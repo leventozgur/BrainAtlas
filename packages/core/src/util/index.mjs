@@ -34,7 +34,9 @@ export function safeJoin(root, rel) {
 
 /** Return a vault-relative path after checking every existing component's real path. */
 export async function resolveSafePath(root, rel) {
-  const base = resolve(root);
+  // PM fix: resolve the root itself once (symlinked vault roots and macOS /var -> /private/var are legitimate).
+  let base = resolve(root);
+  try { base = await realpath(base); } catch { /* root may not exist yet */ }
   const target = safeJoin(base, rel);
   const parts = relative(base, target).split(sep);
   let current = base;
