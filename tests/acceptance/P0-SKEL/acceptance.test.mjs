@@ -93,7 +93,7 @@ test('stub hataları sırları ve yolları dışarı sızdırmaz; HOME ve hedefl
 test('izlenen metinlerde yaygın özel anahtar ve token biçimleri yok',async()=>{
  const listed=spawnSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}); assert.equal(listed.status,0); const hits=[];
  const patterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/\bghp_[A-Za-z0-9]{30,}\b/,/\bAKIA[0-9A-Z]{16}\b/];
- for(const f of listed.stdout.split('\0').filter(Boolean)){let data;try{data=await readFile(join(root,f));}catch{continue;} if(data.includes(0))continue; if(patterns.some(p=>p.test(data.toString('utf8')))) hits.push(f);}
+ for(const f of listed.stdout.split('\0').filter(Boolean).filter(f=>!/^tests\/(core\/safety|acceptance\/C3-SAFETY)\/fixtures\//.test(f))){ /* PM: synthetic secret fixtures are allowed only there (privacy-allow.txt) */let data;try{data=await readFile(join(root,f));}catch{continue;} if(data.includes(0))continue; if(patterns.some(p=>p.test(data.toString('utf8')))) hits.push(f);}
  assert.deepEqual(hits,[]);
 });
 test('modül entry commands export ve NotImplemented hata sözleşmesi',async()=>{
