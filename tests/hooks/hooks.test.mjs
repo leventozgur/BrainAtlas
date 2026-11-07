@@ -65,3 +65,26 @@ test('command and cold start', async t => {
   if (!cmd.includes('--permission')) t.diagnostic('Node permission model unavailable; outside-path check skipped');
   else { const {realpath} = await import('node:fs/promises'); const probe = join(await realpath(f.state),'probe.mjs'); await writeFile(probe, "import {readFileSync} from 'node:fs'; readFileSync(process.argv[2]);"); const flags = cmd.slice(1,cmd.indexOf(bin)); const allowed = spawnSync(process.execPath,[...flags,probe,join(await realpath(f.vault),'topic.md')],{env,encoding:'utf8'}); assert.equal(allowed.status,0,allowed.stderr); const r = spawnSync(process.execPath,[...flags,probe,'/etc/passwd'],{env,encoding:'utf8'}); assert.notEqual(r.status,0); assert.match(r.stderr,/ERR_ACCESS_DENIED/); }
 });
+test('rejects symlinked state subdirectories', async t => {
+  for (const name of ['hooks', 'metrics']) {
+    const f = await fixture(t); const outside = join(f.root, 'outside'); await mkdir(outside);
+    await symlink(outside, join(f.state, name));
+    await call(f.config);
+    const {readdir} = await import('node:fs/promises');
+    assert.deepEqual(await readdir(outside), []);
+  }
+});
+test('permission command runs with the supplied config file', async t => {
+  const f = await fixture(t); const bin = resolve('packages/hooks/bin/brainatlas-hook.mjs');
+  const env = {PATH:process.env.PATH, HOME:f.root, XDG_CONFIG_HOME:join(f.root,'config'), XDG_STATE_HOME:join(f.root,'xdg-state'), XDG_DATA_HOME:join(f.root,'data')};
+  const {resolvePaths, vaultId} = await import('../../packages/core/src/paths/index.mjs');
+  const {dirname} = await import('node:path'); const paths = resolvePaths({env});
+  await mkdir(dirname(paths.configFile), {recursive:true});
+  const {defaultConfig} = await import('../../packages/core/src/config/index.mjs');
+  const config = defaultConfig('lite'); config.vault.path = f.vault; config.retrieval.abstainThreshold = 0;
+  await writeFile(paths.configFile, JSON.stringify(config));
+  await mkdir(join(paths.stateDir,vaultId(f.vault)), {recursive:true});
+  const command = buildHookCommand({nodePath:process.execPath,shimPath:bin,client:'claude',event:'prompt',paths:{vault:f.vault,state:join(paths.stateDir,vaultId(f.vault)),release:resolve('.'),configFile:paths.configFile}});
+  const result = spawnSync(command[0],command.slice(1),{env,input:JSON.stringify({session_id:'s',prompt:'topic'}),encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr); assert.match(result.stdout,/Topic/,result.stderr);
+});

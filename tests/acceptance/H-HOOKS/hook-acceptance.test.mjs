@@ -367,7 +367,10 @@ test('permission-enabled buildHookCommand can read its real config and execute a
   if (!permissionSupported) return t.skip(`Node ${process.versions.node} is below 22.13 or has no permission model`);
   const f = await fixture(t);
   await page(f);
-  const command = buildHookCommand({nodePath:process.execPath, shimPath:BIN, client:'claude', event:'prompt', paths:{vault:f.vault, state:f.stateDir, release:ROOT}});
+  // PM correction: the installer passes the config path and creates the state dir before registering the hook
+  // (permissions are fixed when the command is built, so the builder must be told where the config lives).
+  await mkdir(f.stateDir, { recursive: true });
+  const command = buildHookCommand({nodePath:process.execPath, shimPath:BIN, client:'claude', event:'prompt', paths:{vault:f.vault, state:f.stateDir, release:ROOT, configFile:f.configFile}});
   const result = spawnSync(command[0], command.slice(1), {cwd:ROOT, env:f.env, input:JSON.stringify({session_id:'permission-session',prompt:'topic'}), encoding:'utf8', timeout:PROCESS_TIMEOUT});
   assert.equal(result.error, undefined, result.error?.message || '');
   assert.equal(result.status, 0, result.stderr);

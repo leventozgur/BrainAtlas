@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
 import { constants, realpathSync } from 'node:fs';
-import { mkdir, open, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { lstat, mkdir, open, readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { redact } from '../../core/src/safety/index.mjs';
 import { resolvePaths, vaultId } from '../../core/src/paths/index.mjs';
@@ -36,10 +37,21 @@ async function writeState(file, values) {
   const h = await secureFile(file, constants.O_WRONLY | constants.O_CREAT);
   try { await h.truncate(0); await h.writeFile(JSON.stringify(values)); } finally { await h.close(); }
 }
+async function secureDirectory(dir, recursive = false) {
+  try { await mkdir(dir, {recursive, mode:0o700}); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+  const st = await lstat(dir);
+  if (!st.isDirectory() || st.isSymbolicLink() || (typeof process.getuid === 'function' && st.uid !== process.getuid())) throw new Error('Unsafe directory');
+}
+async function stateSubdirectory(stateDir, name) {
+  await secureDirectory(stateDir, true);
+  const dir = join(stateDir, name);
+  await secureDirectory(dir);
+  return dir;
+}
 async function metric(stateDir, record) {
   if (!stateDir) return;
   try {
-    const dir = join(stateDir, 'metrics'); await mkdir(dir, {recursive:true, mode:0o700});
+    const dir = await stateSubdirectory(stateDir, 'metrics');
     const h = await secureFile(join(dir, 'hooks.jsonl'), constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
     try { await h.writeFile(JSON.stringify(record) + '\n'); } finally { await h.close(); }
   } catch { /* Metrics never affect the hook. */ }
@@ -77,7 +89,7 @@ export async function runHook(input = {}) {
       const query = prompt.replace(/(^|\s)(?:\/sb|@sb)(?=\s|$)/gi, '$1').trim();
       const knowledge = /\?|\b(?:what|why|how|where|when|which|who|explain|remember|knowledge|decision|nasıl|nedir|neden|hangi|nerede)\b/iu.test(query);
       if (query && (mode === 'normal' || trigger || (mode === 'economic' && knowledge))) {
-        const dir = join(stateDir, 'hooks'); await mkdir(dir, {recursive:true,mode:0o700});
+        const dir = await stateSubdirectory(stateDir, 'hooks');
         const file = join(dir, `${client}-${hash(session)}.json`);
         const seen = session ? await readState(file) : [];
         const found = await retrieve({vaultDir:config.vault.path,stateDir,now}, query, {limit:20,budgetChars:4002,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start));
@@ -110,6 +122,14 @@ export function buildHookCommand({nodePath, shimPath, client, event, paths}) {
   const supported = process.allowedNodeEnvironmentFlags.has('--permission') && (version[0] > 22 || (version[0] === 22 && version[1] >= 13));
   const args = [nodePath];
   const canonical = value => { try { return realpathSync(value); } catch { return value; } };
-  if (supported) args.push('--permission', ...[paths.vault,paths.state,paths.release].map(value => `--allow-fs-read=${canonical(value)}`), `--allow-fs-write=${canonical(paths.state)}`, '--allow-worker');
+  if (supported) {
+    let defaultConfig;
+    try { defaultConfig = resolvePaths({env:process.env}).configFile; } catch {}
+    let yamlDir;
+    try { yamlDir = dirname(createRequire(import.meta.url).resolve('yaml/package.json')); } catch {}
+    const reads = [paths.vault, paths.state, paths.release, paths.configFile, process.env.BRAINATLAS_CONFIG, defaultConfig, yamlDir, dirname(nodePath)].filter(Boolean);
+    // Retrieval runs in a worker so its deadline can interrupt synchronous search.
+    args.push('--permission', ...[...new Set(reads.flatMap(value => [value, canonical(value)]))].map(value => `--allow-fs-read=${value}`), ...[...new Set([paths.state, canonical(paths.state)])].map(value => `--allow-fs-write=${value}`), '--allow-worker');
+  }
   args.push(shimPath, client, event); return args;
 }
