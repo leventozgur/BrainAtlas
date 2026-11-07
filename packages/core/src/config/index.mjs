@@ -86,6 +86,11 @@ export async function loadConfig(options) {
   try { text = await readFile(paths.configFile, 'utf8'); } catch (cause) { if (cause?.code === 'ENOENT') return defaultConfig(env.BRAINATLAS_PROFILE || 'lite'); throw new BrainAtlasError('E_CONFIG_READ', 'Could not read configuration.'); }
   let value;
   try { value = JSON.parse(text); } catch { throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.'); }
+  if (!Number.isInteger(value?.schemaVersion) || value.schemaVersion < 1) {
+    const migrated = await migrateConfig(text, { backupDir: dirname(paths.configFile) });
+    value = migrated.config;
+    if (migrated.applied.length) await saveConfig(value, { paths });
+  }
   const result = validateConfig(value);
   if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
   return value;
@@ -122,9 +127,14 @@ export function setConfigValue(cfg, dottedKey, value) {
   return out;
 }
 
-/** @param {unknown} obj @param {{backupDir:string,now?:Date,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
-export async function migrateConfig(obj, options = {}) {
-  const { backupDir, now = new Date(), migrations } = options;
+/** @param {unknown| string} objOrText @param {{backupDir:string,now?:Date,sourceText?:string,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
+export async function migrateConfig(objOrText, options = {}) {
+  const { backupDir, now = new Date(), sourceText, migrations } = options;
+  let obj = objOrText;
+  if (typeof objOrText === 'string') {
+    try { obj = JSON.parse(objOrText); } catch { throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.'); }
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.');
   const migration = (await import('./migrations/000-to-1.mjs')).default;
   const chain = migrations || [migration];
   let current = clone(obj); const applied = [];
@@ -141,6 +151,8 @@ export async function migrateConfig(obj, options = {}) {
   if (!backupDir) throw new BrainAtlasError('E_BACKUP_DIR', 'A backup directory is required for migration.');
   await mkdir(backupDir, { recursive: true });
   const backupPath = join(backupDir, `config.json.bak.${now.toISOString()}`);
-  await writeFile(backupPath, `${JSON.stringify(obj, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  // In-memory callers have no original bytes; retain the compact JSON serialization plus its line ending.
+  const backupText = sourceText ?? (typeof objOrText === 'string' ? objOrText : `${JSON.stringify(obj)}\n`);
+  await writeFile(backupPath, backupText, { flag: 'wx', mode: 0o600 });
   return { config: current, applied, backupPath };
 }

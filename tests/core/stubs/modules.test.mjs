@@ -4,13 +4,21 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { discoverModules, readModuleManifest, resolveModuleOrder } from '../../../packages/core/src/modules/index.mjs';
+import { discoverModules, readModuleManifest, resolveModuleOrder, resolveProfileModules } from '../../../packages/core/src/modules/index.mjs';
 
 test('fixture manifests are discovered and dependencies are ordered first', async () => {
   const release = new URL('../modules/fixtures/release/', import.meta.url).pathname;
   const manifests = await discoverModules(release);
   assert.deepEqual(manifests.map((item) => item.name), ['consumer', 'foundation']);
   assert.deepEqual(resolveModuleOrder(manifests).map((item) => item.name), ['foundation', 'consumer']);
+});
+
+test('profile module resolution expands the full wildcard in dependency order', async () => {
+  const release = new URL('../modules/fixtures/release/', import.meta.url).pathname;
+  const manifests = await discoverModules(release);
+  assert.deepEqual(resolveProfileModules('lite', manifests), []);
+  assert.deepEqual(resolveProfileModules('custom', manifests), []);
+  assert.deepEqual(resolveProfileModules('full', manifests), ['foundation', 'consumer']);
 });
 
 test('invalid manifests include only the manifest file name in error details', async (t) => {

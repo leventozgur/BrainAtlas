@@ -21,7 +21,7 @@ test('Linux path defaults and XDG overrides', () => {
     binPath: '/home/you/.local/share/brainatlas/bin/brainatlas', configFile: '/home/you/.config/brainatlas/config.json', stateDir: '/home/you/.local/state/brainatlas', installManifest: '/home/you/.local/share/brainatlas/install-manifest.json'
   });
   const custom = resolvePaths({ platform: 'linux', env: { HOME: '/home/you', XDG_DATA_HOME: '/data', XDG_CONFIG_HOME: '/config', XDG_STATE_HOME: '/state' } });
-  assert.equal(custom.dataDir, '/data'); assert.equal(custom.configFile, '/config/brainatlas/config.json'); assert.equal(custom.stateDir, '/state/brainatlas');
+  assert.equal(custom.dataDir, '/data/brainatlas'); assert.equal(custom.configFile, '/config/brainatlas/config.json'); assert.equal(custom.stateDir, '/state/brainatlas');
 });
 
 test('paths require injected HOME and vault IDs are stable hashes', () => {

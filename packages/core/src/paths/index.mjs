@@ -15,7 +15,7 @@ export function resolvePaths(options = {}) {
     const dataDir = join(home, 'Library', 'Application Support', 'BrainAtlas');
     return { dataDir, releasesDir: join(dataDir, 'releases'), currentDir: join(dataDir, 'current'), binPath: join(dataDir, 'bin', 'brainatlas'), configFile: join(dataDir, 'config.json'), stateDir: join(dataDir, 'state'), installManifest: join(dataDir, 'install-manifest.json') };
   }
-  const dataDir = env.XDG_DATA_HOME || path.join(home, '.local', 'share', 'brainatlas');
+  const dataDir = path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'brainatlas');
   const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
   const stateHome = env.XDG_STATE_HOME || path.join(home, '.local', 'state');
   return { dataDir, releasesDir: path.join(dataDir, 'releases'), currentDir: path.join(dataDir, 'current'), binPath: path.join(dataDir, 'bin', 'brainatlas'), configFile: path.join(configHome, 'brainatlas', 'config.json'), stateDir: path.join(stateHome, 'brainatlas'), installManifest: path.join(dataDir, 'install-manifest.json') };

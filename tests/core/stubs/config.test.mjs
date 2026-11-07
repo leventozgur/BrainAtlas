@@ -42,6 +42,20 @@ test('load and atomic save round-trip config and reject invalid documents', asyn
   await assert.rejects(api.loadConfig({ paths, env: {} }), { code: 'E_CONFIG_PARSE' });
 });
 
+test('load migrates legacy config and keeps its exact source text in the backup', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'brainatlas-load-migrate-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const paths = { configFile: join(dir, 'config.json') };
+  const original = '{\n  "profile": "lite", "vault": {"path":"/vault"}\n}\n';
+  await (await import('node:fs/promises')).writeFile(paths.configFile, original);
+  const loaded = await api.loadConfig({ paths, env: {} });
+  assert.equal(loaded.schemaVersion, 1);
+  const entries = await (await import('node:fs/promises')).readdir(dir);
+  const backup = entries.find((name) => name.startsWith('config.json.bak.'));
+  assert.ok(backup);
+  assert.equal(await readFile(join(dir, backup), 'utf8'), original);
+  assert.equal(JSON.parse(await readFile(paths.configFile, 'utf8')).schemaVersion, 1);
+});
+
 test('migrations back up original config and support injected chains', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'brainatlas-migrate-')); t.after(() => rm(dir, { recursive: true, force: true }));
   const old = { vault: { path: '/vault' } };
@@ -55,4 +69,13 @@ test('migrations back up original config and support injected chains', async (t)
   ];
   const chain = await api.migrateConfig(old, { backupDir: dir, now: new Date('2025-01-02T03:04:06.000Z'), migrations: fake });
   assert.deepEqual(chain.applied, ['000-to-0.5','0.5-to-1']); assert.equal(calls, 2);
+});
+
+test('migration accepts source text directly or as sourceText and preserves its bytes', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'brainatlas-migrate-text-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const original = '{ "profile":"lite",\n "vault":{"path":"/vault"}}\n';
+  const direct = await api.migrateConfig(original, { backupDir: dir, now: new Date('2025-01-02T03:04:05.000Z') });
+  assert.equal(await readFile(direct.backupPath, 'utf8'), original);
+  const source = await api.migrateConfig({ profile: 'lite' }, { backupDir: dir, now: new Date('2025-01-02T03:04:06.000Z'), sourceText: original });
+  assert.equal(await readFile(source.backupPath, 'utf8'), original);
 });

@@ -59,6 +59,15 @@ export function resolveModuleOrder(manifests) {
   return ordered;
 }
 
+/** @param {'lite'|'full'|'custom'} profile @param {ModuleManifest[]} discoveredManifests @returns {string[]} */
+export function resolveProfileModules(profile, discoveredManifests) {
+  if (!profiles.has(profile)) throw new BrainAtlasError('E_PROFILE', 'Unknown configuration profile.');
+  if (profile !== 'full') return [];
+  return resolveModuleOrder(discoveredManifests)
+    .filter((manifest) => manifest.profiles?.includes('full'))
+    .map((manifest) => manifest.name);
+}
+
 /** Activate a validated module entry, keeping the import inside its release directory. */
 export async function activate(ctx) {
   if (!ctx?.moduleDir || !ctx?.manifest) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Module activation context is incomplete.');
