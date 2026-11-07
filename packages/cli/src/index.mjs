@@ -31,9 +31,10 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     const agents = value('--agents'); cfg.agents = agents ? agents.split(',').filter(Boolean) : [];
     const adapterRoot = resolve(new URL('../../adapters/', import.meta.url).pathname);
     let available = []; try { available = await readdir(adapterRoot); } catch {}
-    if (cfg.agents.some(a => !available.includes(a) || !/^[a-z0-9-]+$/.test(a))) throw error('E_AGENT_UNKNOWN', 'Unknown agent adapter.');
+    if (cfg.agents.some(a => !/^[a-z0-9-]+$/.test(a))) throw error('E_AGENT_UNKNOWN', 'Invalid agent adapter name.');
     const warnings = [];
     for (const agent of cfg.agents) {
+      if (!available.includes(agent)) { warnings.push(`Adapter ${agent} is unavailable.`); continue; }
       try {
         const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
         const ctx = { env, config: cfg, paths, scope: cfg.scope, nodePath: process.execPath, shimPath: paths.binPath, now: new Date() };
@@ -60,7 +61,29 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     if (action === 'set') { const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.'); let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; } const updated = setConfigValue(cfg, key, parsed); if (!plan) await saveConfig(updated, { paths }); output({ action: 'config set', key }); return; }
   }
   if (command === 'update' && flag('--check')) { output({ status: 'unknown' }); return; }
-  if (command === 'hook' || command === 'mcp') throw error('E_COMPONENT_MISSING', 'Requested component entry point is unavailable.');
+  if (command === 'eval') {
+    let component;
+    try { component = await import(new URL('../../../eval/run-eval.mjs', import.meta.url)); }
+    catch (e) { if (e.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Evaluation component is unavailable.'); throw e; }
+    if (typeof component.runEval !== 'function') throw error('E_COMPONENT_MISSING', 'Evaluation component is unavailable.');
+    output(await component.runEval({ cases: value('--cases'), corpus: value('--corpus') })); return;
+  }
+  if (command === 'hook' || command === 'mcp') {
+    let component;
+    try { component = command === 'hook' ? await import('@brainatlas/hooks') : await import('@brainatlas/mcp'); }
+    catch (e) { if (e.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.'); throw e; }
+    const entry = command === 'hook' ? component.runHook : component.main;
+    if (typeof entry !== 'function') throw error('E_COMPONENT_MISSING', 'Requested component entry point is unavailable.');
+    try {
+      if (command === 'mcp') await entry({ config: await config(), paths, env });
+      else {
+        let stdin = ''; for await (const chunk of process.stdin) stdin += chunk;
+        const result = await entry({ client: args[0], event: args[1], stdin, env, now: new Date(), config: await config() });
+        if (result.stdout) process.stdout.write(result.stdout); process.exitCode = result.exitCode;
+      }
+    } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.'); throw e; }
+    return;
+  }
   throw error('E_NOT_IMPLEMENTED', 'Command is not implemented.');
 }
 export const activate = main;

@@ -20,4 +20,10 @@ test('init, config, plan and doctor use an isolated HOME', async t => {
   const status = run('status', '--json'); assert.equal(status.status, 0); assert.equal(JSON.parse(status.stdout).checks.config, true);
   assert.equal(run('doctor', '--json').status, 1);
   assert.equal(JSON.parse(run('update', '--check', '--json').stdout).status, 'unknown');
+  const unavailable = run('init', '--yes', '--agents', 'missing-adapter', '--json');
+  assert.equal(unavailable.status, 0);
+  assert.match(JSON.parse(unavailable.stdout).warnings[0], /unavailable/);
+  const missingEval = run('eval', '--json');
+  assert.equal(missingEval.status, 1);
+  assert.match(missingEval.stderr, /E_COMPONENT_MISSING/);
 });

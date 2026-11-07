@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFile, readdir, mkdir, writeFile, lstat } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile, lstat, rm } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -59,8 +59,18 @@ export async function buildRelease(options) {
   const { version, profile, builtAt = '1970-01-01T00:00:00.000Z', out = root } = options || {};
   if (!safe(version) || !['lite', 'full'].includes(profile) || typeof builtAt !== 'string') throw fail('E_MANIFEST_INVALID', 'Invalid release options.');
   const roots = ['package.json', 'packages/core', 'packages/mcp', 'packages/hooks', 'packages/cli', 'packages/adapters', 'vendor', 'templates'];
-  if (profile === 'full') roots.push('modules');
   let files = (await Promise.all(roots.map(p => walk(root, p)))).flat();
+  const modules = [];
+  if (profile === 'full') {
+    for (const name of (await readdir(join(root, 'modules'))).sort()) {
+      const entries = await walk(root, `modules/${name}`);
+      if (!entries.some(f => f.path === `modules/${name}/module.json`)) {
+        console.warn(`Skipping module without manifest: ${name}`);
+        continue;
+      }
+      modules.push(name); files.push(...entries);
+    }
+  }
   const lock = JSON.parse(await readFile(join(root, 'package-lock.json'), 'utf8'));
   const queue = files.filter(f => f.path.endsWith('/package.json')).map(f => JSON.parse(f.data).dependencies || {});
   const seen = new Set();
@@ -84,9 +94,8 @@ export async function buildRelease(options) {
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (profile === 'lite') {
     const forbidden = /modules\/sync-|keychain|secret-service|launchd|systemd|dropbox/i;
-    if (files.some(f => forbidden.test(f.path) || forbidden.test(f.data.toString('utf8')))) throw fail('E_LITE_PURITY', 'Lite release contains forbidden content.');
+    if (files.filter(f => /^(packages\/|vendor\/llmwiki-core\/|templates\/)/.test(f.path)).some(f => forbidden.test(f.path) || forbidden.test(f.data.toString('utf8')))) throw fail('E_LITE_PURITY', 'Lite release contains forbidden content.');
   }
-  const modules = profile === 'full' ? (await readdir(join(root, 'modules'))).sort() : [];
   const manifest = { name: 'brainatlas', version, profile, modules, files: files.map(f => ({ path: f.path, sha256: hash(f.data) })), builtAt };
   files.push({ path: 'release-manifest.json', data: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`), mode: 0o644 });
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -100,8 +109,7 @@ export async function buildRelease(options) {
 }
 
 /** @param {string} archivePath @param {string} checksumPath @param {string} signaturePath @returns {Promise<object>} */
-export async function verifyRelease(archivePath, checksumPath, signaturePath) {
-  const allowedSigners = arguments[3] || join(root, 'release/allowed_signers');
+async function verifiedArchive(archivePath, checksumPath, signaturePath, allowedSigners = join(root, 'release/allowed_signers')) {
   const archive = await readFile(archivePath); const sums = await readFile(checksumPath);
   const matches = sums.toString().split('\n').filter(l => l.endsWith(`  ${basename(archivePath)}`));
   if (matches.length !== 1 || matches[0] !== `${hash(archive)}  ${basename(archivePath)}`) throw fail('E_SHA_MISMATCH', 'Archive checksum mismatch.');
@@ -119,6 +127,25 @@ export async function verifyRelease(archivePath, checksumPath, signaturePath) {
     if (!bytes || hash(bytes) !== f.sha256) throw fail('E_SHA_MISMATCH', 'Release inventory checksum mismatch.');
   }
   if (entries.size !== expected.size || [...entries.keys()].some(n => !expected.has(n))) throw fail('E_MANIFEST_INVALID', 'Unexpected archive entry.');
+  if (manifest.profile === 'lite' && [...entries.keys()].some(n => n.startsWith(`${prefix}modules/`))) throw fail('E_PROFILE_MISMATCH', 'Lite archive contains modules.');
+  return { manifest, entries, prefix };
+}
+/** @param {string} archivePath @param {string} checksumPath @param {string} signaturePath @returns {Promise<object>} */
+export async function verifyRelease(archivePath, checksumPath, signaturePath) {
+  return (await verifiedArchive(archivePath, checksumPath, signaturePath, arguments[3])).manifest;
+}
+
+// Extract only verified regular files, into a newly created directory.
+export async function extractRelease(archivePath, checksumPath, signaturePath, destination, allowedSigners) {
+  const { manifest, entries, prefix } = await verifiedArchive(archivePath, checksumPath, signaturePath, allowedSigners);
+  await mkdir(destination);
+  try {
+    for (const [name, bytes] of entries) {
+      const target = join(destination, name.slice(prefix.length));
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, bytes, { flag: 'wx', mode: 0o644 });
+    }
+  } catch (e) { await rm(destination, { recursive: true, force: true }); throw e; }
   return manifest;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
