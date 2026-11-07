@@ -1,0 +1,11 @@
+---
+title: Session expiration
+status: active
+---
+# Session expiration
+
+## Uygulama
+Bu sayfa session expiration için ekip uygulamasını açıklar. İşlem başlamadan önce sorumlu kişi bağımlılıkları ve mevcut durumu kontrol eder. Beklenmeyen bir sonuç görülürse değişiklik durdurulur ve olay kaydı açılır.
+
+## Kontrol
+İngilizce operasyon notu: expire inactive sessions and require reauthentication. Ekip sonucu gözden geçirir ve doğrulama kanıtını kayıt altında tutar. Bir sonraki bakım döneminde bu karar tekrar değerlendirilir.

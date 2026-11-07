@@ -35,7 +35,7 @@ Results contain evidence paths, bounded snippets, scores, freshness, and status.
 ### Errors
 
 - `E_INDEX_CORRUPT`: persisted index is malformed or unreadable; discard and rebuild it from the vault.
-- `E_QUERY_EMPTY`: query contains no searchable terms.
+- `E_QUERY_INVALID`: query is not a string. Empty, whitespace-only or stopword-only queries do not throw; they return `{results: [], abstained: true, reason: "empty-query"}`.
 - `E_VAULT_MISSING`: configured vault directory is unavailable.
 
 ## Example
