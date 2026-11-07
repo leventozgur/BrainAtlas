@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { resolve } from 'node:path';
-import { runCommand as defaultRunCommand, BrainAtlasError } from '../util/index.mjs';
+import { realpath } from 'node:fs/promises';
+import { runCommand as defaultRunCommand, BrainAtlasError, resolveSafePath } from '../util/index.mjs';
 import * as defaultSafety from '../safety/index.mjs';
 
 const output = (value) => typeof value === 'string' ? value : value?.stdout ?? '';
@@ -10,7 +11,7 @@ const findings = (value) => Array.isArray(value) ? value.length > 0 : Array.isAr
 /** Stage configured paths, safety scan staged blobs, lint and commit. */
 export async function checkpoint(vaultDir, message, options = {}) {
   if (typeof message !== 'string' || !message.trim() || message.length > 120 || /[\r\n]/.test(message)) throw new BrainAtlasError('E_CHECKPOINT_MESSAGE', 'Checkpoint message is invalid.');
-  const base = resolve(vaultDir);
+  let base = resolve(vaultDir);
   const paths = options.paths ?? ['wiki/'];
   if (!Array.isArray(paths) || !paths.length || paths.some((p) => typeof p !== 'string' || p.startsWith('/') || p.includes('\\') || p.split('/').filter(Boolean).some((segment) => segment === '.' || segment === '..'))) throw new BrainAtlasError('E_CHECKPOINT_PATH', 'Checkpoint paths are invalid.');
   const run = options.runCommand ?? options.git?.runCommand ?? options.git?.run ?? defaultRunCommand;
@@ -19,6 +20,11 @@ export async function checkpoint(vaultDir, message, options = {}) {
     const probe = await call(['rev-parse', '--is-inside-work-tree']);
     if (failed(probe) || output(probe).trim() !== 'true') return { committed: false, skipped: true, reason: 'not-a-git-repository' };
   } catch { return { committed: false, skipped: true, reason: 'git-unavailable-or-not-a-repository' }; }
+  base = await realpath(base);
+  for (const path of paths) {
+    const rel = path.endsWith('/') ? path.slice(0, -1) : path;
+    if (rel) await resolveSafePath(base, rel);
+  }
   const lintGate = options.lint ?? options.lintGate;
   if (typeof lintGate !== 'function') throw new BrainAtlasError('E_CHECKPOINT_LINT', 'Checkpoint requires an injected lint gate.');
   const lintResult = await lintGate(base);
