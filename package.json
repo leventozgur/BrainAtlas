@@ -1,0 +1,23 @@
+{
+  "name": "brainatlas-monorepo",
+  "version": "0.1.0-dev",
+  "private": true,
+  "description": "BrainAtlas — evidence-first memory for coding agents",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "workspaces": [
+    "packages/core",
+    "packages/mcp",
+    "packages/hooks",
+    "packages/cli",
+    "packages/adapters/*",
+    "modules/*",
+    "vendor/llmwiki-core"
+  ],
+  "scripts": {
+    "test": "node scripts/run-tests.mjs",
+    "guard": "node scripts/guard.mjs",
+    "build:release": "node release/build-release.mjs"
+  }
+}

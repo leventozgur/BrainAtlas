@@ -1,0 +1,22 @@
+{
+  "name": "brainatlas",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "brainatlas": "./bin/brainatlas.mjs",
+    "ba": "./bin/brainatlas.mjs"
+  },
+  "dependencies": {
+    "@brainatlas/core": "*"
+  }
+}

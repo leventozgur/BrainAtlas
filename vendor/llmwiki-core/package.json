@@ -1,0 +1,25 @@
+{
+  "name": "@llmwiki/core",
+  "version": "0.1.2",
+  "description": "Core wiki operations and MCP server (stdio launcher: llmwiki-mcp) for LLM Wiki (vendored from microsoft/llmwiki v1.0.1)",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mcp-bin": "./dist/mcp/bin.js",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "gray-matter": "^4.0.3"
+  }
+}
