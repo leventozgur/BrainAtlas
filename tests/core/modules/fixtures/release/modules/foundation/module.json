@@ -1,0 +1,1 @@
+{"name":"foundation","version":"1.0.0","description":"Fixture foundation module","requires":[],"provides":["fixture.foundation"],"profiles":["full","custom"],"entry":"index.mjs"}

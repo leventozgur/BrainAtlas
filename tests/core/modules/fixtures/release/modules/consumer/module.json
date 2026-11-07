@@ -1,0 +1,1 @@
+{"name":"consumer","version":"1.0.0","description":"Fixture consumer module","requires":["foundation"],"provides":["fixture.consumer"],"profiles":["full","custom"],"entry":"index.mjs"}
