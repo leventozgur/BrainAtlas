@@ -152,7 +152,7 @@ const nonCredentialUrls = [
   'mongodb+srv://cluster.example.invalid/app',
   'https://host.example.invalid/?user=sample',
   'file:///tmp/example.db',
-  'ssh://host.example.invalid/home/demo',
+  'ssh://host.example.invalid/home/you',
   'http://localhost:8080/health',
   'git+https://example.invalid/project.git',
 ];
