@@ -58,7 +58,7 @@ function untar(buf) {
 export async function buildRelease(options) {
   const { version, profile, builtAt = '1970-01-01T00:00:00.000Z', out = root } = options || {};
   if (!safe(version) || !['lite', 'full'].includes(profile) || typeof builtAt !== 'string') throw fail('E_MANIFEST_INVALID', 'Invalid release options.');
-  const roots = ['package.json', 'packages/core', 'packages/mcp', 'packages/hooks', 'packages/cli', 'packages/adapters', 'vendor', 'templates'];
+  const roots = ['package.json', 'packages/core', 'packages/mcp', 'packages/hooks', 'packages/cli', 'packages/adapters', 'vendor', 'templates', 'release/allowed_signers'];
   let files = (await Promise.all(roots.map(p => walk(root, p)))).flat();
   const modules = [];
   if (profile === 'full') {

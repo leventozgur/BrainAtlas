@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildRelease, verifyRelease, extractRelease } from '../../release/build-release.mjs';
 import { signRelease } from '../../release/sign.mjs';
+import { extractVerifiedRelease } from '../../packages/cli/src/archive.mjs';
 
 test('full release is reproducible and rejects invalid checksum and signature', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'ba-release-')); t.after(() => rm(dir, { recursive: true, force: true }));
@@ -37,6 +38,7 @@ test('signed archives reject traversal, absolute paths and links before extracti
   const original = gunzipSync(await readFile(archive));
   const key = join(dir, 'key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
   const signers = join(dir, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
+  let index = 0;
   for (const [name, type] of [['../escape', '0'], ['/escape', '0'], ['link', '2'], ['hardlink', '1']]) {
     const tar = Buffer.from(original); tar.fill(0, 0, 100); tar.write(name, 0); tar.write(type, 156);
     tar.fill(32, 148, 156); tar.write(tar.subarray(0, 512).reduce((a, b) => a + b, 0).toString(8).padStart(6, '0') + '\0 ', 148, 8);
@@ -44,6 +46,7 @@ test('signed archives reject traversal, absolute paths and links before extracti
     await writeFile(sums, `${createHash('sha256').update(bytes).digest('hex')}  brainatlas-0.1.0-test.3-lite.tgz\n`);
     await rm(`${sums}.sig`, { force: true }); signRelease(key, sums);
     await assert.rejects(extractRelease(archive, sums, `${sums}.sig`, join(dir, 'out'), signers), { code: 'E_MANIFEST_INVALID' });
+    await assert.rejects(extractVerifiedRelease(archive, join(dir, `cli-out-${index++}`), signers), { code: 'E_MANIFEST_INVALID' });
   }
 });
 
