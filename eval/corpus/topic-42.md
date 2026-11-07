@@ -1,9 +1,11 @@
 ---
-title: retries guide
-aliases: [yineleme]
-keywords: [retries]
+title: Retry strategy
 status: active
-generated: 2020-01-01
 ---
-# retries guide
-A synthetic reference describing retries procedures and evidence.
+# Retry strategy
+
+## Uygulama
+Bu sayfa retry strategy için ekip uygulamasını açıklar. İşlem başlamadan önce sorumlu kişi bağımlılıkları ve mevcut durumu kontrol eder. Beklenmeyen bir sonuç görülürse değişiklik durdurulur ve olay kaydı açılır.
+
+## Kontrol
+İngilizce operasyon notu: use bounded exponential backoff with jitter. Ekip sonucu gözden geçirir ve doğrulama kanıtını kayıt altında tutar. Bir sonraki bakım döneminde bu karar tekrar değerlendirilir.

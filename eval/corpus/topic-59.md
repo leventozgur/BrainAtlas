@@ -1,9 +1,11 @@
 ---
-title: redaction guide
-aliases: [gizleme]
-keywords: [redaction]
+title: Secret redaction
 status: active
-generated: 2020-01-01
 ---
-# redaction guide
-A synthetic reference describing redaction procedures and evidence.
+# Secret redaction
+
+## Procedure
+The team uses this guide when working on secret redaction. Before making a change, identify the owner and inspect the current system state. The main operational step is to mask credentials before exporting diagnostic output. If the check fails, stop the rollout and record the evidence for investigation.
+
+## Verification
+Repeat the check in a representative environment before approving production use. Record the outcome and the responsible operator in the change history. Review the procedure again after an incident or a change in dependencies.

@@ -1,9 +1,11 @@
 ---
-title: expiration guide
-aliases: [sonlanma]
-keywords: [expiration]
+title: Session expiration
 status: active
-generated: 2020-01-01
 ---
-# expiration guide
-A synthetic reference describing expiration procedures and evidence.
+# Session expiration
+
+## Uygulama
+Bu sayfa session expiration için ekip uygulamasını açıklar. İşlem başlamadan önce sorumlu kişi bağımlılıkları ve mevcut durumu kontrol eder. Beklenmeyen bir sonuç görülürse değişiklik durdurulur ve olay kaydı açılır.
+
+## Kontrol
+İngilizce operasyon notu: expire inactive sessions and require reauthentication. Ekip sonucu gözden geçirir ve doğrulama kanıtını kayıt altında tutar. Bir sonraki bakım döneminde bu karar tekrar değerlendirilir.

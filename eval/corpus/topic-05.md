@@ -1,9 +1,12 @@
 ---
-title: network guide
+title: Network connectivity
 aliases: [ag]
-keywords: [network]
 status: active
-generated: 2020-01-01
 ---
-# network guide
-A synthetic reference describing network procedures and evidence.
+# Network connectivity
+
+## Procedure
+The team uses this guide when working on network connectivity. Before making a change, identify the owner and inspect the current system state. The main operational step is to trace packet loss between service endpoints and inspect firewall rules. If the check fails, stop the rollout and record the evidence for investigation.
+
+## Verification
+Repeat the check in a representative environment before approving production use. Record the outcome and the responsible operator in the change history. Review the procedure again after an incident or a change in dependencies.

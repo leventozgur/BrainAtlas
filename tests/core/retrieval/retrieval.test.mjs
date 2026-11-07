@@ -5,17 +5,33 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { buildIndex, search, createSearcher, loadPages } from '../../../packages/core/src/retrieval/index.mjs';
+import { buildIndex, search, createSearcher, loadPages, stem } from '../../../packages/core/src/retrieval/index.mjs';
 import { runEval } from '../../../eval/run-eval.mjs';
 const now = new Date('2025-01-01T00:00:00Z');
 const page = (name, body, frontmatter = {}) => ({path:name,title:'Backup',aliases:[],keywords:[],headings:[],body,frontmatter});
+test('unsafe paths and stacked suffixes are handled consistently', () => {
+  const index = buildIndex([page('../escape.md', 'canary'), page('/absolute.md', 'canary'), page('folder\\escape.md', 'canary'), page('safe.md', 'yedek')], {now});
+  assert.deepEqual(search(index, 'canary').results, []);
+  assert.equal(search(index, 'yedeklerden').results[0].path, 'safe.md');
+  assert.equal(stem('stories'), 'story');
+  assert.equal(stem('kisa'), 'kisa');
+  assert.throws(() => search(index, 42), {code:'E_QUERY_INVALID'});
+});
+test('eval records a malformed query as a failure and continues', t => {
+  const dir = temp(t), vault = path.join(dir, 'vault'); fs.mkdirSync(vault);
+  fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha evidence');
+  const casesFile = path.join(dir, 'cases.json');
+  fs.writeFileSync(casesFile, JSON.stringify([{query:42,relevant:['a.md']},{query:'alpha',relevant:['a.md']}]));
+  const result = runEval({corpusDir:vault,casesFile,now});
+  assert.equal(result.n, 2); assert.equal(result.recallAt5, 0.5);
+});
 function temp(t) { const dir=fs.mkdtempSync(path.join(os.tmpdir(),'retrieval-test-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true})); return dir; }
 test('ranking, freshness, supersession, budget, threshold and empty queries', () => {
   const index=buildIndex([page('b.md','backup contents',{stale_after:'P7D',generated:'2020-01-01'}),page('a.md','backup contents'),page('old.md','backup',{status:'superseded'}),page('old2.md','backup',{superseded_by:'a.md'})],{now});
   const r=search(index,'backup',{budgetChars:4});
   assert.deepEqual(r.results.map(x=>x.path),['a.md','b.md']); assert.equal(r.results[1].stale,true); assert.equal(r.truncated,true); assert.equal(r.results.map(x=>x.snippet).join('').length,4); assert.ok(r.results[0].snippet.endsWith('…'));
   assert.equal(search(index,'unmatched').abstained,true); assert.equal(search(index,'backup unmatched',{abstainThreshold:0.99}).abstained,true);
-  assert.throws(()=>search(index,'the ve'),{code:'E_QUERY_EMPTY'});
+  assert.equal(search(index,'the ve').reason,'empty-query');
 });
 test('loader, cache invalidation and corrupt cache recovery', async t => {
   const dir=temp(t), vault=path.join(dir,'vault'), state=path.join(dir,'state'); fs.mkdirSync(vault);

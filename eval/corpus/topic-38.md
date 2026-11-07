@@ -1,9 +1,11 @@
 ---
-title: ranking guide
-aliases: [siralama]
-keywords: [ranking]
+title: Result ranking
 status: active
-generated: 2020-01-01
 ---
-# ranking guide
-A synthetic reference describing ranking procedures and evidence.
+# Result ranking
+
+## Procedure
+The team uses this guide when working on result ranking. Before making a change, identify the owner and inspect the current system state. The main operational step is to evaluate ranking changes against labeled examples. If the check fails, stop the rollout and record the evidence for investigation.
+
+## Verification
+Repeat the check in a representative environment before approving production use. Record the outcome and the responsible operator in the change history. Review the procedure again after an incident or a change in dependencies.

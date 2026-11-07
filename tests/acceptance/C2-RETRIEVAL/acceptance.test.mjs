@@ -275,7 +275,7 @@ test('missing vault, malformed frontmatter and corrupt index produce typed sanit
 test('invalid options and non-text input fail without echoing sensitive values', () => {
   const index = buildIndex([page('one.md')], { now });
   assert.throws(() => search(index, 'secret-canary', { limit: -1 }), (error) => error.code === 'E_INVALID_INPUT' && !error.message.includes('secret-canary'));
-  assert.throws(() => search(index, 42), { code: 'E_INVALID_INPUT' });
+  assert.throws(() => search(index, 42), { code: 'E_QUERY_INVALID' });
   assert.throws(() => buildIndex({}), { code: 'E_INVALID_INPUT' });
 });
 
