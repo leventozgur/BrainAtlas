@@ -20,7 +20,7 @@ export function runHook(input);
 
 ## Output and errors
 
-Output is at most 4002 characters (Codex at most 1400). The deadline is 4700 ms; timeout fails open with empty output and exit code 0. Metrics contain only client, event, duration, character count, result count, mode, and a hashed session ID.
+Output is at most 4002 characters (Codex at most 1400). The deadline is 4700 ms; timeout fails open with empty output and exit code 0. Metrics (JSONL `stateDir/metrics/hooks.jsonl`, mode 0600) contain only `ts`, `client`, `event`, `mode`, `durationMs`, `chars`, `results`, `outcome` (`ok|empty|deadline|error`) and `session` (first 16 hex of sha256(session_id)) — never prompt text, page paths or the raw session id.
 
 ### Errors
 
