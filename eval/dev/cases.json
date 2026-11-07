@@ -1,0 +1,346 @@
+[
+  {
+    "id": "tr-01",
+    "query": "yedekleri hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-01.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-02",
+    "query": "aramaden hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-02.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-03",
+    "query": "depolamalerinde hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-03.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-04",
+    "query": "guvenlikleri hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-04.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-05",
+    "query": "How should the team handle network connectivity safely",
+    "relevant": [
+      "topic-05.md"
+    ]
+  },
+  {
+    "id": "tr-06",
+    "query": "veritabanileri hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-06.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-07",
+    "query": "dizinden hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-07.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-08",
+    "query": "onbelleklerinde hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-08.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-09",
+    "query": "gunlukleri hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-09.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-10",
+    "query": "izlemelerden hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-10.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-11",
+    "query": "dagitimleri hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-11.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-12",
+    "query": "sifrelemeden hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-12.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-13",
+    "query": "kimliklerinde hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-13.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-14",
+    "query": "yetkilendirmeleri hakkında hangi işlem yapılır",
+    "relevant": [
+      "topic-14.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "id": "tr-15",
+    "query": "How should the team handle schema migration safely",
+    "relevant": [
+      "topic-15.md"
+    ]
+  },
+  {
+    "id": "en-16",
+    "query": "How should the team handle disaster recovery safely",
+    "relevant": [
+      "topic-16.md"
+    ]
+  },
+  {
+    "id": "en-17",
+    "query": "How should the team handle input validation safely",
+    "relevant": [
+      "topic-17.md"
+    ]
+  },
+  {
+    "id": "en-18",
+    "query": "How should the team handle service configuration safely",
+    "relevant": [
+      "topic-18.md"
+    ]
+  },
+  {
+    "id": "en-19",
+    "query": "How should the team handle request routing safely",
+    "relevant": [
+      "topic-19.md"
+    ]
+  },
+  {
+    "id": "en-20",
+    "query": "How should the team handle folder synchronization safely",
+    "relevant": [
+      "topic-20.md"
+    ]
+  },
+  {
+    "id": "en-21",
+    "query": "How should the team handle archive policy safely",
+    "relevant": [
+      "topic-21.md"
+    ]
+  },
+  {
+    "id": "en-22",
+    "query": "How should the team handle job scheduling safely",
+    "relevant": [
+      "topic-22.md"
+    ]
+  },
+  {
+    "id": "en-23",
+    "query": "How should the team handle api versioning safely",
+    "relevant": [
+      "topic-23.md"
+    ]
+  },
+  {
+    "id": "en-24",
+    "query": "How should the team handle integration testing safely",
+    "relevant": [
+      "topic-24.md"
+    ]
+  },
+  {
+    "id": "en-25",
+    "query": "How should the team handle event filtering safely",
+    "relevant": [
+      "topic-25.md"
+    ]
+  },
+  {
+    "id": "en-26",
+    "query": "How should the team handle document parsing safely",
+    "relevant": [
+      "topic-26.md"
+    ]
+  },
+  {
+    "id": "en-27",
+    "query": "How should the team handle page rendering safely",
+    "relevant": [
+      "topic-27.md"
+    ]
+  },
+  {
+    "id": "en-28",
+    "query": "How should the team handle payload compression safely",
+    "relevant": [
+      "topic-28.md"
+    ]
+  },
+  {
+    "id": "en-29",
+    "query": "How should the team handle replica consistency safely",
+    "relevant": [
+      "topic-29.md"
+    ]
+  },
+  {
+    "id": "en-30",
+    "query": "How should the team handle data partitioning safely",
+    "relevant": [
+      "topic-30.md"
+    ]
+  },
+  {
+    "id": "en-31",
+    "query": "How should the team handle credential rotation safely",
+    "relevant": [
+      "topic-31.md"
+    ]
+  },
+  {
+    "id": "en-32",
+    "query": "How should the team handle record retention safely",
+    "relevant": [
+      "topic-32.md"
+    ]
+  },
+  {
+    "id": "en-33",
+    "query": "How should the team handle service discovery safely",
+    "relevant": [
+      "topic-33.md"
+    ]
+  },
+  {
+    "id": "en-34",
+    "query": "How should the team handle transport protocol safely",
+    "relevant": [
+      "topic-34.md"
+    ]
+  },
+  {
+    "id": "en-35",
+    "query": "How should the team handle metric aggregation safely",
+    "relevant": [
+      "topic-35.md"
+    ]
+  },
+  {
+    "id": "history-1",
+    "query": "What is the current backup restoration procedure",
+    "relevant": [
+      "topic-01.md"
+    ],
+    "excluded": [
+      "old-0.md"
+    ]
+  },
+  {
+    "id": "history-2",
+    "query": "What is the current search relevance procedure",
+    "relevant": [
+      "topic-02.md"
+    ],
+    "excluded": [
+      "old-1.md"
+    ]
+  },
+  {
+    "id": "history-3",
+    "query": "What is the current object storage procedure",
+    "relevant": [
+      "topic-03.md"
+    ],
+    "excluded": [
+      "old-2.md"
+    ]
+  },
+  {
+    "id": "history-4",
+    "query": "What is the current security incident response procedure",
+    "relevant": [
+      "topic-04.md"
+    ],
+    "excluded": [
+      "old-3.md"
+    ]
+  },
+  {
+    "id": "history-5",
+    "query": "What is the current network connectivity procedure",
+    "relevant": [
+      "topic-05.md"
+    ],
+    "excluded": [
+      "old-4.md"
+    ]
+  },
+  {
+    "id": "abstain-1",
+    "query": "Why do penguins migrate across Antarctica",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "abstain-2",
+    "query": "Who painted the ceiling of the chapel",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "abstain-3",
+    "query": "Which saffron recipe pairs cardamom with pistachios",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "abstain-4",
+    "query": "When is Jupiter visible tonight",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "abstain-5",
+    "query": "the and of to ve ile",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "abstain-6",
+    "query": "Where do giraffes sleep outdoors",
+    "relevant": [],
+    "abstain": true
+  }
+]

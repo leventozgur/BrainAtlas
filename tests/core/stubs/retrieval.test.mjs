@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as api from '../../../packages/core/src/retrieval/index.mjs';
-test('retrieval contract exports are explicit not-implemented stubs', async () => {
-  await assert.rejects(Promise.resolve().then(() => api.buildIndex()), (error) => error.code === 'E_NOT_IMPLEMENTED');
-  await assert.rejects(Promise.resolve().then(() => api.search()), (error) => error.code === 'E_NOT_IMPLEMENTED');
-  await assert.rejects(Promise.resolve().then(() => api.createSearcher()), (error) => error.code === 'E_NOT_IMPLEMENTED');
-  await assert.rejects(Promise.resolve().then(() => api.normalizeText()), (error) => error.code === 'E_NOT_IMPLEMENTED');
-  await assert.rejects(Promise.resolve().then(() => api.stem()), (error) => error.code === 'E_NOT_IMPLEMENTED');
+import { buildIndex, search, normalizeText, stem } from '../../../packages/core/src/retrieval/index.mjs';
+test('retrieval contract provides ranked evidence', () => {
+  const index = buildIndex([{path:'a.md',title:'Vault backup',aliases:[],keywords:[],headings:[],body:'Backup evidence',frontmatter:{status:'active'}}], {now:new Date('2025-01-01')});
+  assert.equal(search(index,'backup').results[0].path,'a.md');
+  assert.equal(normalizeText('İŞIĞI'), 'isigi');
+  assert.equal(stem('backups'), 'backup');
 });
