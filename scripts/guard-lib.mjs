@@ -68,7 +68,7 @@ export async function checkRule(root, id) {
   if (id === 'lockfile') {
     const out=[]; const lp=join(root,'package-lock.json'); let lock;
     try { lock=JSON.parse(await readFile(lp,'utf8')); } catch { return [{file:'package-lock.json',line:1,rule:id}]; }
-    const allowedRoots=['@modelcontextprotocol/sdk','yaml','gray-matter'];
+    const allowedRoots=['@modelcontextprotocol/sdk','yaml','gray-matter','zod']; // zod: MCP SDK peer used directly by packages/mcp (PLAN §2)
     const workspaces=(lock.packages||{});
     for(const [path,pkg] of Object.entries(workspaces)) if(pkg.hasInstallScript===true) out.push({file:'package-lock.json',line:1,rule:id});
     const allowedNames=new Set(allowedRoots);
