@@ -22,6 +22,12 @@ export function runHook(input);
 
 Output is at most 4002 characters (Codex at most 1400). The deadline is 4700 ms; timeout fails open with empty output and exit code 0. Metrics contain only client, event, duration, character count, result count, mode, and a hashed session ID.
 
+### Errors
+
+- `E_HOOK_INPUT`: malformed stdin; fail open with empty output and exit code 0.
+- `E_HOOK_DEADLINE`: processing exceeded the deadline; fail open with empty output and exit code 0.
+- `E_HOOK_CLIENT`: unknown client; return empty output and exit code 2.
+
 ## Example
 
 ```js

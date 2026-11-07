@@ -32,6 +32,12 @@ Search options default to `limit=5` and support character budget, as-of date, an
 
 Results contain evidence paths, bounded snippets, scores, freshness, and status. If the score/evidence does not meet threshold, `abstained` is true with a reason. Truncation is explicit. Invalid inputs produce typed errors without echoing sensitive content.
 
+### Errors
+
+- `E_INDEX_CORRUPT`: persisted index is malformed or unreadable; discard and rebuild it from the vault.
+- `E_QUERY_EMPTY`: query contains no searchable terms.
+- `E_VAULT_MISSING`: configured vault directory is unavailable.
+
 ## Example
 
 ```js

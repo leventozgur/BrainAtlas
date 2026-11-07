@@ -1,2 +1,5 @@
 // SPDX-License-Identifier: MIT
-export const activate = async () => { throw new Error("Not implemented"); };
+import { NotImplementedError } from '../../../packages/core/src/util/errors.mjs';
+
+export async function activate(ctx) { throw new NotImplementedError('module.activate'); }
+export const commands = {};

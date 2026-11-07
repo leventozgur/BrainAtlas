@@ -26,6 +26,14 @@ The archive root is `brainatlas-<v>/` and contains `package.json`, `packages/`, 
 
 Verification order is SHA-256 checksums, signature and signer namespace, then manifest file inventory and per-file hashes. Reject missing files, profile mismatch, and path traversal. Verification returns the validated manifest; failures use stable `E_*` error codes.
 
+### Errors
+
+- `E_SHA_MISMATCH`: an artifact or manifest file hash differs from its recorded checksum.
+- `E_SIGNATURE_INVALID`: the signature or signer namespace is invalid.
+- `E_MANIFEST_INVALID`: the release manifest is malformed or its file inventory is invalid.
+- `E_PROFILE_MISMATCH`: the selected profile does not match the release manifest.
+- `E_MODULE_MISSING`: a module required by the manifest is absent from the archive.
+
 ## Example
 
 ```text
