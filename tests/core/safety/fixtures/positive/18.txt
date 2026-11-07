@@ -1,0 +1,3 @@
+{{PEM_BEGIN}} PRIVATE KEY-----
+ZmFrZSBrZXk=
+{{PEM_END}} PRIVATE KEY-----
