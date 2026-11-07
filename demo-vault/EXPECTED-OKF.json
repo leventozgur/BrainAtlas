@@ -1,0 +1,44 @@
+[
+  {
+    "path": "wiki/concepts/confirmed-empty.md",
+    "rule": "confirmed.unverified",
+    "severity": "warn",
+    "message": "Confirmed pages need at least one verified record."
+  },
+  {
+    "path": "wiki/concepts/superseded-missing.md",
+    "rule": "superseded.target-missing",
+    "severity": "warn",
+    "message": "The superseded_by target is not present in the Wiki scan."
+  },
+  {
+    "path": "wiki/entities/missing-status.md",
+    "rule": "required.status",
+    "severity": "warn",
+    "message": "Required field 'status' is missing."
+  },
+  {
+    "path": "wiki/entities/superseded-no-target.md",
+    "rule": "superseded.target-required",
+    "severity": "warn",
+    "message": "Superseded pages need a valid wiki path in superseded_by."
+  },
+  {
+    "path": "wiki/queries/unquoted-date-trap.md",
+    "rule": "date.unquoted.generated",
+    "severity": "warn",
+    "message": "Quote the generated date to preserve date-only semantics."
+  },
+  {
+    "path": "wiki/sources/bad-stale.md",
+    "rule": "stale_after.invalid",
+    "severity": "error",
+    "message": "stale_after must be a UTC date, timestamp, or positive P<n>D/P<n>W duration."
+  },
+  {
+    "path": "wiki/summaries/stale-page.md",
+    "rule": "stale.expired",
+    "severity": "warn",
+    "message": "Page has passed its review threshold."
+  }
+]
