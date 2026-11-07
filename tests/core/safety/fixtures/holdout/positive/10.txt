@@ -1,0 +1,3 @@
+{{PEM_BEGIN}} RSA PRIVATE KEY-----
+ZmFrZQ==
+{{PEM_END}} RSA PRIVATE KEY-----
