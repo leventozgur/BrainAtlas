@@ -88,3 +88,24 @@ test('readOnly stdio server omits every write tool', async (t) => {
   assert.deepEqual(names.sort(), ['wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_index', 'wiki_read_page', 'wiki_status'].sort());
   assert.equal(names.some((name) => writeTools.includes(name)), false);
 });
+
+test('Wiki read tools return E_VAULT_MISSING when the wiki directory is absent', async (t) => {
+  const env = await setup(true); t.after(async () => rm(env.home, { recursive: true, force: true }));
+  const { client, transport } = await connect(env); t.after(async () => { await client.close(); await transport.close(); });
+  await rm(resolve(env.vault, 'wiki'), { recursive: true });
+
+  for (const [name, args] of [
+    ['wiki_query', { query: 'evidence' }],
+    ['wiki_read_page', { path: 'entities/sample-01.md' }],
+    ['wiki_read_index', {}],
+    ['wiki_list_pages', {}],
+    ['wiki_status', {}],
+    ['wiki_lint', {}]
+  ]) {
+    const result = await client.callTool({ name, arguments: args });
+    assert.equal(result.isError, true, `${name} should return an MCP error`);
+    const message = result.content.find((item) => item.type === 'text')?.text ?? '';
+    assert.match(message, /E_VAULT_MISSING/);
+    assert.equal(message.includes(env.home), false, `${name} must not expose an absolute path`);
+  }
+});

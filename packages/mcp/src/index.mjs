@@ -90,28 +90,40 @@ export function createServer(options) {
     try { return textResult(await handler(args)); }
     catch (error) { return { content: [{ type: 'text', text: asText(error) }], isError: true }; }
   });
+  const ensureWikiDirectory = async () => {
+    try {
+      if ((await stat(wikiDir)).isDirectory()) return;
+    } catch (error) {
+      if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
+    }
+    throw mcpError('E_VAULT_MISSING', 'The Wiki directory is missing.');
+  };
+  const readTool = (name, schema, handler) => tool(name, schema, async (args) => {
+    await ensureWikiDirectory();
+    return handler(args);
+  });
 
-  tool('wiki_query', z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional() }), ({ query, limit }) => {
+  readTool('wiki_query', z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional() }), ({ query, limit }) => {
     const answer = searcher.search(query, { limit: limit ?? 5, budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT), abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
     return { results: answer.results, abstained: answer.abstained };
   });
-  tool('wiki_read_page', z.object({ path: z.string() }), async ({ path }) => {
+  readTool('wiki_read_page', z.object({ path: z.string() }), async ({ path }) => {
     const { target } = await safeFile(path);
     const raw = await readFile(target, 'utf8');
     return { path: `wiki/${(await safeFile(path)).normalized}`, content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT };
   });
-  tool('wiki_read_index', z.object({}), async () => {
+  readTool('wiki_read_index', z.object({}), async () => {
     const { target } = await safeFile('index.md');
     const raw = await readFile(target, 'utf8');
     return { content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT };
   });
-  tool('wiki_list_pages', z.object({ type: z.string().optional() }), async ({ type }) => {
+  readTool('wiki_list_pages', z.object({ type: z.string().optional() }), async ({ type }) => {
     let pages = await core.listPages(vaultDir);
     pages = pages.filter((item) => item !== 'wiki/index.md' && item !== 'wiki/log.md');
     if (type) pages = pages.filter((item) => item.startsWith(`wiki/${type}/`));
     return { pages };
   });
-  tool('wiki_status', z.object({}), async () => {
+  readTool('wiki_status', z.object({}), async () => {
     const pages = (await core.listPages(vaultDir)).filter((item) => !['wiki/index.md', 'wiki/log.md'].includes(item));
     const findings = await core.checkVault(vaultDir);
     let indexAgeMs = null;
@@ -121,7 +133,7 @@ export function createServer(options) {
       okfErrorCount: findings.filter((item) => item.severity === 'error').length, indexAgeMs,
       readOnly: config.readOnly === true, indexCoveragePct: entries.index_coverage_pct };
   });
-  tool('wiki_lint', z.object({}), () => wiki.lintWiki(wikiDir));
+  readTool('wiki_lint', z.object({}), () => wiki.lintWiki(wikiDir));
 
   if (config.readOnly !== true) {
     tool('wiki_write_page', z.object({ path: z.string(), content: z.string() }), async ({ path, content }) => {
