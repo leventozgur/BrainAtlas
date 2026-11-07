@@ -1,0 +1,317 @@
+[
+  {
+    "query": "yedek",
+    "relevant": [
+      "topic-01.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "arama",
+    "relevant": [
+      "topic-02.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "depolama",
+    "relevant": [
+      "topic-03.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "guvenlik",
+    "relevant": [
+      "topic-04.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "ag",
+    "relevant": [
+      "topic-05.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "veritabani",
+    "relevant": [
+      "topic-06.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "dizin",
+    "relevant": [
+      "topic-07.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "onbellek",
+    "relevant": [
+      "topic-08.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "gunluk",
+    "relevant": [
+      "topic-09.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "izleme",
+    "relevant": [
+      "topic-10.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "dagitim",
+    "relevant": [
+      "topic-11.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "sifreleme",
+    "relevant": [
+      "topic-12.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "kimlik",
+    "relevant": [
+      "topic-13.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "yetkilendirme",
+    "relevant": [
+      "topic-14.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "goc",
+    "relevant": [
+      "topic-15.md"
+    ],
+    "trToEn": true
+  },
+  {
+    "query": "recovery",
+    "relevant": [
+      "topic-16.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "validation",
+    "relevant": [
+      "topic-17.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "configuration",
+    "relevant": [
+      "topic-18.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "routing",
+    "relevant": [
+      "topic-19.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "synchronization",
+    "relevant": [
+      "topic-20.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "archiving",
+    "relevant": [
+      "topic-21.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "scheduling",
+    "relevant": [
+      "topic-22.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "versioning",
+    "relevant": [
+      "topic-23.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "testing",
+    "relevant": [
+      "topic-24.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "filtering",
+    "relevant": [
+      "topic-25.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "parsing",
+    "relevant": [
+      "topic-26.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "rendering",
+    "relevant": [
+      "topic-27.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "compression",
+    "relevant": [
+      "topic-28.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "replication",
+    "relevant": [
+      "topic-29.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "partitioning",
+    "relevant": [
+      "topic-30.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "rotation",
+    "relevant": [
+      "topic-31.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "retention",
+    "relevant": [
+      "topic-32.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "discovery",
+    "relevant": [
+      "topic-33.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "transport",
+    "relevant": [
+      "topic-34.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "aggregation",
+    "relevant": [
+      "topic-35.md"
+    ],
+    "trToEn": false
+  },
+  {
+    "query": "legacytoken0 backup",
+    "relevant": [
+      "topic-01.md"
+    ],
+    "excluded": [
+      "old-0.md"
+    ]
+  },
+  {
+    "query": "legacytoken1 search",
+    "relevant": [
+      "topic-02.md"
+    ],
+    "excluded": [
+      "old-1.md"
+    ]
+  },
+  {
+    "query": "legacytoken2 storage",
+    "relevant": [
+      "topic-03.md"
+    ],
+    "excluded": [
+      "old-2.md"
+    ]
+  },
+  {
+    "query": "legacytoken3 security",
+    "relevant": [
+      "topic-04.md"
+    ],
+    "excluded": [
+      "old-3.md"
+    ]
+  },
+  {
+    "query": "legacytoken4 network",
+    "relevant": [
+      "topic-05.md"
+    ],
+    "excluded": [
+      "old-4.md"
+    ]
+  },
+  {
+    "query": "unknownconcept0",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "query": "unknownconcept1",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "query": "unknownconcept2",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "query": "unknownconcept3",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "query": "unknownconcept4",
+    "relevant": [],
+    "abstain": true
+  }
+]
