@@ -35,7 +35,12 @@ function mcpEntry(ctx) {
   return { type: 'stdio', command: ctx.nodePath, args: [ctx.shimPath, 'mcp'], env: {} };
 }
 function quote(value) { return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`; }
-function hookCommand(ctx, event) { return `${quote(ctx.nodePath)} ${quote(ctx.shimPath)} hook claude-code ${event}`; }
+const hookEvents = { UserPromptSubmit: 'prompt', SessionStart: 'session-start' };
+function hookCommand(ctx, event) { return `${quote(ctx.nodePath)} ${quote(ctx.shimPath)} hook claude ${hookEvents[event]}`; }
+function legacyHookCommand(ctx, event) { return `${quote(ctx.nodePath)} ${quote(ctx.shimPath)} hook claude-code ${event}`; }
+function isManagedHook(hook, ctx, event) {
+  return hook?.type === 'command' && [hookCommand(ctx, event), legacyHookCommand(ctx, event)].includes(hook.command);
+}
 function pointer(ctx) {
   const payload = `Use BrainAtlas as evidence-first project memory. Query relevant knowledge with the BrainAtlas wiki_query MCP tool before making substantial project changes. Treat retrieved pages as evidence, verify them against the current repository, and cite page paths when reporting findings. If no relevant page exists, proceed from current evidence.`;
   const digest = hash(payload);
@@ -90,12 +95,26 @@ function changesFor(ctx, current) {
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) fail('E_CONFIG_PARSE', 'Configuration has an invalid hooks structure.');
   let settingsChanged = settingsBefore === null;
-  for (const event of ['UserPromptSubmit', 'SessionStart']) {
+  for (const event of Object.keys(hookEvents)) {
     const list = settings.hooks[event] ?? [];
     if (!Array.isArray(list)) fail('E_CONFIG_PARSE', 'Configuration has an invalid hook list.');
     const command = hookCommand(ctx, event);
-    const has = list.some(group => group && Array.isArray(group.hooks) && group.hooks.some(hook => hook?.type === 'command' && hook.command === command));
-    if (!has) { list.push({ hooks: [{ type: 'command', command, timeout: 5 }] }); settings.hooks[event] = list; settingsChanged = true; }
+    let has = list.some(group => group && Array.isArray(group.hooks) && group.hooks.some(hook => hook?.type === 'command' && hook.command === command));
+    const emptied = new Set();
+    for (const group of list) {
+      if (!group || !Array.isArray(group.hooks)) continue;
+      const previousLength = group.hooks.length;
+      group.hooks = group.hooks.filter(hook => {
+        if (hook?.type !== 'command' || hook.command !== legacyHookCommand(ctx, event)) return true;
+        settingsChanged = true;
+        if (has) return false;
+        hook.command = command; has = true; return true;
+      });
+      if (previousLength && !group.hooks.length) emptied.add(group);
+    }
+    const kept = list.filter(group => !emptied.has(group));
+    if (!has) { kept.push({ hooks: [{ type: 'command', command, timeout: 5 }] }); settingsChanged = true; }
+    if (settingsChanged) settings.hooks[event] = kept;
   }
   if (settingsChanged) changes.push({ file: files.settings, kind: settingsBefore === null ? 'create' : 'modify', before: settingsBefore, after: jsonStringify(settings, settingsBefore), ownership: 'json-key' });
   const instructionsBefore = current[files.instructions];
@@ -159,7 +178,7 @@ function removeHook(settings, event, ctx) {
   const kept = [];
   for (const group of list) {
     if (!group || !Array.isArray(group.hooks)) { kept.push(group); continue; }
-    const hooks = group.hooks.filter(hook => !(hook?.type === 'command' && hook.command?.includes(ctx.shimPath) && hook.command.includes(` hook claude-code ${event}`)));
+    const hooks = group.hooks.filter(hook => !isManagedHook(hook, ctx, event));
     const ownedRemoved = hooks.length !== group.hooks.length;
     if (ownedRemoved) changed = true;
     if (hooks.length || !ownedRemoved) kept.push(ownedRemoved ? { ...group, hooks } : group);
@@ -181,6 +200,15 @@ export async function remove(ctx) {
     }
     if (current === null) { actions.push({ file, record, removeRecord: recText !== null }); continue; }
     if (original?.file === file && current === original.expected) {
+      if (file === files.settings && original.existed) {
+        const value = parseJson(original.original); let changed = false;
+        for (const event of Object.keys(hookEvents)) changed = removeHook(value, event, ctx) || changed;
+        if (changed) {
+          if (value.hooks && !Object.keys(value.hooks).length) delete value.hooks;
+          actions.push({ file, record, removeRecord: true, write: jsonStringify(value, original.original) });
+          continue;
+        }
+      }
       actions.push({ file, record, removeRecord: recText !== null, write: original.existed ? original.original : null });
       continue;
     }
@@ -236,7 +264,7 @@ export async function doctor(ctx) {
   checks.push({ id: 'shim', ok: shimExists, message: shimExists ? 'Shim file exists.' : 'Shim file is missing.' });
   checks.push({ id: 'version-drift', ok: true, message: 'Version drift cannot be determined from adapter configuration.' });
   const settingsText = await readOptional(files.settings); let hookPresent = false;
-  if (settingsText !== null) { const settings = parseJson(settingsText); hookPresent = ['UserPromptSubmit', 'SessionStart'].some(event => settings.hooks?.[event]?.some(group => group.hooks?.some(hook => hook.command?.includes(ctx.shimPath) && hook.command.includes(` hook claude-code ${event}`)))); }
+  if (settingsText !== null) { const settings = parseJson(settingsText); hookPresent = Object.keys(hookEvents).every(event => Array.isArray(settings.hooks?.[event]) && settings.hooks[event].some(group => Array.isArray(group?.hooks) && group.hooks.some(hook => hook?.type === 'command' && hook.command === hookCommand(ctx, event)))); }
   checks.push({ id: 'hook-present', ok: hookPresent, message: hookPresent ? 'Claude Code hooks are configured.' : 'Claude Code hooks are not configured.' });
   return { ok: checks.every(check => check.ok), checks };
 }

@@ -43,6 +43,32 @@ function indentAt(text,at){const line=text.lastIndexOf('\n',at-1)+1;return text.
 function setMember(text,node,key,value){const old=member(node,key),encoded=JSON.stringify(value);if(old)return text.slice(0,old.start)+encoded+text.slice(old.end);const close=node.end-1,nonempty=node.members.length>0,nl=text.includes('\r\n')?'\r\n':'\n',parent=indentAt(text,node.start),child=nonempty?indentAt(text,node.members[0].keyStart):parent+'  ';return text.slice(0,close)+`${nonempty?',':''}${nl}${child}${JSON.stringify(key)}: ${encoded}${nl}${parent}`+text.slice(close);}
 function appendArray(text,node,value){const close=node.end-1,nl=text.includes('\r\n')?'\r\n':'\n',parent=indentAt(text,node.start),child=node.items.length?indentAt(text,node.items[0].start):parent+'  ';return text.slice(0,close)+`${node.items.length?',':''}${nl}${child}${JSON.stringify(value)}${nl}${parent}`+text.slice(close);}
 function quote(value){return `"${String(value).replaceAll('\\','\\\\').replaceAll('"','\\"')}"`;}
+function hookCommand(ctx,verb,legacy=false){return `${quote(ctx.nodePath)} ${quote(ctx.shimPath)} ${legacy?'':'hook '}gemini ${verb}`;}
+function visitHooks(text,ctx,mode){
+  for(const [event,name,verb] of [['BeforeAgent','brainatlas-context','prompt'],['SessionStart','brainatlas-session','session-start']]){
+    let list=member(member(sourceTree(text),'hooks')?.node,event);
+    if(list?.node.type!=='array')continue;
+    let current=mode==='upgrade'&&(parseJson(text).hooks?.[event]??[]).some(g=>g?.matcher==='*'&&Array.isArray(g.hooks)&&g.hooks.some(h=>h?.name===name&&h.type==='command'&&h.command===hookCommand(ctx,verb)));
+    for(let i=list.node.items.length-1;i>=0;i--){
+      list=member(member(sourceTree(text),'hooks')?.node,event);
+      const group=list.node.items[i],matcher=member(group,'matcher'),children=member(group,'hooks');
+      if(!matcher||text.slice(matcher.start,matcher.end)!=='"*"'||children?.node.type!=='array')continue;
+      for(let j=children.node.items.length-1;j>=0;j--){
+        list=member(member(sourceTree(text),'hooks')?.node,event);
+        const items=member(list.node.items[i],'hooks').node,item=items.items[j];
+        const n=member(item,'name'),ty=member(item,'type'),command=member(item,'command');
+        if(!n||!ty||!command||text.slice(n.start,n.end)!==JSON.stringify(name)||text.slice(ty.start,ty.end)!=='"command"')continue;
+        const value=text.slice(command.start,command.end);
+        if(mode==='upgrade'&&!current&&value===JSON.stringify(hookCommand(ctx,verb,true))){text=text.slice(0,command.start)+JSON.stringify(hookCommand(ctx,verb))+text.slice(command.end);current=true;}
+        else if((mode==='upgrade'&&value===JSON.stringify(hookCommand(ctx,verb,true)))||(mode==='remove'&&[hookCommand(ctx,verb),hookCommand(ctx,verb,true)].some(c=>value===JSON.stringify(c)))){
+          if(items.items.length===1){text=removeItem(text,list.node,i);break;}
+          text=removeItem(text,items,j);
+        }
+      }
+    }
+  }
+  return text;
+}
 function geminiSettings(before,ctx){
   const conf=before===null||before.trim()===''?{}:parseJson(before);let text=before===null||before.trim()===''?'{}':before;
   if(conf.mcpServers!==undefined&&(!conf.mcpServers||Array.isArray(conf.mcpServers)||typeof conf.mcpServers!=='object'))fail('E_CONFIG_PARSE','MCP server configuration must be an object.');
@@ -51,8 +77,9 @@ function geminiSettings(before,ctx){
   if(!mcp){text=setMember(text,root,'mcpServers',{});root=sourceTree(text);mcp=member(root,'mcpServers');}
   if(mcp.node.type!=='object')fail('E_CONFIG_PARSE','MCP server configuration must be an object.');
   if(JSON.stringify(conf.mcpServers?.brainatlas)!==JSON.stringify(entry)){text=setMember(text,mcp.node,'brainatlas',entry);root=sourceTree(text);}
-  const hook={name:'brainatlas-context',type:'command',command:`${quote(ctx.nodePath)} ${quote(ctx.shimPath)} gemini prompt`,timeout:5000,description:'Add relevant BrainAtlas context before the agent responds.'};
-  const sessionHook={name:'brainatlas-session',type:'command',command:`${quote(ctx.nodePath)} ${quote(ctx.shimPath)} gemini session-start`,timeout:5000,description:'Restore BrainAtlas session continuity at session start.'};
+  const hook={name:'brainatlas-context',type:'command',command:hookCommand(ctx,'prompt'),timeout:5000,description:'Add relevant BrainAtlas context before the agent responds.'};
+  const sessionHook={name:'brainatlas-session',type:'command',command:hookCommand(ctx,'session-start'),timeout:5000,description:'Restore BrainAtlas session continuity at session start.'};
+  text=visitHooks(text,ctx,'upgrade');root=sourceTree(text);conf.hooks=parseJson(text).hooks;
   let hooks=member(root,'hooks');if(!hooks){text=setMember(text,root,'hooks',{});root=sourceTree(text);hooks=member(root,'hooks');}
   if(hooks.node.type!=='object')fail('E_CONFIG_PARSE','Hook configuration must be an object.');
   let event=member(hooks.node,'BeforeAgent');if(!event){text=setMember(text,hooks.node,'BeforeAgent',[]);root=sourceTree(text);hooks=member(root,'hooks');event=member(hooks.node,'BeforeAgent');}
@@ -134,32 +161,13 @@ export async function remove(ctx) {
         if(prior!==undefined){if(!servers){text=setMember(text,root,'mcpServers',{brainatlas:prior});}else{text=setMember(text,servers.node,'brainatlas',prior);}}
         else if(servers){const owned=member(servers.node,'brainatlas');if(owned){text=removeMember(text,servers.node,'brainatlas');root=sourceTree(text);servers=member(root,'mcpServers');if(servers&&!servers.node.members.length&&!parseJson(rec.original??'{}').mcpServers)text=removeMember(text,root,'mcpServers');}}
         actions.push({ file, record: s.record, cleanup: true, value: text, managedChanges: true });
-      } else actions.push({ file, record: s.record, cleanup: false });
+      } else actions.push({ file, record: s.record, cleanup: false, value: current });
     }
   }
-  // Remove the two owned Gemini registrations from a settings file that changed
-  // after apply, while retaining every unrelated JSON value and source byte.
-  const settingAction=actions.find(a=>a.file===f.mcp&&a.managedChanges&&a.value!==undefined&&a.value!==null);
-  if(settingAction){
-    let text=settingAction.value;
-    for(const [event,name,verb] of [['BeforeAgent','brainatlas-context','gemini prompt'],['SessionStart','brainatlas-session','gemini session-start']]){
-      let root=sourceTree(text),hooks=member(root,'hooks'),list=member(hooks?.node,event);
-      if(!list||list.node.type!=='array')continue;
-      for(let i=list.node.items.length-1;i>=0;i--){
-        root=sourceTree(text);hooks=member(root,'hooks');list=member(hooks?.node,event);
-        const group=list?.node.items[i];if(!group||group.type!=='object')continue;
-        const match=member(group,'matcher'),children=member(group,'hooks');
-        if(!match||text.slice(match.start,match.end)!=='"*"'||children?.node.type!=='array')continue;
-        const ownedIndex=children.node.items.findIndex(item=>{
-          if(item.type!=='object')return false;
-          const n=member(item,'name'),c=member(item,'command'),ty=member(item,'type');
-          return n&&c&&ty&&text.slice(n.start,n.end)===JSON.stringify(name)&&text.slice(ty.start,ty.end)==='"command"'&&text.slice(c.start,c.end)===JSON.stringify(`${quote(ctx.nodePath)} ${quote(ctx.shimPath)} ${verb}`);
-        });
-        if(ownedIndex<0)continue;
-        if(children.node.items.length===1)text=removeItem(text,list.node,i);
-        else text=removeItem(text,children.node,ownedIndex);
-      }
-    }
+  // Remove current and legacy registrations, including from restored originals.
+  const settingAction=actions.find(a=>a.file===f.mcp&&a.value!==undefined&&a.value!==null);
+  if(settingAction&&settingAction.value.trim()){
+    let text=visitHooks(settingAction.value,ctx,'remove');
     // Drop adapter-created empty hook containers only when they were absent originally.
     const original=settingAction.record?await read(settingAction.record):null;let rec;try{rec=original&&JSON.parse(original);}catch{}
     const before=rec?.existed?parseJson(rec.original):{};let root=sourceTree(text),hooks=member(root,'hooks');
@@ -176,10 +184,11 @@ export async function doctor(ctx) {
   checks.push({ id:'shim',ok:shim,message:shim?'Shim file exists.':'Shim file is missing.' });
   checks.push({ id:'version-drift',ok:true,message:'Version drift cannot be determined from adapter configuration.' });
   const hookConfig=configText===null?{}:parseJson(configText).hooks||{};
-  const hookPresent=(hookConfig.BeforeAgent||[]).some(g=>g?.matcher==='*'&&Array.isArray(g.hooks)&&g.hooks.some(h=>h?.name==='brainatlas-context'&&h.type==='command'));
-  const sessionPresent=(hookConfig.SessionStart||[]).some(g=>g?.matcher==='*'&&Array.isArray(g.hooks)&&g.hooks.some(h=>h?.name==='brainatlas-session'&&h.type==='command'));
-  checks.push({id:'hook-present',ok:true,message:hookPresent?'Gemini BeforeAgent hook is registered; enable it in the hooks panel if needed.':'Gemini BeforeAgent hook is not registered; enablement in the hooks panel may be required.'});
-  checks.push({id:'session-hook-present',ok:true,message:sessionPresent?'Gemini SessionStart hook is registered.':'Gemini SessionStart hook is not registered.'});
+  const hookPresent=(hookConfig.BeforeAgent||[]).some(g=>g?.matcher==='*'&&Array.isArray(g.hooks)&&g.hooks.some(h=>h?.name==='brainatlas-context'&&h.type==='command'&&h.command===hookCommand(ctx,'prompt')));
+  const sessionPresent=(hookConfig.SessionStart||[]).some(g=>g?.matcher==='*'&&Array.isArray(g.hooks)&&g.hooks.some(h=>h?.name==='brainatlas-session'&&h.type==='command'&&h.command===hookCommand(ctx,'session-start')));
+  const legacy=(event,name,verb)=>(hookConfig[event]||[]).some(g=>g?.matcher==='*'&&Array.isArray(g.hooks)&&g.hooks.some(h=>h?.name===name&&h.type==='command'&&h.command===hookCommand(ctx,verb,true)));
+  checks.push({id:'hook-present',ok:!legacy('BeforeAgent','brainatlas-context','prompt'),message:hookPresent?'Gemini BeforeAgent hook is registered; enable it in the hooks panel if needed.':'Gemini BeforeAgent hook is not registered; enablement in the hooks panel may be required.'});
+  checks.push({id:'session-hook-present',ok:!legacy('SessionStart','brainatlas-session','session-start'),message:sessionPresent?'Gemini SessionStart hook is registered.':'Gemini SessionStart hook is not registered.'});
   const md = await read(f.instructions); let present = false; if (md !== null) present = Boolean(getBlock(md));
   checks.push({id:'instructions',ok:present,message:present?'BrainAtlas instructions are present.':'BrainAtlas instructions are not present.'});
   return { ok:checks.every(c=>c.ok), checks };

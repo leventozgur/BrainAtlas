@@ -96,12 +96,57 @@ test('registers BeforeAgent while preserving other hook and setting bytes', asyn
   assert.ok(registration);
   const command=registration.hooks[0];
   assert.equal(command.name,'brainatlas-context'); assert.equal(command.type,'command');
-  assert.ok(command.timeout<=5000); assert.match(command.command,/gemini prompt$/);
+  assert.ok(command.timeout<=5000); assert.match(command.command,/hook gemini prompt$/);
+  const session=obj.hooks.SessionStart.find(group=>group.matcher==='*').hooks[0];
+  assert.match(session.command,/hook gemini session-start$/);
+  for(const [hook,event] of [[command,'prompt'],[session,'session-start']]){
+    assert.equal(hook.command,`"${x.ctx.nodePath}" "${x.ctx.shimPath}" hook gemini ${event}`);
+  }
   const doctor=await adapter.doctor(x.ctx);
   assert.equal(doctor.checks.find(check=>check.id==='hook-present').ok,true);
   assert.match(doctor.checks.find(check=>check.id==='hook-present').message,/hooks panel/);
   await adapter.remove(x.ctx);
   assert.equal(await readFile(f.mcp,'utf8'),foreign);
+});
+
+test('upgrades legacy hooks in place and removes them without disturbing user hooks', async t => {
+  const x=await setup(), f=files(x.root); t.after(()=>cleanup(x.base));
+  await mkdir(join(x.root,'.gemini'),{recursive:true});
+  const command=event=>`"${x.ctx.nodePath}" "${x.ctx.shimPath}" gemini ${event}`;
+  const legacy=JSON.stringify({hooks:{BeforeAgent:[{matcher:'*',hooks:[{name:'user-hook',type:'command',command:'keep'}, {name:'brainatlas-context',type:'command',command:command('prompt')}]}],SessionStart:[{matcher:'*',hooks:[{name:'brainatlas-session',type:'command',command:command('session-start')}]}]}},null,2)+'\n';
+  await writeFile(f.mcp,legacy);
+  let health=await adapter.doctor(x.ctx);
+  for(const id of ['hook-present','session-hook-present'])assert.equal(health.checks.find(c=>c.id===id).ok,false);
+  await adapter.apply(adapter.plan(x.ctx),x.ctx);
+  const updated=await readFile(f.mcp,'utf8'), config=JSON.parse(updated);
+  for(const [event,name,suffix] of [['BeforeAgent','brainatlas-context','hook gemini prompt'],['SessionStart','brainatlas-session','hook gemini session-start']]){
+    const entries=config.hooks[event].flatMap(g=>g.hooks).filter(h=>h.name===name);
+    assert.equal(entries.length,1); assert.ok(entries[0].command.endsWith(suffix));
+  }
+  assert.ok(updated.includes('"name": "user-hook"'));
+  assert.equal(adapter.plan(x.ctx).changes.length,0);
+  health=await adapter.doctor(x.ctx);
+  for(const id of ['hook-present','session-hook-present'])assert.equal(health.checks.find(c=>c.id===id).ok,true);
+  await adapter.remove(x.ctx);
+  const removed=await readFile(f.mcp,'utf8');
+  assert.ok(removed.includes('"name": "user-hook"'));
+  assert.doesNotMatch(removed,/brainatlas-context|brainatlas-session/);
+});
+
+test('deduplicates mixed legacy and current hooks and removes hooks after settings change', async t => {
+  const x=await setup(), f=files(x.root); t.after(()=>cleanup(x.base));
+  await mkdir(join(x.root,'.gemini'),{recursive:true});
+  const base=`"${x.ctx.nodePath}" "${x.ctx.shimPath}"`;
+  const entry=command=>({name:'brainatlas-context',type:'command',command});
+  await writeFile(f.mcp,JSON.stringify({hooks:{BeforeAgent:[{matcher:'*',hooks:[entry(`${base} gemini prompt`),entry(`${base} hook gemini prompt`),{name:'user',type:'command',command:'keep'}]}]}}));
+  await adapter.apply(adapter.plan(x.ctx),x.ctx);
+  let config=JSON.parse(await readFile(f.mcp,'utf8'));
+  assert.equal(config.hooks.BeforeAgent[0].hooks.filter(h=>h.name==='brainatlas-context').length,1);
+  config.extra='preserve'; await writeFile(f.mcp,JSON.stringify(config));
+  await adapter.remove(x.ctx);
+  config=JSON.parse(await readFile(f.mcp,'utf8'));
+  assert.equal(config.extra,'preserve');
+  assert.deepEqual(config.hooks.BeforeAgent[0].hooks.map(h=>h.name),['user']);
 });
 
 test('a foreign plan target is rejected and malformed settings remain untouched', async t => {
