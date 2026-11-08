@@ -288,7 +288,7 @@ async function writeInstallEntrypoints(paths, env) {
   const roots = managedRoots(paths, env);
   const created = [...await missingDirectories(dirname(shim), env.HOME, roots), ...await missingDirectories(localBin, env.HOME, roots)];
   const cli = join(paths.currentDir, 'packages', 'cli', 'bin', 'brainatlas.mjs');
-  const shimContent = `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(cli)} "$@"\n`;
+  const shimContent = `#!/bin/sh\n":" //; exec ${shellQuote(process.execPath)} "$0" "$@"\nimport('node:url').then(({ pathToFileURL }) => import(pathToFileURL(${JSON.stringify(cli)}).href)).catch(error => { console.error(error); process.exitCode = 1; });\n`;
   await recordManagedWrite(paths, paths.currentDir, { before: null, after: await snapshotPath(paths.currentDir) });
   await mkdir(dirname(shim), { recursive: true });
   await managePath(paths, shim, async () => {
