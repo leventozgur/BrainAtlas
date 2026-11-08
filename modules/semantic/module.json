@@ -1,0 +1,9 @@
+{
+  "name": "semantic",
+  "version": "0.1.0-dev",
+  "description": "Optional semantic retrieval for Full profile",
+  "requires": [],
+  "provides": ["retrieval-semantic"],
+  "profiles": ["full", "custom"],
+  "entry": "src/index.mjs"
+}
