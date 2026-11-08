@@ -2,9 +2,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, lstat, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { defaultConfig, resolvePaths, vaultId } from '../../packages/core/src/index.mjs';
+import { hookCommandFor } from '../../packages/cli/src/index.mjs';
 
 test('init, config, plan and doctor use an isolated HOME', async t => {
   const home = await mkdtemp(join(tmpdir(), 'ba-cli-')); t.after(() => rm(home, { recursive: true, force: true }));
@@ -19,11 +21,24 @@ test('init, config, plan and doctor use an isolated HOME', async t => {
   assert.equal(run('config', 'set', 'safety.secretFilter', 'false').status, 1);
   const status = run('status', '--json'); assert.equal(status.status, 0); assert.equal(JSON.parse(status.stdout).checks.config, true);
   assert.equal(run('doctor', '--json').status, 1);
-  assert.equal(JSON.parse(run('update', '--check', '--json').stdout).status, 'unknown');
+  assert.deepEqual(JSON.parse(run('update', '--check', '--metadata-only', '--json').stdout), { status: 'unknown', reason: 'offline' });
   const unavailable = run('init', '--yes', '--agents', 'missing-adapter', '--json');
   assert.equal(unavailable.status, 0);
   assert.match(JSON.parse(unavailable.stdout).warnings[0], /unavailable/);
-  const missingEval = run('eval', '--json');
-  assert.equal(missingEval.status, 1);
-  assert.match(missingEval.stderr, /E_COMPONENT_MISSING/);
+  const evaluation = run('eval', '--json');
+  assert.equal(evaluation.status, 0, evaluation.stderr);
+  assert.ok(JSON.parse(evaluation.stdout).n > 0);
+  const hook = spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), 'hook', 'codex', 'prompt'], { env, encoding: 'utf8', input: '{}' });
+  assert.equal(hook.status, 0, hook.stderr); assert.deepEqual(JSON.parse(hook.stdout), {});
+  assert.equal(JSON.parse(run('config', 'get', 'vault.path', '--json').stdout), join(home, 'BrainAtlas'));
+  await mkdir(join(home, 'BrainAtlas', 'wiki'), { recursive: true });
+  await lstat(join(home, 'BrainAtlas', 'wiki'));
+  const mcp = spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), 'mcp'], { env: { ...env, BRAINATLAS_VAULT: join(home, 'BrainAtlas') }, encoding: 'utf8', input: '', timeout: 5000 });
+  assert.equal(mcp.status, 0, mcp.stderr);
+  const state = join(home, 'state', 'brainatlas');
+  await lstat(state);
+  const paths = resolvePaths({ platform: 'linux', env }); const config = defaultConfig('lite'); config.vault.path = join(home, 'vault');
+  const hookCommand = await hookCommandFor({ client: 'codex', event: 'prompt', paths, config });
+  assert.deepEqual(hookCommand.slice(-3), [paths.binPath, 'codex', 'prompt']);
+  await lstat(join(paths.stateDir, vaultId(config.vault.path)));
 });

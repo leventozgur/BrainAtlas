@@ -2,19 +2,22 @@
 # SPDX-License-Identifier: MIT
 set -eu
 
-from=
+archive=
 profile=
 vault=
 prefix_home=
 allowed_signers=
 yes=0
+insecure=0
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --from|--profile|--vault|--prefix-home|--allowed-signers)
       option=$1
-      [ "$#" -ge 2 ] && [ -n "$2" ] || { printf '%s\n' "E_ARGUMENT: Missing value for $option." >&2; exit 1; }
+      [ "$#" -ge 2 ] || { echo "E_ARGUMENT: missing value for $option." >&2; exit 1; }
+      case "$2" in --*) echo "E_ARGUMENT: missing value for $option." >&2; exit 1 ;; esac
       case "$option" in
-        --from) from=$2 ;;
+        --from) archive=$2 ;;
         --profile) profile=$2 ;;
         --vault) vault=$2 ;;
         --prefix-home) prefix_home=$2 ;;
@@ -23,117 +26,104 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --yes) yes=1; shift ;;
-    *) printf '%s\n' 'E_ARGUMENT: Unknown install option.' >&2; exit 1 ;;
+    --insecure-skip-signature) insecure=1; shift ;;
+    *) echo "E_ARGUMENT: unknown installer option." >&2; exit 1 ;;
   esac
 done
 
-[ -n "$from" ] || { printf '%s\n' 'E_ARGUMENT: Use --from <tgz> for offline installation.' >&2; exit 1; }
-if [ -n "$profile" ]; then
-  case "$profile" in lite|full|custom) ;; *) printf '%s\n' 'E_ARGUMENT: Invalid profile.' >&2; exit 1 ;; esac
-fi
-command -v node >/dev/null 2>&1 || { printf '%s\n' 'E_NODE_VERSION: Node.js 20 or later is required.' >&2; exit 1; }
-node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)' || { printf '%s\n' 'E_NODE_VERSION: Node.js 20 or later is required.' >&2; exit 1; }
-if [ "$yes" -ne 1 ]; then
-  [ -t 0 ] || { printf '%s\n' 'E_ARGUMENT: Pass --yes for non-interactive installation.' >&2; exit 1; }
-  printf '%s' 'Install BrainAtlas from the local release archive? [y/N] '
-  IFS= read -r answer
-  case "$answer" in y|Y|yes|YES) ;; *) printf '%s\n' 'E_CANCELLED: Installation cancelled.' >&2; exit 1 ;; esac
-fi
+[ -n "$archive" ] || { echo "E_ARGUMENT: --from <release.tgz> is required for offline installation." >&2; exit 1; }
+[ -f "$archive" ] || { echo "E_ARCHIVE_READ: release archive is unavailable." >&2; exit 1; }
+if [ -n "$profile" ]; then case "$profile" in lite|full) ;; *) echo "E_ARGUMENT: profile is invalid." >&2; exit 1 ;; esac; fi
 
-script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
-node_path=$(node -p 'process.execPath')
 if [ -n "$prefix_home" ]; then
-  mkdir -p "$prefix_home"
-  HOME=$(CDPATH= cd "$prefix_home" && pwd)
-  export HOME
+  case "$prefix_home" in /*) ;; *) echo "E_ARGUMENT: prefix HOME must be absolute." >&2; exit 1 ;; esac
+  HOME=$prefix_home; export HOME
 fi
-home=${HOME:?}
+[ -n "${HOME:-}" ] || { echo "E_NO_HOME: HOME must be set." >&2; exit 1; }
 if [ -n "${BRAINATLAS_PLATFORM:-}" ]; then platform=$BRAINATLAS_PLATFORM
 else
-  case "$(uname -s)" in Darwin) platform=darwin ;; Linux) platform=linux ;; *) printf '%s\n' 'E_PLATFORM: Unsupported platform.' >&2; exit 1 ;; esac
+  system=$(uname -s)
+  case "$system" in Darwin) platform=darwin ;; Linux) platform=linux ;; *) echo "E_PLATFORM: unsupported platform." >&2; exit 1 ;; esac
 fi
-case "$platform" in
-  darwin) data_dir=$home/Library/'Application Support'/BrainAtlas ;;
-  linux) data_home=${XDG_DATA_HOME:-$home/.local/share}; data_dir=$data_home/brainatlas ;;
-  *) printf '%s\n' 'E_PLATFORM: Unsupported platform.' >&2; exit 1 ;;
-esac
-
-old_current=
-if [ -L "$data_dir/current" ]; then
-  old_current=$(readlink "$data_dir/current")
-  case "$old_current" in releases/[A-Za-z0-9]*) ;; *) printf '%s\n' 'E_CURRENT_INVALID: Current release link is invalid.' >&2; exit 1 ;; esac
-  case "$old_current" in *..*|*/*/*) printf '%s\n' 'E_CURRENT_INVALID: Current release link is invalid.' >&2; exit 1 ;; esac
-elif [ -e "$data_dir/current" ]; then
-  printf '%s\n' 'E_CURRENT_INVALID: Current release path is not a link.' >&2
-  exit 1
+case "$platform" in darwin|linux) ;; *) echo "E_PLATFORM: unsupported platform." >&2; exit 1 ;; esac
+export BRAINATLAS_PLATFORM=$platform
+if [ -n "$prefix_home" ]; then
+  case "${XDG_DATA_HOME:-}" in "$HOME"/*) ;; *) XDG_DATA_HOME="$HOME/.local/share"; export XDG_DATA_HOME ;; esac
+  case "${XDG_CONFIG_HOME:-}" in "$HOME"/*) ;; *) XDG_CONFIG_HOME="$HOME/.config"; export XDG_CONFIG_HOME ;; esac
+  case "${XDG_STATE_HOME:-}" in "$HOME"/*) ;; *) XDG_STATE_HOME="$HOME/.local/state"; export XDG_STATE_HOME ;; esac
 fi
 
-if [ -n "$allowed_signers" ]; then signer_file=$allowed_signers
-elif [ -n "${BRAINATLAS_ALLOWED_SIGNERS:-}" ]; then signer_file=$BRAINATLAS_ALLOWED_SIGNERS
-else signer_file=$script_dir/release/allowed_signers
-fi
-mkdir -p "$data_dir/releases"
-archive_info=$(node "$script_dir/release/install-archive.mjs" --archive "$from" --destination "$data_dir/releases/.staging-$$" --allowed-signers "$signer_file")
-set -- $archive_info
-[ "$#" -eq 2 ] || { printf '%s\n' 'E_MANIFEST_INVALID: Release metadata is invalid.' >&2; exit 1; }
-version=$1
-archive_profile=$2
-case "$version" in *[!A-Za-z0-9._-]*|'') printf '%s\n' 'E_MANIFEST_INVALID: Release version is invalid.' >&2; exit 1 ;; esac
-case "$archive_profile" in lite|full) ;; *) printf '%s\n' 'E_MANIFEST_INVALID: Release profile is invalid.' >&2; exit 1 ;; esac
-if [ -n "$profile" ]; then
-  case "$profile" in lite|full|custom) ;; *) printf '%s\n' 'E_ARGUMENT: Invalid profile.' >&2; exit 1 ;; esac
-  init_profile=$profile
-else init_profile=$archive_profile
-fi
+node_bin=${NODE:-node}
+if ! command -v "$node_bin" >/dev/null 2>&1; then echo "E_NODE_VERSION: Node.js 20 or newer is required." >&2; exit 1; fi
+node_major=$("$node_bin" -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)
+case "$node_major" in *[!0-9]*|'') node_major=0 ;; esac
+[ "$node_major" -ge 20 ] || { echo "E_NODE_VERSION: Node.js 20 or newer is required." >&2; exit 1; }
 
-releases_dir=$data_dir/releases
-staging=$releases_dir/.staging-$$
-release=$releases_dir/$version
-if [ -e "$release" ]; then
-  rm -rf "$staging"
-  printf '%s\n' 'E_RELEASE_EXISTS: Release version is already installed.' >&2
-  exit 1
+script_dir=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
+helper="$script_dir/release/install-archive.mjs"
+[ -f "$helper" ] || { echo "E_INSTALL: release verification helper is unavailable." >&2; exit 1; }
+if [ -z "$allowed_signers" ]; then
+  allowed_signers=${BRAINATLAS_ALLOWED_SIGNERS:-$script_dir/release/allowed_signers}
 fi
-mkdir -p "$data_dir/bin" "$home/.local/bin"
-mv "$staging" "$release"
-cli=$data_dir/current/packages/cli/bin/brainatlas.mjs
-shim=$data_dir/bin/brainatlas
-shim_tmp=$data_dir/bin/.brainatlas-$$
-node "$script_dir/release/install-archive.mjs" --write-shim --file "$shim_tmp" --node "$node_path" --cli "$cli"
-if [ -e "$shim" ] && [ ! -L "$shim" ]; then
-  rm -f "$shim_tmp"; rm -rf "$release"
-  printf '%s\n' 'E_PATH_CONFLICT: Application shim already exists.' >&2
-  exit 1
-fi
-if [ -L "$shim" ]; then
-  rm -f "$shim"
-fi
-mv "$shim_tmp" "$shim"
-
-link_tool() {
-  link=$1
-  if [ -L "$link" ]; then
-    [ "$(readlink "$link")" = "$shim" ] || { printf '%s\n' 'E_PATH_CONFLICT: Command link already exists.' >&2; return 1; }
-    rm -f "$link"
-  elif [ -e "$link" ]; then
-    printf '%s\n' 'E_PATH_CONFLICT: Command path already exists.' >&2
-    return 1
-  fi
-  ln -s "$shim" "$link"
-}
-link_tool "$home/.local/bin/brainatlas"
-link_tool "$home/.local/bin/ba"
-
-node "$script_dir/release/install-archive.mjs" --switch-link --link "$data_dir/current" --target "releases/$version"
-
-set -- "$shim" init --yes --profile "$init_profile"
-if [ -n "$vault" ]; then set -- "$@" --vault "$vault"; fi
-if BRAINATLAS_OFFLINE=1 "$@"; then
-  exit 0
+verify_dir=${TMPDIR:-/tmp}/brainatlas-install-verify-$$
+if [ "$insecure" -eq 1 ]; then
+  echo "WARNING: release signature verification is disabled by explicit request." >&2
+  signer_arg=${allowed_signers:-/dev/null}
+  release_info=$(BRAINATLAS_INSECURE_SKIP_SIGNATURE=1 "$node_bin" "$helper" --archive "$archive" --destination "$verify_dir" --allowed-signers "$signer_arg") || exit 1
 else
-  if [ -n "$old_current" ]; then
-    node "$script_dir/release/install-archive.mjs" --switch-link --link "$data_dir/current" --target "$old_current"
-  else rm -f "$data_dir/current"; fi
-  printf '%s\n' 'E_INIT_FAILED: Initialization failed; previous release restored.' >&2
+  command -v ssh-keygen >/dev/null 2>&1 || { echo "E_SIGNATURE_INVALID: ssh-keygen is required; use --insecure-skip-signature only when explicitly accepting this risk." >&2; exit 1; }
+  [ -f "$allowed_signers" ] || { echo "E_SIGNATURE_INVALID: allowed signers file is unavailable." >&2; exit 1; }
+  if ! release_info=$("$node_bin" "$helper" --archive "$archive" --destination "$verify_dir" --allowed-signers "$allowed_signers"); then
+    rm -rf "$verify_dir"
+    exit 1
+  fi
+fi
+rm -rf "$verify_dir"
+set -- $release_info
+version=${1:-}
+archive_profile=${2:-}
+case "$version" in ''|*[!A-Za-z0-9._-]*) echo "E_MANIFEST_INVALID: release version is invalid." >&2; exit 1 ;; esac
+if [ -n "$profile" ] && [ "$archive_profile" != "$profile" ]; then echo "E_PROFILE_MISMATCH: requested profile does not match the release." >&2; exit 1; fi
+profile=$archive_profile
+
+if [ "$platform" = darwin ]; then
+  data_dir="$HOME/Library/Application Support/BrainAtlas"
+else
+  data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+  data_dir="$data_home/brainatlas"
+fi
+release_dir="$data_dir/releases/$version"
+current="$data_dir/current"
+stage="$data_dir/releases/.staging-$$"
+set --
+probe="$data_dir/releases"
+while [ ! -d "$probe" ]; do set -- --created-dir "$probe" "$@"; probe=$(dirname "$probe"); done
+mkdir -p "$data_dir/releases"
+[ ! -e "$release_dir" ] || { echo "E_RELEASE_EXISTS: release version is already installed." >&2; exit 1; }
+
+if [ "$insecure" -eq 1 ]; then
+  BRAINATLAS_INSECURE_SKIP_SIGNATURE=1 "$node_bin" "$helper" --archive "$archive" --destination "$stage" --allowed-signers "${allowed_signers:-/dev/null}" >/dev/null
+else
+  "$node_bin" "$helper" --archive "$archive" --destination "$stage" --allowed-signers "$allowed_signers" >/dev/null
+fi
+mv "$stage" "$release_dir"
+
+if [ -e "$current" ] && [ ! -L "$current" ]; then
+  echo "E_CURRENT_INVALID: current release path is not a symbolic link." >&2
   exit 1
 fi
+"$node_bin" "$helper" --switch-link --link "$current" --target "releases/$version"
+
+export BRAINATLAS_ALLOWED_SIGNERS=$allowed_signers
+cli="$current/packages/cli/bin/brainatlas.mjs"
+"$node_bin" "$cli" install --finalize --json "$@" >/dev/null
+if [ "$yes" -eq 1 ]; then
+  if [ -n "$vault" ]; then "$node_bin" "$cli" init --yes --profile "$profile" --vault "$vault" --json >/dev/null
+  else "$node_bin" "$cli" init --yes --profile "$profile" --json >/dev/null
+  fi
+else
+  if [ -n "$vault" ]; then "$node_bin" "$cli" init --profile "$profile" --vault "$vault"
+  else "$node_bin" "$cli" init --profile "$profile"
+  fi
+fi
+exit 0

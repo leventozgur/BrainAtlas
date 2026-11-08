@@ -57,13 +57,16 @@ function untar(buf) {
 /** @param {{version:string,profile:'lite'|'full',modules:string[],builtAt:string,out?:string}} options @returns {Promise<string[]>} */
 export async function buildRelease(options) {
   const { version, profile, builtAt = '1970-01-01T00:00:00.000Z', out = root } = options || {};
+  const sourceRoot = resolve(process.env.BRAINATLAS_RELEASE_SOURCE || root);
   if (!safe(version) || !['lite', 'full'].includes(profile) || typeof builtAt !== 'string') throw fail('E_MANIFEST_INVALID', 'Invalid release options.');
   const roots = ['package.json', 'packages/core', 'packages/mcp', 'packages/hooks', 'packages/cli', 'packages/adapters', 'vendor', 'templates', 'release/allowed_signers'];
-  let files = (await Promise.all(roots.map(p => walk(root, p)))).flat();
+  let files = (await Promise.all(roots.map(p => walk(sourceRoot, p)))).flat();
   const modules = [];
   if (profile === 'full') {
-    for (const name of (await readdir(join(root, 'modules'))).sort()) {
-      const entries = await walk(root, `modules/${name}`);
+    let moduleNames = [];
+    try { moduleNames = await readdir(join(sourceRoot, 'modules')); } catch (cause) { if (cause.code !== 'ENOENT') throw cause; }
+    for (const name of moduleNames.sort()) {
+      const entries = await walk(sourceRoot, `modules/${name}`);
       if (!entries.some(f => f.path === `modules/${name}/module.json`)) {
         console.warn(`Skipping module without manifest: ${name}`);
         continue;
@@ -71,7 +74,7 @@ export async function buildRelease(options) {
       modules.push(name); files.push(...entries);
     }
   }
-  const lock = JSON.parse(await readFile(join(root, 'package-lock.json'), 'utf8'));
+  const lock = JSON.parse(await readFile(join(sourceRoot, 'package-lock.json'), 'utf8'));
   const queue = files.filter(f => f.path.endsWith('/package.json')).map(f => JSON.parse(f.data).dependencies || {});
   const seen = new Set();
   while (queue.length) for (const name of Object.keys(queue.shift())) {
@@ -81,23 +84,25 @@ export async function buildRelease(options) {
     if (info.link) {
       const target = info.resolved;
       if (!target || target.startsWith('/') || target.split('/').includes('..')) throw fail('E_MANIFEST_INVALID', 'Invalid workspace dependency.');
-      const entries = await walk(root, target);
+      const entries = await walk(sourceRoot, target);
       if (!entries.length) throw fail('E_MANIFEST_INVALID', 'Workspace dependency is missing.');
       files.push(...entries.map(f => ({ ...f, path: `node_modules/${name}/${f.path.slice(target.length + 1)}` })));
-      const pkg = JSON.parse(await readFile(join(root, target, 'package.json'))); queue.push(pkg.dependencies || {});
+      const pkg = JSON.parse(await readFile(join(sourceRoot, target, 'package.json'))); queue.push(pkg.dependencies || {});
     } else {
-      const entries = await walk(root, `node_modules/${name}`);
+      const entries = await walk(sourceRoot, `node_modules/${name}`);
       if (!entries.length) throw fail('E_MANIFEST_INVALID', 'A production dependency is not installed.');
       files.push(...entries); queue.push(info.dependencies || {});
     }
   }
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  const forbidden = /modules\/sync-|keychain|secret-service|launchd|systemd|dropbox/i;
   if (profile === 'lite') {
-    const forbidden = /modules\/sync-|keychain|secret-service|launchd|systemd|dropbox/i;
     if (files.filter(f => /^(packages\/|vendor\/llmwiki-core\/|templates\/)/.test(f.path)).some(f => forbidden.test(f.path) || forbidden.test(f.data.toString('utf8')))) throw fail('E_LITE_PURITY', 'Lite release contains forbidden content.');
   }
   const manifest = { name: 'brainatlas', version, profile, modules, files: files.map(f => ({ path: f.path, sha256: hash(f.data) })), builtAt };
-  files.push({ path: 'release-manifest.json', data: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`), mode: 0o644 });
+  const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+  if (profile === 'lite' && forbidden.test(manifestBytes.toString('utf8'))) throw fail('E_LITE_PURITY', 'Lite release contains forbidden content.');
+  files.push({ path: 'release-manifest.json', data: manifestBytes, mode: 0o644 });
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   const archive = gzipSync(tar(files.map(f => ({ ...f, path: `brainatlas-${version}/${f.path}` }))), { level: 9, mtime: 0 });
   await mkdir(out, { recursive: true }); const name = `brainatlas-${version}-${profile}.tgz`; const dest = join(out, name);

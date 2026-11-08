@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildRelease, verifyRelease, extractRelease } from '../../release/build-release.mjs';
 import { signRelease } from '../../release/sign.mjs';
-import { extractVerifiedRelease } from '../../packages/cli/src/archive.mjs';
+import { extractVerifiedRelease, inspectReleaseArchive } from '../../packages/cli/src/archive.mjs';
 
 test('full release is reproducible and rejects invalid checksum and signature', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'ba-release-')); t.after(() => rm(dir, { recursive: true, force: true }));
@@ -26,7 +26,7 @@ test('full release is reproducible and rejects invalid checksum and signature', 
   await extractRelease(archive, sums, sig, extracted, join(one, 'allowed_signers'));
   assert.equal(JSON.parse(await readFile(join(extracted, 'release-manifest.json'))).version, options.version);
   await assert.rejects(extractRelease(archive, sums, sig, extracted, join(one, 'allowed_signers')), { code: 'EEXIST' });
-  const original = await readFile(sums); await writeFile(sums, `a${original.toString().slice(1)}`);
+  const original = await readFile(sums); const originalText = original.toString(); await writeFile(sums, `${originalText[0] === 'a' ? 'b' : 'a'}${originalText.slice(1)}`);
   await assert.rejects(verifyRelease(archive, sums, sig, join(one, 'allowed_signers')), { code: 'E_SHA_MISMATCH' });
   await writeFile(sums, original); await writeFile(sig, 'bad');
   await assert.rejects(verifyRelease(archive, sums, sig, join(one, 'allowed_signers')), { code: 'E_SIGNATURE_INVALID' });
@@ -52,6 +52,12 @@ test('signed archives reject traversal, absolute paths and links before extracti
 
 test('lite release excludes modules while permitting third-party content', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'ba-lite-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const [archive] = await buildRelease({ version: '0.1.0-test.1', profile: 'lite', out: dir });
+  const [archive, sums] = await buildRelease({ version: '0.1.0-test.1', profile: 'lite', out: dir });
   assert.ok((await readFile(archive)).length > 0);
+  const key = join(dir, 'key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+  const signers = join(dir, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`); signRelease(key, sums);
+  const { manifest, files } = await inspectReleaseArchive(archive, signers);
+  assert.deepEqual(manifest.modules, []);
+  assert.ok([...files.keys()].every(name => !name.startsWith('brainatlas-0.1.0-test.1/modules/')));
+  assert.ok([...files].some(([name, bytes]) => name.includes('/node_modules/@modelcontextprotocol/sdk/') && /SYSTEMDRIVE/i.test(bytes.toString('utf8'))));
 });
