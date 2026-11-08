@@ -9,6 +9,13 @@ function mergeField(baseValue, localValue, remoteValue) {
   return { value: undefined, conflict: true };
 }
 
+function mergeEntry(baseValue, localValue, remoteValue) {
+  if (canonical(localValue) === canonical(remoteValue)) return { value: localValue, conflict: false };
+  if (canonical(localValue) === canonical(baseValue)) return { value: remoteValue, conflict: false };
+  if (canonical(remoteValue) === canonical(baseValue)) return { value: localValue, conflict: false };
+  return { value: undefined, conflict: true };
+}
+
 function parseIndex(text) {
   const entries = new Map();
   const lines = String(text ?? '').split(/\r?\n/);
@@ -29,19 +36,10 @@ function parseIndex(text) {
 }
 
 function mergeIndexEntry(key, base, local, remote) {
-  if (canonical(local) === canonical(remote)) return { entry: local, conflicts: [] };
-  if (canonical(local) === canonical(base)) return { entry: remote, conflicts: [] };
-  if (canonical(remote) === canonical(base)) return { entry: local, conflicts: [] };
-  if (!base && !local) return { entry: remote, conflicts: [] };
-  if (!base && !remote) return { entry: local, conflicts: [] };
-  if (!local || !remote) return { entry: null, conflicts: [{ path: key, field: 'entry' }] };
-  const result = { path: key }, conflicts = [];
-  for (const field of ['category', 'title', 'summary', 'tags']) {
-    const merged = mergeField(base?.[field], local[field], remote[field]);
-    if (merged.conflict) conflicts.push({ path: key, field });
-    else if (merged.value !== undefined) result[field] = merged.value;
-  }
-  return { entry: conflicts.length ? null : result, conflicts };
+  const merged = mergeEntry(base, local, remote);
+  return merged.conflict
+    ? { entry: null, conflicts: [{ path: key, field: 'entry' }] }
+    : { entry: merged.value, conflicts: [] };
 }
 
 function renderIndex(header, entries) {
@@ -92,15 +90,13 @@ export function mergeLogThreeWay(baseText, localText, remoteText) {
   const base = splitLog(baseText), local = splitLog(localText), remote = splitLog(remoteText);
   const preamble = mergeField(base.preamble, local.preamble, remote.preamble);
   if (preamble.conflict) return { content: null, conflicts: [{ path: 'wiki/log.md', field: 'header' }] };
-  const entries = new Map(base.entries);
+  const entries = new Map();
   const conflicts = [];
-  for (const source of [local.entries, remote.entries]) {
-    for (const [key, value] of source) {
-      const existing = entries.get(key);
-      if (existing !== undefined && existing !== value && base.entries.has(key)) conflicts.push({ path: 'wiki/log.md', field: 'entry' });
-      else if (existing === undefined) entries.set(key, value);
-      else if (existing !== value && !base.entries.has(key)) conflicts.push({ path: 'wiki/log.md', field: 'entry' });
-    }
+  const keys = new Set([...base.entries.keys(), ...local.entries.keys(), ...remote.entries.keys()]);
+  for (const key of keys) {
+    const merged = mergeEntry(base.entries.get(key), local.entries.get(key), remote.entries.get(key));
+    if (merged.conflict) conflicts.push({ path: 'wiki/log.md', field: 'entry' });
+    else if (merged.value !== undefined) entries.set(key, merged.value);
   }
   if (conflicts.length) return { content: null, conflicts };
   const ordered = [...entries.values()];

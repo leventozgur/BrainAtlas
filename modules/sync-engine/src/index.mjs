@@ -27,7 +27,15 @@ async function dispatch(ctx, args = {}) {
   if (action === 'run') return engine.run();
   if (action === 'check') {
     const positional = Array.isArray(args) ? args.slice(1) : (args.positionals ?? args.args ?? []);
-    const peer = Array.isArray(args) ? args[1] : (args.peer ?? args['--peer'] ?? positional[0]);
+    let peer = Array.isArray(args) ? undefined : (args.peer ?? args['--peer'] ?? positional[0]);
+    if (Array.isArray(args)) {
+      for (let index = 1; index < args.length; index++) {
+        const argument = args[index];
+        if (argument === '--peer') { peer = args[index + 1]; break; }
+        if (typeof argument === 'string' && argument.startsWith('--peer=')) { peer = argument.slice('--peer='.length); break; }
+        if (typeof argument === 'string' && !argument.startsWith('-') && peer === undefined) peer = argument;
+      }
+    }
     return engine.checkPeer(peer);
   }
   if (action === 'approve') {
@@ -45,8 +53,16 @@ export async function activate(ctx) {
   return;
 }
 
+function syncCommand(argsOrContext, contextOrArgs) {
+  const firstIsContext = argsOrContext && typeof argsOrContext === 'object'
+    && argsOrContext.config && argsOrContext.paths;
+  const ctx = firstIsContext ? argsOrContext : contextOrArgs;
+  const args = firstIsContext ? contextOrArgs : argsOrContext;
+  return dispatch(ctx, args ?? {});
+}
+
 export const commands = Object.freeze({
-  sync: dispatch,
+  sync: syncCommand,
   status: (ctx) => dispatch(ctx, { action: 'status' }),
   run: (ctx) => dispatch(ctx, { action: 'run' }),
   check: (ctx, args) => dispatch(ctx, Array.isArray(args) ? ['check', ...args] : { ...args, action: 'check' }),

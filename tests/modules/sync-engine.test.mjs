@@ -145,6 +145,21 @@ test('index entries and append-only log entries merge independently from a share
   assert.match(log, /change from a/); assert.match(log, /change from b/);
   assert.equal(mergeIndexThreeWay('# I\n', '# I\n\n## A\n\n- [x](x.md)\n', '# I\n\n## A\n\n- [y](y.md)\n').conflicts.length, 0);
   assert.equal(mergeLogThreeWay('# L\n', '# L\n\n- [a] one\n', '# L\n\n- [b] two\n').conflicts.length, 0);
+
+  const indexBase = '# Wiki Index\n\n## Notes\n\n- [Base](wiki/base.md) — original\n';
+  const indexChanged = '# Wiki Index\n\n## Notes\n\n- [Base](wiki/base.md) — updated\n';
+  const indexMerge = mergeIndexThreeWay(indexBase, indexChanged, indexBase);
+  assert.deepEqual(indexMerge.conflicts, []);
+  assert.match(indexMerge.content, /updated/);
+  assert.doesNotMatch(indexMerge.content, /original/);
+
+  const logBase = '# Wiki Log\n\n## Shared entry\noriginal\n';
+  const logChanged = '# Wiki Log\n\n## Shared entry\nupdated\n';
+  const logMerge = mergeLogThreeWay(logBase, logChanged, logBase);
+  assert.deepEqual(logMerge.conflicts, []);
+  assert.match(logMerge.content, /updated/);
+  assert.doesNotMatch(logMerge.content, /original/);
+  assert.equal(mergeLogThreeWay(logBase, logChanged, logChanged).content, logMerge.content);
 });
 
 test('interrupted put is journaled and resumes idempotently', async (t) => {
@@ -174,6 +189,7 @@ test('scope globs, peer check, scheduler plans and module commands expose the sp
   assert.deepEqual(drift.differences, [{ path: 'wiki/a.md', kind: 'modified' }]);
   const context = { config: { vault: { path: a.vaultPath }, sync: { options: {} } }, paths: { stateDir: a.stateDir }, transport: fx.transport, hostId: 'host-a' };
   assert.deepEqual(await commands.check(context, { peer: b.stateDir }), drift);
+  assert.deepEqual(await commands.sync(['check', '--peer', b.stateDir, '--json'], context), drift);
   assert.deepEqual(await commands.pause(context), { status: 'PAUSED' });
   assert.equal((await commands.status(context)).status, 'PAUSED');
   assert.equal((await commands.run(context)).status, 'PAUSED');
