@@ -1,0 +1,836 @@
+[
+  {
+    "id": "tr-01",
+    "query": "Arşiv dosyalarını geri açabildiğimizi nasıl düzenli sınarız?",
+    "relevant": [
+      "natural-01.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-02",
+    "query": "Yeni sürümün herkese açılmadan önce küçük bir kullanıcı diliminde izlenmesi",
+    "relevant": [
+      "natural-02.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-03",
+    "query": "Bir hatayı çözmeden önce yeniden üretme koşullarını nasıl not etmeliyim?",
+    "relevant": [
+      "natural-03.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-04",
+    "query": "Loglarda kimlik doğrulama bilgisinin görünmesini nasıl engelleriz?",
+    "relevant": [
+      "natural-04.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-05",
+    "query": "Aynı kavram için kullanılan farklı kelimeleri aramada buluşturmak",
+    "relevant": [
+      "natural-05.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-06",
+    "query": "Ekran kapanınca devam eden iOS ağ işini sonlandırma",
+    "relevant": [
+      "natural-06.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-07",
+    "query": "SwiftUI ekranındaki seçili sekme değerini kim yönetmeli?",
+    "relevant": [
+      "natural-07.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-08",
+    "query": "Yavaş yazıcıya veri gönderirken Node belleğinin büyümesini durdurma",
+    "relevant": [
+      "natural-08.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-09",
+    "query": "Derleme cache anahtarında hangi girdileri hesaba katayım?",
+    "relevant": [
+      "natural-09.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-10",
+    "query": "Arayüzde geriye dönük uyumlu alan yenileme yaklaşımı",
+    "relevant": [
+      "natural-10.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-11",
+    "query": "Veri yapısı değişikliğini uygulamadan önce nasıl prova ederim?",
+    "relevant": [
+      "natural-11.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-12",
+    "query": "Eksik ayar geldiğinde güvenli değer ve anlaşılır hata",
+    "relevant": [
+      "natural-12.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-13",
+    "query": "Yarı yazılmış ayar dosyasından okuyucuyu koruma yolu",
+    "relevant": [
+      "natural-13.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-14",
+    "query": "Klavye ile dolaşırken odak sırası nasıl incelenir?",
+    "relevant": [
+      "natural-14.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-15",
+    "query": "Sistemler arası zaman karşılaştırmasını hangi biçimde saklamalıyım?",
+    "relevant": [
+      "natural-15.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-16",
+    "query": "Bir isteği katmanlar boyunca aynı kimlikle takip etme",
+    "relevant": [
+      "natural-16.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-17",
+    "query": "Yanıt kaybolduğunda para benzeri işlemin iki kez uygulanmasını önleme",
+    "relevant": [
+      "natural-17.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-18",
+    "query": "Son kullanma testlerinde duvar saatini beklemeden ilerletme",
+    "relevant": [
+      "natural-18.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-19",
+    "query": "Test dosyalarını makinenin kişisel ayarlarından ayrı tutma",
+    "relevant": [
+      "natural-19.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "tr-20",
+    "query": "Kullanıcıdan gelen dosya adının izin verilen klasörden çıkmasını engelleme",
+    "relevant": [
+      "natural-20.md"
+    ],
+    "category": "tr"
+  },
+  {
+    "id": "en-01",
+    "query": "How can a wrapper add context without hiding the original exception?",
+    "relevant": [
+      "natural-27.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-02",
+    "query": "Should heading matches count more than a term buried in body text?",
+    "relevant": [
+      "natural-28.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-03",
+    "query": "What should an async Swift task do when its screen disappears?",
+    "relevant": [
+      "natural-29.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-04",
+    "query": "How do I restore navigation without trusting an obsolete route?",
+    "relevant": [
+      "natural-30.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-05",
+    "query": "Which CI combinations cover distinct risk without multiplying every option?",
+    "relevant": [
+      "natural-31.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-06",
+    "query": "How can two builds prove they produced the same release archive?",
+    "relevant": [
+      "natural-32.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-07",
+    "query": "What makes a cursor stable when several rows share a timestamp?",
+    "relevant": [
+      "natural-33.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-08",
+    "query": "How do I avoid showing an old object after a successful write?",
+    "relevant": [
+      "natural-34.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-09",
+    "query": "What should happen when someone leaves an unmatched filter operator?",
+    "relevant": [
+      "natural-35.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-10",
+    "query": "Can local documentation links be checked without requesting remote sites?",
+    "relevant": [
+      "natural-36.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-11",
+    "query": "How should a background worker drain tasks before its deadline?",
+    "relevant": [
+      "natural-37.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-12",
+    "query": "Which source wins when a command flag and environment setting disagree?",
+    "relevant": [
+      "natural-38.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-13",
+    "query": "How do I keep a test from inspecting my actual profile directory?",
+    "relevant": [
+      "natural-39.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-14",
+    "query": "When is it safe to retry a request after a connection reset?",
+    "relevant": [
+      "natural-40.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-15",
+    "query": "What should a module do when an older reader cannot ignore new fields?",
+    "relevant": [
+      "natural-41.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-16",
+    "query": "Why should request identifiers stay out of metric dimensions?",
+    "relevant": [
+      "natural-42.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-17",
+    "query": "How should a review date affect an old technical note?",
+    "relevant": [
+      "natural-43.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-18",
+    "query": "How should search represent two incompatible reports about one behavior?",
+    "relevant": [
+      "natural-44.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-19",
+    "query": "Why does a point of sale till have nothing to do with an in-memory copy?",
+    "relevant": [
+      "natural-45.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "en-20",
+    "query": "How do operating system tasks differ from a written checklist?",
+    "relevant": [
+      "natural-46.md"
+    ],
+    "category": "en"
+  },
+  {
+    "id": "mixed-01",
+    "query": "Türkçe aramada İ ve ı harfleri için normalization nasıl tutarlı olur?",
+    "relevant": [
+      "natural-51.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-02",
+    "query": "Cash drawer sayımı ile cache eviction sorguları birbirine karışmasın",
+    "relevant": [
+      "natural-52.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-03",
+    "query": "SwiftUI async load eski response ile yeni state değerini ezmesin",
+    "relevant": [
+      "natural-53.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-04",
+    "query": "Node ESM paketinde hangi import path public kabul edilmeli?",
+    "relevant": [
+      "natural-54.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-05",
+    "query": "CI cache hit olsa bile clean build ne sıklıkla çalışmalı?",
+    "relevant": [
+      "natural-55.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-06",
+    "query": "Canary rollout için health eşiğini hangi sinyaller belirler?",
+    "relevant": [
+      "natural-56.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-07",
+    "query": "Backup integrity manifest içindeki checksum neyi kanıtlar?",
+    "relevant": [
+      "natural-57.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-08",
+    "query": "Security log redaction Authorization header değerini nerede temizler?",
+    "relevant": [
+      "natural-58.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-09",
+    "query": "Arama değerlendirmesinde process için procedure belgesini dışarıda tutma",
+    "relevant": [
+      "natural-59.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-10",
+    "query": "URLSession timeout ile cancellation telemetrisini nasıl ayırırız?",
+    "relevant": [
+      "natural-60.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-11",
+    "query": "SwiftUI ekran açılınca hangi async task yeniden başlar?",
+    "relevant": [
+      "natural-53.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "mixed-12",
+    "query": "Cache ve nakit kasası kavramlarını aramada ayıran örnek var mı?",
+    "relevant": [
+      "natural-52.md"
+    ],
+    "category": "mixed"
+  },
+  {
+    "id": "synonym-01",
+    "query": "How do I undo the last rollout if the new build behaves badly?",
+    "relevant": [
+      "natural-02.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-02",
+    "query": "Find guidance for bringing a saved snapshot back into service.",
+    "relevant": [
+      "natural-01.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-03",
+    "query": "What is another term for a reusable computed response copy?",
+    "relevant": [
+      "natural-52.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-04",
+    "query": "Where is the advice about work being attempted again after a temporary failure?",
+    "relevant": [
+      "natural-21.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-05",
+    "query": "How can I tie a log line to the same operation across components?",
+    "relevant": [
+      "natural-16.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-06",
+    "query": "Look up the method for reverting a schema change safely.",
+    "relevant": [
+      "natural-11.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-07",
+    "query": "Where are synonyms connected without changing the wording in source notes?",
+    "relevant": [
+      "natural-05.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-08",
+    "query": "How can the user return to the same screen stack after launching again?",
+    "relevant": [
+      "natural-30.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-09",
+    "query": "Find the note about a temporary queue waiting longer between attempts.",
+    "relevant": [
+      "natural-21.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "synonym-10",
+    "query": "Where is the guidance for a staged release to a small audience?",
+    "relevant": [
+      "natural-02.md"
+    ],
+    "category": "synonym"
+  },
+  {
+    "id": "technical-exact-01",
+    "query": "What does URLSession work cancellation need to do when a view closes?",
+    "relevant": [
+      "natural-06.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-02",
+    "query": "How should @State hold the selected tab in SwiftUI?",
+    "relevant": [
+      "natural-07.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-03",
+    "query": "What does write() returning false tell a Node stream producer?",
+    "relevant": [
+      "natural-08.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-04",
+    "query": "Which files belong in the build cache key for v1.2.3?",
+    "relevant": [
+      "natural-09.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-05",
+    "query": "Where is the API_VERSION example for a compatible interface change?",
+    "relevant": [
+      "natural-10.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-06",
+    "query": "Where is the example using atomic rename for settings.json?",
+    "relevant": [
+      "natural-13.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-07",
+    "query": "How should Idempotency-Key be reused on a retry?",
+    "relevant": [
+      "natural-17.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-08",
+    "query": "Which test pattern injects HOME and XDG_CONFIG_HOME?",
+    "relevant": [
+      "natural-39.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-09",
+    "query": "How does Task.checkCancellation() affect a long Swift operation?",
+    "relevant": [
+      "natural-29.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-10",
+    "query": "Which release job compares an artifact with sha256sum?",
+    "relevant": [
+      "natural-32.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-11",
+    "query": "How is a packages/core/src/x.mjs import kept behind exports?",
+    "relevant": [
+      "natural-54.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "technical-exact-12",
+    "query": "Which timeout setting applies to URLSessionConfiguration?",
+    "relevant": [
+      "natural-60.md"
+    ],
+    "category": "technical-exact"
+  },
+  {
+    "id": "typo-01",
+    "query": "How do I safely restroe a saved archive?",
+    "relevant": [
+      "natural-01.md"
+    ],
+    "category": "typo"
+  },
+  {
+    "id": "typo-02",
+    "query": "Where is the canry traffic rollout guidance?",
+    "relevant": [
+      "natural-02.md"
+    ],
+    "category": "typo"
+  },
+  {
+    "id": "typo-03",
+    "query": "How do I stop a node stream from overfllowing memory?",
+    "relevant": [
+      "natural-08.md"
+    ],
+    "category": "typo"
+  },
+  {
+    "id": "typo-04",
+    "query": "Which ci cach key inputs matter for rebuilds?",
+    "relevant": [
+      "natural-09.md"
+    ],
+    "category": "typo"
+  },
+  {
+    "id": "typo-05",
+    "query": "How can I test an atomic file renmae?",
+    "relevant": [
+      "natural-13.md"
+    ],
+    "category": "typo"
+  },
+  {
+    "id": "typo-06",
+    "query": "How to keep a tempory fixture outside my user profile?",
+    "relevant": [
+      "natural-19.md"
+    ],
+    "category": "typo"
+  },
+  {
+    "id": "typo-07",
+    "query": "What avoids duplicate effects when a request is retried?",
+    "relevant": [
+      "natural-17.md"
+    ],
+    "category": "typo"
+  },
+  {
+    "id": "typo-08",
+    "query": "How do I check a stail technical note before using it?",
+    "relevant": [
+      "natural-43.md"
+    ],
+    "category": "typo"
+  },
+  {
+    "id": "near-miss-01",
+    "query": "How do I check the operating system process identifier?",
+    "relevant": [
+      "natural-46.md"
+    ],
+    "category": "near-miss",
+    "excluded": [
+      "natural-49.md"
+    ]
+  },
+  {
+    "id": "near-miss-02",
+    "query": "What checklist should I follow to renew a disposable test sample?",
+    "relevant": [
+      "natural-49.md"
+    ],
+    "category": "near-miss",
+    "excluded": [
+      "natural-46.md"
+    ]
+  },
+  {
+    "id": "near-miss-03",
+    "query": "I need the internal state value that changes after a tap.",
+    "relevant": [
+      "natural-47.md"
+    ],
+    "category": "near-miss",
+    "excluded": [
+      "natural-56.md"
+    ]
+  },
+  {
+    "id": "near-miss-04",
+    "query": "How do I change the external status label for a record?",
+    "relevant": [
+      "natural-47.md"
+    ],
+    "category": "near-miss",
+    "excluded": [
+      "natural-56.md"
+    ]
+  },
+  {
+    "id": "near-miss-05",
+    "query": "How do I count cash in a retail till at the end of a shift?",
+    "relevant": [
+      "natural-45.md"
+    ],
+    "category": "near-miss",
+    "excluded": [
+      "natural-52.md"
+    ]
+  },
+  {
+    "id": "near-miss-06",
+    "query": "How do I evict a software cache entry after writing new data?",
+    "relevant": [
+      "natural-34.md"
+    ],
+    "category": "near-miss",
+    "excluded": [
+      "natural-45.md"
+    ]
+  },
+  {
+    "id": "near-miss-07",
+    "query": "How should a priority heap choose the next work item?",
+    "relevant": [
+      "natural-48.md"
+    ],
+    "category": "near-miss",
+    "excluded": [
+      "natural-21.md"
+    ]
+  },
+  {
+    "id": "near-miss-08",
+    "query": "How do I use a queue retry delay after a failed task?",
+    "relevant": [
+      "natural-21.md"
+    ],
+    "category": "near-miss",
+    "excluded": [
+      "natural-48.md"
+    ]
+  },
+  {
+    "id": "stale-superseded-01",
+    "query": "What is the current backup integrity check for stored snapshots?",
+    "relevant": [
+      "natural-57.md"
+    ],
+    "category": "stale-superseded",
+    "excluded": [
+      "natural-01.md"
+    ]
+  },
+  {
+    "id": "stale-superseded-02",
+    "query": "How should the current canary rollout move a small traffic share?",
+    "relevant": [
+      "natural-56.md"
+    ],
+    "category": "stale-superseded",
+    "excluded": [
+      "natural-02.md"
+    ]
+  },
+  {
+    "id": "stale-superseded-03",
+    "query": "What current search approach links related terms without rewriting a note?",
+    "relevant": [
+      "natural-28.md"
+    ],
+    "category": "stale-superseded",
+    "excluded": [
+      "natural-05.md"
+    ]
+  },
+  {
+    "id": "stale-superseded-04",
+    "query": "Where is the current guidance for avoiding sensitive values in security logs?",
+    "relevant": [
+      "natural-58.md"
+    ],
+    "category": "stale-superseded",
+    "excluded": [
+      "natural-04.md"
+    ]
+  },
+  {
+    "id": "stale-superseded-05",
+    "query": "How should synonyms be represented in the present search index?",
+    "relevant": [
+      "natural-28.md"
+    ],
+    "category": "stale-superseded",
+    "excluded": [
+      "natural-05.md"
+    ]
+  },
+  {
+    "id": "no-answer-01",
+    "query": "What exact repair command should be run on an unidentified production cluster?",
+    "relevant": [],
+    "category": "no-answer",
+    "abstain": true
+  },
+  {
+    "id": "no-answer-02",
+    "query": "Which real person approved the most recent financial transfer?",
+    "relevant": [],
+    "category": "no-answer",
+    "abstain": true
+  },
+  {
+    "id": "no-answer-03",
+    "query": "What is the private signing key for the next release?",
+    "relevant": [],
+    "category": "no-answer",
+    "abstain": true
+  },
+  {
+    "id": "no-answer-04",
+    "query": "Which unlisted service host is currently failing?",
+    "relevant": [],
+    "category": "no-answer",
+    "abstain": true
+  },
+  {
+    "id": "no-answer-05",
+    "query": "What did an unnamed team decide in a meeting that is not documented here?",
+    "relevant": [],
+    "category": "no-answer",
+    "abstain": true
+  }
+]
