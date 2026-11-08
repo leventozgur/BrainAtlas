@@ -93,6 +93,29 @@ test('install manifest records resolved paths under a symlinked ~/.local and uni
   assert.equal(await readFile(join(localTarget, 'sentinel'), 'utf8'), 'keep\n');
 });
 
+test('uninstall JSON reports the path of a changed external managed file', async t => {
+  const work = await mkdtemp(join(tmpdir(), 'ba-uninstall-conflict-')); t.after(() => rm(work, { recursive: true, force: true }));
+  const home = join(work, 'home'); const out = join(work, 'release'); await mkdir(home);
+  const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+  const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
+  const archive = await signedLite(out, '0.1.0-conflict.1', key);
+  const env = { ...process.env, HOME: home, BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1', BRAINATLAS_ALLOWED_SIGNERS: signers };
+  const installed = spawnSync('sh', [resolve('install.sh'), '--from', archive, '--allowed-signers', signers, '--prefix-home', home, '--yes'], { cwd: resolve('.'), env, encoding: 'utf8' });
+  assert.equal(installed.status, 0, installed.stderr);
+  const cli = join(home, '.local', 'share', 'brainatlas', 'current', 'packages', 'cli', 'bin', 'brainatlas.mjs');
+  const changedFile = join(home, '.local', 'bin', 'ba');
+  const resolvedChangedFile = join(await realpath(join(home, '.local', 'bin')), 'ba');
+  await rm(changedFile); await writeFile(changedFile, 'user-owned replacement\n');
+  const uninstalled = spawnSync(process.execPath, [cli, 'uninstall', '--json'], { cwd: resolve('.'), env, encoding: 'utf8' });
+  assert.equal(uninstalled.status, 1);
+  const response = JSON.parse(uninstalled.stderr.trim());
+  assert.equal(response.code, 'E_UNINSTALL_CONFLICT');
+  assert.match(response.message, new RegExp(resolvedChangedFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.deepEqual(response.conflicts, [resolvedChangedFile]);
+  assert.doesNotMatch(response.message, /user-owned replacement/);
+  assert.equal(await readFile(changedFile, 'utf8'), 'user-owned replacement\n');
+});
+
 test('install rejects a wrong checksum and an invalid signature before creating a current release', async t => {
   const work = await mkdtemp(join(tmpdir(), 'ba-install-reject-')); t.after(() => rm(work, { recursive: true, force: true }));
   const out = join(work, 'release'); const key = join(work, 'release-key');
