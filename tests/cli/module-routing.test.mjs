@@ -25,15 +25,27 @@ test('routes commands to installed and enabled module exports', async t => {
   const paths = resolvePaths({ platform: 'linux', env });
   const releaseDir = join(paths.releasesDir, 'fixture-1');
   const moduleDir = join(releaseDir, 'modules', 'okf-fixture');
+  const engineDir = join(releaseDir, 'modules', 'sync-engine');
+  const transportDir = join(releaseDir, 'modules', 'transport-fixture');
   await mkdir(join(moduleDir, 'src'), { recursive: true });
+  await mkdir(join(engineDir, 'src'), { recursive: true });
+  await mkdir(join(transportDir, 'src'), { recursive: true });
   await mkdir(dirname(paths.configFile), { recursive: true });
   await writeFile(join(moduleDir, 'module.json'), `${JSON.stringify({
     name: 'okf-fixture', version: '1.0.0', description: 'CLI routing fixture', requires: [], provides: [], profiles: ['full'], entry: 'src/index.mjs'
   }, null, 2)}\n`);
-  await writeFile(join(moduleDir, 'src/index.mjs'), `// SPDX-License-Identifier: MIT\nlet activated = false;\nexport async function activate(ctx) { if (!ctx.config.modules.includes('okf-fixture')) throw new Error('module is not enabled'); activated = true; }\nexport const commands = { okf(args, ctx) { return { args, activated, enabled: ctx.config.modules.includes('okf-fixture'), hasCore: typeof ctx.core.redact === 'function', hasLogger: typeof ctx.logger.info === 'function' }; } };\n`);
+  await writeFile(join(moduleDir, 'src/index.mjs'), `// SPDX-License-Identifier: MIT\nlet activated = false;\nexport async function activate(ctx) { if (!ctx.config.modules.includes('okf-fixture')) throw new Error('module is not enabled'); activated = true; (ctx.activationLog ||= []).push('okf-fixture'); }\nexport const commands = { okf(args, ctx) { return { args, activated, enabled: ctx.config.modules.includes('okf-fixture'), hasCore: typeof ctx.core.redact === 'function', hasLogger: typeof ctx.logger.info === 'function' }; } };\n`);
+  await writeFile(join(engineDir, 'module.json'), `${JSON.stringify({
+    name: 'sync-engine', version: '1.0.0', description: 'Sync engine fixture', requires: [], provides: ['sync'], profiles: ['full'], entry: 'src/index.mjs'
+  }, null, 2)}\n`);
+  await writeFile(join(engineDir, 'src/index.mjs'), `// SPDX-License-Identifier: MIT\nexport async function activate(ctx) { (ctx.activationLog ||= []).push('sync-engine'); }\nexport const commands = { sync() { return { route: 'engine' }; } };\n`);
+  await writeFile(join(transportDir, 'module.json'), `${JSON.stringify({
+    name: 'transport-fixture', version: '1.0.0', description: 'Transport fixture', requires: ['sync-engine'], provides: ['sync-transport:wire'], profiles: ['full'], entry: 'src/index.mjs'
+  }, null, 2)}\n`);
+  await writeFile(join(transportDir, 'src/index.mjs'), `// SPDX-License-Identifier: MIT\nexport async function activate(ctx) { (ctx.activationLog ||= []).push('transport-fixture'); ctx.transport = { active: true }; }\nexport const commands = { status(args, ctx) { return { route: 'transport', args, active: ctx.transport.active, activationLog: ctx.activationLog, registryReady: ctx.registry.has('transport-fixture') }; } };\n`);
   await symlink('releases/fixture-1', paths.currentDir);
   const cfg = defaultConfig('lite');
-  cfg.modules = ['okf-fixture'];
+  cfg.modules = ['okf-fixture', 'sync-engine', 'transport-fixture'];
   await writeFile(paths.configFile, `${JSON.stringify(cfg, null, 2)}\n`);
 
   const cli = join(sourceRoot, 'packages/cli/bin/brainatlas.mjs');
@@ -42,6 +54,13 @@ test('routes commands to installed and enabled module exports', async t => {
   assert.equal(routed.status, 0, routed.stderr);
   assert.deepEqual(JSON.parse(routed.stdout), {
     args: ['check', '--strict'], activated: true, enabled: true, hasCore: true, hasLogger: true
+  });
+
+  const transportRouted = run('sync', 'wire', 'status', '--json');
+  assert.equal(transportRouted.status, 0, transportRouted.stderr);
+  assert.deepEqual(JSON.parse(transportRouted.stdout), {
+    route: 'transport', args: ['--json'], active: true,
+    activationLog: ['okf-fixture', 'sync-engine', 'transport-fixture'], registryReady: true
   });
 
   const unavailable = run('review', 'list');
