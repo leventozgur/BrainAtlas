@@ -18,7 +18,10 @@ export function isFolderConflictCopy(path) {
     || / \(conflicted copy(?: [^)]*)?\)$/i.test(stem)
     || / \([^)]*çakışan kopya[^)]*\)$/i.test(stem)
     || / \(\d+\)$/.test(stem)
-    || /-[A-Z0-9][A-Z0-9_-]*$/i.test(stem)
+    // OneDrive appends the device name after the final dash. Require an
+    // uppercase/digit host token of at least three characters so ordinary
+    // kebab-case names (for example, "meeting-notes") are not conflicts.
+    || /-[A-Z0-9]{3,}$/.test(stem)
     || /\.sync-conflict-\d{8}-\d{6}-[A-Z0-9]{7}$/i.test(stem);
 }
 
@@ -51,7 +54,9 @@ async function validateRoot(path, vaultPath) {
   }
   const [root, vault] = await Promise.all([canonicalCandidate(path), canonicalCandidate(vaultPath)]);
   if (within(vault, root)) throw new SyncTransportError('E_INVALID_PATH');
-  return resolve(path);
+  // A user may intentionally configure a symlink as the transport root.
+  // Use its canonical target for subsequent path checks and filesystem work.
+  return root;
 }
 
 function revision(bytes, mtimeMs) { return `${sha256(bytes)}:${mtimeMs}`; }

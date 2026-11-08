@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readModuleManifest, resolveModuleOrder } from '../../packages/core/src/modules/index.mjs';
@@ -70,6 +70,9 @@ test('provider conflict copies are surfaced as degraded status and never folded 
     'notes/page (çeşitli çakışan kopya).md',
   ];
   for (const path of conflicts) assert.equal(isFolderConflictCopy(path), true, path);
+  for (const path of ['meeting-notes.md', 'notes-final-draft.md', 'notes-AB.md']) {
+    assert.equal(isFolderConflictCopy(path), false, path);
+  }
   for (const [index, path] of conflicts.entries()) await writeFile(join(fx.share, ...path.split('/')), `copy ${index}`);
   await writeFile(join(fx.share, 'notes', 'placeholder.md.icloud'), 'placeholder');
   await writeFile(join(fx.share, 'notes', '~$draft.md'), 'temporary');
@@ -94,9 +97,17 @@ test('folder writes reject traversal and symlink escapes', async (t) => {
   const outside = join(fx.root, 'outside');
   await mkdir(outside);
   const link = join(fx.share, 'link');
-  const { symlink } = await import('node:fs/promises');
   await symlink(outside, link, 'dir');
   await assert.rejects(transport.put('link/escaped.md', Buffer.from('secret'), { ifAbsent: true }), { code: 'E_INVALID_PATH' });
+});
+
+test('a configured symlink to an external shared folder is accepted as the root', async (t) => {
+  const fx = await fixture(t);
+  const configuredRoot = join(fx.root, 'shared-link');
+  await symlink(fx.share, configuredRoot, 'dir');
+  const transport = createFolderTransport({ path: configuredRoot, vaultPath: fx.vault });
+  await transport.put('notes/shared.md', Buffer.from('shared\n'), { ifAbsent: true });
+  assert.equal(await readFile(join(fx.share, 'notes', 'shared.md'), 'utf8'), 'shared\n');
 });
 
 test('activation wires selected folder transport and the manifest declares its dependency', async (t) => {
