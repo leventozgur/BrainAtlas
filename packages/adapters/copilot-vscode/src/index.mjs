@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { writeFile, unlink } from 'node:fs/promises';
 import { readFileSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, isAbsolute, sep } from 'node:path';
 import { atomicWriteFile, BrainAtlasError, resolvePaths } from '@brainatlas/core';
 
 export const id = 'copilot-vscode';
@@ -24,6 +24,7 @@ function platform(ctx) {
 function vaultRoot(ctx) {
   const value = ctx?.vaultDir || ctx?.paths?.vault || ctx?.config?.vault?.path;
   if (typeof value !== 'string' || !value) throw error('E_VAULT_PATH', 'Vault path is required for vault scope.');
+  if (!isAbsolute(value) || value.split(sep).includes('..')) throw error('E_PATH_ESCAPE', 'Vault path must be absolute and cannot contain parent segments.');
   return resolve(value);
 }
 function stateDir(ctx) {
@@ -64,9 +65,10 @@ function verifyBlock(text) {
   if (start < 0 || end < start || text.indexOf(BEGIN, start + BEGIN.length) >= 0 || text.indexOf(END, end + END.length) >= 0) throw error('E_MANAGED_BLOCK_EDITED', 'Managed instructions block is invalid.');
   const block = text.slice(start, end + END.length);
   const match = block.match(/<!-- brainatlas:sha256:([a-f0-9]{64}) -->/);
-  const body = block.slice(block.indexOf('-->') + 3, block.lastIndexOf(END)).replace(/^\n/, '').replace(/\n$/, '');
+  const bodyStart = match ? block.indexOf(match[0]) + match[0].length : -1;
+  const body = bodyStart < 0 ? '' : block.slice(bodyStart, block.lastIndexOf(END)).replace(/\r\n/g, '\n').replace(/^\n/, '').replace(/\n$/, '');
   if (!match || createHash('sha256').update(body).digest('hex') !== match[1]) throw error('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
-  return { start, end: end + END.length, block };
+  return { start, end: end + END.length, block, hash: match[1] };
 }
 function change(file, kind, before, after, ownership) { return { file, kind, before, after, ownership }; }
 function jsonKeyChange(file, key, entry, ownership, options = {}) {
@@ -92,7 +94,7 @@ function markdownChange(file, block) {
   if (before === null) return change(file, 'create', null, `${block}\n`, 'marked-block');
   const found = verifyBlock(before);
   if (found) {
-    if (found.block === block) return null;
+    if (found.hash === block.match(/<!-- brainatlas:sha256:([a-f0-9]{64}) -->/)[1]) return null;
     return change(file, 'modify', before, `${before.slice(0, found.start)}${block}${before.slice(found.end)}`, 'marked-block');
   }
   return change(file, 'modify', before, `${before}${before.endsWith('\n') || !before ? '' : '\n'}\n${block}\n`, 'marked-block');
@@ -137,9 +139,18 @@ async function persistOriginal(ctx, file, bytes, after) {
   await atomicWriteFile(dest, JSON.stringify({ file, bytes: bytes === null ? null : Buffer.from(bytes).toString('base64'), after: Buffer.from(after).toString('base64') }) + '\n', { mode: 0o600 });
 }
 export async function apply(planResult, ctx) {
-  for (const item of planResult?.changes || []) {
+  const changes = planResult?.changes || [];
+  plan(ctx);
+  const allowed = new Set(collectPaths({ ...ctx, scope: ctx.scope || ctx.config?.scope || 'global' }).map(item => item.file));
+  if (changes.some(item => !item || typeof item.file !== 'string' || !allowed.has(item.file))) throw error('E_PLAN_TARGET', 'Plan contains a file outside this adapter’s targets.');
+  for (const item of changes) {
     const current = readText(item.file);
     if (current !== item.before) throw error('E_CONFIG_CHANGED', 'Configuration changed after planning.');
+  }
+  for (const item of changes) {
+    if (item.before !== null && existsSync(`${item.file}.bak.${backupStamp(ctx.now)}`)) throw error('E_BACKUP_EXISTS', 'A configuration backup already exists.');
+  }
+  for (const item of changes) {
     if (item.before !== null) await writeFile(`${item.file}.bak.${backupStamp(ctx.now)}`, item.before, { flag: 'wx', mode: 0o600 });
     await persistOriginal(ctx, item.file, item.before, item.after);
     await atomicWriteFile(item.file, item.after, { mode: 0o600 });
@@ -148,7 +159,7 @@ export async function apply(planResult, ctx) {
 function removeJsonKey(ctx, file, key) {
   const before = readText(file); if (before === null) return null;
   const saved = readText(originalFile(ctx, file));
-  if (!saved) return before;
+  if (!saved) { decodeJson(before); return before; }
   try {
     const original = JSON.parse(saved);
     if (original.after === Buffer.from(before).toString('base64')) return original.bytes === null ? null : Buffer.from(original.bytes, 'base64').toString('utf8');
@@ -170,23 +181,19 @@ export async function remove(ctx) {
   const scope = ctx.scope || ctx.config?.scope || 'global';
   const copy = { ...ctx, scope };
   const files = collectPaths(copy);
+  const actions = [];
   for (const entry of files) {
     const before = readText(entry.file); if (before === null) continue;
+    if (entry.type === 'json') decodeJson(before);
+    if (entry.type === 'markdown') verifyBlock(before);
+    if (entry.type === 'whole' && entry.file.endsWith('.json')) decodeJson(before);
     const savedText = readText(originalFile(copy, entry.file));
     if (savedText) {
       try {
         const saved = JSON.parse(savedText);
         if (saved.after === Buffer.from(before).toString('base64')) {
           const original = saved.bytes === null ? null : Buffer.from(saved.bytes, 'base64').toString('utf8');
-          if (original === null) {
-            await writeFile(`${entry.file}.bak.${backupStamp(ctx.now)}`, before, { flag: 'wx', mode: 0o600 });
-            await unlink(entry.file);
-          }
-          else {
-            await writeFile(`${entry.file}.bak.${backupStamp(ctx.now)}`, before, { flag: 'wx', mode: 0o600 });
-            await atomicWriteFile(entry.file, original, { mode: 0o600 });
-          }
-          await clearOriginal(copy, entry.file);
+          actions.push({ entry, before, after: original, clear: true });
           continue;
         }
       } catch (cause) { if (cause.code === 'EEXIST') throw cause; }
@@ -202,11 +209,16 @@ export async function remove(ctx) {
       if (before !== expected) throw error('E_CONFIG_OWNERSHIP', 'BrainAtlas managed file was changed.');
       after = null;
     }
-    if (after === before) continue;
+    if (after !== before) actions.push({ entry, before, after, clear: true });
+  }
+  for (const { entry } of actions) {
+    if (existsSync(`${entry.file}.bak.${backupStamp(ctx.now)}`)) throw error('E_BACKUP_EXISTS', 'A configuration backup already exists.');
+  }
+  for (const { entry, before, after, clear } of actions) {
     await writeFile(`${entry.file}.bak.${backupStamp(ctx.now)}`, before, { flag: 'wx', mode: 0o600 });
     if (after === null) await unlink(entry.file);
     else await atomicWriteFile(entry.file, after, { mode: 0o600 });
-    await clearOriginal(copy, entry.file);
+    if (clear) await clearOriginal(copy, entry.file);
   }
 }
 function collectPaths(ctx) {
