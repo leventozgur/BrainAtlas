@@ -129,7 +129,7 @@ export function buildHookCommand({nodePath, shimPath, client, event, paths}) {
     try { defaultConfig = resolvePaths({env:process.env}).configFile; } catch {}
     let yamlDir;
     try { yamlDir = dirname(createRequire(import.meta.url).resolve('yaml/package.json')); } catch {}
-    const reads = [paths.vault, paths.state, paths.release, paths.configFile, process.env.BRAINATLAS_CONFIG, defaultConfig, yamlDir, dirname(nodePath)].filter(Boolean);
+    const reads = [paths.vault, paths.state, paths.release, paths.configFile, process.env.BRAINATLAS_CONFIG, defaultConfig, yamlDir, dirname(nodePath), shimPath].filter(Boolean);
     // Retrieval runs in a worker so its deadline can interrupt synchronous search.
     args.push('--permission', ...[...new Set(reads.flatMap(value => [value, canonical(value)]))].map(value => `--allow-fs-read=${value}`), ...[...new Set([paths.state, canonical(paths.state)])].map(value => `--allow-fs-write=${value}`), '--allow-worker');
   }
