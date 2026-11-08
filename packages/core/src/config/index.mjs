@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile, copyFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number},safety:{secretFilter:true,extraDenyGlobs:string[]},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
 /** @type {object} */
 export const CONFIG_SCHEMA = {
@@ -16,7 +16,13 @@ export const CONFIG_SCHEMA = {
     scope: { type: 'string', enum: ['global','vault'] },
     retrieval: { type: 'object', required: ['budgetChars','abstainThreshold'], properties: { budgetChars: { type: 'integer', minimum: 1 }, abstainThreshold: { type: 'number', minimum: 0, maximum: 1 } }, additionalProperties: false },
     hooks: { type: 'object', required: ['mode','deadlineMs'], properties: { mode: { type: 'string', enum: ['normal','economic','manual'] }, deadlineMs: { type: 'integer', minimum: 1 } }, additionalProperties: false },
-    safety: { type: 'object', required: ['secretFilter','extraDenyGlobs'], properties: { secretFilter: { const: true }, extraDenyGlobs: { type: 'array', items: { type: 'string' } } }, additionalProperties: false },
+    safety: { type: 'object', required: ['secretFilter','extraDenyGlobs'], properties: {
+      secretFilter: { const: true }, extraDenyGlobs: { type: 'array', items: { type: 'string' } },
+      allow: { type: 'array', items: { type: 'object', required: ['path','ruleId'], properties: {
+        path: { type: 'string', minLength: 1 }, ruleId: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,63}$' },
+        sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' }
+      }, additionalProperties: false } }
+    }, additionalProperties: false },
     okf: { type: 'object', required: ['level'], properties: { level: { type: 'string', enum: ['warn','strict'] } }, additionalProperties: false },
     sync: { type: 'object', required: ['transport','options'], properties: { transport: { type: ['string','null'] }, options: { type: 'object' } }, additionalProperties: false },
     telemetry: { const: false }, readOnly: { type: 'boolean' }, node: { type: 'object', required: ['path'], properties: { path: { type: 'string' } }, additionalProperties: false }
@@ -67,7 +73,7 @@ function validateSchema(value, schema, path, errors) {
 /** @param {'lite'|'full'|'custom'} profile @returns {Config} */
 export function defaultConfig(profile) {
   if (!has(PROFILES, profile)) throw new BrainAtlasError('E_PROFILE', 'Unknown configuration profile.');
-  return { schemaVersion: 1, profile, vault: { path: '.' }, modules: [...PROFILES[profile].modules], agents: [], scope: 'global', retrieval: { budgetChars: 4000, abstainThreshold: 0.35 }, hooks: { mode: 'normal', deadlineMs: 1000 }, safety: { secretFilter: true, extraDenyGlobs: [] }, okf: { level: 'warn' }, sync: { transport: null, options: {} }, telemetry: false, readOnly: false, node: { path: 'node' } };
+  return { schemaVersion: 1, profile, vault: { path: '.' }, modules: [...PROFILES[profile].modules], agents: [], scope: 'global', retrieval: { budgetChars: 4000, abstainThreshold: 0.35 }, hooks: { mode: 'normal', deadlineMs: 1000 }, safety: { secretFilter: true, extraDenyGlobs: [], allow: [] }, okf: { level: 'warn' }, sync: { transport: null, options: {} }, telemetry: false, readOnly: false, node: { path: 'node' } };
 }
 
 /** @param {unknown} obj @returns {{ok:boolean, errors:Array<{path:string,code:string,message:string}>}} */
@@ -75,21 +81,43 @@ export function validateConfig(obj) {
   const errors = [];
   validateSchema(obj, CONFIG_SCHEMA, '', errors);
   if (obj && typeof obj === 'object' && !Array.isArray(obj) && obj.safety && typeof obj.safety === 'object' && obj.safety.secretFilter === false) errors.push(error('safety.secretFilter', 'E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.'));
+  const allow = obj?.safety?.allow;
+  if (Array.isArray(allow)) {
+    const seen = new Set();
+    for (let index = 0; index < allow.length; index++) {
+      const entry = allow[index];
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const path = entry.path;
+      if (typeof path === 'string' && (path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path) || path.includes('\\') || path.includes('\0')
+          || path.split('/').some((part) => !part || part === '.' || part === '..'))) {
+        errors.push(error(`safety.allow[${index}].path`, 'E_PATH_INVALID', 'Safety allow paths must be canonical vault-relative paths.'));
+      }
+      if (typeof entry.ruleId === 'string') {
+        if (entry.ruleId === 'denied-path' && has(entry, 'sha256')) errors.push(error(`safety.allow[${index}].sha256`, 'E_FINGERPRINT', 'Path findings do not have a content fingerprint.'));
+        if (entry.ruleId !== 'denied-path' && !has(entry, 'sha256')) errors.push(error(`safety.allow[${index}].sha256`, 'E_FINGERPRINT', 'Content findings require a SHA-256 fingerprint.'));
+      }
+      if (typeof path === 'string' && typeof entry.ruleId === 'string') {
+        const key = `${path}\0${entry.ruleId}\0${entry.sha256 ?? ''}`;
+        if (seen.has(key)) errors.push(error('safety.allow', 'E_UNIQUE', 'safety.allow contains duplicate fingerprints.'));
+        seen.add(key);
+      }
+    }
+  }
   return { ok: errors.length === 0, errors };
 }
 
-/** @param {{paths:object,env:Record<string,string|undefined>}} options @returns {Promise<Config>} */
+/** @param {{paths:object,env:Record<string,string|undefined>,readOnly?:boolean}} options @returns {Promise<Config>} */
 export async function loadConfig(options) {
-  const { paths, env = {} } = options || {};
+  const { paths, env = {}, readOnly = false } = options || {};
   if (!paths?.configFile) throw new BrainAtlasError('E_PATHS', 'Configuration file path is required.');
   let text;
   try { text = await readFile(paths.configFile, 'utf8'); } catch (cause) { if (cause?.code === 'ENOENT') return defaultConfig(env.BRAINATLAS_PROFILE || 'lite'); throw new BrainAtlasError('E_CONFIG_READ', 'Could not read configuration.'); }
   let value;
   try { value = JSON.parse(text); } catch { throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.'); }
   if (!Number.isInteger(value?.schemaVersion) || value.schemaVersion < 1) {
-    const migrated = await migrateConfig(text, { backupDir: dirname(paths.configFile) });
+    const migrated = await migrateConfig(text, { backupDir: dirname(paths.configFile), dryRun: readOnly });
     value = migrated.config;
-    if (migrated.applied.length) await saveConfig(value, { paths });
+    if (migrated.applied.length && !readOnly) await saveConfig(value, { paths });
   }
   const result = validateConfig(value);
   if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
@@ -127,9 +155,9 @@ export function setConfigValue(cfg, dottedKey, value) {
   return out;
 }
 
-/** @param {unknown| string} objOrText @param {{backupDir:string,now?:Date,sourceText?:string,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
+/** @param {unknown| string} objOrText @param {{backupDir:string,now?:Date,sourceText?:string,dryRun?:boolean,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
 export async function migrateConfig(objOrText, options = {}) {
-  const { backupDir, now = new Date(), sourceText, migrations } = options;
+  const { backupDir, now = new Date(), sourceText, dryRun = false, migrations } = options;
   let obj = objOrText;
   if (typeof objOrText === 'string') {
     try { obj = JSON.parse(objOrText); } catch { throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.'); }
@@ -148,6 +176,7 @@ export async function migrateConfig(objOrText, options = {}) {
   const validation = validateConfig(current);
   if (!validation.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Migrated configuration is invalid.', validation.errors);
   if (!applied.length) return { config: current, applied, backupPath: null };
+  if (dryRun) return { config: current, applied, backupPath: null };
   if (!backupDir) throw new BrainAtlasError('E_BACKUP_DIR', 'A backup directory is required for migration.');
   await mkdir(backupDir, { recursive: true });
   const backupPath = join(backupDir, `config.json.bak.${now.toISOString()}`);

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+import { createHash } from 'node:crypto';
 import { CONTENT_RULES, DENY_GLOBS } from './rules.mjs';
 
 const placeholder = /^(?:<[^>]*>|x{3,}|changeme|example|none|null|undefined|redacted|placeholder|\$\{[^}]+\}|\$[A-Za-z_][\w]*|process\.env\.[\w]+|\*+)$/i;
@@ -83,7 +84,34 @@ export function scanPath(relPath, options = {}) {
   const normalize = (s) => s.replace(/\\/g, '/').replace(/(?:^|\/)\.\//g, '/').replace(/^\/+/, '').toLowerCase();
   const path = normalize(relPath);
   const patterns = [...DENY_GLOBS, ...(options.denyGlobs ?? []), ...(options.extraDenyGlobs ?? [])];
-  return patterns.filter((glob) => globMatch(normalize(glob), path)).map(() => ({ ruleId: 'denied-path', kind: 'path', start: 0, end: relPath.length }));
+  const denied = patterns.some((glob) => globMatch(normalize(glob), path));
+  const basename = path.slice(path.lastIndexOf('/') + 1);
+  // A generic secret(s).<extension> filename remains sensitive, while Markdown
+  // slugs such as team-secret-rotation-notes-v0.md are ordinary wiki page names.
+  const genericSecretFile = /^secrets?\.(?!.*\.md$).+/i.test(basename);
+  return denied || genericSecretFile ? [{ ruleId: 'denied-path', kind: 'path', start: 0, end: relPath.length }] : [];
+}
+
+/** Return the persisted, value-free identity for one safety finding. */
+export function fingerprintSafetyFinding(relPath, text, finding) {
+  if (typeof relPath !== 'string' || typeof text !== 'string' || !finding || typeof finding.ruleId !== 'string') {
+    throw new TypeError('Invalid safety finding');
+  }
+  if (finding.kind === 'path') return { path: relPath, ruleId: finding.ruleId };
+  if (finding.kind !== 'content' || !Number.isInteger(finding.start) || !Number.isInteger(finding.end)
+      || finding.start < 0 || finding.end <= finding.start || finding.end > text.length) {
+    throw new TypeError('Invalid safety finding');
+  }
+  const matchedBytes = Buffer.from(text.slice(finding.start, finding.end), 'utf8');
+  return { path: relPath, ruleId: finding.ruleId, sha256: createHash('sha256').update(matchedBytes).digest('hex') };
+}
+
+/** Match a finding against the exact value-free entries stored in safety.allow. */
+export function isSafetyFindingAllowed(relPath, text, finding, allow = []) {
+  if (!Array.isArray(allow)) return false;
+  const fingerprint = fingerprintSafetyFinding(relPath, text, finding);
+  return allow.some((entry) => entry && entry.path === fingerprint.path && entry.ruleId === fingerprint.ruleId
+    && (Object.hasOwn(fingerprint, 'sha256') ? entry.sha256 === fingerprint.sha256 : !Object.hasOwn(entry, 'sha256')));
 }
 /** @param {string} text @param {{rules?:object[]}} options */
 export function redact(text, options = {}) {

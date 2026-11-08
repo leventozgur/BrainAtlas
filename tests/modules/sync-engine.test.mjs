@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fingerprintSafetyFinding, scanPath, scanText } from '../../packages/core/src/safety/index.mjs';
 import { createMemoryTransport, createSyncEngine, mergeIndexThreeWay, mergeLogThreeWay, planScheduler, planSchedulerUninstall, activate, commands } from '../../modules/sync-engine/src/index.mjs';
+import { inventoryVault } from '../../modules/sync-engine/src/scope.mjs';
 import { createFolderTransport } from '../../modules/sync-folder/src/index.mjs';
 
 async function fixture(t, { config = { sync: { options: {} } }, transport = createMemoryTransport(), initial = {} } = {}) {
@@ -209,6 +211,38 @@ test('secret path and content refusals expose only path and ruleId and do not up
   assert.equal(await transport.get('wiki/entities/local.md'), null);
   assert.equal(JSON.stringify({ result, logs }).includes('Z9kLm2Pq8R4tWx7V3cN'), false);
   assert.ok(result.refused.every((row) => Object.keys(row).sort().join(',') === 'path,ruleId'));
+});
+
+test('sync inventory suppresses only exact fingerprinted findings and keeps content filtering active', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'sync-engine-allow-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const vaultPath = join(root, 'vault'), stateDir = join(root, 'state');
+  await mkdir(join(vaultPath, 'wiki/entities'), { recursive: true });
+  const path = 'wiki/entities/approved.md';
+  const original = 'A note\nsecret: "S-ALLOW-original-29QaWsEdRfTg"\n';
+  await writeFile(join(vaultPath, path), original);
+  await writeFile(join(vaultPath, '.env'), 'MODE=example\n');
+  const config = { safety: { allow: [] }, sync: { options: { include: ['**/*'] } } };
+  const originalFinding = scanText(original).find(finding => finding.ruleId === 'secret-assignment');
+  const contentFingerprint = fingerprintSafetyFinding(path, original, originalFinding);
+  const envFinding = scanPath('.env')[0];
+  config.safety.allow.push(contentFingerprint, fingerprintSafetyFinding('.env', '', envFinding));
+
+  const approved = await inventoryVault({ vaultPath, stateDir, config });
+  assert.equal(approved.files.has(path), true);
+  assert.equal(approved.files.has('.env'), true);
+  assert.equal(approved.refused.some(row => row.path === path || row.path === '.env'), false);
+
+  const changed = `${original}secret: "S-ALLOW-added-83LmNpQrStUv"\n`;
+  await writeFile(join(vaultPath, path), changed);
+  const changedInventory = await inventoryVault({ vaultPath, stateDir, config });
+  assert.equal(changedInventory.files.has(path), false);
+  assert.ok(changedInventory.refused.some(row => row.path === path && row.ruleId === 'secret-assignment'));
+
+  config.safety.allow = config.safety.allow.filter(row => row.path !== path);
+  const revokedInventory = await inventoryVault({ vaultPath, stateDir, config });
+  assert.equal(revokedInventory.files.has(path), false);
+  assert.ok(revokedInventory.refused.some(row => row.path === path && row.ruleId === 'secret-assignment'));
 });
 
 test('index entries and append-only log entries merge independently from a shared base', async (t) => {

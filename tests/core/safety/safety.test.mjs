@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
-import { scanText, scanPath, redact } from '../../../packages/core/src/safety/index.mjs';
+import { scanText, scanPath, redact, fingerprintSafetyFinding, isSafetyFindingAllowed } from '../../../packages/core/src/safety/index.mjs';
 import { metrics } from './metrics.mjs';
 const fixtures = new URL('./fixtures/', import.meta.url);
 
@@ -34,11 +34,37 @@ test('private key block and custom rules are redacted', async () => {
   assert.match(redact(text), /^\[REDACTED:private-key\]/);
   assert.equal(redact('custom-value', { rules: [{ id: 'custom', pattern: /custom-value/ }] }), '[REDACTED:custom]');
 });
-test('deny patterns match nested and normalized paths and additive globs', () => {
-  for (const path of ['.env', 'dir/.ENV.local', 'dir\\.ssh\\config', './.git/config', 'dir/id_rsa.pub', 'x/SECRETS.txt', 'a/file.PEM', '.npmrc', 'credentials.json']) assert.ok(scanPath(path).length, path);
+test('path deny table blocks sensitive names but permits Markdown slugs containing secret', () => {
+  const denied = [
+    '.env', '.env.local', '.envbackup', 'dir/.ENV.local', 'dir\\.ssh\\config', './.git/config',
+    'dir/id_rsa.pub', 'secret.md', 'nested/secrets.md', 'secret.txt', 'secrets.json', 'secrets.data.json',
+    'x/file.secret', 'x/file.secrets', 'client_secret_notes.md', 'a/file.PEM', 'a/file.key', 'bundle.p12',
+    '.npmrc', 'credentials.json', 'nested/credentials-prod.json',
+  ];
+  for (const path of denied) assert.equal(scanPath(path).length > 0, true, `expected path to be denied: ${path}`);
+  const allowed = [
+    'wiki/concepts/team-secret-rotation-notes-v0.md', 'wiki/concepts/client-secret.md',
+    'wiki/concepts/secret-notes.md', 'wiki/concepts/secrets-of-memory.md', 'wiki/concepts/secret.v0.md',
+    'docs/readme.md', 'dir/environment.txt',
+  ];
+  for (const path of allowed) assert.deepEqual(scanPath(path), [], `expected path to be allowed: ${path}`);
   assert.ok(scanPath('nested/private/file.txt', { extraDenyGlobs: ['private/**'] }).length);
   assert.ok(scanPath('.env', { denyGlobs: [] }).length);
-  assert.deepEqual(scanPath('dir/environment.txt'), []);
+});
+test('fingerprints identify content bytes and path findings without exposing matched text', () => {
+  const original = 'title\nsecret: "S-ALLOW-original-9XyZaBcDeFgH"\n';
+  const finding = scanText(original).find(row => row.ruleId === 'secret-assignment');
+  assert.ok(finding);
+  const fingerprint = fingerprintSafetyFinding('wiki/concepts/entry.md', original, finding);
+  assert.deepEqual(Object.keys(fingerprint).sort(), ['path', 'ruleId', 'sha256']);
+  assert.equal(isSafetyFindingAllowed('wiki/concepts/entry.md', original, finding, [fingerprint]), true);
+  const changed = `${original}secret: "S-ALLOW-new-37QwErTyUiOpL"\n`;
+  const changedFinding = scanText(changed).at(-1);
+  assert.equal(isSafetyFindingAllowed('wiki/concepts/entry.md', changed, changedFinding, [fingerprint]), false);
+  const pathFinding = scanPath('secret.md')[0];
+  const pathFingerprint = fingerprintSafetyFinding('secret.md', '', pathFinding);
+  assert.deepEqual(pathFingerprint, { path: 'secret.md', ruleId: 'denied-path' });
+  assert.equal(isSafetyFindingAllowed('secret.md', '', pathFinding, [pathFingerprint]), true);
 });
 test('one megabyte and adversarial input remain bounded', () => {
   const inputs = ['ordinary words '.repeat(70000), 'a'.repeat(1024 * 1024), ('a='.repeat(350000))];
