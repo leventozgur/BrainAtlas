@@ -93,10 +93,10 @@ test('comparison table keeps unverifiable claims marked for verification', () =>
     }
   }
 });
-test('online quickstart states GitHub Releases is planned and unpublished', () => {
+test('online quickstart points to the GitHub Releases channel and the signing key fingerprint', () => {
   for (const [file, start, end] of [['README.md', '### Online', '### Offline'], ['README.tr.md', '### Çevrimiçi', '### Çevrimdışı']]) {
     const text = docs.find(d => d.file === file).text; const section = text.split(start)[1]?.split(end)[0] || '';
-    assert.match(section, /GitHub Releases is the planned online channel|GitHub Releases planlanan çevrimiçi kanal/i, `${file}: planned release channel missing`);
-    assert.match(section, /nothing has been published yet|henüz yayın yok/i, `${file}: unpublished state missing`);
+    assert.match(section, /github\.com\/[\w.-]+\/BrainAtlas\/releases/i, `${file}: release channel missing`);
+    assert.match(section, /SHA256:[A-Za-z0-9+\/]{43}/, `${file}: signing key fingerprint missing`);
   }
 });

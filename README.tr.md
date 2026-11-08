@@ -33,7 +33,7 @@ Semantik retrieval deneysel olup değerlendirme kapısının arkasında varsayı
 
 ### Çevrimiçi
 
-GitHub Releases planlanan çevrimiçi kanaldır; henüz yayın yoktur. **Yayımlamadan önce doğrulayın:** bugün kullanılabilir yayın indirme adresi bulunmuyor. Şimdilik güvenilir kaynaktan alınan çevrimdışı dağıtım klasörünü kullanın. Node.js 20+ ve `ssh-keygen` gerekir.
+Sürümler GitHub Releases'ta yayımlanır: https://github.com/leventozgur/BrainAtlas/releases. Her sürüm tam dağıtım klasörünü içerir (Lite ve Full arşivleri, `install.sh`, `release/`, `SHA256SUMS`, `SHA256SUMS.sig`). Bir sürümün tüm dosyalarını boş bir klasöre indirin ve aşağıdaki çevrimdışı adımlarla devam edin. Bakımcı imza anahtarının parmak izi `SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40`; kurmadan önce `release/allowed_signers` ile karşılaştırın.
 
 ### Çevrimdışı
 

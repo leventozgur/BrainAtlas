@@ -42,7 +42,7 @@ test('private SSH guide has complete security and two-host workflow', () => {
 });
 test('distribution and Gemini instructions specify required boundaries', () => {
   const install = read('docs/user/install.md');
-  const patterns = [/build-release\.mjs --version <v> --out <dir>/, /SHA256SUMS\.sig/, /--allowed-signers/, /--vault PATH/, /--allow-symlinked-root/, /outside `HOME`/, /planned online channel/i];
+  const patterns = [/build-release\.mjs --version <v> --out <dir>/, /SHA256SUMS\.sig/, /--allowed-signers/, /--vault PATH/, /--allow-symlinked-root/, /outside `HOME`/, /GitHub Releases/i];
   assert(complete(install, patterns)); assert(!complete('install.sh --yes', patterns));
   assert(complete(read('docs/user/agents.md'), [/BeforeAgent/, /SessionStart/, /brainatlas-context/, /brainatlas-session/, /\/hooks/]));
 });

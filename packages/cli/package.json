@@ -20,5 +20,13 @@
     "@brainatlas/core": "*",
     "@brainatlas/hooks": "*",
     "@brainatlas/mcp": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leventozgur/BrainAtlas.git"
+  },
+  "homepage": "https://github.com/leventozgur/BrainAtlas",
+  "bugs": {
+    "url": "https://github.com/leventozgur/BrainAtlas/issues"
   }
 }

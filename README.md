@@ -35,7 +35,7 @@ Adapters can create or modify agent configuration. Inspect the plan and trust re
 
 ### Online
 
-GitHub Releases is the planned online channel; nothing has been published yet. **Verify before publishing:** there is no release download URL today. Use a trusted offline distribution folder for now. Node.js 20 or newer and `ssh-keygen` are required.
+Releases are published on GitHub Releases: https://github.com/leventozgur/BrainAtlas/releases. Each release attaches the complete distribution folder (Lite and Full archives, `install.sh`, `release/`, `SHA256SUMS`, `SHA256SUMS.sig`). Download every file of one release into an empty folder and continue with the offline steps below. The maintainer signing key fingerprint is `SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40`; compare it with `release/allowed_signers` before installing. Node.js 20 or newer and `ssh-keygen` are required.
 
 ### Offline
 

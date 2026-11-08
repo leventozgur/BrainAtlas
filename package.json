@@ -5,7 +5,9 @@
   "description": "BrainAtlas — evidence-first memory for coding agents",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "packages/core",
     "packages/mcp",
@@ -19,5 +21,13 @@
     "test": "node scripts/run-tests.mjs",
     "guard": "node scripts/guard.mjs",
     "build:release": "node release/build-release.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leventozgur/BrainAtlas.git"
+  },
+  "homepage": "https://github.com/leventozgur/BrainAtlas",
+  "bugs": {
+    "url": "https://github.com/leventozgur/BrainAtlas/issues"
   }
 }
