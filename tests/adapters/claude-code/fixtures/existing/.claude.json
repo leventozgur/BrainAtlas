@@ -1,0 +1,6 @@
+{
+  "numProjects": 7,
+  "hasCompletedOnboarding": true,
+  "mcpServers": {"personal": {"command": "local-tool", "args": ["--keep"]}},
+  "other": {"nested": [1, 2, 3]}
+}
