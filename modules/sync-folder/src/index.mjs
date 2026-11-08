@@ -116,7 +116,7 @@ async function scanFiles(root, current = root, rows = []) {
  * this transport intentionally makes no cross-process CAS guarantee.
  * @param {{path:string,vaultPath:string}} options
  */
-export function createFolderTransport({ path, vaultPath } = {}) {
+export function createFolderTransport({ path, vaultPath, atomicWriter = atomicWriteFile } = {}) {
   if (typeof path !== 'string' || typeof vaultPath !== 'string') throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder transport paths are incomplete.');
   const initialization = validateRoot(path, vaultPath).then(async (validated) => {
     await mkdir(validated, { recursive: true });
@@ -182,7 +182,7 @@ export function createFolderTransport({ path, vaultPath } = {}) {
       })();
       if ((options.ifAbsent && beforeWrite) || (options.ifRev !== undefined && (!beforeWrite || beforeWrite.rev !== options.ifRev))
           || (options.ifAbsent !== true && options.ifRev === undefined && beforeWrite)) throw new ConflictError();
-      await atomicWriteFile(target, bytes);
+      await atomicWriter(target, bytes, { tempPrefix: '.brainatlas-tmp-' });
       const stored = await getObject(path);
       if (!stored) throw new SyncTransportError('E_DEGRADED');
       return { rev: stored.rev };

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runCommand } from '../../packages/core/src/util/index.mjs';
+import { atomicWriteFile, runCommand } from '../../packages/core/src/util/index.mjs';
 import { readModuleManifest, resolveModuleOrder } from '../../packages/core/src/modules/index.mjs';
 import { createGitTransport, activate } from '../../modules/sync-git/src/index.mjs';
 
@@ -151,6 +151,19 @@ test('offline guard rejects network remotes before invoking Git', async (t) => {
   });
   await assert.rejects(transport.list(), { code: 'E_OFFLINE' });
   assert.equal(calls, 0);
+});
+
+test('Git object atomic write failure keeps old bytes and removes its temporary file', async (t) => {
+  const fx = await fixture(t);
+  const seed=fx.create('atomic-failure');
+  const prior=await seed.put('wiki/data.bin',Buffer.from('old complete'),{ifAbsent:true});
+  const fsOps={...await import('node:fs/promises'), rename: async () => { throw new Error('injected rename failure'); }};
+  const failingWriter=(target,bytes,options)=>atomicWriteFile(target,bytes,{...options,fsOps});
+  const transport=fx.create('atomic-failure',{atomicWriter:failingWriter});
+  await assert.rejects(transport.put('wiki/data.bin',Buffer.from('new complete'),{ifRev:prior.rev}),/injected rename failure/);
+  const target=join(fx.root,'atomic-failure','state','sync','git','wiki','data.bin');
+  assert.equal(await readFile(target,'utf8'),'old complete');
+  assert.deepEqual(await readdir(join(fx.root,'atomic-failure','state','sync','git','wiki')),['data.bin']);
 });
 
 test('activation wires the selected Git transport into the sync engine context', async (t) => {

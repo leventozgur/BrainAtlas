@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readModuleManifest, resolveModuleOrder } from '../../packages/core/src/modules/index.mjs';
+import { atomicWriteFile } from '../../packages/core/src/util/index.mjs';
 import { activate, createFolderTransport, isFolderConflictCopy } from '../../modules/sync-folder/src/index.mjs';
 
 async function fixture(t) {
@@ -108,6 +109,20 @@ test('a configured symlink to an external shared folder is accepted as the root'
   const transport = createFolderTransport({ path: configuredRoot, vaultPath: fx.vault });
   await transport.put('notes/shared.md', Buffer.from('shared\n'), { ifAbsent: true });
   assert.equal(await readFile(join(fx.share, 'notes', 'shared.md'), 'utf8'), 'shared\n');
+});
+
+test('folder atomic write failure keeps old bytes and removes ignored temporary files', async (t) => {
+  const fx = await fixture(t);
+  const target = join(fx.share, 'record.md'); await writeFile(target, 'old complete');
+  let temporaryPath;
+  const fsOps={...await import('node:fs/promises'), writeFile: async (file,...args) => { temporaryPath=file; return (await import('node:fs/promises')).writeFile(file,...args); }, rename: async () => { throw new Error('injected rename failure'); }};
+  const atomicWriter=(file,data,options)=>atomicWriteFile(file,data,{...options,fsOps});
+  const transport=createFolderTransport({path:fx.share,vaultPath:fx.vault,atomicWriter});
+  const current=await transport.get('record.md');
+  await assert.rejects(transport.put('record.md',Buffer.from('new complete'),{ifRev:current.rev}),/injected rename failure/);
+  assert.match(temporaryPath,/\/\.brainatlas-tmp-[^/]+$/);
+  assert.equal(await readFile(target,'utf8'),'old complete');
+  assert.deepEqual(await readdir(fx.share), ['record.md']);
 });
 
 test('activation wires selected folder transport and the manifest declares its dependency', async (t) => {
