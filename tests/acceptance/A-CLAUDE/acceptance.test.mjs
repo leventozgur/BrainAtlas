@@ -39,7 +39,7 @@ for (const scope of ['global', 'vault']) for (const platform of ['linux', 'darwi
     const settings = JSON.parse(await readFile(join(s.root, names(scope)[1]), 'utf8'));
     assert.equal(mcp.mcpServers.brainatlas.command, s.ctx.nodePath);
     assert.deepEqual(mcp.mcpServers.brainatlas.args, [s.ctx.shimPath, 'mcp']);
-    for (const event of ['SessionStart', 'UserPromptSubmit']) assert.equal(settings.hooks[event].at(-1).hooks[0].command, `"${s.ctx.nodePath}" "${s.ctx.shimPath}" hook claude-code ${event}`);
+    for (const [event, cliEvent] of [['SessionStart', 'session-start'], ['UserPromptSubmit', 'prompt']]) assert.equal(settings.hooks[event].at(-1).hooks[0].command, `"${s.ctx.nodePath}" "${s.ctx.shimPath}" hook claude ${cliEvent}`);
     if (!['absent', 'empty-object'].includes(style)) { assert.equal(mcp.user, secret); assert.equal(settings.theme, 'dark'); assert.equal(settings.hooks.Notification[0].hooks[0].command, 'user-hook'); }
     await adapter.remove(s.ctx); assert.deepEqual(await snapshot(s.root, scope), before);
     assert.equal(await readFile(s.sentinel, 'utf8'), secret);

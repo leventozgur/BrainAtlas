@@ -47,6 +47,13 @@ for (const fixture of ['empty', 'existing']) test(`apply then remove restores ${
     assert.deepEqual(mcp.mcpServers.brainatlas.args, [ctx.shimPath, 'mcp']);
     const settings = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'));
     assert.ok(settings.hooks.UserPromptSubmit.length > 0 && settings.hooks.SessionStart.length > 0);
+    for (const [event, expected] of Object.entries({ UserPromptSubmit: 'prompt', SessionStart: 'session-start' })) {
+      const command = settings.hooks[event].flatMap(group => group.hooks).find(hook => hook.command.includes(ctx.shimPath)).command;
+      const args = command.match(/ hook (\S+) (\S+)$/)?.slice(1);
+      assert.deepEqual(args, ['claude', expected]);
+      assert.ok(['claude', 'codex', 'kiro', 'copilot', 'gemini'].includes(args[0]));
+      assert.ok(['prompt', 'session-start', 'session-end'].includes(args[1]));
+    }
     await adapter.remove(ctx);
     const after = await snapshot(home);
     for (const key of Object.keys(before)) assert.deepEqual(after[key], before[key], key);
@@ -150,5 +157,53 @@ test('doctor and trust review report Claude Code setup', async () => {
     const result = await adapter.doctor(ctx);
     assert.equal(result.ok, true); assert.deepEqual(result.checks.map(check => check.id), ['registered', 'shim', 'version-drift', 'hook-present']);
     assert.deepEqual(await adapter.trustReview(ctx), { required: true, client: 'Claude Code', steps: ['Start a new Claude Code session.', 'Approve the BrainAtlas MCP server if prompted.'] });
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('upgrade replaces legacy hooks, preserves user hooks, and uninstall removes both formats', async () => {
+  const { base, home, ctx } = await setup('existing');
+  const file = join(home, '.claude/settings.json');
+  try {
+    const settings = JSON.parse(await readFile(file, 'utf8'));
+    const legacy = event => `"${ctx.nodePath}" "${ctx.shimPath}" hook claude-code ${event}`;
+    settings.hooks.UserPromptSubmit[0].hooks.push({ type: 'command', command: legacy('UserPromptSubmit'), timeout: 5 });
+    settings.hooks.SessionStart = [{ hooks: [{ type: 'command', command: legacy('SessionStart') }] }];
+    await writeFile(file, JSON.stringify(settings, null, 2));
+    assert.equal((await adapter.doctor(ctx)).checks.find(check => check.id === 'hook-present').ok, false);
+    await adapter.apply(adapter.plan(ctx), ctx);
+    const upgraded = JSON.parse(await readFile(file, 'utf8'));
+    for (const [event, expected] of Object.entries({ UserPromptSubmit: 'prompt', SessionStart: 'session-start' })) {
+      const commands = upgraded.hooks[event].flatMap(group => group.hooks).map(hook => hook.command);
+      assert.equal(commands.filter(command => command.includes(ctx.shimPath)).length, 1);
+      assert.ok(commands.includes(`"${ctx.nodePath}" "${ctx.shimPath}" hook claude ${expected}`));
+    }
+    assert.equal(upgraded.hooks.UserPromptSubmit[0].hooks[0].command, 'user-hook');
+    assert.equal((await adapter.doctor(ctx)).checks.find(check => check.id === 'hook-present').ok, true);
+    const beforeSecondInstall = await readFile(file);
+    const secondPlan = adapter.plan(ctx); assert.equal(secondPlan.changes.length, 0);
+    await adapter.apply(secondPlan, ctx);
+    assert.deepEqual(await readFile(file), beforeSecondInstall);
+    // Simulate an old hook reappearing alongside the installed hook.
+    upgraded.hooks.SessionStart[0].hooks.push({ type: 'command', command: legacy('SessionStart') });
+    await writeFile(file, JSON.stringify(upgraded));
+    await adapter.remove(ctx);
+    const removed = JSON.parse(await readFile(file, 'utf8'));
+    assert.equal(removed.hooks.UserPromptSubmit[0].hooks[0].command, 'user-hook');
+    assert.ok(!JSON.stringify(removed).includes(ctx.shimPath));
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('uninstall does not restore legacy hooks from the original settings snapshot', async () => {
+  const { base, home, ctx } = await setup('existing');
+  const file = join(home, '.claude/settings.json');
+  try {
+    const settings = JSON.parse(await readFile(file, 'utf8'));
+    settings.hooks.UserPromptSubmit[0].hooks.push({ type: 'command', command: `"${ctx.nodePath}" "${ctx.shimPath}" hook claude-code UserPromptSubmit` });
+    await writeFile(file, JSON.stringify(settings));
+    await adapter.apply(adapter.plan(ctx), ctx);
+    await adapter.remove(ctx);
+    const removed = JSON.parse(await readFile(file, 'utf8'));
+    assert.equal(removed.hooks.UserPromptSubmit[0].hooks[0].command, 'user-hook');
+    assert.ok(!JSON.stringify(removed).includes(ctx.shimPath));
   } finally { await rm(base, { recursive: true, force: true }); }
 });
