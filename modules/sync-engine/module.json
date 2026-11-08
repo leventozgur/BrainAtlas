@@ -1,0 +1,9 @@
+{
+  "name": "sync-engine",
+  "version": "0.1.0-dev",
+  "description": "Manifest based, transport agnostic vault synchronization.",
+  "requires": [],
+  "provides": ["sync"],
+  "profiles": ["full", "custom"],
+  "entry": "src/index.mjs"
+}
