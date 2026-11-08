@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMemoryTransport, createSyncEngine, mergeIndexThreeWay, mergeLogThreeWay, planScheduler, planSchedulerUninstall, activate, commands } from '../../modules/sync-engine/src/index.mjs';
+import { createFolderTransport } from '../../modules/sync-folder/src/index.mjs';
 
 async function fixture(t, { config = { sync: { options: {} } }, transport = createMemoryTransport(), initial = {} } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'sync-engine-test-'));
@@ -235,4 +236,19 @@ test('scope globs, peer check, scheduler plans and module commands expose the sp
   assert.equal(planSchedulerUninstall({ platform: 'linux', paths: { binPath: '/Users/you/bin/brainatlas', stateDir: '/Users/you/state' } }).files.length, 2);
   assert.deepEqual(Object.keys(commands).sort(), ['approve', 'check', 'pause', 'resume', 'run', 'status', 'sync']);
   assert.equal(await activate({ config: {}, paths: {} }), undefined);
+});
+
+test('sync status reports folder transport degradation and its reason', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'sync-folder-status-test-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const vaultPath = join(root, 'vault'); const sharedPath = join(root, 'shared'); const stateDir = join(root, 'state');
+  await Promise.all([mkdir(vaultPath), mkdir(sharedPath)]);
+  const transport = createFolderTransport({ path: sharedPath, vaultPath });
+  const engine = createSyncEngine({ vaultPath, stateDir, transport, config: { sync: { options: {} } } });
+  const context = { config: { vault: { path: vaultPath }, sync: { options: {} } }, paths: { stateDir }, transport };
+  const status = await commands.status(context);
+  assert.equal(status.status, 'DEGRADED');
+  assert.equal(status.transport.status, 'degraded');
+  assert.match(status.degradedReason, /cannot guarantee compare-and-swap/);
+  assert.equal((await engine.status()).status, 'DEGRADED');
 });

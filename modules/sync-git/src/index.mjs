@@ -20,6 +20,7 @@ function transportPath(path) {
 
 function errorCodeFrom(stderr, code) {
   const message = String(stderr ?? '').toLowerCase();
+  if (/host key verification failed|remote host identification has changed|no .* host key is known|host key .* not found/.test(message)) return 'E_AUTH';
   if (/authentication failed|permission denied|could not read username|access denied|publickey/.test(message)) return 'E_AUTH';
   if (/quota|no space left/.test(message)) return 'E_QUOTA';
   if (/non-fast-forward|fetch first|not possible to fast-forward|would be overwritten/.test(message)) return 'E_CONFLICT';
@@ -28,7 +29,45 @@ function errorCodeFrom(stderr, code) {
 }
 
 function isRemoteUrl(value) {
-  return /^(?:https?|ssh|git):\/\//i.test(value) || /^[^/@:\s]+@[^/:\s]+:.+/.test(value);
+  if (/^(?:https?|ssh|git):\/\//i.test(value)) return true;
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value)) return false;
+  return /^(?:[^/@:\s]+@)?[A-Za-z0-9._-]+:.+/.test(value);
+}
+
+function isSshRemote(value) {
+  if (/^ssh:\/\//i.test(value)) return true;
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value)) return false;
+  return /^(?:[^/@:\s]+@)?[A-Za-z0-9._-]+:.+/.test(value);
+}
+
+function redactRemote(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    if (/^(?:https?|ssh|git):\/\//i.test(value)) {
+      const url = new URL(value);
+      if (url.username || url.password) {
+        url.username = '[redacted]';
+        url.password = '';
+      }
+      if (url.search) url.search = '[redacted]';
+      url.hash = '';
+      return url.toString().replace(/%5Bredacted%5D/gi, '[redacted]');
+    }
+  } catch { /* Keep malformed values from being echoed verbatim below. */ }
+  const safe = value
+    .replace(/^((?:https?|ssh|git):\/\/)[^/?#]*@/i, '$1[redacted]@')
+    .replace(/^([^/@:\s]+)@([^/:]+):/, '[redacted]@$2:')
+    .replace(/\?.*$/, '?[redacted]')
+    .replace(/#.*$/, '');
+  return safe;
+}
+
+function hasEmbeddedHttpsCredentials(value) {
+  try {
+    const url = new URL(value);
+    return /^https?:$/.test(url.protocol)
+      && (Boolean(url.username || url.password) || /(?:token|auth|password|secret|key)/i.test(url.search));
+  } catch { return false; }
 }
 
 function conflictCopyPath(path, host, timestamp, index = 0) {
@@ -52,14 +91,16 @@ function strictUtf8(bytes) {
 /**
  * A Git backed object transport. It owns only `stateDir/sync/git`; it never
  * opens or modifies the vault's Git metadata.
- * @param {{stateDir:string,remote:string,env?:Record<string,string|undefined>,runCommand?:Function,now?:()=>Date,hostId?:string}} options
+ * @param {{stateDir:string,remote:string,branch?:string,authorName?:string,authorEmail?:string,env?:Record<string,string|undefined>,runCommand?:Function,now?:()=>Date,hostId?:string}} options
  */
-export function createGitTransport({ stateDir, remote, env = process.env, runCommand = coreRunCommand, now = () => new Date(), hostId = 'host', atomicWriter = atomicWriteFile } = {}) {
+export function createGitTransport({ stateDir, remote, branch = 'main', authorName, authorEmail, env = process.env, runCommand = coreRunCommand, now = () => new Date(), hostId = 'host', atomicWriter = atomicWriteFile } = {}) {
   if (typeof stateDir !== 'string' || !stateDir) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Git transport state is incomplete.');
   if (typeof runCommand !== 'function') throw new BrainAtlasError('E_ARGUMENT', 'Git command runner is invalid.');
   const syncDir = join(resolve(stateDir), 'sync');
   const repoDir = join(syncDir, 'git');
   const host = String(hostId).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 32) || 'host';
+  const commitName = typeof authorName === 'string' && authorName.trim() ? authorName.trim() : `BrainAtlas Sync (${host})`;
+  const commitEmail = typeof authorEmail === 'string' && authorEmail.trim() ? authorEmail.trim() : 'sync@brainatlas.invalid';
   let ready = false;
   let initialization;
 
@@ -76,15 +117,19 @@ export function createGitTransport({ stateDir, remote, env = process.env, runCom
   }
 
   function commandEnv() {
-    return {
+    const result = {
       ...process.env,
       ...(env ?? {}),
       GIT_TERMINAL_PROMPT: '0',
+      GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+      GIT_CONFIG_NOSYSTEM: '1',
     };
+    if (isSshRemote(configuredRemote()) && !result.GIT_SSH_COMMAND) result.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes';
+    return result;
   }
 
   function gitArgs(args) {
-    return ['-c', 'user.name=Sync Worker', '-c', 'user.email=local', ...args];
+    return ['-c', `user.name=${commitName}`, '-c', `user.email=${commitEmail}`, ...args];
   }
 
   async function execute(args, { cwd = repoDir, allowFailure = false } = {}) {
@@ -111,6 +156,10 @@ export function createGitTransport({ stateDir, remote, env = process.env, runCom
     initialization = (async () => {
       assertOnline();
       await ensureDirectory(syncDir);
+      const validBranch = await runCommand('git', gitArgs(['check-ref-format', '--branch', branch]), {
+        cwd: syncDir, env: commandEnv(), timeoutMs: COMMAND_TIMEOUT_MS,
+      }).catch(() => ({ code: 1 }));
+      if (validBranch.code !== 0) throw new BrainAtlasError('E_ARGUMENT', 'Configured Git branch is invalid.');
       let exists = false;
       try {
         const info = await lstat(repoDir);
@@ -138,6 +187,35 @@ export function createGitTransport({ stateDir, remote, env = process.env, runCom
       if (url.stdout.trim() !== configuredRemote()) {
         const changed = await execute(['remote', 'set-url', 'origin', configuredRemote()], { allowFailure: true });
         if (changed.code !== 0) throw new SyncTransportError('E_DEGRADED');
+      }
+      const remoteHead = await execute(['ls-remote', '--symref', 'origin', 'HEAD'], { allowFailure: true });
+      if (remoteHead.code !== 0) throw new SyncTransportError(errorCodeFrom(remoteHead.stderr, remoteHead.code));
+      const symbolicDefault = remoteHead.stdout.match(/^ref:\s+refs\/heads\/([^\s]+)\s+HEAD\s*$/m)?.[1] ?? null;
+      const localBranch = await execute(['symbolic-ref', '--quiet', '--short', 'HEAD'], { allowFailure: true });
+      const localHead = await head();
+      let defaultBranch = symbolicDefault;
+      let remoteHasBranch = symbolicDefault === branch;
+      if (!defaultBranch) {
+        const refs = await execute(['ls-remote', '--heads', 'origin'], { allowFailure: true });
+        if (refs.code !== 0) throw new SyncTransportError(errorCodeFrom(refs.stderr, refs.code));
+        const branches = refs.stdout.split('\n').map((line) => line.match(/\trefs\/heads\/([^\s]+)$/)?.[1]).filter(Boolean);
+        remoteHasBranch = branches.includes(branch);
+        if (branches.length === 1 && remoteHasBranch) defaultBranch = branch;
+        else if (branches.length) throw new BrainAtlasError('E_DEGRADED', 'Git remote has branches but no matching default branch configured.');
+      }
+      if (defaultBranch && defaultBranch !== branch) {
+        throw new BrainAtlasError('E_DEGRADED', 'Git remote default branch does not match configured sync.options.branch.');
+      }
+      if (!localHead && remoteHasBranch) {
+        const fetched = await execute(['fetch', 'origin', `refs/heads/${branch}:refs/remotes/origin/${branch}`], { allowFailure: true });
+        if (fetched.code !== 0) throw new SyncTransportError(errorCodeFrom(fetched.stderr, fetched.code));
+        const checkedOut = await execute(['checkout', '--track', `origin/${branch}`], { allowFailure: true });
+        if (checkedOut.code !== 0) throw new SyncTransportError('E_DEGRADED');
+      } else if (!localHead && (localBranch.code !== 0 || localBranch.stdout.trim() !== branch)) {
+        const changed = await execute(['symbolic-ref', 'HEAD', `refs/heads/${branch}`], { allowFailure: true });
+        if (changed.code !== 0) throw new SyncTransportError('E_DEGRADED');
+      } else if (localHead && (localBranch.code !== 0 || localBranch.stdout.trim() !== branch)) {
+        throw new BrainAtlasError('E_DEGRADED', 'Local Git branch does not match configured sync.options.branch.');
       }
       ready = true;
     })();
@@ -272,9 +350,7 @@ export function createGitTransport({ stateDir, remote, env = process.env, runCom
   }
 
   async function pushOnce() {
-    const branch = await execute(['symbolic-ref', '--quiet', '--short', 'HEAD'], { allowFailure: true });
-    const targetBranch = branch.code === 0 && branch.stdout.trim() ? branch.stdout.trim() : 'main';
-    const result = await execute(['push', '--set-upstream', 'origin', `HEAD:refs/heads/${targetBranch}`], { allowFailure: true });
+    const result = await execute(['push', '--set-upstream', 'origin', `HEAD:refs/heads/${branch}`], { allowFailure: true });
     return result;
   }
 
@@ -427,19 +503,40 @@ export function createGitTransport({ stateDir, remote, env = process.env, runCom
     async status() {
       if (!ready) {
         try { await lstat(repoDir); }
-        catch (error) { if (missing(error)) return { mode: 'git', initialized: false, clean: true, ahead: 0, behind: 0 }; throw error; }
+        catch (error) {
+          if (missing(error)) return {
+            mode: 'git', initialized: false, remote: redactRemote(configuredRemote()), branch,
+            ahead: 0, behind: 0, clean: true, lastSuccessfulSync: await lastSuccessfulSync(),
+          };
+          throw error;
+        }
       }
       await ensureReady();
       const status = await execute(['status', '--porcelain=v1', '--untracked-files=all']);
       const headId = await head();
+      const currentBranch = await execute(['symbolic-ref', '--quiet', '--short', 'HEAD'], { allowFailure: true });
       let ahead = 0, behind = 0;
       if (headId) {
         const counts = await execute(['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'], { allowFailure: true });
         if (counts.code === 0) [ahead, behind] = counts.stdout.trim().split(/\s+/).map((value) => Number(value) || 0);
       }
-      return { mode: 'git', initialized: true, clean: status.stdout.length === 0, ahead, behind };
+      return {
+        mode: 'git', initialized: true, remote: redactRemote(configuredRemote()),
+        branch: currentBranch.code === 0 ? currentBranch.stdout.trim() : null,
+        clean: status.stdout.length === 0, ahead, behind, lastSuccessfulSync: await lastSuccessfulSync(),
+      };
     },
   });
+
+  async function lastSuccessfulSync() {
+    try {
+      const manifest = JSON.parse(await readFile(join(stateDir, 'sync', 'last-synced-manifest.json'), 'utf8'));
+      return typeof manifest?.generatedAt === 'string' && Number.isFinite(Date.parse(manifest.generatedAt)) ? manifest.generatedAt : null;
+    } catch (error) {
+      if (missing(error)) return null;
+      throw new SyncTransportError('E_STATE_INVALID');
+    }
+  }
 }
 
 export async function activate(ctx) {
@@ -448,12 +545,28 @@ export async function activate(ctx) {
   }
   if (ctx.config.sync?.transport !== 'git') return;
   if (ctx.transport) return;
+  const options = ctx.config.sync?.options ?? {};
+  if (hasEmbeddedHttpsCredentials(options.remote)) {
+    ctx.logger?.warn?.('HTTPS Git remote contains embedded credentials; use a credential helper instead.', { code: 'W_REMOTE_CREDENTIALS' });
+  }
   ctx.transport = createGitTransport({
     stateDir: ctx.paths.stateDir,
-    remote: ctx.config.sync?.options?.remote,
+    remote: options.remote,
+    branch: options.branch ?? 'main',
+    authorName: options.authorName,
+    authorEmail: options.authorEmail,
     env: ctx.env ?? process.env,
     hostId: ctx.env?.BRAINATLAS_HOST_ID,
   });
 }
 
-export const commands = Object.freeze({});
+function gitStatusCommand(args, ctx) {
+  const values = Array.isArray(args) ? args : [];
+  if (values.some((value) => value !== '--json')) throw new BrainAtlasError('E_ARGUMENT', 'Use sync git status [--json].');
+  if (ctx?.config?.sync?.transport !== 'git' || typeof ctx.transport?.status !== 'function') {
+    throw new BrainAtlasError('E_MODULE_CONTEXT', 'Git sync status is unavailable.');
+  }
+  return ctx.transport.status();
+}
+
+export const commands = Object.freeze({ status: gitStatusCommand });

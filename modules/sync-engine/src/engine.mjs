@@ -252,14 +252,22 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
   }
 
   async function status() {
-    const [manifest, conflicts, pendingDeletes, paused, journal] = await Promise.all([
+    const [manifest, conflicts, pendingDeletes, paused, journal, transportStatus] = await Promise.all([
       readManifest(), readJson(conflictsPath, []), readJson(pendingDeletesPath, []), isPaused(), readJson(journalPath),
+      typeof tx.status === 'function' ? tx.status() : null,
     ]);
     if (!Array.isArray(conflicts) || !Array.isArray(pendingDeletes)) throw new SyncTransportError('E_STATE_INVALID');
     const unresolved = conflicts.filter((row) => !row.resolvedAt);
-    return { status: paused ? 'PAUSED' : journal?.phase === 'interrupted' ? 'INTERRUPTED' : (pendingDeletes.length || unresolved.length ? 'PENDING' : 'SYNCED'),
+    const degraded = transportStatus?.status === 'degraded' || transportStatus?.status === 'DEGRADED';
+    const degradedReason = typeof transportStatus?.reason === 'string' ? transportStatus.reason
+      : degraded && tx.capabilities?.mode === 'object' && tx.capabilities?.cas === false
+        ? 'Folder sync cannot guarantee compare-and-swap; an external sync client may also create conflict copies.'
+        : undefined;
+    return { status: paused ? 'PAUSED' : degraded ? 'DEGRADED' : journal?.phase === 'interrupted' ? 'INTERRUPTED' : (pendingDeletes.length || unresolved.length ? 'PENDING' : 'SYNCED'),
       manifestVersion: MANIFEST_VERSION, fileCount: manifest.files.length, conflictCount: unresolved.length,
-      pendingDeleteCount: pendingDeletes.length, pendingDeletionPaths: pendingDeletes.map((row) => row.path).filter((path) => typeof path === 'string').sort(), paused };
+      pendingDeleteCount: pendingDeletes.length, pendingDeletionPaths: pendingDeletes.map((row) => row.path).filter((path) => typeof path === 'string').sort(), paused,
+      ...(transportStatus ? { transport: transportStatus } : {}),
+      ...(degradedReason ? { degradedReason } : {}) };
   }
 
   async function pause() { await ensureState(); await saveJson(settingsPath, { paused: true, updatedAt: now().toISOString() }); return { status: 'PAUSED' }; }
