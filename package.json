@@ -20,7 +20,8 @@
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "guard": "node scripts/guard.mjs",
-    "build:release": "node release/build-release.mjs"
+    "build:release": "node release/build-release.mjs",
+    "eval": "node eval/run-eval.mjs --json"
   },
   "repository": {
     "type": "git",
