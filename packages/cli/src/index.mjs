@@ -341,25 +341,25 @@ async function recoverUpdate(paths, env) {
 
 function currentReleaseDir(paths, current) { return current ? join(paths.dataDir, current) : null; }
 
-function redactPlanCopy(value) {
-  const copy = structuredClone(value);
-  function visit(item) {
-    if (!item || typeof item !== 'object') return;
-    if (Array.isArray(item)) { for (const child of item) visit(child); return; }
-    for (const [key, child] of Object.entries(item)) {
-      if ((key === 'before' || key === 'after') && typeof child === 'string') item[key] = redact(child);
-      else visit(child);
-    }
-  }
-  visit(copy);
-  return copy;
-}
-
-function redactPlanOutput(value, home) {
-  if (typeof value === 'string') return redact(home ? value.split(home).join('~') : value);
-  if (Array.isArray(value)) return value.map(item => redactPlanOutput(item, home));
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, /(?:password|passwd|secret|token|credential|private[_-]?key)/i.test(key) && typeof item === 'string' ? '[REDACTED]' : redactPlanOutput(item, home)]));
-  return value;
+function redactOutput(value, home) {
+  const redactString = text => {
+    let result = home ? text.split(home).join('~') : text;
+    // The core redactor catches user:password@, but URL userinfo can also be
+    // username-only. Remove the entire userinfo component for every URL form.
+    result = result.replace(/\b([a-z][a-z0-9+.-]{0,31}:\/\/)([^\s/?#]*)/gi, (match, scheme, authority) => {
+      const at = authority.lastIndexOf('@');
+      return at < 0 ? match : `${scheme}[REDACTED]@${authority.slice(at + 1)}`;
+    });
+    return redact(result);
+  };
+  const visit = (item, key = '') => {
+    if (/(?:password|passwd|passphrase|(?:^|[_ .-])pwd|secret|token|api[_ .-]?key|access[_ .-]?key|credential|private[_-]?key)/i.test(key)) return '[REDACTED]';
+    if (typeof item === 'string') return redactString(item);
+    if (Array.isArray(item)) return item.map(child => visit(child));
+    if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([childKey, child]) => [childKey, visit(child, childKey)]));
+    return item;
+  };
+  return visit(value);
 }
 
 async function loadInstalledModuleEntry(releaseDir, manifest) {
@@ -497,7 +497,7 @@ const helpDescriptions = Object.freeze({
 });
 const helpUsages = Object.freeze({
   init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
-  config: 'brainatlas config get KEY | set KEY VALUE [--plan]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
+  config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
   migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', help: 'brainatlas --help | brainatlas help [COMMAND]'
@@ -629,9 +629,10 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
   const value = name => { const i = args.indexOf(name); if (i < 0) return undefined; if (!args[i + 1] || args[i + 1].startsWith('--')) throw error('E_ARGUMENT', `Missing value for ${name}.`); return args[i + 1]; };
   const paths = resolvePaths({ platform: env.BRAINATLAS_PLATFORM || process.platform, env });
   const json = flag('--json'); const plan = flag('--plan');
+  let redactCommandOutput = plan || (json && (command === 'status' || command === 'doctor'));
   const output = data => {
-    const protectedPlan = plan && ['init', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover'].includes(command);
-    const result = protectedPlan ? redactPlanOutput(data, env.HOME) : data;
+    const hideHome = plan && ['init', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover'].includes(command);
+    const result = redactCommandOutput ? redactOutput(data, hideHome ? env.HOME : undefined) : data;
     console.log(json || plan ? JSON.stringify(result, null, 2) : typeof result === 'string' ? result : JSON.stringify(result, null, 2));
   };
   const config = () => loadConfig({ paths, env });
@@ -697,7 +698,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
       } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED' || e.code === 'ERR_MODULE_NOT_FOUND') warnings.push(`Adapter ${agent} is unavailable.`); else throw e; }
     }
     if (!plan) await saveTrackedConfig(cfg, paths, env);
-    output({ action: 'init', configFile: paths.configFile, warnings, adapters: plan ? plannedAdapters.map(item => redactPlanCopy(item.changes)) : undefined }); return;
+    output({ action: 'init', configFile: paths.configFile, warnings, adapters: plan ? plannedAdapters.map(item => redactOutput(item.changes, env.HOME)) : undefined }); return;
   }
   if (command === 'install' && flag('--finalize')) {
     const createdDirectories = [];
@@ -717,9 +718,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
   }
   if (command === 'config') {
     const action = args.shift(); const key = args.shift(); const cfg = await config();
-    if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
-    if (action === 'get') { const result = key.split('.').reduce((v, k) => v?.[k], cfg); if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.'); output(typeof result === 'string' ? redact(result) : result); return; }
+    if (action === 'get') {
+      if (key && !key.startsWith('--') && !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
+      const result = key && !key.startsWith('--') ? key.split('.').reduce((v, k) => v?.[k], cfg) : cfg;
+      if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.');
+      redactCommandOutput = true; output(result); return;
+    }
     if (action === 'set') {
+      if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
       const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.');
       let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; }
       const updated = setCliConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env);
