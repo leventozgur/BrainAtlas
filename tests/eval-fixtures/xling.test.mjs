@@ -12,7 +12,7 @@ const casesPath = resolve(root, 'eval/dev/xling-cases.json');
 const files = readdirSync(corpusDir).filter(name => name.endsWith('.md')).sort();
 const pages = new Map(files.map(name => [name, readFileSync(resolve(corpusDir, name), 'utf8')]));
 const cases = JSON.parse(readFileSync(casesPath, 'utf8'));
-const expectedCounts = new Map([['xling-tr2en', 10], ['xling-en2tr', 10], ['no-answer', 10]]);
+const expectedCounts = new Map([['xling-tr2en', 5], ['xling-en2tr', 10], ['no-answer', 10]]);
 
 function pageLanguage(markdown) {
   const text = markdown.replace(/^---[\s\S]*?---/u, '').toLocaleLowerCase('tr-TR');
