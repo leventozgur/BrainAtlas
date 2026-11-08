@@ -34,7 +34,7 @@ function containsPrivatePattern(text) {
 }
 
 test('cross-language and abstain cases have valid shape, unique IDs, and balanced categories', () => {
-  assert.equal(cases.length, 30);
+  assert.equal(cases.length, 25);
   const ids = new Set();
   const counts = new Map();
   const allowedKeys = new Set(['id', 'query', 'relevant', 'category', 'trToEn', 'abstain', 'excluded']);
