@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+import {readFileSync} from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, copyFile, symlink } from 'node:fs/promises';
@@ -60,7 +61,7 @@ for (const [file, expected] of signatures) test(`stub imzaları: ${file}`,async(
  for(const [name,count] of Object.entries(expected)) { assert.equal(typeof mod[name],'function',name); const match=mod[name].toString().match(/^(?:async\s+)?(?:function\s*[^ (]*\s*)?\(([^)]*)\)/); assert.ok(match,name); assert.equal(match[1].trim()?match[1].split(',').length:0,count,name); }
 });
 test('CLI sürüm ve bilinmeyen komut',()=>{
- const version=run(['packages/cli/bin/brainatlas.mjs','--version']); assert.equal(version.status,0,version.stderr); assert.match(version.stdout,/^0\.1\.0-rc\.1\s*$/);
+ const version=run(['packages/cli/bin/brainatlas.mjs','--version']); assert.equal(version.status,0,version.stderr); assert.equal(version.stdout.trim(),JSON.parse(readFileSync(join(root,'package.json'),'utf8')).version); // PM: version-agnostic (rc bumps)
  const bad=run(['packages/cli/bin/brainatlas.mjs','unknown']); assert.equal(bad.status,2);
 });
 test('test runner filtre, hariç dizinler, hata ve boş sonuç',async()=>temporary(async dir=>{

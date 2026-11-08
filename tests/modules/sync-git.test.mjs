@@ -314,7 +314,7 @@ test('activation wires the selected Git transport into the sync engine context',
   assert.deepEqual(manifest.requires, ['sync-engine']);
   assert.deepEqual(resolveModuleOrder([
     manifest,
-    { name: 'sync-engine', version: '0.1.0-rc.1', description: 'engine', requires: [], provides: ['sync'], profiles: ['full'], entry: 'src/index.mjs' },
+    { name: 'sync-engine', version: '0.1.0-rc.2', description: 'engine', requires: [], provides: ['sync'], profiles: ['full'], entry: 'src/index.mjs' },
   ]).map((item) => item.name), ['sync-engine', 'sync-git']);
   const ctx = {
     config: { sync: { transport: 'git', options: { remote: fx.remote } } },
