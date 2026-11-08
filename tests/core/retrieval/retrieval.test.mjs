@@ -46,6 +46,81 @@ test('calibrated confidence retains unmatched-term penalties and threshold bound
   assert.equal(search(index, 'backup archive unknown unrelated', {abstainThreshold: threshold + 1e-9}).abstained, true);
   assert.equal(search(index, 'unknown unrelated', {abstainThreshold: 0.35}).abstained, true);
 });
+test('section selection uses distinct weighted stems, ancestry, and the snippet budget', () => {
+  const index = buildIndex([page('a.md', '# Root\ncommon common\n## First\ncommon\n## Second\nrare common evidence\n### Child\nother') , page('b.md', 'common')], {now});
+  const result = search(index, 'common rare', {limit:1}).results[0];
+  assert.equal(result.heading, 'Second'); assert.equal(result.headingPath, 'Root > Second');
+  assert.equal(result.anchor, 'second'); assert.equal(result.snippet, '## Second\nrare common evidence');
+  const bounded = search(index, 'common rare', {limit:1, budgetChars:5});
+  assert.equal(bounded.results[0].snippet, '## S…'); assert.equal(bounded.truncated, true);
+  assert.equal(search(index, 'common').results.find(result => result.path === 'a.md').heading, 'Root');
+});
+test('fences, duplicate headings, collisions, and Turkish anchor folding', () => {
+  const body = '# İLK\nordinary\n```js\n# comment\n```\n## Işık\nfirst\n## Işık\nsecondtarget\n## Isik-1\nthirdtarget\n## Işık\nfourthtarget';
+  const index = buildIndex([page('a.md', body)], {now});
+  const second = search(index, 'secondtarget').results[0];
+  assert.equal(second.heading, 'Işık'); assert.equal(second.anchor, 'isik-1'); assert.equal(second.headingPath, 'İLK > Işık');
+  assert.equal(search(index, 'thirdtarget').results[0].anchor, 'isik-1-1');
+  assert.equal(search(index, 'fourthtarget').results[0].anchor, 'isik-2');
+  const comment = search(index, 'comment').results[0];
+  assert.equal(comment.heading, 'İLK'); assert.match(comment.snippet, /# comment/);
+});
+test('tilde and backtick fences close only with the same character and sufficient length', () => {
+  const body = '# Root\n~~~~js\n# Hidden\n```\n~~~\n# Still hidden\n~~~~\n## Visible\nneedle\n````\n# Also hidden\n~~~\n```\n# Still hidden too\n````\n## End\nfinish';
+  const index = buildIndex([page('a.md', body)], {now});
+  assert.equal(search(index, 'hidden').results[0].heading, 'Root');
+  assert.equal(search(index, 'needle').results[0].heading, 'Visible');
+  assert.equal(search(index, 'finish').results[0].heading, 'End');
+});
+test('symbol-only headings use unique fallback anchors even when names collide', () => {
+  const body = '## section\nfirsttarget\n## 😀💥\nsecondtarget\n## section-2\nthirdtarget\n## ---\nfourthtarget';
+  const index = buildIndex([page('a.md', body)], {now});
+  assert.equal(search(index, 'firsttarget').results[0].anchor, 'section');
+  assert.equal(search(index, 'secondtarget').results[0].anchor, 'section-1');
+  assert.equal(search(index, 'thirdtarget').results[0].anchor, 'section-2');
+  assert.equal(search(index, 'fourthtarget').results[0].anchor, 'section-3');
+});
+test('a BOM before the first heading does not prevent section selection', t => {
+  const dir = temp(t), vault = path.join(dir, 'vault'); fs.mkdirSync(vault);
+  const body = '\uFEFF# İstanbul ve Işık\nneedle';
+  fs.writeFileSync(path.join(vault, 'plain.md'), body);
+  fs.writeFileSync(path.join(vault, 'frontmatter.md'), '\uFEFF---\ntitle: Example\n---\n# Topic\nother');
+  const pages = loadPages(vault), plain = pages.find(p => p.path === 'plain.md');
+  assert.equal(plain.body, body);
+  assert.equal(pages.find(p => p.path === 'frontmatter.md').frontmatter.title, 'Example');
+  const result = search(buildIndex(pages, {now}), 'needle').results[0];
+  assert.equal(result.heading, 'İstanbul ve Işık');
+  assert.equal(result.anchor, 'istanbul-ve-isik');
+});
+test('headingless and section-unmatched pages retain the body snippet', () => {
+  const plain = search(buildIndex([page('a.md', 'plain evidence')], {now}), 'plain').results[0];
+  assert.equal(plain.snippet, 'plain evidence'); assert.equal(plain.heading, null); assert.equal(plain.anchor, null); assert.equal(plain.headingPath, null);
+  const body = 'preface\n# Title\nunrelated';
+  const unmatched = search(buildIndex([page('b.md', body)], {now}), 'backup').results[0];
+  assert.equal(unmatched.snippet, body); assert.equal(unmatched.heading, null);
+});
+test('selected snippets retain the original heading line and single-section body', () => {
+  const body = '# Topic  \r\n\r\nknowledge topic evidence\r\n';
+  const result = search(buildIndex([page('topic.md', body)], {now}), 'knowledge').results[0];
+  assert.equal(result.snippet, body.trim());
+  assert.equal(result.heading, 'Topic');
+  const prefaced = search(buildIndex([page('preface.md', 'preface evidence\n# Topic\nunrelated')], {now}), 'preface').results[0];
+  assert.equal(prefaced.snippet, 'preface evidence\n# Topic\nunrelated');
+  assert.equal(prefaced.heading, null);
+});
+test('synthetic snippet coverage compares body-start and selected sections', () => {
+  const pages = [page('a.md', '# Intro\nfiller\n## Detail\norchards thrive'), page('b.md', '# Intro\nfiller\n## Detail\nharbors thrive')];
+  const index = buildIndex(pages, {now});
+  const queries = ['orchards', 'harbors'];
+  const contains = (text, query) => new Set((text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).map(stem)).has(stem(query));
+  let before = 0, after = 0;
+  for (const query of queries) {
+    const result = search(index, query, {limit:1, budgetChars:20}).results[0];
+    before += Number(contains(pages.find(p => p.path === result.path).body.trim().slice(0, 19) + '…', query));
+    after += Number(contains(result.snippet, query));
+  }
+  assert.equal(before, 0); assert.equal(after, queries.length);
+});
 test('loader, cache invalidation and corrupt cache recovery', async t => {
   const dir=temp(t), vault=path.join(dir,'vault'), state=path.join(dir,'state'); fs.mkdirSync(vault);
   const file=path.join(vault,'x.md'); fs.writeFileSync(file,'---\ntitle: Alpha\ngenerated: 2020-01-01\nstale_after: P1W\n---\n# Alpha\nalpha body');
