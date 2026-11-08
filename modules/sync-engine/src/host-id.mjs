@@ -74,7 +74,8 @@ async function readStoredHostId(path) {
   try {
     handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     info = await handle.stat();
-    if (!info.isFile()) throw invalidPath();
+    const processUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    if (!info.isFile() || info.nlink !== 1 || processUid === null || info.uid !== processUid) throw invalidPath();
     if ((info.mode & 0o777) !== 0o600) await handle.chmod(0o600);
     const value = (await handle.readFile('utf8')).trim();
     if (!/^[a-z0-9-]{1,32}$/.test(value)) throw invalidState();
@@ -114,8 +115,11 @@ export async function resolveHostId({ stateDir, env = {}, config = {}, hostId: l
   try {
     await ensureSyncDirectory(syncDir, stateRoot);
     handle = await open(temporaryPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600);
-    await handle.writeFile(`${generated}\n`);
+    const createdInfo = await handle.stat();
+    const processUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    if (!createdInfo.isFile() || createdInfo.nlink !== 1 || processUid === null || createdInfo.uid !== processUid) throw invalidPath();
     await handle.chmod(0o600);
+    await handle.writeFile(`${generated}\n`);
     await handle.sync();
     await handle.close();
     handle = undefined;

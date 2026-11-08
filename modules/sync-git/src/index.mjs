@@ -511,15 +511,11 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     commitAndPush,
     async status() {
       const hostId = await getHostId();
-      const legacyIdentity = typeof legacyHostId === 'string' && legacyHostId.trim()
-        && !(typeof env?.BRAINATLAS_HOST_ID === 'string' && env.BRAINATLAS_HOST_ID.trim())
-        && !(typeof config?.sync?.options?.hostId === 'string' && config.sync.options.hostId.trim());
-      const identityField = legacyIdentity ? {} : { hostId };
       if (!ready) {
         try { await lstat(repoDir); }
         catch (error) {
           if (missing(error)) return {
-            mode: 'git', ...identityField, initialized: false, remote: redactRemote(configuredRemote()), branch,
+            mode: 'git', hostId, initialized: false, remote: redactRemote(configuredRemote()), branch,
             ahead: 0, behind: 0, clean: true, lastSuccessfulSync: await lastSuccessfulSync(),
           };
           throw error;
@@ -535,7 +531,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
         if (counts.code === 0) [ahead, behind] = counts.stdout.trim().split(/\s+/).map((value) => Number(value) || 0);
       }
       return {
-        mode: 'git', ...identityField, initialized: true, remote: redactRemote(configuredRemote()),
+        mode: 'git', hostId, initialized: true, remote: redactRemote(configuredRemote()),
         branch: currentBranch.code === 0 ? currentBranch.stdout.trim() : null,
         clean: status.stdout.length === 0, ahead, behind, lastSuccessfulSync: await lastSuccessfulSync(),
       };

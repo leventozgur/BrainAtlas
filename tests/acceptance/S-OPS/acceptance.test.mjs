@@ -43,7 +43,7 @@ test('empty bare remote: two hosts run, exchange updates, report JSON fields and
   await writeFile(join(b.config.vault.path, 'page.md'), 'second\n'); await syncCommands.sync(b, { action: 'run' }); await syncCommands.sync(a, { action: 'run' });
   assert.equal(await readFile(join(a.config.vault.path, 'page.md'), 'utf8'), 'second\n');
   const status = JSON.parse(JSON.stringify(await gitCommands.status(['--json'], a)));
-  assert.deepEqual(Object.keys(status).sort(), ['ahead', 'behind', 'branch', 'clean', 'initialized', 'lastSuccessfulSync', 'mode', 'remote'].sort());
+  assert.deepEqual(Object.keys(status).sort(), ['ahead', 'behind', 'branch', 'clean', 'initialized', 'hostId', 'lastSuccessfulSync', 'mode', 'remote'].sort()); // PM: S-HOSTID acceptance adds hostId to git status
   assert.equal(status.branch, 'main'); assert.equal(status.remote, f.remote); assert.equal(status.ahead, 0); assert.equal(status.behind, 0); assert.equal(status.clean, true); assert.ok(Number.isFinite(Date.parse(status.lastSuccessfulSync)));
   await writeFile(join(a.paths.stateDir, 'sync/git/untracked'), 'dirty'); assert.equal((await gitCommands.status([], a)).clean, false);
   assert.throws(() => gitCommands.status(['--bad'], a), { code: 'E_ARGUMENT' });
