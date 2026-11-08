@@ -82,12 +82,19 @@ export function createServer(options) {
   let backgroundFailed = false;
   const settings = { ...core.SEMANTIC_DEFAULTS, ...config.semantic };
   const loadSemantic = () => semanticModulePromise ??= (async () => {
-    const release = await realpath(paths.currentDir);
-    const releases = await realpath(paths.releasesDir);
+    let release, releases;
+    try {
+      release = await realpath(paths.currentDir);
+      releases = await realpath(paths.releasesDir);
+      await stat(join(release, 'modules', 'semantic', 'module.json'));
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') throw Object.assign(new Error(), { fallbackReason: 'module-missing' });
+      throw error;
+    }
     const releaseRel = relative(releases, release);
     if (!releaseRel || releaseRel.startsWith(`..${sep}`) || isAbsolute(releaseRel) || releaseRel.includes(sep)) throw new Error();
     const manifest = (await core.discoverModules(release)).find(item => item.name === 'semantic');
-    if (!manifest) throw new Error();
+    if (!manifest) throw Object.assign(new Error(), { fallbackReason: 'module-missing' });
     const dir = await realpath(join(release, 'modules', 'semantic'));
     if (relative(release, dir) !== join('modules', 'semantic')) throw new Error();
     const entry = await realpath(resolve(dir, manifest.entry));
@@ -99,9 +106,9 @@ export function createServer(options) {
     module.validateConfiguredProvider(settings);
     return module.createOllamaProvider({ ...settings, fetchImpl: options.fetchImpl ?? globalThis.fetch });
   };
-  const scheduleUpdate = () => {
+  const scheduleUpdate = (markDirty = true) => {
     if (!semanticEnabled) return;
-    if (background) { backgroundDirty = true; return; }
+    if (background) { if (markDirty) backgroundDirty = true; return; }
     background = (async () => {
       do {
         backgroundDirty = false;
@@ -165,11 +172,15 @@ export function createServer(options) {
     if (!semanticEnabled) return lexical;
     const fallback = reason => ({ ...lexical, semantic: { used: false, fallbackReason: reason }, mode: 'lexical' });
     try {
-      const module = await loadSemantic();
+      let module;
+      try { module = await loadSemantic(); }
+      catch (error) { return fallback(error?.fallbackReason === 'module-missing' ? 'module-missing' : 'module-load-error'); }
       const provider = providerFor(module);
       const index = await module.readSemanticIndex(stateDir);
-      if (!index) { scheduleUpdate(); return fallback(backgroundFailed ? 'provider-error' : 'index-missing'); }
-      if (index.providerFingerprint !== provider.fingerprint || index.dims !== provider.dims) { scheduleUpdate(); return fallback('fingerprint-mismatch'); }
+      const emptyIndexWithPages = index && index.entries.length === 0 && Object.keys(index.fileHashes).length === 0 &&
+        (await core.listPages(vaultDir)).some(path => !['wiki/index.md', 'wiki/log.md'].includes(path));
+      if (!index || emptyIndexWithPages) { scheduleUpdate(false); return fallback(emptyIndexWithPages || !backgroundFailed ? 'index-missing' : 'provider-error'); }
+      if (index.providerFingerprint !== provider.fingerprint || index.dims !== provider.dims) { scheduleUpdate(false); return fallback('fingerprint-mismatch'); }
       const results = await module.searchHybrid({ query, pages: core.loadPages(wikiDir), entries: index.entries, provider, limit: count, indexMeta: index, mode: settings.mode, minSemanticScore: settings.minScore, abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
       if (results.fallbackReason) return fallback(results.fallbackReason);
       if (results.abstained) return { ...lexical, semantic: { used: true }, mode: settings.mode };

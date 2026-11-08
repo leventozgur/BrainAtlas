@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, cp, symlink, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, cp, symlink, writeFile, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -30,6 +30,80 @@ test('MCP opt-in semantic search keeps lexical fallback and thresholds', async t
   const cross = await query('araba'); assert.equal(cross.results[0].path, 'car.md'); assert.equal(cross.semantic.used, true); assert.equal(cross.results[0].heading, 'Engine');
   const absent = await query('irrelevant'); assert.equal(absent.abstained, true);
   const lexical = await query('motor'); assert.equal(lexical.abstained, false); assert.equal(lexical.results[0].path, 'car.md'); assert.ok(calls >= 4);
+});
+
+test('missing semantic module and manifest differ from an import failure', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-module-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const wiki = join(root, 'vault/wiki'), stateDir = join(root, 'state'), releasesDir = join(root, 'releases'), release = join(releasesDir, 'v1');
+  const moduleDir = join(release, 'modules/semantic'), currentDir = join(root, 'current');
+  await mkdir(wiki, { recursive: true }); await mkdir(join(release, 'modules'), { recursive: true });
+  await writeFile(join(wiki, 'car.md'), '# Engine\ncar motor'); await symlink(release, currentDir);
+  const config = defaultConfig('custom'); config.modules = ['semantic']; config.vault.path = join(root, 'vault'); config.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2 };
+  const golden = createSearcher({ vaultDir: wiki, stateDir }).search('car', { limit: 5, budgetChars: 4000, abstainThreshold: 0.35 });
+  let calls = 0;
+  const query = async () => {
+    const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl: async () => { calls++; throw new Error(); } });
+    const [ct, st] = InMemoryTransport.createLinkedPair(), client = new Client({ name: 'test', version: '1' });
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    try { return JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query: 'car' } })).content[0].text); }
+    finally { await client.close(); await server.close(); }
+  };
+  for (const scenario of ['absent', 'manifest-missing', 'import-error']) {
+    if (scenario === 'manifest-missing') await mkdir(moduleDir);
+    if (scenario === 'import-error') {
+      await cp(resolve('modules/semantic/module.json'), join(moduleDir, 'module.json'));
+      await mkdir(join(moduleDir, 'src')); await writeFile(join(moduleDir, 'src/index.mjs'), 'throw new Error("import failed");\n');
+    }
+    const result = await query();
+    assert.deepEqual({ results: result.results, abstained: result.abstained }, { results: golden.results, abstained: golden.abstained });
+    assert.deepEqual(result.semantic, { used: false, fallbackReason: scenario === 'import-error' ? 'module-load-error' : 'module-missing' });
+    assert.equal(result.mode, 'lexical');
+  }
+  assert.equal(calls, 0);
+});
+
+test('empty index rebuilds once when pages exist and remains valid for an empty vault', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-empty-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const wiki = join(root, 'vault/wiki'), stateDir = join(root, 'state'), releasesDir = join(root, 'releases'), release = join(releasesDir, 'v1'), currentDir = join(root, 'current');
+  await mkdir(wiki, { recursive: true }); await mkdir(join(release, 'modules'), { recursive: true });
+  await cp(resolve('modules/semantic'), join(release, 'modules/semantic'), { recursive: true }); await symlink(resolve('packages'), join(release, 'packages')); await symlink(release, currentDir);
+  const config = defaultConfig('custom'); config.modules = ['semantic']; config.vault.path = join(root, 'vault'); config.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2 };
+  let calls = 0, releaseBuild;
+  const gate = new Promise(resolve => { releaseBuild = resolve; });
+  const fetchImpl = async (_url, options) => { calls++; await gate; return { ok: true, json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }) }; };
+  const provider = createOllamaProvider({ ...config.semantic, fetchImpl });
+  await updateSemanticIndex({ corpusDir: wiki, stateDir, provider, chunkMarkdown: markdownChunks });
+  const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
+  const [ct, st] = InMemoryTransport.createLinkedPair(), client = new Client({ name: 'test', version: '1' });
+  await Promise.all([server.connect(st), client.connect(ct)]); t.after(async () => { releaseBuild(); await client.close(); await server.close(); });
+  const query = async () => JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query: 'car' } })).content[0].text);
+  // Empty indexes remain usable when the vault contains no pages.
+  releaseBuild();
+  const empty = await query(); assert.equal(empty.semantic.used, true); assert.equal(calls, 1);
+  await client.close(); await server.close();
+  // Use a fresh server and a blocking provider to verify concurrent misses share one build.
+  await writeFile(join(wiki, 'car.md'), '# Engine\ncar motor');
+  let unblock, signal; const blocked = new Promise(resolve => { unblock = resolve; }); const building = new Promise(resolve => { signal = resolve; });
+  let builds = 0;
+  const blockedFetch = async (_url, options) => { builds++; signal(); await blocked; return { ok: true, json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }) }; };
+  const server2 = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl: blockedFetch });
+  const [ct2, st2] = InMemoryTransport.createLinkedPair(), client2 = new Client({ name: 'test', version: '1' });
+  await Promise.all([server2.connect(st2), client2.connect(ct2)]); t.after(async () => { unblock(); await client2.close(); await server2.close(); });
+  const golden = createSearcher({ vaultDir: wiki, stateDir }).search('car', { limit: 5, budgetChars: 4000, abstainThreshold: 0.35 });
+  const query2 = async () => JSON.parse((await client2.callTool({ name: 'wiki_query', arguments: { query: 'car' } })).content[0].text);
+  const first = await query2(); await building; const second = await query2();
+  for (const result of [first, second]) {
+    assert.deepEqual({ results: result.results, abstained: result.abstained }, { results: golden.results, abstained: golden.abstained });
+    assert.deepEqual(result.semantic, { used: false, fallbackReason: 'index-missing' }); assert.equal(result.mode, 'lexical');
+  }
+  assert.equal(builds, 1); unblock();
+  for (let i = 0; i < 100; i++) {
+    const index = JSON.parse(await readFile(join(stateDir, 'semantic/index.json'), 'utf8'));
+    if (index.entries.length) break;
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  assert.ok(JSON.parse(await readFile(join(stateDir, 'semantic/index.json'), 'utf8')).entries.length);
+  assert.equal(builds, 1);
 });
 
 test('MCP fallback, opt-out and remote policy preserve lexical answers without leaking inputs', async t => {
