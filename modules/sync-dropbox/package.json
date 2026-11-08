@@ -13,6 +13,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@brainatlas/core": "*"
+    "@brainatlas/core": "*",
+    "@brainatlas/module-sync-engine": "*"
   }
 }
