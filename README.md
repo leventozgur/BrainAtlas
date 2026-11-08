@@ -27,7 +27,7 @@ Semantic retrieval is experimental and off by default behind an evaluation gate.
 | GitHub Copilot in VS Code | MCP, session-start hook, managed instructions | Per-prompt hooks are unsupported by Copilot; context uses session-start plus pull-mode MCP. Global instructions path is unverified. |
 | Kiro | MCP, steering file, prompt hook | Prompt trigger name and compatibility are unverified; review before relying on it. |
 | Codex CLI | MCP and managed instruction pointer; hook support is adapter-dependent | Review the resulting MCP and instruction configuration. |
-| Gemini CLI | MCP, managed instruction pointer, pull mode | No hook is configured; query MCP when needed. |
+| Gemini CLI | MCP, managed instruction pointer, `BeforeAgent` and `SessionStart` hooks | Enable the hook entries in Gemini's `/hooks` panel if required. |
 
 Adapters can create or modify agent configuration. Inspect the plan and trust review, then confirm the agent loads the MCP server and instructions. See [Agent setup](docs/user/agents.md).
 
@@ -35,14 +35,14 @@ Adapters can create or modify agent configuration. Inspect the plan and trust re
 
 ### Online
 
-Download the Lite release archive and its `SHA256SUMS` and `SHA256SUMS.sig` files from the project's verified release channel, then verify the checksums and signature using the release instructions. **Verify before publishing:** this repository does not define a public release URL or an online bootstrap command. Once you have the verified archive, use the offline installation flow below. Node.js 20 or newer and `ssh-keygen` are required.
+GitHub Releases is the planned online channel; nothing has been published yet. **Verify before publishing:** there is no release download URL today. Use a trusted offline distribution folder for now. Node.js 20 or newer and `ssh-keygen` are required.
 
 ### Offline
 
-Obtain the Lite archive from a trusted source, along with the matching signature files and allowed-signers file. The installer requires a release `.tgz` and verifies it before installing. The archive filename below is a placeholder; substitute the actual release version.
+Obtain the complete Lite distribution folder from a trusted source. It includes the archive, signed checksum files and allowed-signers file. The archive filename below is a placeholder; substitute the actual release version.
 
 ```sh
-./install.sh --from brainatlas-<v>-lite.tgz
+sh install.sh --from brainatlas-<v>-lite.tgz --allowed-signers release/allowed_signers --yes
 brainatlas init --profile lite --agents claude-code,copilot-vscode,kiro
 brainatlas doctor
 ```
@@ -67,7 +67,7 @@ This is a high-level comparison of project types, not a feature benchmark. Verif
 |---|---|---|
 | claude-mem | Persistent memory/context for Claude Code | BrainAtlas is designed for multiple coding agents, a local Markdown evidence vault, and MCP-based retrieval. **Verify current feature details before publishing.** |
 | basic-memory | Markdown-based knowledge management with agent integrations | BrainAtlas focuses on coding-agent evidence retrieval, controlled writes, privacy filters, and agent adapters. **Verify current feature details before publishing.** |
-| Karpathy-style LLM wiki setups | LLM-maintained Wiki or notes, often built from scripts and prompts | BrainAtlas packages a structured local Wiki, retrieval interfaces, safety checks, and release/update tooling. Implementations vary; no single product feature set is implied. |
+| Karpathy-style LLM wiki setups | LLM-maintained Wiki or notes, often built from scripts and prompts | BrainAtlas packages a structured local Wiki, retrieval interfaces, safety checks, and release/update tooling. Implementations vary; verify before publishing. |
 | avenoxbeyin | Reference project named in the development brief | Public identity and capabilities are not verifiable from this offline repository. **Verify before publishing; no comparative claims made.** |
 
 ## User guides

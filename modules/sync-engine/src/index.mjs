@@ -75,6 +75,20 @@ export const commands = Object.freeze({
   resume: (ctx) => dispatch(ctx, { action: 'resume' }),
 });
 
+export const help = Object.freeze({
+  sync: Object.freeze({
+    usage: Object.freeze([
+      'brainatlas sync run [--json]',
+      'brainatlas sync status [--json]',
+      'brainatlas sync check --peer STATE_DIR [--json]',
+      'brainatlas sync approve <path> | --all',
+      'brainatlas sync pause',
+      'brainatlas sync resume',
+    ]),
+    description: 'Run and inspect synchronization, check peers, and manage pending deletions.',
+  }),
+});
+
 export { createSyncEngine, classifySyncError, SYNC_ERROR_CODES, createMemoryTransport, SyncTransportError, ConflictError,
   planScheduler, planSchedulerUninstall, mergeCanonicalPath, mergeIndexThreeWay, mergeLogThreeWay,
   inventoryVault, resolveSyncScope, globMatch };

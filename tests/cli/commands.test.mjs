@@ -14,6 +14,13 @@ test('init, config, plan and doctor use an isolated HOME', async t => {
   const home = await mkdtemp(join(tmpdir(), 'ba-cli-')); t.after(() => rm(home, { recursive: true, force: true }));
   const env = cleanEnv({ HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1' });
   const run = (...args) => spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), ...args], { env, encoding: 'utf8', shell: false });
+  const initHelp = run('help', 'init');
+  assert.equal(initHelp.status, 0, initHelp.stderr);
+  assert.match(initHelp.stdout, /--agents claude-code,copilot-vscode,kiro,codex,gemini-cli/);
+  assert.match(initHelp.stdout, /--plan.*--json/);
+  const syncHelp = run('help', 'sync');
+  assert.equal(syncHelp.status, 0, syncHelp.stderr);
+  assert.match(syncHelp.stdout, /sync is provided by the Full profile modules; install\/enable sync-engine/);
   assert.equal(run('init', '--yes', '--vault', join(home, 'vault')).status, 0);
   const initPlan = run('init', '--yes', '--vault', join(home, 'planned-vault'), '--plan', '--json');
   assert.equal(initPlan.status, 0, initPlan.stderr); assert.ok(initPlan.stdout.includes('~/config/brainatlas/config.json')); assert.ok(!initPlan.stdout.includes(home));
