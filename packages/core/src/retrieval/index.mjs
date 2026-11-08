@@ -90,25 +90,26 @@ function stale(fm, asOf) {
 }
 // Sections are deliberately derived at query time, after the ranking is final.
 function bestSection(body, terms, index) {
-  const lines = body.split(/\r?\n/), sections = [], ancestors = [], used = new Set();
+  const lines = body.split('\n'), sections = [], ancestors = [], used = new Set();
   let current = null, fenceLength = 0;
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
     const fence = line.match(/^ {0,3}(`{3,})(.*)$/);
     if (fence) {
       if (!fenceLength) fenceLength = fence[1].length;
       else if (fence[1].length >= fenceLength && !fence[2].trim()) fenceLength = 0;
-      if (current) current.lines.push(line);
+      if (current) current.lines.push(rawLine);
       continue;
     }
     const heading = !fenceLength && line.match(/^(#{1,3})[\t ]+(.+)$/);
-    if (!heading) { if (current) current.lines.push(line); continue; }
+    if (!heading) { if (current) current.lines.push(rawLine); continue; }
     const level = heading[1].length, title = heading[2].trim();
     ancestors.length = level - 1; ancestors[level - 1] = title;
     const base = normalizeText(title).replace(/[^\p{L}\p{N}_\- ]/gu, '').replace(/ /g, '-');
     let anchor = base, suffix = 0;
     while (used.has(anchor)) anchor = `${base}-${++suffix}`;
     used.add(anchor);
-    current = {heading:title, anchor, headingPath:ancestors.filter(Boolean).join(' > '), lines:[]};
+    current = {heading:title, anchor, headingPath:ancestors.filter(Boolean).join(' > '), headingLine:rawLine, lines:[]};
     sections.push(current);
   }
   let best = null, bestScore = 0;
@@ -120,7 +121,7 @@ function bestSection(body, terms, index) {
       const count = Object.hasOwn(index.postings, term) ? index.postings[term].length : 0;
       score += Math.log(1 + (index.docs.length - count + 0.5) / (count + 0.5));
     }
-    if (score > bestScore) { bestScore = score; best = {...section, text}; }
+    if (score > bestScore) { bestScore = score; best = {...section, text:[section.headingLine, ...section.lines].join('\n').trim()}; }
   }
   return best;
 }

@@ -50,9 +50,9 @@ test('section selection uses distinct weighted stems, ancestry, and the snippet 
   const index = buildIndex([page('a.md', '# Root\ncommon common\n## First\ncommon\n## Second\nrare common evidence\n### Child\nother') , page('b.md', 'common')], {now});
   const result = search(index, 'common rare', {limit:1}).results[0];
   assert.equal(result.heading, 'Second'); assert.equal(result.headingPath, 'Root > Second');
-  assert.equal(result.anchor, 'second'); assert.equal(result.snippet, 'rare common evidence');
+  assert.equal(result.anchor, 'second'); assert.equal(result.snippet, '## Second\nrare common evidence');
   const bounded = search(index, 'common rare', {limit:1, budgetChars:5});
-  assert.equal(bounded.results[0].snippet, 'rare…'); assert.equal(bounded.truncated, true);
+  assert.equal(bounded.results[0].snippet, '## S…'); assert.equal(bounded.truncated, true);
   assert.equal(search(index, 'common').results.find(result => result.path === 'a.md').heading, 'Root');
 });
 test('fences, duplicate headings, collisions, and Turkish anchor folding', () => {
@@ -71,6 +71,15 @@ test('headingless and section-unmatched pages retain the body snippet', () => {
   const body = 'preface\n# Title\nunrelated';
   const unmatched = search(buildIndex([page('b.md', body)], {now}), 'backup').results[0];
   assert.equal(unmatched.snippet, body); assert.equal(unmatched.heading, null);
+});
+test('selected snippets retain the original heading line and single-section body', () => {
+  const body = '# Topic  \r\n\r\nknowledge topic evidence\r\n';
+  const result = search(buildIndex([page('topic.md', body)], {now}), 'knowledge').results[0];
+  assert.equal(result.snippet, body.trim());
+  assert.equal(result.heading, 'Topic');
+  const prefaced = search(buildIndex([page('preface.md', 'preface evidence\n# Topic\nunrelated')], {now}), 'preface').results[0];
+  assert.equal(prefaced.snippet, 'preface evidence\n# Topic\nunrelated');
+  assert.equal(prefaced.heading, null);
 });
 test('synthetic snippet coverage compares body-start and selected sections', () => {
   const pages = [page('a.md', '# Intro\nfiller\n## Detail\norchards thrive'), page('b.md', '# Intro\nfiller\n## Detail\nharbors thrive')];
