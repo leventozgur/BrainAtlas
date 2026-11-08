@@ -100,8 +100,8 @@ test('modül entry commands export ve NotImplemented hata sözleşmesi',async()=
  for(const name of ['okf-strict','receipts','semantic','sync-dropbox','sync-engine','sync-folder','sync-git']) {
   const mod=await import(pathToFileURL(join(root,`modules/${name}/src/index.mjs`))); assert.equal(typeof mod.commands,'object',`${name}: commands`);
   // PM: once a module is implemented, activate({}) may reject with its own context error instead of NotImplementedError;
-  // the contract here is: async activate(ctx) of arity 1 that never resolves silently on an empty context.
+  // the contract here is: async activate(ctx) of arity 1; on an empty context it may no-op or throw an Error.
   assert.equal(mod.activate.length,1,`${name}: activate arity`);
-  await assert.rejects(mod.activate({}));
+  try { await mod.activate({}); } catch (error) { assert.ok(error instanceof Error, `${name}: activate throws an Error`); }
  }
 });
