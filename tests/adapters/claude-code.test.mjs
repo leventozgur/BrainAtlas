@@ -97,6 +97,52 @@ test('apply rechecks planned bytes and keeps unrelated user settings when removi
   } finally { await rm(base, { recursive: true, force: true }); }
 });
 
+test('apply rejects a modified plan target outside the adapter scope before writing', async () => {
+  const { base, home, ctx } = await setup(); const outside = join(base, 'outside.json');
+  await writeFile(outside, '{"keep":true}');
+  try {
+    const p = adapter.plan(ctx);
+    p.changes[0].file = outside;
+    await assert.rejects(adapter.apply(p, ctx), error => error.code === 'E_PLAN_TARGET');
+    assert.equal(await readFile(outside, 'utf8'), '{"keep":true}');
+    assert.deepEqual(await snapshot(home), { '.claude.json': null, '.claude/settings.json': null, 'CLAUDE.md': null });
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('remove preflights all files before removing any when the managed block was edited', async () => {
+  const { base, home, ctx } = await setup();
+  try {
+    await adapter.apply(adapter.plan(ctx), ctx);
+    const mcpBefore = await readFile(join(home, '.claude.json'));
+    const settingsBefore = await readFile(join(home, '.claude/settings.json'));
+    const edited = (await readFile(join(home, 'CLAUDE.md'), 'utf8')).replace('evidence-first', 'edited');
+    await writeFile(join(home, 'CLAUDE.md'), edited);
+    await assert.rejects(adapter.remove(ctx), error => error.code === 'E_MANAGED_BLOCK_EDITED');
+    assert.deepEqual(await readFile(join(home, '.claude.json')), mcpBefore);
+    assert.deepEqual(await readFile(join(home, '.claude/settings.json')), settingsBefore);
+    assert.equal(await readFile(join(home, 'CLAUDE.md'), 'utf8'), edited);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('vault paths reject parent segments and remove restores empty and pre-existing BrainAtlas data', async () => {
+  const { base, home, ctx } = await setup();
+  const vault = join(base, 'vault'); await mkdir(vault);
+  try {
+    ctx.scope = 'vault'; ctx.vaultDir = `${vault}/../vault`;
+    assert.throws(() => adapter.plan(ctx), error => error.code === 'E_PATH_ESCAPE');
+
+    ctx.scope = 'global';
+    await writeFile(join(home, 'CLAUDE.md'), '');
+    const entry = { type: 'stdio', command: ctx.nodePath, args: [ctx.shimPath, 'mcp'], env: {} };
+    await writeFile(join(home, '.claude.json'), JSON.stringify({ mcpServers: { brainatlas: entry } }, null, 2));
+    const beforeMcp = await readFile(join(home, '.claude.json'));
+    await adapter.apply(adapter.plan(ctx), ctx);
+    await adapter.remove(ctx);
+    assert.deepEqual(await readFile(join(home, '.claude.json')), beforeMcp);
+    assert.equal(await readFile(join(home, 'CLAUDE.md'), 'utf8'), '');
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
 test('doctor and trust review report Claude Code setup', async () => {
   const { base, ctx } = await setup();
   try {

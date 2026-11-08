@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir, unlink, stat } from 'node:fs/promises';
 import { readFileSync as readSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { atomicWriteFile, resolvePaths, BrainAtlasError } from '@brainatlas/core';
 
 export const id = 'claude-code';
@@ -20,7 +20,8 @@ function platformOf(ctx) { return ctx.platform || ctx.env?.BRAINATLAS_PLATFORM |
 function pathsOf(ctx) { return ctx.paths || resolvePaths({ env: ctx.env, platform: platformOf(ctx) }); }
 function filesOf(ctx) {
   const home = homeOf(ctx); const vault = ctx.scope === 'vault';
-  if (vault && (typeof ctx.vaultDir !== 'string' || !ctx.vaultDir.startsWith('/'))) fail('E_VAULT_PATH', 'Vault scope requires an absolute vault directory.');
+  if (vault && (typeof ctx.vaultDir !== 'string' || !isAbsolute(ctx.vaultDir))) fail('E_VAULT_PATH', 'Vault scope requires an absolute vault directory.');
+  if (vault && ctx.vaultDir.split(/[\\/]+/).includes('..')) fail('E_PATH_ESCAPE', 'Vault directory must not contain parent path segments.');
   const root = vault ? ctx.vaultDir : home;
   return {
     mcp: join(root, vault ? '.mcp.json' : '.claude.json'),
@@ -133,6 +134,12 @@ function backupName(file, now) {
 }
 export async function apply(planResult, ctx) {
   if (!planResult || !Array.isArray(planResult.changes)) fail('E_ARGUMENT', 'Adapter plan is invalid.');
+  // A caller may retain or alter a plan, so derive the writable set again from
+  // the current adapter scope before trusting any supplied change.
+  const allowed = new Set(plan(ctx).changes.map(change => change.file));
+  for (const change of planResult.changes) {
+    if (!change || typeof change.file !== 'string' || !allowed.has(change.file)) fail('E_PLAN_TARGET', 'Plan contains a file outside this adapter plan.');
+  }
   for (const change of planResult.changes) {
     const current = await readOptional(change.file);
     if (current !== change.before) fail('E_CONFIG_CHANGED', 'Configuration changed after planning.');
@@ -162,33 +169,61 @@ function removeHook(settings, event, ctx) {
 }
 export async function remove(ctx) {
   const files = filesOf(ctx); const targets = [files.mcp, files.settings, files.instructions];
+  const actions = [];
+  // Preflight every target before making any file or state change.
   for (const file of targets) {
     const { record } = await stateFile(ctx, file); const recText = await readOptional(record);
     const current = await readOptional(file);
-    if (current === null) { if (recText !== null) await unlink(record); continue; }
     let original;
-    if (recText) { try { original = JSON.parse(recText); } catch { fail('E_STATE_CORRUPT', 'Adapter state is invalid.'); } }
+    if (recText) {
+      try { original = JSON.parse(recText); } catch { fail('E_STATE_CORRUPT', 'Adapter state is invalid.'); }
+      if (!original || original.file !== file || typeof original.existed !== 'boolean' || typeof original.expected !== 'string' || (original.existed && typeof original.original !== 'string')) fail('E_STATE_CORRUPT', 'Adapter state is invalid.');
+    }
+    if (current === null) { actions.push({ file, record, removeRecord: recText !== null }); continue; }
     if (original?.file === file && current === original.expected) {
-      if (original.existed) await atomicWriteFile(file, original.original, { mode: 0o600 }); else await unlink(file);
-      if (recText !== null) await unlink(record);
+      actions.push({ file, record, removeRecord: recText !== null, write: original.existed ? original.original : null });
       continue;
     }
     if (file === files.instructions) {
       const block = managedBlock(current);
-      if (!block) continue;
+      if (!block) { actions.push({ file, record, removeRecord: recText !== null }); continue; }
       const next = `${current.slice(0, block.start)}${current.slice(block.end)}`;
-      await atomicWriteFile(file, next, { mode: 0o600 }); if (recText !== null) await unlink(record); continue;
+      actions.push({ file, record, removeRecord: recText !== null, write: next }); continue;
     }
     const value = parseJson(current); let changed = false;
-    if (file === files.mcp) {
-      if (value.mcpServers && Object.hasOwn(value.mcpServers, 'brainatlas')) { delete value.mcpServers.brainatlas; if (!Object.keys(value.mcpServers).length) delete value.mcpServers; changed = true; }
+    if (file === files.mcp && original) {
+      // Restore a pre-existing BrainAtlas entry from the saved snapshot. If
+      // none existed, remove only the entry this adapter added.
+      const beforeValue = original.existed ? parseJson(original.original) : {};
+      const priorEntry = beforeValue.mcpServers?.brainatlas;
+      if (priorEntry !== undefined) {
+        value.mcpServers ??= {};
+        value.mcpServers.brainatlas = priorEntry;
+        changed = true;
+      } else if (value.mcpServers && Object.hasOwn(value.mcpServers, 'brainatlas')) {
+        delete value.mcpServers.brainatlas;
+        if (!Object.keys(value.mcpServers).length) delete value.mcpServers;
+        changed = true;
+      }
+    } else if (file === files.mcp) {
+      // Without an ownership record, this entry may have predated apply.
+      actions.push({ file, record, removeRecord: false });
+      continue;
+    } else if (!original) {
+      // Do not claim matching hooks that were present before the first apply.
+      actions.push({ file, record, removeRecord: false });
+      continue;
     } else {
       changed = removeHook(value, 'UserPromptSubmit', ctx) || changed;
       changed = removeHook(value, 'SessionStart', ctx) || changed;
       if (value.hooks && !Object.keys(value.hooks).length) delete value.hooks;
     }
-    if (changed) await atomicWriteFile(file, jsonStringify(value, current), { mode: 0o600 });
-    if (recText !== null) await unlink(record);
+    actions.push({ file, record, removeRecord: recText !== null, write: changed ? jsonStringify(value, current) : undefined });
+  }
+  for (const action of actions) {
+    if (action.write === null) await unlink(action.file);
+    else if (action.write !== undefined) await atomicWriteFile(action.file, action.write, { mode: 0o600 });
+    if (action.removeRecord) await unlink(action.record);
   }
 }
 export async function doctor(ctx) {
