@@ -1,0 +1,9 @@
+{
+  "name": "receipts",
+  "version": "0.1.0-dev",
+  "description": "Queue session-end knowledge proposals for human review.",
+  "requires": [],
+  "provides": ["receipts"],
+  "profiles": ["full", "custom"],
+  "entry": "src/index.mjs"
+}
