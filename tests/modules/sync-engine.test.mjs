@@ -102,6 +102,35 @@ test('local deletes stay queued until approval and approved tombstones reach the
   assert.deepEqual(await a.engine.checkPeer(b.stateDir), { status: 'PASS', differences: [] });
 });
 
+test('remote delete requests appear on the peer and peer approval removes both copies', async (t) => {
+  const fx = await fixture(t);
+  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const path = 'wiki/entities/peer-remove.md';
+  await put(a, path, 'shared\n');
+  await a.engine.run(); await b.engine.run();
+  await rm(join(a.vaultPath, path));
+
+  const requested = await a.engine.run();
+  assert.equal(requested.status, 'PENDING');
+  assert.equal(requested.pendingDeletes, 1);
+  assert.equal((await a.engine.status()).pendingDeleteCount, 1);
+  assert.deepEqual((await a.engine.status()).pendingDeletionPaths, [path]);
+  assert.ok(await fx.transport.get(path), 'delete request must leave the shared object intact');
+
+  await b.engine.run();
+  assert.equal((await b.engine.status()).pendingDeleteCount, 1);
+  assert.deepEqual((await b.engine.status()).pendingDeletionPaths, [path]);
+  assert.equal(await readFile(join(b.vaultPath, path), 'utf8'), 'shared\n');
+  const context = { config: { vault: { path: b.vaultPath }, sync: { options: {} } }, paths: { stateDir: b.stateDir }, transport: fx.transport, hostId: 'host-b' };
+  assert.deepEqual(await commands.approve(context, ['--all']), { approved: [path] });
+
+  assert.equal(await fx.transport.get(path), null);
+  await assert.rejects(readFile(join(b.vaultPath, path)), { code: 'ENOENT' });
+  await a.engine.run();
+  assert.equal((await a.engine.status()).pendingDeleteCount, 0);
+  assert.deepEqual(await a.engine.checkPeer(b.stateDir), { status: 'PASS', differences: [] });
+});
+
 test('secret path and content refusals expose only path and ruleId and do not upload', async (t) => {
   const logs = [];
   const root = await mkdtemp(join(tmpdir(), 'sync-engine-secret-'));

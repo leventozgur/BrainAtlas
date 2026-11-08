@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import { BrainAtlasError, runCommand as coreRunCommand } from '../../../packages/core/src/util/index.mjs';
+import { BrainAtlasError, atomicWriteFile, runCommand as coreRunCommand } from '../../../packages/core/src/util/index.mjs';
 import { mergeCanonicalPath } from '../../sync-engine/src/merge.mjs';
 import { ConflictError, SyncTransportError, validateTransportPath } from '../../sync-engine/src/transport.mjs';
 
@@ -54,7 +54,7 @@ function strictUtf8(bytes) {
  * opens or modifies the vault's Git metadata.
  * @param {{stateDir:string,remote:string,env?:Record<string,string|undefined>,runCommand?:Function,now?:()=>Date,hostId?:string}} options
  */
-export function createGitTransport({ stateDir, remote, env = process.env, runCommand = coreRunCommand, now = () => new Date(), hostId = 'host' } = {}) {
+export function createGitTransport({ stateDir, remote, env = process.env, runCommand = coreRunCommand, now = () => new Date(), hostId = 'host', atomicWriter = atomicWriteFile } = {}) {
   if (typeof stateDir !== 'string' || !stateDir) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Git transport state is incomplete.');
   if (typeof runCommand !== 'function') throw new BrainAtlasError('E_ARGUMENT', 'Git command runner is invalid.');
   const syncDir = join(resolve(stateDir), 'sync');
@@ -213,7 +213,7 @@ export function createGitTransport({ stateDir, remote, env = process.env, runCom
 
   async function writeObject(path, bytes) {
     const target = await ensureParents(path);
-    await writeFile(target, bytes, { mode: 0o600 });
+    await atomicWriter(target, bytes, { mode: 0o600 });
   }
 
   async function readObject(path) {
