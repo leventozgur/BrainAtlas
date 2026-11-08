@@ -61,3 +61,86 @@ test('interrupted cache and log writes preserve prior content; traversal and sym
 test('doctor without modules omits module rows and reports missing release as error', async t => {
   const {run} = await fixture(t); const r = run('doctor','--json'); assert.equal(r.status,1); const result = JSON.parse(r.stdout); assert.equal(result.ok,false); assert.deepEqual(result.modules ?? result.moduleHealth ?? [],[]);
 });
+
+test('credential redaction applies at every config level and to status, doctor and plans', async t => {
+  const {run} = await fixture(t);
+  const url = `https://user:${secret}@example.invalid/repo`;
+  const set = run('config','set','sync.options.remote',url,'--json');
+  assert.equal(set.status, 0, set.stderr);
+  for (const args of [
+    ['config','get'], ['config','get','sync'], ['config','get','sync.options'],
+    ['config','get','sync.options.remote'], ['config','get','sync','--plan'],
+    ['config','set','sync.options.remote',url,'--plan'], ['status'], ['doctor']
+  ]) {
+    for (const json of [false, true]) {
+      const r = run(...args, ...(json ? ['--json'] : []));
+      assert.ok(!(r.stdout + r.stderr).includes(secret), `${args.join(' ')} json=${json}`);
+      assert.ok(!(r.stdout + r.stderr).includes(url), `${args.join(' ')} exposed URL`);
+      if (args[0] === 'config') assert.equal(r.status, 0, r.stderr);
+    }
+  }
+  const invalid = run('config','get','../sync','--json');
+  assert.notEqual(invalid.status, 0); assert.ok(!(invalid.stdout + invalid.stderr).includes(secret));
+});
+
+test('rollback plan succeeds without exposing HOME; unavailable targets fail safely', async t => {
+  const {home, env, run} = await fixture(t);
+  const data = join(env.XDG_DATA_HOME, 'brainatlas');
+  await mkdir(join(data, 'releases', '1.0.0'), {recursive:true});
+  await mkdir(join(data, 'releases', '2.0.0'), {recursive:true});
+  await symlink('releases/2.0.0', join(data, 'current'));
+  const good = run('rollback','--to','1.0.0','--plan','--json');
+  assert.equal(good.status, 0, good.stderr);
+  assert.equal(JSON.parse(good.stdout).to, 'releases/1.0.0');
+  assert.ok(!(good.stdout + good.stderr).includes(home));
+  const bad = run('rollback','--to','../outside','--plan','--json');
+  assert.notEqual(bad.status, 0); assert.ok(!(bad.stdout + bad.stderr).includes(home));
+});
+
+test('signed update plan hides the archive HOME path and rejects a corrupt archive', async t => {
+  const {home, env} = await fixture(t);
+  const {buildRelease} = await import('../../../release/build-release.mjs');
+  const {signRelease} = await import('../../../release/sign.mjs');
+  const key = join(home, 'signing-key');
+  const keygen = spawnSync('ssh-keygen', ['-q','-t','ed25519','-N','','-f',key], {env, encoding:'utf8'});
+  assert.equal(keygen.status, 0, keygen.stderr);
+  const signers = join(home, 'signers');
+  await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
+  const [archive, sums] = await buildRelease({version:'1.0.0-acceptance.1',profile:'lite',out:join(home,'release')});
+  signRelease(key, sums);
+  const run = file => spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'),'update','--from',file,'--plan','--json'], {env:{...env,BRAINATLAS_ALLOWED_SIGNERS:signers}, encoding:'utf8'});
+  const good = run(archive); assert.equal(good.status, 0, good.stderr);
+  assert.match(JSON.parse(good.stdout).from, /^~\//); assert.ok(!(good.stdout + good.stderr).includes(home));
+  await writeFile(archive, 'corrupt');
+  const bad = run(archive); assert.notEqual(bad.status, 0); assert.ok(!(bad.stdout + bad.stderr).includes(secret));
+});
+
+test('vault atomic replacement cleans a fully written temporary file when rename fails', async t => {
+  const {root} = await fixture(t);
+  const fs = await import('node:fs/promises');
+  const {atomicWriteFile} = await import('../../../packages/core/src/util/index.mjs');
+  const wiki = join(root, 'wiki'); await mkdir(wiki);
+  const log = join(wiki, 'log.md'); await writeFile(log, 'before\n');
+  const fsOps = {...fs, rename: async () => { throw new Error('rename interrupted'); }};
+  await assert.rejects(appendLog(root, {action:'update'}, {atomicWriter:(file, data) => atomicWriteFile(file, data, {fsOps})}), /rename interrupted/);
+  assert.equal(await readFile(log, 'utf8'), 'before\n');
+  assert.deepEqual(await fs.readdir(wiki), ['log.md']);
+  await appendLog(root, {action:'update'}, {now:new Date('2020-01-01T00:00:00Z')});
+  assert.match(await readFile(log, 'utf8'), /update/);
+});
+
+test('successful module removal plan redacts a secret-shaped module name', async t => {
+  const {env, home, run} = await fixture(t);
+  const data = join(env.XDG_DATA_HOME, 'brainatlas');
+  const moduleDir = join(data, 'releases', '1.0.0', 'modules', secret);
+  await mkdir(moduleDir, {recursive:true});
+  const manifest = JSON.parse(await readFile('modules/semantic/module.json', 'utf8'));
+  manifest.name = secret;
+  await writeFile(join(moduleDir, 'module.json'), JSON.stringify(manifest));
+  await symlink('releases/1.0.0', join(data, 'current'));
+  const result = run('module','remove',secret,'--plan','--json');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).action, 'module remove');
+  assert.ok(!(result.stdout + result.stderr).includes(secret));
+  assert.ok(!(result.stdout + result.stderr).includes(home));
+});
