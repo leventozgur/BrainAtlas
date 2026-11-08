@@ -108,8 +108,10 @@ test('offline install, module lifecycle, doctor rollback and uninstall restore H
   const configPath = await realpath(join(dataDir, 'config.json'));
   const configEntry = installManifest.files.find(item => item.path === configPath);
   assert.match(configEntry.beforeSha256, /^[a-f0-9]{64}$/); assert.match(configEntry.afterSha256, /^[a-f0-9]{64}$/); assert.ok(configEntry.backupPath);
-  const initialized = run('init', '--profile', 'lite', '--vault', activeVault, '--agents', 'fixture-agent', '--yes', '--json');
+  const initialized = run('init', '--agents', 'fixture-agent', '--yes', '--json');
   assert.equal(initialized.status, 0, initialized.stderr);
+  assert.equal(JSON.parse(await readFile(join(dataDir, 'config.json'), 'utf8')).vault.path, activeVault);
+  await assert.rejects(lstat(join(home, 'BrainAtlas')), { code: 'ENOENT' });
   assert.equal(JSON.parse(await readFile(join(home, '.fixture-agent.json'), 'utf8')).brainatlas.command, join(dataDir, 'bin', 'brainatlas'));
   await mkdir(activeVault, { recursive: true }); await writeFile(join(activeVault, 'keep.md'), 'vault bytes\n');
   const unavailableEval = run('eval', '--json'); assert.equal(unavailableEval.status, 1); assert.match(unavailableEval.stderr, /E_COMPONENT_MISSING/);
