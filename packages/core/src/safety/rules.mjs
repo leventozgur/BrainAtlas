@@ -14,6 +14,7 @@ export const CONTENT_RULES = Object.freeze([
   { id: 'connection-credentials', pattern: /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s/:@]{0,256}:[^\s/@]{1,256}@/gi },
 ]);
 export const DENY_GLOBS = Object.freeze([
-  '.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '*.p12', '*.pfx',
-  '.npmrc', '.netrc', 'credentials*', '*secret*', '.git/**', '.ssh/**',
+  '.env*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '*.p12', '*.pfx',
+  '.npmrc', '.netrc', 'credentials*', 'client_secret*', 'secret', 'secrets',
+  'secret.md', 'secrets.md', '*.secret', '*.secrets', '.git/**', '.ssh/**',
 ]);

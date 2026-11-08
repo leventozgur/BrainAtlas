@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { scanPath, scanText } from '../../../packages/core/src/safety/index.mjs';
+import { scanPath, scanText, isSafetyFindingAllowed } from '../../../packages/core/src/safety/index.mjs';
 import { SyncTransportError } from './transport.mjs';
 
 const DEFAULT_INCLUDE = Object.freeze(['**/*.md']);
@@ -61,7 +61,7 @@ function safeRelative(path) {
     && path.split('/').every((part) => part && part !== '.' && part !== '..');
 }
 
-async function walk(root, ignoredDir, output, current = root) {
+async function walk(root, ignoredDir, output, allowedPaths, current = root) {
   let entries;
   try { entries = await readdir(current, { withFileTypes: true }); }
   catch (error) { if (error?.code === 'ENOENT') return; throw error; }
@@ -71,8 +71,8 @@ async function walk(root, ignoredDir, output, current = root) {
     if (entry.isDirectory()) {
       const rel = relative(root, absolute).split(sep).join('/');
       if (ignoredDir && (rel === ignoredDir || rel.startsWith(`${ignoredDir}/`))) continue;
-      if (scanPath(`${rel}/sentinel.md`).length) continue;
-      await walk(root, ignoredDir, output, absolute);
+      if (scanPath(`${rel}/sentinel.md`).length && !allowedPaths.some((path) => path.startsWith(`${rel}/`))) continue;
+      await walk(root, ignoredDir, output, allowedPaths, absolute);
     } else if (entry.isFile()) {
       const path = relative(root, absolute).split(sep).join('/');
       if (safeRelative(path) && !conflictArtifact(path)) output.push({ path, absolute });
@@ -91,13 +91,17 @@ export async function inventoryVault({ vaultPath, stateDir, config = {} }) {
     if (relativeState && !relativeState.startsWith('../') && relativeState !== '..') ignoredDir = relativeState;
   }
   const candidates = [];
-  await walk(vaultPath, ignoredDir, candidates);
+  const allowed = Array.isArray(config?.safety?.allow) ? config.safety.allow : [];
+  const allowedPaths = allowed.map((entry) => entry?.path).filter((path) => typeof path === 'string');
+  await walk(vaultPath, ignoredDir, candidates, allowedPaths);
   const included = new Map();
   const refused = [];
   const excluded = new Set();
   const seen = new Map();
+  const extraDenyGlobs = Array.isArray(config?.safety?.extraDenyGlobs) ? config.safety.extraDenyGlobs : [];
   for (const { path, absolute } of candidates.sort((a, b) => a.path.localeCompare(b.path))) {
-    const denied = scanPath(path, { denyGlobs: scope.deny });
+    const denied = scanPath(path, { denyGlobs: scope.deny, extraDenyGlobs })
+      .filter((finding) => !isSafetyFindingAllowed(path, '', finding, allowed));
     if (denied.length) {
       for (const finding of denied) refused.push({ path, ruleId: finding.ruleId });
       excluded.add(path);
@@ -107,7 +111,8 @@ export async function inventoryVault({ vaultPath, stateDir, config = {} }) {
     let bytes;
     try { bytes = await readFile(absolute); } catch (error) { if (error?.code === 'ENOENT') continue; throw error; }
     if (isLocalOnlyFrontmatter(bytes.toString('utf8'))) { excluded.add(path); continue; }
-    const findings = scanText(bytes.toString('utf8'));
+    const text = bytes.toString('utf8');
+    const findings = scanText(text).filter((finding) => !isSafetyFindingAllowed(path, text, finding, allowed));
     if (findings.length) {
       refused.push({ path, ruleId: findings[0].ruleId });
       excluded.add(path);

@@ -4,14 +4,15 @@ import { basename, dirname, join, resolve, relative, sep, isAbsolute } from 'nod
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import * as core from '@brainatlas/core';
-import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, redact, vaultId } from '@brainatlas/core';
+import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, redact, vaultId, scanPath, scanText, fingerprintSafetyFinding } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from './archive.mjs';
 import { managePath, recordManagedWrite, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
 import { adoptPlan, migrateVault } from './migrate.mjs';
 
 const error = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details });
-const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'help']);
+const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'safety', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'help']);
 const validVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
 function compareVersions(left, right) {
   const parse = value => /^(?:v)?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
@@ -283,6 +284,62 @@ function setCliConfigValue(cfg, dottedKey, value) {
   return updated;
 }
 
+function normalizeSafetyPath(input) {
+  if (typeof input !== 'string' || !input || input.startsWith('/') || /^[A-Za-z]:[\\/]/.test(input) || input.includes('\0')) {
+    throw error('E_SAFETY_PATH', 'A vault-relative file path is required.');
+  }
+  const path = input.replace(/\\/g, '/');
+  if (path.split('/').some((part) => !part || part === '.' || part === '..')) throw error('E_SAFETY_PATH', 'A canonical vault-relative file path is required.');
+  return path;
+}
+
+async function readSafetyTarget(vaultPath, relPath) {
+  let root;
+  try { root = await realpath(resolve(vaultPath)); } catch { throw error('E_VAULT_NOT_FOUND', 'Configured vault is unavailable.'); }
+  let target = root;
+  const parts = relPath.split('/');
+  for (let index = 0; index < parts.length; index++) {
+    target = join(target, parts[index]);
+    let stat;
+    try { stat = await lstat(target); } catch { throw error('E_SAFETY_FILE', 'Safety target is unavailable.'); }
+    if (stat.isSymbolicLink() || (index < parts.length - 1 ? !stat.isDirectory() : !stat.isFile())) {
+      throw error('E_SAFETY_FILE', 'Safety target must be a regular file inside the vault.');
+    }
+  }
+  let actual;
+  try { actual = await realpath(target); } catch { throw error('E_SAFETY_FILE', 'Safety target is unavailable.'); }
+  const rel = relative(root, actual);
+  if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw error('E_SAFETY_PATH', 'Safety target must remain inside the vault.');
+  let bytes;
+  try { bytes = await readFile(actual); } catch { throw error('E_SAFETY_FILE', 'Safety target could not be read.'); }
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw error('E_SAFETY_ENCODING', 'Safety target is not valid UTF-8 text.'); }
+  return { bytes, text };
+}
+
+function safetyFingerprintPrefix(entry) {
+  if (entry.sha256) return entry.sha256.slice(0, 12);
+  return createHash('sha256').update(`${entry.path}\0${entry.ruleId}`).digest('hex').slice(0, 12);
+}
+
+function currentSafetyFindings(path, text, extraDenyGlobs = []) {
+  const findings = [
+    ...scanPath(path, { extraDenyGlobs }),
+    ...scanText(text),
+  ];
+  const rows = new Map();
+  for (const finding of findings) {
+    const fingerprint = fingerprintSafetyFinding(path, text, finding);
+    const key = `${fingerprint.path}\0${fingerprint.ruleId}\0${fingerprint.sha256 ?? ''}`;
+    if (!rows.has(key)) rows.set(key, { fingerprint, ...(finding.kind === 'content' ? { lineNumber: text.slice(0, finding.start).split('\n').length } : {}) });
+  }
+  return [...rows.values()];
+}
+
+function publicSafetyEntry(entry, lineNumber) {
+  return { path: entry.path, ruleId: entry.ruleId, ...(lineNumber === undefined ? {} : { lineNumber }), fingerprint: safetyFingerprintPrefix(entry) };
+}
+
 async function writeInstallEntrypoints(paths, env) {
   const shim = paths.binPath; const localBin = join(env.HOME, '.local', 'bin');
   const roots = managedRoots(paths, env);
@@ -547,14 +604,14 @@ async function installedSyncSchedule(action, { paths, env, config: cfg, dependen
 
 const helpDescriptions = Object.freeze({
   init: 'Create a BrainAtlas configuration and initialize a vault.', install: 'Install a BrainAtlas release.', status: 'Show installation status.',
-  doctor: 'Check installation health.', config: 'Read or change BrainAtlas configuration.', module: 'List, add, or remove installed modules.',
+  doctor: 'Check installation health.', config: 'Read or change BrainAtlas configuration.', safety: 'Review and manage fingerprinted safety allowances.', module: 'List, add, or remove installed modules.',
   uninstall: 'Remove BrainAtlas while preserving the vault.', update: 'Install or inspect a release update.', rollback: 'Switch to a previous release.',
   recover: 'Inspect or recover an interrupted update.', eval: 'Run the local retrieval evaluation.', hook: 'Run an agent hook.', mcp: 'Start the BrainAtlas MCP server.',
   migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', help: 'Show built-in and active module commands.'
 });
 const helpUsages = Object.freeze({
   init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
-  config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
+  config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', safety: 'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
   migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', help: 'brainatlas --help | brainatlas help [COMMAND]'
@@ -845,6 +902,49 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
     output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null });
     if (command === 'doctor' && !result.ok) process.exitCode = 1;
     return;
+  }
+  if (command === 'safety') {
+    const action = args.shift();
+    const positional = args.filter(argument => !argument.startsWith('--'));
+    if (args.some(argument => argument.startsWith('--') && !['--json', '--plan'].includes(argument))) throw error('E_ARGUMENT', 'Safety command arguments are invalid.');
+    const cfg = await loadConfig({ paths, env, readOnly: true });
+    const existing = Array.isArray(cfg.safety.allow) ? cfg.safety.allow : [];
+    if (action === 'list') {
+      if (positional.length > 1) throw error('E_ARGUMENT', 'Safety list accepts at most one path.');
+      const filterPath = positional.length ? normalizeSafetyPath(positional[0]) : null;
+      const entries = existing.filter(entry => filterPath === null || entry.path === filterPath)
+        .map(entry => publicSafetyEntry(entry));
+      output({ action: 'safety list', entries }); return;
+    }
+    if (action === 'allow') {
+      if (positional.length !== 1) throw error('E_ARGUMENT', 'Safety allow requires one vault-relative path.');
+      const path = normalizeSafetyPath(positional[0]);
+      const { text } = await readSafetyTarget(cfg.vault.path, path);
+      const findings = currentSafetyFindings(path, text, cfg.safety.extraDenyGlobs);
+      if (!findings.length) throw error('E_SAFETY_CLEAN', 'Safety target has no current findings.');
+      const next = [...existing];
+      for (const { fingerprint } of findings) {
+        if (!next.some(entry => entry.path === fingerprint.path && entry.ruleId === fingerprint.ruleId && entry.sha256 === fingerprint.sha256
+            && Object.hasOwn(entry, 'sha256') === Object.hasOwn(fingerprint, 'sha256'))) next.push(fingerprint);
+      }
+      if (!plan && next.length !== existing.length) {
+        const updated = structuredClone(cfg); updated.safety.allow = next;
+        await saveTrackedConfig(updated, paths, env);
+      }
+      output({ action: 'safety allow', path, entries: findings.map(({ fingerprint, lineNumber }) => publicSafetyEntry(fingerprint, lineNumber)) }); return;
+    }
+    if (action === 'revoke') {
+      if (positional.length !== 1) throw error('E_ARGUMENT', 'Safety revoke requires one vault-relative path.');
+      const path = normalizeSafetyPath(positional[0]);
+      const next = existing.filter(entry => entry.path !== path);
+      const revoked = existing.length - next.length;
+      if (!plan && revoked) {
+        const updated = structuredClone(cfg); updated.safety.allow = next;
+        await saveTrackedConfig(updated, paths, env);
+      }
+      output({ action: 'safety revoke', path, revoked }); return;
+    }
+    throw error('E_ARGUMENT', 'Safety action must be allow, list, or revoke.');
   }
   if (command === 'config') {
     const action = args.shift(); const key = args.shift(); const cfg = await config();

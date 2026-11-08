@@ -11,7 +11,7 @@ export function migrate(obj) {
       agents: Array.isArray(obj?.agents) ? obj.agents : [], scope: obj?.scope === 'vault' ? 'vault' : 'global',
       retrieval: { budgetChars: obj?.retrieval?.budgetChars ?? 4000, abstainThreshold: obj?.retrieval?.abstainThreshold ?? 0.35 },
       hooks: { mode: obj?.hooks?.mode ?? 'normal', deadlineMs: obj?.hooks?.deadlineMs ?? 1000 },
-      safety: { secretFilter: true, extraDenyGlobs: Array.isArray(obj?.safety?.extraDenyGlobs) ? obj.safety.extraDenyGlobs : [] },
+      safety: { secretFilter: true, extraDenyGlobs: Array.isArray(obj?.safety?.extraDenyGlobs) ? obj.safety.extraDenyGlobs : [], allow: Array.isArray(obj?.safety?.allow) ? obj.safety.allow : [] },
       okf: { level: obj?.okf?.level ?? 'warn' }, sync: { transport: obj?.sync?.transport ?? null, options: obj?.sync?.options ?? {} },
       telemetry: false, readOnly: obj?.readOnly === true, node: { path: obj?.node?.path ?? 'node' }
     };
