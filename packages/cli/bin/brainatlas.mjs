@@ -9,5 +9,5 @@ try {
   const code = typeof error?.code === 'string' ? error.code : 'E_ERROR';
   const message = typeof error?.message === 'string' ? error.message : `${CLI_NAME} failed.`;
   console.error(`${code}: ${message}`);
-  process.exitCode = code === 'E_NOT_IMPLEMENTED' ? 2 : 1;
+  process.exitCode = code === 'E_COMMAND_UNKNOWN' ? 2 : 1;
 }
