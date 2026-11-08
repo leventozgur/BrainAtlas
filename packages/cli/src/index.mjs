@@ -8,9 +8,10 @@ import * as core from '@brainatlas/core';
 import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, redact, vaultId } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from './archive.mjs';
 import { managePath, recordManagedWrite, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
+import { adoptPlan, migrateVault } from './migrate.mjs';
 
 const error = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details });
-const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp']);
+const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'help']);
 const validVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
 function compareVersions(left, right) {
   const parse = value => /^(?:v)?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
@@ -449,6 +450,53 @@ async function dispatchModuleCommand(command, args, { paths, env, output }) {
   } else if (result !== undefined) output(result);
 }
 
+const helpDescriptions = Object.freeze({
+  init: 'Create a BrainAtlas configuration and initialize a vault.', install: 'Install a BrainAtlas release.', status: 'Show installation status.',
+  doctor: 'Check installation health.', config: 'Read or change BrainAtlas configuration.', module: 'List, add, or remove installed modules.',
+  uninstall: 'Remove BrainAtlas while preserving the vault.', update: 'Install or inspect a release update.', rollback: 'Switch to a previous release.',
+  recover: 'Inspect or recover an interrupted update.', eval: 'Run the local retrieval evaluation.', hook: 'Run an agent hook.', mcp: 'Start the BrainAtlas MCP server.',
+  migrate: 'Copy vault content into a new vault.', adopt: 'Inspect existing agent setup and propose adoption.', help: 'Show built-in and active module commands.'
+});
+const helpUsages = Object.freeze({
+  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
+  config: 'brainatlas config get KEY | set KEY VALUE [--plan]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
+  uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
+  recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
+  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', help: 'brainatlas --help | brainatlas help [COMMAND]'
+});
+
+async function availableHelpCommands(paths, env) {
+  const commands = [...builtInCommands].map(name => ({ name, kind: 'built-in', usage: helpUsages[name], description: helpDescriptions[name] }));
+  const current = await readCurrent(paths).catch(() => null);
+  const releaseDir = currentReleaseDir(paths, current);
+  if (releaseDir) {
+    let cfg; try { cfg = await loadConfig({ paths, env }); } catch { cfg = defaultConfig('lite'); }
+    try {
+      const { ordered, entries } = await enabledModuleEntries(releaseDir, cfg);
+      const seen = new Set(commands.map(item => item.name));
+      for (const manifest of ordered) {
+        for (const name of Object.keys(entries.get(manifest.name)?.commands || {}).sort()) {
+          if (seen.has(name)) continue;
+          seen.add(name); commands.push({ name, kind: 'module', module: manifest.name, usage: `brainatlas ${name} [ARGS]`, description: `Command provided by the ${manifest.name} module.` });
+        }
+      }
+    } catch { /* Help remains usable when an installed module is damaged. */ }
+  }
+  return commands.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function showHelp(topic, { paths, env, output, json }) {
+  const commands = await availableHelpCommands(paths, env);
+  if (topic) {
+    const command = commands.find(item => item.name === topic);
+    if (!command) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
+    output(json ? command : `${command.usage}\n${command.description}`); return;
+  }
+  const result = { commands };
+  const lines = ['BrainAtlas commands:', ...commands.map(item => `  ${item.name.padEnd(14)} ${item.description}`), '', 'Run "brainatlas help <command>" for command usage.'];
+  output(json ? result : lines.join('\n'));
+}
+
 function validateArchiveModule(manifest, name) {
   const allowed = new Set(['name', 'version', 'description', 'requires', 'provides', 'profiles', 'entry', 'experimental']);
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest) || Object.keys(manifest).some(key => !allowed.has(key)) || manifest.name !== name || !/^[a-z0-9][a-z0-9._-]*$/.test(manifest.name) || typeof manifest.version !== 'string' || !manifest.version.trim() || typeof manifest.description !== 'string' || !manifest.description.trim() || !Array.isArray(manifest.requires) || !manifest.requires.every(item => typeof item === 'string' && /^[a-z0-9][a-z0-9._-]*$/.test(item)) || !Array.isArray(manifest.provides) || !manifest.provides.every(item => typeof item === 'string' && item.trim()) || !Array.isArray(manifest.profiles) || !manifest.profiles.length || !manifest.profiles.every(item => ['lite', 'full', 'custom'].includes(item)) || typeof manifest.entry !== 'string' || !manifest.entry || manifest.entry === '.' || manifest.entry.startsWith('/') || manifest.entry.includes('\\') || manifest.entry.split('/').some(part => !part || part === '.' || part === '..') || (manifest.experimental !== undefined && typeof manifest.experimental !== 'boolean')) throw error('E_MODULE_MANIFEST', 'Module manifest is invalid.');
@@ -546,6 +594,19 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const json = flag('--json'); const plan = flag('--plan');
   const output = data => console.log(json || plan ? JSON.stringify(data, null, 2) : typeof data === 'string' ? data : JSON.stringify(data, null, 2));
   const config = () => loadConfig({ paths, env });
+  if (command === '--help' || command === '-h' || command === 'help') {
+    const topic = command === 'help' ? args.find(argument => !argument.startsWith('--')) : undefined;
+    await showHelp(topic, { paths, env, output, json }); return;
+  }
+  if (command === 'migrate') {
+    const from = value('--from'); const to = value('--to');
+    if (!from || !to) throw error('E_ARGUMENT', 'migrate requires --from <old-vault> and --to <new-vault>.');
+    output(await migrateVault(from, to, { plan })); return;
+  }
+  if (command === 'adopt') {
+    if (!plan) throw error('E_ARGUMENT', 'adopt requires --plan.');
+    output(await adoptPlan(env.HOME)); return;
+  }
   if (command === 'init') {
     let vault = value('--vault');
     if (!vault && !flag('--yes')) {

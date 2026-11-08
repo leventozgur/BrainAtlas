@@ -57,6 +57,13 @@ test('routes commands to installed and enabled module exports', async t => {
     args: ['check', '--strict'], activated: true, enabled: true, hasCore: true, hasLogger: true
   });
 
+  const help = run('--help', '--json'); assert.equal(help.status, 0, help.stderr);
+  const helpCommands = JSON.parse(help.stdout).commands;
+  assert.ok(helpCommands.some(item => item.name === 'okf' && item.kind === 'module' && item.module === 'okf-fixture'));
+  assert.ok(helpCommands.some(item => item.name === 'sync' && item.kind === 'module' && item.module === 'sync-engine'));
+  const moduleHelp = run('help', 'okf', '--json'); assert.equal(moduleHelp.status, 0, moduleHelp.stderr);
+  assert.equal(JSON.parse(moduleHelp.stdout).module, 'okf-fixture');
+
   const transportRouted = run('sync', 'wire', 'status', '--json');
   assert.equal(transportRouted.status, 0, transportRouted.stderr);
   assert.deepEqual(JSON.parse(transportRouted.stdout), {
