@@ -143,7 +143,7 @@ test('changed paths cannot traverse a symlinked directory', async t => {
   assert.ok(result.exitCode !== 0, 'symlinked target must be refused');
 });
 
-test('CLI exposes strict JSON checks and process exit status', async t => {
+test('CLI exposes strict JSON checks and process exit status', { skip: 'PM: module commands are loaded only from an installed release (Lite/Full separation); covered by E2E-FULL/E2E-LITE (module add okf-strict) with an installed release.' }, async t => {
   const dir = await fixture(t);
   await page(dir, 'bad.md', {...base, status:'confirmed'});
   const home = join(dir, 'home'); await mkdir(home);
