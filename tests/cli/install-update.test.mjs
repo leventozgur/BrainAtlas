@@ -113,7 +113,7 @@ test('install manifest records resolved paths under a symlinked ~/.local and uni
   assert.equal(await readFile(join(localTarget, 'sentinel'), 'utf8'), 'keep\n');
 });
 
-test('uninstall JSON reports the path of a changed external managed file', async t => {
+test('uninstall JSON error envelope lists the changed external managed file (home-relative)', async t => {
   const work = await mkdtemp(join(tmpdir(), 'ba-uninstall-conflict-')); t.after(() => rm(work, { recursive: true, force: true }));
   const home = join(work, 'home'); const out = join(work, 'release'); await mkdir(home);
   const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
@@ -128,11 +128,16 @@ test('uninstall JSON reports the path of a changed external managed file', async
   await rm(changedFile); await writeFile(changedFile, 'user-owned replacement\n');
   const uninstalled = spawnSync(process.execPath, [cli, 'uninstall', '--json'], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
   assert.equal(uninstalled.status, 1);
-  const response = JSON.parse(uninstalled.stderr.trim());
-  assert.equal(response.code, 'E_UNINSTALL_CONFLICT');
-  assert.match(response.message, new RegExp(resolvedChangedFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.deepEqual(response.conflicts, [resolvedChangedFile]);
-  assert.doesNotMatch(response.message, /user-owned replacement/);
+  const response = JSON.parse(uninstalled.stdout.trim());
+  assert.deepEqual(Object.keys(response), ['ok', 'error']);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'E_UNINSTALL_CONFLICT');
+  assert.equal(response.error.message, 'brainatlas command failed.');
+  // PM: conflicts are listed home-relative so the user can find the changed file; no absolute HOME path on stdout.
+  assert.deepEqual(Object.keys(response.error).sort(), ['code', 'conflicts', 'message']);
+  assert.equal(response.error.conflicts.length, 1); assert.ok(!response.error.conflicts[0].startsWith('/') || !resolvedChangedFile.startsWith(process.env.HOME ?? '\0'));
+  assert.ok(response.error.conflicts[0].endsWith(resolvedChangedFile.split('/').slice(-2).join('/')));
+  assert.match(uninstalled.stderr, /E_UNINSTALL_CONFLICT/);
   assert.equal(await readFile(changedFile, 'utf8'), 'user-owned replacement\n');
 });
 
@@ -140,7 +145,7 @@ test('install, init, update and uninstall support separate XDG roots outside HOM
   const work = await mkdtemp(join(tmpdir(), 'ba-xdg-external-')); t.after(() => rm(work, { recursive: true, force: true }));
   const home = join(work, 'home'); const xdgData = join(work, 'xdg-data'); const xdgConfig = join(work, 'xdg-config'); const xdgState = join(work, 'xdg-state');
   const output1 = join(work, 'release-1'); const output2 = join(work, 'release-2');
-  await mkdir(home); const homeBefore = await treeSnapshot(home);
+  await mkdir(home);
   const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
   const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
   const v1 = await signedLite(output1, '0.1.0-xdg.1', key); const v2 = await signedLite(output2, '0.1.0-xdg.2', key);
@@ -154,13 +159,15 @@ test('install, init, update and uninstall support separate XDG roots outside HOM
   assert.equal(await readlink(join(xdgData, 'brainatlas', 'current')), 'releases/0.1.0-xdg.1');
   const initialized = run('init', '--yes', '--vault', join(home, 'vault'), '--json');
   assert.equal(initialized.status, 0, initialized.stderr);
+  assert.ok(JSON.parse(initialized.stdout).vault.created.includes('wiki/index.md'));
   assert.equal(await readFile(join(xdgConfig, 'brainatlas', 'config.json'), 'utf8').then(JSON.parse).then(config => config.vault.path), join(home, 'vault'));
+  const homeAfterInit = (await treeSnapshot(home)).filter(([path]) => path !== '.local' && !path.startsWith('.local/'));
   const updated = run('update', '--from', v2, '--json');
   assert.equal(updated.status, 0, updated.stderr);
   assert.equal(await readlink(join(xdgData, 'brainatlas', 'current')), 'releases/0.1.0-xdg.2');
   const uninstalled = run('uninstall', '--json');
   assert.equal(uninstalled.status, 0, uninstalled.stderr);
-  assert.deepEqual(await treeSnapshot(home), homeBefore);
+  assert.deepEqual(await treeSnapshot(home), homeAfterInit);
   for (const directory of [xdgData, xdgConfig, xdgState]) await assert.rejects(lstat(directory), { code: 'ENOENT' });
 });
 

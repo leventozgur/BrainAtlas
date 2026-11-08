@@ -42,8 +42,47 @@ function managedRoots(paths, env) {
 const journalPath = paths => join(paths.stateDir, 'update-journal.json');
 const previousPath = paths => join(paths.stateDir, 'previous-release');
 const releaseLink = version => `releases/${version}`;
+const vaultInitDirectories = ['wiki/entities', 'wiki/concepts', 'wiki/sources', 'wiki/summaries', 'wiki/queries', 'raw', 'inbox', 'planning'];
+const vaultInitFiles = ['wiki/index.md', 'wiki/log.md', 'planning/backlog.md', 'AGENTS.md'];
 
 async function exists(path) { try { await lstat(path); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; } }
+async function missingVaultInitPaths(vaultPath) {
+  const base = resolve(vaultPath);
+  const missing = [];
+  for (const path of [...vaultInitDirectories, ...vaultInitFiles]) {
+    if (!(await exists(join(base, path)))) missing.push(path);
+  }
+  return missing;
+}
+async function initializeVault(vaultPath) {
+  try { return await core.initVault(vaultPath); }
+  catch (cause) {
+    // Some packaged releases resolve core templates relative to node_modules; use the CLI's
+    // release-root templates only when that lookup fails, while retaining core path checks.
+    if (cause?.code !== 'ENOENT') throw cause;
+    const requested = resolve(vaultPath);
+    await mkdir(requested, { recursive: true });
+    const base = await realpath(requested);
+    for (const relativePath of vaultInitDirectories) {
+      const directory = await core.resolveSafePath(base, relativePath);
+      await mkdir(directory, { recursive: true });
+    }
+    const files = [
+      ['wiki/index.md', new URL('../../../templates/vault/index.md', import.meta.url)],
+      ['wiki/log.md', new URL('../../../templates/vault/log.md', import.meta.url)],
+      ['planning/backlog.md', new URL('../../../templates/vault/backlog.md', import.meta.url)],
+      ['AGENTS.md', new URL('../../../templates/policy/AGENTS.md', import.meta.url)]
+    ];
+    for (const [relativePath, templateUrl] of files) {
+      const file = await core.resolveSafePath(base, relativePath);
+      await mkdir(dirname(file), { recursive: true });
+      const content = await readFile(templateUrl);
+      try { await writeFile(file, content, { flag: 'wx' }); }
+      catch (writeError) { if (writeError.code !== 'EEXIST') throw writeError; }
+    }
+    return { path: base, created: [...vaultInitDirectories, ...files.map(([relativePath]) => relativePath)] };
+  }
+}
 async function writeJsonFile(file, value, paths = null, env = process.env) {
   const roots = paths ? managedRoots(paths, env) : [env.HOME];
   const created = paths ? await missingDirectories(dirname(file), env.HOME, roots) : [];
@@ -393,7 +432,7 @@ function moduleContext(config, paths, env, entries, ordered) {
     for (const capability of manifest.provides || []) registry.set(capability, entry);
   }
   const logger = Object.freeze({
-    info: (...values) => console.log(...values),
+    info: (...values) => console.error(...values),
     warn: (...values) => console.error(...values),
     error: (...values) => console.error(...values)
   });
@@ -730,8 +769,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
         } else if (!plan) warnings.push(`Adapter ${agent} has no apply operation.`);
       } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED' || e.code === 'ERR_MODULE_NOT_FOUND') warnings.push(`Adapter ${agent} is unavailable.`); else throw e; }
     }
-    if (!plan) await saveTrackedConfig(cfg, paths, env);
-    output({ action: 'init', configFile: paths.configFile, warnings, adapters: plan ? plannedAdapters.map(item => redactOutput(item.changes, env.HOME)) : undefined }); return;
+    const vaultSummary = { path: cfg.vault.path, created: await missingVaultInitPaths(cfg.vault.path) };
+    if (!plan) {
+      await initializeVault(cfg.vault.path);
+      await saveTrackedConfig(cfg, paths, env);
+    }
+    output({ action: 'init', configFile: paths.configFile, vault: vaultSummary, warnings, adapters: plan ? plannedAdapters.map(item => redactOutput(item.changes, env.HOME)) : undefined }); return;
   }
   if (command === 'install' && flag('--finalize')) {
     const createdDirectories = [];
