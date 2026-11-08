@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 import { randomBytes, randomUUID } from 'node:crypto';
-import { chmod, link, lstat, mkdir, open, readFile, unlink } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { constants } from 'node:fs';
+import { link, lstat, mkdir, open, realpath, stat, unlink } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { BrainAtlasError } from '../../../packages/core/src/util/errors.mjs';
 
 const invalidState = () => new BrainAtlasError('E_STATE_INVALID', 'Sync host identity state is invalid.');
+const invalidPath = () => new BrainAtlasError('E_INVALID_PATH', 'Sync host identity path is invalid.');
 
 function normalizeHostId(value) {
   if (value === undefined || value === null) return null;
@@ -16,19 +18,74 @@ function normalizeHostId(value) {
   return normalized;
 }
 
+function isWithin(root, path) {
+  const rel = relative(root, path);
+  return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+async function ensureStateRoot(path) {
+  try { await lstat(path); }
+  catch (error) {
+    if (error?.code !== 'ENOENT') throw invalidState();
+    try { await mkdir(path, { recursive: true, mode: 0o700 }); }
+    catch { throw invalidState(); }
+  }
+
+  let root;
+  try { root = await realpath(path); }
+  catch { throw invalidState(); }
+  try {
+    const info = await stat(root);
+    if (!info.isDirectory()) throw invalidPath();
+  } catch (error) {
+    if (error instanceof BrainAtlasError) throw error;
+    throw invalidState();
+  }
+  return root;
+}
+
+async function ensureSyncDirectory(path, stateRoot) {
+  let info;
+  try { info = await lstat(path); }
+  catch (error) {
+    if (error?.code !== 'ENOENT') throw invalidState();
+    try { await mkdir(path, { mode: 0o700 }); }
+    catch (createError) {
+      if (createError?.code !== 'EEXIST') throw invalidState();
+    }
+    try { info = await lstat(path); }
+    catch { throw invalidState(); }
+  }
+
+  if (!info.isDirectory() || info.isSymbolicLink()) throw invalidPath();
+  let actual;
+  try { actual = await realpath(path); }
+  catch { throw invalidState(); }
+  if (!isWithin(stateRoot, actual)) throw invalidPath();
+  return actual;
+}
+
 async function readStoredHostId(path) {
   let info;
   try { info = await lstat(path); }
   catch (error) { if (error?.code === 'ENOENT') return null; throw invalidState(); }
-  if (!info.isFile() || info.isSymbolicLink()) throw invalidState();
+  if (!info.isFile() || info.isSymbolicLink()) throw invalidPath();
+  let handle;
   try {
-    if ((info.mode & 0o777) !== 0o600) await chmod(path, 0o600);
-    const value = (await readFile(path, 'utf8')).trim();
+    handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    info = await handle.stat();
+    if (!info.isFile()) throw invalidPath();
+    if ((info.mode & 0o777) !== 0o600) await handle.chmod(0o600);
+    const value = (await handle.readFile('utf8')).trim();
     if (!/^[a-z0-9-]{1,32}$/.test(value)) throw invalidState();
     return value;
   } catch (error) {
     if (error instanceof BrainAtlasError) throw error;
+    if (error?.code === 'ENOENT') return null;
+    if (error?.code === 'ELOOP' || error?.code === 'EMLINK') throw invalidPath();
     throw invalidState();
+  } finally {
+    await handle?.close().catch(() => {});
   }
 }
 
@@ -43,9 +100,11 @@ export async function resolveHostId({ stateDir, env = {}, config = {}, hostId: l
   const fromLegacyOption = normalizeHostId(legacyHostId);
   if (fromLegacyOption) return fromLegacyOption;
 
-  const syncDir = join(resolve(stateDir), 'sync');
+  const statePath = resolve(stateDir);
+  const syncDir = join(statePath, 'sync');
   const hostIdPath = join(syncDir, 'host-id');
-  await mkdir(syncDir, { recursive: true, mode: 0o700 }).catch(() => { throw invalidState(); });
+  const stateRoot = await ensureStateRoot(statePath);
+  await ensureSyncDirectory(syncDir, stateRoot);
   const existing = await readStoredHostId(hostIdPath);
   if (existing) return existing;
 
@@ -53,12 +112,14 @@ export async function resolveHostId({ stateDir, env = {}, config = {}, hostId: l
   const temporaryPath = join(syncDir, `.host-id-${randomUUID()}.tmp`);
   let handle;
   try {
-    handle = await open(temporaryPath, 'wx', 0o600);
+    await ensureSyncDirectory(syncDir, stateRoot);
+    handle = await open(temporaryPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600);
     await handle.writeFile(`${generated}\n`);
+    await handle.chmod(0o600);
     await handle.sync();
     await handle.close();
     handle = undefined;
-    await chmod(temporaryPath, 0o600);
+    await ensureSyncDirectory(syncDir, stateRoot);
     try {
       await link(temporaryPath, hostIdPath);
       return generated;

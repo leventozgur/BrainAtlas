@@ -59,7 +59,7 @@ test('invalid stored state and symlink leaf fail closed without leaking values',
   }
   await rm(path); const outside = join(root, 'outside'); await writeFile(outside, 'outside', { mode: 0o644 });
   await symlink(outside, path);
-  await assert.rejects(resolveHostId({ stateDir }), { code: 'E_STATE_INVALID' });
+  await assert.rejects(resolveHostId({ stateDir }), { code: 'E_INVALID_PATH' }); // PM: symlinked path => E_INVALID_PATH (same code as git transport)
   assert.equal(await readFile(outside, 'utf8'), 'outside');
   assert.equal((await stat(outside)).mode & 0o777, 0o644);
 });
@@ -70,7 +70,7 @@ test('symlinked sync directory cannot redirect identity writes outside stateDir'
   let error;
   try { await resolveHostId({ stateDir, env: {} }); } catch (caught) { error = caught; }
   assert.deepEqual(await readdir(outside), [], 'identity must not be written outside stateDir');
-  assert.equal(error?.code, 'E_STATE_INVALID');
+  assert.equal(error?.code, 'E_INVALID_PATH');
 });
 
 test('transport and status command identities agree without environment override', async (t) => {
