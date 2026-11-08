@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { cleanEnv } from './clean-env.mjs';
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -25,7 +26,7 @@ test('CLI finds adapters under a space-containing install path and redacts plan 
   const settings = join(home, '.claude', 'settings.json');
   await mkdir(dirname(settings), { recursive: true });
   await writeFile(settings, `${JSON.stringify({ userSettings: { token: secret } }, null, 2)}\n`);
-  const env = {
+  const env = cleanEnv({
     PATH: process.env.PATH || '/usr/bin:/bin',
     HOME: home,
     XDG_CONFIG_HOME: join(home, '.config'),
@@ -33,7 +34,7 @@ test('CLI finds adapters under a space-containing install path and redacts plan 
     XDG_STATE_HOME: join(home, '.local', 'state'),
     BRAINATLAS_PLATFORM: 'linux',
     BRAINATLAS_OFFLINE: '1'
-  };
+  });
   const cli = join(install, 'packages/cli/bin/brainatlas.mjs');
   const result = spawnSync(process.execPath, [cli, 'init', '--yes', '--vault', join(home, 'vault'), '--agents', 'claude-code', '--plan', '--json'], {
     cwd: temp, env, encoding: 'utf8', shell: false
