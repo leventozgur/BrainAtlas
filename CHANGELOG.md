@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.1.0-rc.2 — 2026-11-08
+## 0.1.0-rc.3 — 2026-11-08
+
+- `init` now creates the vault skeleton (idempotent, never overwrites); `migrate` accepts a destination that only holds an untouched init skeleton.
+- `--json` commands print exactly one JSON value on stdout; errors use `{"ok":false,"error":{…}}`; module logs go to stderr.
+- Removed build artifacts accidentally committed under `release/dist/`.
+
+## 0.1.0-rc.2 — 2026-11-08 (built and verified locally, not tagged: second-host sync failed because `init` did not create the vault)
 
 - Added a self-contained release distribution folder and install kit (R-KIT).
 - Added Git transport setup and sync operations (S-OPS), plus stable host identity configuration (S-HOSTID).

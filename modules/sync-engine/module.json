@@ -1,6 +1,6 @@
 {
   "name": "sync-engine",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "Manifest based, transport agnostic vault synchronization.",
   "requires": [],
   "provides": ["sync"],
