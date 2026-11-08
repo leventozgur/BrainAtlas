@@ -19,7 +19,7 @@ async function fixture(t, { config = { sync: { options: {} } }, transport = crea
       await mkdir(join(target, '..'), { recursive: true });
       await writeFile(target, content);
     }
-    return { vaultPath, stateDir, engine: createSyncEngine({ vaultPath, stateDir, config, transport, hostId: name, now: () => new Date('2026-11-08T10:11:12.000Z') }) };
+    return { vaultPath, stateDir, engine: createSyncEngine({ vaultPath, stateDir, config, transport, env: { BRAINATLAS_HOST_ID: name }, now: () => new Date('2026-11-08T10:11:12.000Z') }) };
   };
   return { root, host, transport };
 }
@@ -95,7 +95,7 @@ test('local deletes stay queued until approval and approved tombstones reach the
   assert.equal(queued.status, 'PENDING');
   assert.equal(queued.pendingDeletes, 1);
   assert.ok(await fx.transport.get('wiki/entities/remove.md'));
-  const context = { config: { vault: { path: a.vaultPath }, sync: { options: {} } }, paths: { stateDir: a.stateDir }, transport: fx.transport, hostId: 'host-a' };
+  const context = { config: { vault: { path: a.vaultPath }, sync: { options: {} } }, paths: { stateDir: a.stateDir }, transport: fx.transport, env: { BRAINATLAS_HOST_ID: 'host-a' } };
   assert.deepEqual(await commands.approve(context, { paths: ['wiki/entities/remove.md'] }), { approved: ['wiki/entities/remove.md'] });
   assert.equal(await fx.transport.get('wiki/entities/remove.md'), null);
   await b.engine.run();
@@ -122,7 +122,7 @@ test('remote delete requests appear on the peer and peer approval removes both c
   assert.equal((await b.engine.status()).pendingDeleteCount, 1);
   assert.deepEqual((await b.engine.status()).pendingDeletionPaths, [path]);
   assert.equal(await readFile(join(b.vaultPath, path), 'utf8'), 'shared\n');
-  const context = { config: { vault: { path: b.vaultPath }, sync: { options: {} } }, paths: { stateDir: b.stateDir }, transport: fx.transport, hostId: 'host-b' };
+  const context = { config: { vault: { path: b.vaultPath }, sync: { options: {} } }, paths: { stateDir: b.stateDir }, transport: fx.transport, env: { BRAINATLAS_HOST_ID: 'host-b' } };
   assert.deepEqual(await commands.approve(context, ['--all']), { approved: [path] });
 
   assert.equal(await fx.transport.get(path), null);
@@ -217,7 +217,7 @@ test('scope globs, peer check, scheduler plans and module commands expose the sp
   const drift = await a.engine.checkPeer(b.stateDir);
   assert.equal(drift.status, 'DRIFT');
   assert.deepEqual(drift.differences, [{ path: 'wiki/a.md', kind: 'modified' }]);
-  const context = { config: { vault: { path: a.vaultPath }, sync: { options: {} } }, paths: { stateDir: a.stateDir }, transport: fx.transport, hostId: 'host-a' };
+  const context = { config: { vault: { path: a.vaultPath }, sync: { options: {} } }, paths: { stateDir: a.stateDir }, transport: fx.transport, env: { BRAINATLAS_HOST_ID: 'host-a' } };
   assert.deepEqual(await commands.check(context, { peer: b.stateDir }), drift);
   assert.deepEqual(await commands.sync(['check', '--peer', b.stateDir, '--json'], context), drift);
   assert.deepEqual(await commands.pause(context), { status: 'PAUSED' });

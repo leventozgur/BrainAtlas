@@ -31,7 +31,7 @@ async function fixture(t, remoteBranch = 'main') {
   assert.equal(initialized.code, 0);
   const remote = pathToFileURL(bare).href;
   const create = (id, options = {}) => createGitTransport({
-    stateDir: join(root, id, 'state'), remote, env, hostId: id, now: () => new Date('2026-11-08T10:11:12.000Z'), ...options,
+    stateDir: join(root, id, 'state'), remote, env: { ...env, BRAINATLAS_HOST_ID: id }, now: () => new Date('2026-11-08T10:11:12.000Z'), ...options,
   });
   return { root, home, env, bare, remote, create };
 }
@@ -118,13 +118,14 @@ test('Git uses configured commit identity and never reads or writes global Git c
 test('Git status reports redacted remote, branch, counts, last sync and clean state', async (t) => {
   const fx = await fixture(t);
   const stateDir = join(fx.root, 'status-host', 'state');
-  const transport = createGitTransport({ stateDir, remote: fx.remote, env: fx.env, hostId: 'status-host' });
+  const transport = createGitTransport({ stateDir, remote: fx.remote, env: { ...fx.env, BRAINATLAS_HOST_ID: 'status-host' } });
   await transport.put('wiki/page.md', Buffer.from('page\n'), { ifAbsent: true });
   await mkdir(join(stateDir, 'sync'), { recursive: true });
   await writeFile(join(stateDir, 'sync', 'last-synced-manifest.json'), JSON.stringify({ generatedAt: '2026-11-08T10:11:12.000Z' }));
   const context = { config: { sync: { transport: 'git' } }, transport };
   const status = await commands.status(['--json'], context);
   assert.equal(status.mode, 'git');
+  assert.equal(status.hostId, 'status-host');
   assert.equal(status.initialized, true);
   assert.equal(status.remote, fx.remote);
   assert.equal(status.branch, 'main');

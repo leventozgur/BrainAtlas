@@ -4,6 +4,7 @@ import { createCredentialStore } from './credentials.mjs';
 import { DropboxError } from './errors.mjs';
 import { createDropboxTokenProvider, enrollDropbox } from './oauth.mjs';
 import { createDropboxTransport } from './transport.mjs';
+import { resolveHostId } from '../../sync-engine/src/host-id.mjs';
 
 function storeFor(ctx) {
   return ctx?.credentialStore ?? ctx?.dropbox?.credentialStore ?? createCredentialStore({
@@ -18,6 +19,9 @@ function fetchFor(ctx) { return ctx?.fetch ?? ctx?.dropbox?.fetch ?? globalThis.
 export async function activate(ctx) {
   if (!ctx || typeof ctx !== 'object' || !ctx.config || !ctx.paths) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Dropbox module context is incomplete.');
   if (ctx.config.sync?.transport !== 'dropbox' || ctx.transport) return;
+  const hostId = typeof ctx.paths.stateDir === 'string'
+    ? await resolveHostId({ stateDir: ctx.paths.stateDir, env: ctx.env ?? process.env, config: ctx.config })
+    : undefined;
   const credentialStore = storeFor(ctx);
   const fetchImpl = fetchFor(ctx);
   const getAccessToken = createDropboxTokenProvider({ credentialStore, fetch: fetchImpl });
@@ -25,6 +29,7 @@ export async function activate(ctx) {
     fetch: fetchImpl,
     getAccessToken,
     root: ctx.config.sync?.options?.root ?? '/BrainAtlas',
+    hostId,
   });
 }
 

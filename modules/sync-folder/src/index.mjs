@@ -4,6 +4,7 @@ import { lstat, mkdir, readFile, readdir, realpath, unlink } from 'node:fs/promi
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { BrainAtlasError, atomicWriteFile } from '../../../packages/core/src/util/index.mjs';
 import { SyncTransportError, ConflictError, validateTransportPath } from '../../sync-engine/src/transport.mjs';
+import { resolveHostId } from '../../sync-engine/src/host-id.mjs';
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const ignoredName = (name) => name.endsWith('.icloud') || name.startsWith('~$') || name.endsWith('.tmp') || name.startsWith('.syncthing.');
@@ -114,9 +115,9 @@ async function scanFiles(root, current = root, rows = []) {
  * Local-folder object storage for folders synchronized by an external client.
  * Revisions include content digest and mtime. Conditional writes are best effort;
  * this transport intentionally makes no cross-process CAS guarantee.
- * @param {{path:string,vaultPath:string}} options
+ * @param {{path:string,vaultPath:string,hostId?:string}} options
  */
-export function createFolderTransport({ path, vaultPath, atomicWriter = atomicWriteFile } = {}) {
+export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = atomicWriteFile } = {}) {
   if (typeof path !== 'string' || typeof vaultPath !== 'string') throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder transport paths are incomplete.');
   const initialization = validateRoot(path, vaultPath).then(async (validated) => {
     await mkdir(validated, { recursive: true });
@@ -151,6 +152,7 @@ export function createFolderTransport({ path, vaultPath, atomicWriter = atomicWr
   }
 
   return Object.freeze({
+    ...(typeof hostId === 'string' ? { hostId } : {}),
     capabilities,
     list: listObjects,
     get: getObject,
@@ -204,7 +206,7 @@ export function createFolderTransport({ path, vaultPath, atomicWriter = atomicWr
     async status() {
       const rows = await listObjects();
       const conflicts = rows.filter((row) => row.conflict).map(({ path }) => path);
-      return { status: 'degraded', code: 'E_DEGRADED', cas: false, conflictCount: conflicts.length, conflicts };
+      return { status: 'degraded', code: 'E_DEGRADED', ...(typeof hostId === 'string' ? { hostId } : {}), cas: false, conflictCount: conflicts.length, conflicts };
     },
   });
 }
@@ -213,7 +215,9 @@ export function createFolderTransport({ path, vaultPath, atomicWriter = atomicWr
 export async function activate(ctx) {
   if (!ctx || typeof ctx !== 'object' || !ctx.config || !ctx.paths) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder module context is incomplete.');
   if (ctx.config.sync?.transport !== 'folder' || ctx.transport) return;
-  ctx.transport = createFolderTransport({ path: ctx.config.sync?.options?.path, vaultPath: ctx.config.vault?.path });
+  if (typeof ctx.paths.stateDir !== 'string') throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder module state is incomplete.');
+  const hostId = await resolveHostId({ stateDir: ctx.paths.stateDir, env: ctx.env ?? process.env, config: ctx.config });
+  ctx.transport = createFolderTransport({ path: ctx.config.sync?.options?.path, vaultPath: ctx.config.vault?.path, hostId });
 }
 
 export const commands = Object.freeze({});
