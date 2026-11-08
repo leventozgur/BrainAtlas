@@ -1,0 +1,10 @@
+{
+  "name": "sync-folder",
+  "version": "0.1.0-dev",
+  "description": "Experimental object transport over a locally synchronized folder.",
+  "requires": ["sync-engine"],
+  "provides": ["sync-transport:folder"],
+  "profiles": ["full", "custom"],
+  "entry": "src/index.mjs",
+  "experimental": true
+}
