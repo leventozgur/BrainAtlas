@@ -2,5 +2,5 @@ Third-party notices
 ===================
 
 - vendor/llmwiki-core: Microsoft llmwiki packages/core v1.0.1, MIT. See vendor/llmwiki-core/LICENSE.
-- avenoxbeyin: MIT. Design patterns only: BM25 parameters k1=1.5 and b=0.75, vault-id hash pattern, and release/installation patterns. No code was copied. TODO(PM): confirm upstream URL and copyright line.
-- npm dependencies: a complete license inventory will be generated in the AUDIT track.
+- avenoxbeyin (https://github.com/avenoxai/avenoxbeyin): MIT License, Copyright (c) 2026 Avenox. Design patterns only: BM25 parameters k1=1.5 and b=0.75, vault-id hash pattern, and release/installation patterns. No code was copied.
+- npm dependencies: see docs/audit/dependencies.md for the complete license inventory (MIT, ISC and BSD only).
