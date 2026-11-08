@@ -7,13 +7,14 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { defaultConfig, resolvePaths } from '@brainatlas/core';
+import { cleanEnv } from './clean-env.mjs';
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 test('routes commands to installed and enabled module exports', async t => {
   const home = await mkdtemp(join(tmpdir(), 'ba module route-'));
   t.after(() => rm(home, { recursive: true, force: true }));
-  const env = {
+  const env = cleanEnv({
     PATH: process.env.PATH || '/usr/bin:/bin',
     HOME: home,
     XDG_CONFIG_HOME: join(home, '.config'),
@@ -21,7 +22,7 @@ test('routes commands to installed and enabled module exports', async t => {
     XDG_STATE_HOME: join(home, '.local', 'state'),
     BRAINATLAS_PLATFORM: 'linux',
     BRAINATLAS_OFFLINE: '1'
-  };
+  });
   const paths = resolvePaths({ platform: 'linux', env });
   const releaseDir = join(paths.releasesDir, 'fixture-1');
   const moduleDir = join(releaseDir, 'modules', 'okf-fixture');

@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { buildRelease, verifyRelease, extractRelease } from '../../release/build-release.mjs';
 import { signRelease } from '../../release/sign.mjs';
 import { extractVerifiedRelease, inspectReleaseArchive } from '../../packages/cli/src/archive.mjs';
+import { cleanEnv } from './clean-env.mjs';
 
 test('full release is reproducible and rejects invalid checksum and signature', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'ba-release-')); t.after(() => rm(dir, { recursive: true, force: true }));
@@ -18,7 +19,7 @@ test('full release is reproducible and rejects invalid checksum and signature', 
   const [archive, sums] = await buildRelease({ ...options, out: one });
   const [archive2] = await buildRelease({ ...options, out: two });
   assert.deepEqual(await readFile(archive), await readFile(archive2));
-  const key = join(dir, 'key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+  const key = join(dir, 'key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
   const pub = (await readFile(`${key}.pub`, 'utf8')).trim(); await writeFile(join(one, 'allowed_signers'), `brainatlas-release ${pub}\n`);
   const sig = signRelease(key, sums);
   assert.equal((await verifyRelease(archive, sums, sig, join(one, 'allowed_signers'))).version, options.version);
@@ -36,7 +37,7 @@ test('signed archives reject traversal, absolute paths and links before extracti
   const dir = await mkdtemp(join(tmpdir(), 'ba-unsafe-')); t.after(() => rm(dir, { recursive: true, force: true }));
   const [archive, sums] = await buildRelease({ version: '0.1.0-test.3', profile: 'lite', out: dir });
   const original = gunzipSync(await readFile(archive));
-  const key = join(dir, 'key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+  const key = join(dir, 'key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
   const signers = join(dir, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
   let index = 0;
   for (const [name, type] of [['../escape', '0'], ['/escape', '0'], ['link', '2'], ['hardlink', '1']]) {
@@ -54,7 +55,7 @@ test('lite release excludes modules while permitting third-party content', async
   const dir = await mkdtemp(join(tmpdir(), 'ba-lite-')); t.after(() => rm(dir, { recursive: true, force: true }));
   const [archive, sums] = await buildRelease({ version: '0.1.0-test.1', profile: 'lite', out: dir });
   assert.ok((await readFile(archive)).length > 0);
-  const key = join(dir, 'key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+  const key = join(dir, 'key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
   const signers = join(dir, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`); signRelease(key, sums);
   const { manifest, files } = await inspectReleaseArchive(archive, signers);
   assert.deepEqual(manifest.modules, []);

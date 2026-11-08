@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { buildRelease } from '../../release/build-release.mjs';
 import { signRelease } from '../../release/sign.mjs';
+import { cleanEnv } from './clean-env.mjs';
 import { defaultConfig } from '../../packages/core/src/config/index.mjs';
 
 const root = resolve('.');
@@ -78,7 +79,7 @@ test('offline install, module lifecycle, doctor rollback and uninstall restore H
   for (const version of versions) for (const profile of ['lite', 'full']) {
     const [archive] = await buildRelease({ version, profile, out: releaseOutput }); artifacts.set(`${version}-${profile}`, archive);
   }
-  const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+  const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
   const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
   signRelease(key, join(releaseOutput, 'SHA256SUMS'));
 
@@ -94,10 +95,10 @@ test('offline install, module lifecycle, doctor rollback and uninstall restore H
   await writeFile(join(home, 'existing-command'), 'existing target\n'); await symlink(join(home, 'existing-command'), join(localBin, 'ba'));
   await writeFile(join(home, '.fixture-agent.json'), `${JSON.stringify({ userSetting: 'keep' }, null, 2)}\n`);
   const vaultExclusions = ['vaults', relative(home, activeVault)]; const before = await snapshot(home, vaultExclusions);
-  const env = { ...process.env, HOME: home, BRAINATLAS_PLATFORM: 'darwin', BRAINATLAS_OFFLINE: '1', BRAINATLAS_ALLOWED_SIGNERS: signers };
-  const install = (...args) => spawnSync('sh', [join(root, 'install.sh'), ...args], { cwd: root, env, encoding: 'utf8' });
+  const env = cleanEnv({ HOME: home, BRAINATLAS_PLATFORM: 'darwin', BRAINATLAS_OFFLINE: '1', BRAINATLAS_ALLOWED_SIGNERS: signers });
+  const install = (...args) => spawnSync('sh', [join(root, 'install.sh'), ...args], { cwd: root, env, encoding: 'utf8', shell: false });
   const cli = join(dataDir, 'current', 'packages', 'cli', 'bin', 'brainatlas.mjs');
-  const run = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: root, env, encoding: 'utf8' });
+  const run = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: root, env, encoding: 'utf8', shell: false });
 
   const installed = install('--from', artifacts.get('0.1.0-test.1-lite'), '--profile', 'lite', '--vault', activeVault, '--yes', '--prefix-home', home, '--allowed-signers', signers);
   assert.equal(installed.status, 0, installed.stderr);
@@ -118,7 +119,7 @@ test('offline install, module lifecycle, doctor rollback and uninstall restore H
   assert.equal(check.status, 0); assert.equal(JSON.parse(check.stdout).status, 'up-to-date');
   const olderCheck = run('update', '--check', '--from', artifacts.get('0.1.0-test.1-lite'), '--json');
   assert.equal(olderCheck.status, 0); assert.equal(JSON.parse(olderCheck.stdout).status, 'current-newer');
-  const unhealthy = spawnSync(process.execPath, [cli, 'update', '--from', artifacts.get('0.1.0-test.3-lite'), '--json'], { cwd: root, env: { ...env, BRAINATLAS_TEST_DOCTOR_FAIL: '1' }, encoding: 'utf8' });
+  const unhealthy = spawnSync(process.execPath, [cli, 'update', '--from', artifacts.get('0.1.0-test.3-lite'), '--json'], { cwd: root, env: cleanEnv({ ...env, BRAINATLAS_TEST_DOCTOR_FAIL: '1' }), encoding: 'utf8', shell: false });
   assert.equal(unhealthy.status, 1); assert.match(unhealthy.stderr, /E_DOCTOR_FAILED/);
   assert.equal(await readlink(join(dataDir, 'current')), 'releases/0.1.0-test.2');
   const rolledBack = run('rollback', '--json'); assert.equal(rolledBack.status, 0, rolledBack.stderr);
@@ -143,15 +144,15 @@ test('offline install, module lifecycle, doctor rollback and uninstall restore H
   const linuxAgentFile = join(linuxHome, '.fixture-agent.json');
   await writeFile(linuxAgentFile, `${JSON.stringify({ userSetting: 'before' }, null, 2)}\n`);
   const linuxBefore = await snapshot(linuxHome);
-  const linuxEnv = { ...env, HOME: linuxHome, BRAINATLAS_PLATFORM: 'linux', XDG_DATA_HOME: join(linuxHome, '.local', 'share'), XDG_CONFIG_HOME: join(linuxHome, '.config'), XDG_STATE_HOME: join(linuxHome, '.local', 'state') };
-  const linuxInstall = spawnSync('sh', [join(root, 'install.sh'), '--from', artifacts.get('0.1.0-test.1-lite'), '--yes', '--prefix-home', linuxHome, '--allowed-signers', signers], { cwd: root, env: linuxEnv, encoding: 'utf8' });
+  const linuxEnv = cleanEnv({ ...env, HOME: linuxHome, BRAINATLAS_PLATFORM: 'linux', XDG_DATA_HOME: join(linuxHome, '.local', 'share'), XDG_CONFIG_HOME: join(linuxHome, '.config'), XDG_STATE_HOME: join(linuxHome, '.local', 'state') });
+  const linuxInstall = spawnSync('sh', [join(root, 'install.sh'), '--from', artifacts.get('0.1.0-test.1-lite'), '--yes', '--prefix-home', linuxHome, '--allowed-signers', signers], { cwd: root, env: linuxEnv, encoding: 'utf8', shell: false });
   assert.equal(linuxInstall.status, 0, linuxInstall.stderr);
   const linuxCli = join(linuxHome, '.local', 'share', 'brainatlas', 'current', 'packages', 'cli', 'bin', 'brainatlas.mjs');
-  const linuxInit = spawnSync(process.execPath, [linuxCli, 'init', '--agents', 'fixture-agent', '--yes', '--json'], { cwd: root, env: linuxEnv, encoding: 'utf8' });
+  const linuxInit = spawnSync(process.execPath, [linuxCli, 'init', '--agents', 'fixture-agent', '--yes', '--json'], { cwd: root, env: linuxEnv, encoding: 'utf8', shell: false });
   assert.equal(linuxInit.status, 0, linuxInit.stderr);
   const changedAgentConfig = JSON.parse(await readFile(linuxAgentFile, 'utf8')); changedAgentConfig.userSetting = 'changed after install';
   await writeFile(linuxAgentFile, `${JSON.stringify(changedAgentConfig, null, 2)}\n`);
-  const linuxUninstall = spawnSync(process.execPath, [linuxCli, 'uninstall', '--json'], { cwd: root, env: linuxEnv, encoding: 'utf8' });
+  const linuxUninstall = spawnSync(process.execPath, [linuxCli, 'uninstall', '--json'], { cwd: root, env: linuxEnv, encoding: 'utf8', shell: false });
   assert.equal(linuxUninstall.status, 0, linuxUninstall.stderr);
   assert.deepEqual(JSON.parse(await readFile(linuxAgentFile, 'utf8')), { userSetting: 'changed after install' });
   const expectedLinux = linuxBefore.map(item => item[0] === '.fixture-agent.json'

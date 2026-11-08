@@ -33,8 +33,10 @@ function compareVersions(left, right) {
 }
 function managedRoots(paths, env) {
   const home = env.HOME; const platform = env.BRAINATLAS_PLATFORM || process.platform;
-  if (platform === 'darwin') return [home];
-  return [home, join(home, '.local'), env.XDG_DATA_HOME || join(home, '.local', 'share'), env.XDG_CONFIG_HOME || join(home, '.config'), env.XDG_STATE_HOME || join(home, '.local', 'state')];
+  const roots = platform === 'darwin'
+    ? [home]
+    : [home, join(home, '.local'), env.XDG_DATA_HOME || join(home, '.local', 'share'), env.XDG_CONFIG_HOME || join(home, '.config'), env.XDG_STATE_HOME || join(home, '.local', 'state')];
+  return [...new Set(roots.filter(root => typeof root === 'string' && root.length > 0))];
 }
 const journalPath = paths => join(paths.stateDir, 'update-journal.json');
 const previousPath = paths => join(paths.stateDir, 'previous-release');
