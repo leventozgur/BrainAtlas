@@ -253,7 +253,7 @@ test('Full release syncs two offline hosts, reconciles content, protects secrets
     { home: homeB, vault: vaultB, env: envB, platform: 'linux', id: 'fixture-b' },
   ];
   for (const host of hosts) {
-    const installed = run('sh', [join(root, 'install.sh'), '--from', archive, '--profile', 'full', '--prefix-home', host.home, '--allowed-signers', signers, '--yes'], host.env);
+    const installed = run('sh', [join(root, 'install.sh'), '--from', archive, '--profile', 'full', '--prefix-home', host.home, '--allowed-signers', signers, '--vault', host.vault, '--yes'], host.env);
     assertSuccess(installed, 'Full release install');
     host.cli = join(resolvePaths({ platform: host.platform, env: host.env }).currentDir, 'packages', 'cli', 'bin', 'brainatlas.mjs');
     const initialized = cli(host.cli, ['init', '--profile', 'full', '--yes', '--vault', host.vault, '--json'], host.env);

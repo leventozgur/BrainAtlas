@@ -140,7 +140,7 @@ test('install, init, update and uninstall support separate XDG roots outside HOM
   const work = await mkdtemp(join(tmpdir(), 'ba-xdg-external-')); t.after(() => rm(work, { recursive: true, force: true }));
   const home = join(work, 'home'); const xdgData = join(work, 'xdg-data'); const xdgConfig = join(work, 'xdg-config'); const xdgState = join(work, 'xdg-state');
   const output1 = join(work, 'release-1'); const output2 = join(work, 'release-2');
-  await mkdir(home); const homeBefore = await treeSnapshot(home);
+  await mkdir(home);
   const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
   const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
   const v1 = await signedLite(output1, '0.1.0-xdg.1', key); const v2 = await signedLite(output2, '0.1.0-xdg.2', key);
@@ -154,13 +154,15 @@ test('install, init, update and uninstall support separate XDG roots outside HOM
   assert.equal(await readlink(join(xdgData, 'brainatlas', 'current')), 'releases/0.1.0-xdg.1');
   const initialized = run('init', '--yes', '--vault', join(home, 'vault'), '--json');
   assert.equal(initialized.status, 0, initialized.stderr);
+  assert.ok(JSON.parse(initialized.stdout).vault.created.includes('wiki/index.md'));
   assert.equal(await readFile(join(xdgConfig, 'brainatlas', 'config.json'), 'utf8').then(JSON.parse).then(config => config.vault.path), join(home, 'vault'));
+  const homeAfterInit = (await treeSnapshot(home)).filter(([path]) => path !== '.local' && !path.startsWith('.local/'));
   const updated = run('update', '--from', v2, '--json');
   assert.equal(updated.status, 0, updated.stderr);
   assert.equal(await readlink(join(xdgData, 'brainatlas', 'current')), 'releases/0.1.0-xdg.2');
   const uninstalled = run('uninstall', '--json');
   assert.equal(uninstalled.status, 0, uninstalled.stderr);
-  assert.deepEqual(await treeSnapshot(home), homeBefore);
+  assert.deepEqual(await treeSnapshot(home), homeAfterInit);
   for (const directory of [xdgData, xdgConfig, xdgState]) await assert.rejects(lstat(directory), { code: 'ENOENT' });
 });
 

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, realpath, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import * as core from '@brainatlas/core';
 
 const error = (code, message) => Object.assign(new Error(message), { code });
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const categories = ['wiki', 'planning', 'raw', 'inbox', 'archive'];
+const initDirectories = new Set(['wiki', 'wiki/entities', 'wiki/concepts', 'wiki/sources', 'wiki/summaries', 'wiki/queries', 'raw', 'inbox', 'planning']);
 const instructionNames = new Set(['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'COPILOT.md', 'CODEX.md', 'CURSOR.md', 'WINDSURF.md']);
 const instructionMarker = '<!-- migrated:user-section -->';
 
@@ -28,6 +29,40 @@ async function realDestination(path) {
   return resolve(current, ...tail);
 }
 
+async function initScaffoldTemplates() {
+  const entries = [
+    ['wiki/index.md', new URL('../../../templates/vault/index.md', import.meta.url)],
+    ['wiki/log.md', new URL('../../../templates/vault/log.md', import.meta.url)],
+    ['planning/backlog.md', new URL('../../../templates/vault/backlog.md', import.meta.url)],
+    ['AGENTS.md', new URL('../../../templates/policy/AGENTS.md', import.meta.url)]
+  ];
+  return new Map(await Promise.all(entries.map(async ([path, url]) => [path, await readFile(url)])));
+}
+
+async function inspectInitScaffold(target, templates) {
+  const present = new Map();
+  async function visit(directory, relativeDirectory = '') {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+      const absolutePath = join(directory, entry.name);
+      const stat = await lstat(absolutePath);
+      if (stat.isSymbolicLink()) throw error('E_TARGET_NOT_EMPTY', 'Migration destination contains user data.');
+      if (stat.isDirectory()) {
+        if (!initDirectories.has(relativePath)) throw error('E_TARGET_NOT_EMPTY', 'Migration destination contains user data.');
+        await visit(absolutePath, relativePath);
+        continue;
+      }
+      const expected = templates.get(relativePath);
+      if (!stat.isFile() || !expected || !(await readFile(absolutePath)).equals(expected)) {
+        throw error('E_TARGET_NOT_EMPTY', 'Migration destination contains user data.');
+      }
+      present.set(relativePath, expected);
+    }
+  }
+  await visit(target);
+  return present;
+}
+
 function inside(parent, child) {
   const rel = relative(parent, child);
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
@@ -42,11 +77,12 @@ async function validateRoots(from, to, { requireEmpty = true } = {}) {
   const targetReal = await realDestination(target);
   if (inside(source, targetReal)) throw error('E_TARGET_INVALID', 'Migration destination must be outside the source vault.');
   if (inside(targetReal, source)) throw error('E_TARGET_INVALID', 'Migration destination cannot contain the source vault.');
+  let targetScaffoldFiles = new Map();
   if (requireEmpty && targetStat) {
     const entries = await readdir(target);
-    if (entries.length) throw error('E_TARGET_NOT_EMPTY', 'Migration destination is not empty.');
+    if (entries.length) targetScaffoldFiles = await inspectInitScaffold(target, await initScaffoldTemplates());
   }
-  return { source, target, targetStat };
+  return { source, target, targetStat, targetScaffoldFiles };
 }
 
 async function countExcludedTree(path) {
@@ -172,9 +208,9 @@ export async function migrateVault(from, to, { plan = false } = {}) {
     const bytes = await readFile(sourcePath);
     if (bytes.length !== item.size) throw error('E_SOURCE_CHANGED', 'Source vault changed during migration.');
     const targetPath = join(roots.target, item.path);
-    await mkdir(dirname(targetPath), { recursive: true }); await writeFile(targetPath, bytes, { flag: 'wx' });
+    await mkdir(dirname(targetPath), { recursive: true }); await writeMigrationFile(targetPath, item.path, bytes, roots.targetScaffoldFiles);
   }
-  for (const item of record.instructions) await writeFile(join(roots.target, item.path), instructionBytes(item), { flag: 'wx' });
+  for (const item of record.instructions) await writeMigrationFile(join(roots.target, item.path), item.path, instructionBytes(item), roots.targetScaffoldFiles);
 
   await core.appendLog(roots.target, { action: 'migrated', path: 'wiki/index.md' });
   let bodyHashMatch = true;
@@ -192,6 +228,18 @@ export async function migrateVault(from, to, { plan = false } = {}) {
   const lintErrors = findings.filter(item => item.severity === 'error').length + (integrity ? 0 : 1);
   const okfWarnings = findings.filter(item => item.severity === 'warn').length;
   return { pages: summary.pages, files: summary.files, bytes: summary.bytes, bodyHashMatch, logPrefixPreserved, logAppendedEntries: 1, skipped: summary.skipped, okfWarnings, lintErrors };
+}
+
+async function writeMigrationFile(targetPath, relativePath, bytes, scaffoldFiles) {
+  const expected = scaffoldFiles.get(relativePath);
+  if (expected) {
+    const stat = await pathInfo(targetPath);
+    if (!stat?.isFile() || stat.isSymbolicLink() || !(await readFile(targetPath)).equals(expected)) {
+      throw error('E_TARGET_NOT_EMPTY', 'Migration destination contains user data.');
+    }
+    await unlink(targetPath);
+  }
+  await writeFile(targetPath, bytes, { flag: 'wx' });
 }
 
 const scanConfigFiles = [

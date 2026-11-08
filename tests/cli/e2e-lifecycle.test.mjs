@@ -150,13 +150,18 @@ test('offline install, module lifecycle, doctor rollback and uninstall restore H
   const linuxCli = join(linuxHome, '.local', 'share', 'brainatlas', 'current', 'packages', 'cli', 'bin', 'brainatlas.mjs');
   const linuxInit = spawnSync(process.execPath, [linuxCli, 'init', '--agents', 'fixture-agent', '--yes', '--json'], { cwd: root, env: linuxEnv, encoding: 'utf8', shell: false });
   assert.equal(linuxInit.status, 0, linuxInit.stderr);
+  const linuxVault = await snapshot(join(linuxHome, 'BrainAtlas'));
   const changedAgentConfig = JSON.parse(await readFile(linuxAgentFile, 'utf8')); changedAgentConfig.userSetting = 'changed after install';
   await writeFile(linuxAgentFile, `${JSON.stringify(changedAgentConfig, null, 2)}\n`);
   const linuxUninstall = spawnSync(process.execPath, [linuxCli, 'uninstall', '--json'], { cwd: root, env: linuxEnv, encoding: 'utf8', shell: false });
   assert.equal(linuxUninstall.status, 0, linuxUninstall.stderr);
   assert.deepEqual(JSON.parse(await readFile(linuxAgentFile, 'utf8')), { userSetting: 'changed after install' });
-  const expectedLinux = linuxBefore.map(item => item[0] === '.fixture-agent.json'
+  const expectedLinux = [
+    ...linuxBefore.map(item => item[0] === '.fixture-agent.json'
     ? [item[0], 'file', Buffer.from(`${JSON.stringify({ userSetting: 'changed after install' }, null, 2)}\n`).toString('base64'), item[3]]
-    : item);
+    : item),
+    ['BrainAtlas', 'dir'],
+    ...linuxVault.map(item => [`BrainAtlas/${item[0]}`, ...item.slice(1)])
+  ];
   assert.deepEqual(await snapshot(linuxHome), expectedLinux);
 });
