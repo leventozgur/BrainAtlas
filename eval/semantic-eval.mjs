@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { scanText } from '../packages/core/src/safety/index.mjs';
 import { buildIndex, loadPages, search } from '../packages/core/src/retrieval/index.mjs';
-import { buildSemanticIndex, createOllamaProvider, markdownChunks, cosineSimilarity, reciprocalRankFusion } from '../modules/semantic/src/index.mjs';
+import { buildSemanticIndex, createOllamaProvider, markdownChunks, cosineSimilarity, searchHybrid } from '../modules/semantic/src/index.mjs';
 import { reciprocalRank, ndcg, percentile } from './lib/metrics.mjs';
 
 const metricNames = ['recallAt5', 'precisionAt5', 'mrrAt10', 'ndcgAt10'];
@@ -71,7 +71,8 @@ export async function runSemanticEval({ corpusDir, casesFile, provider, limit = 
         if (!best.has(entry.path) || score > best.get(entry.path).score) best.set(entry.path, { path: entry.path, score });
       }
       const semantic = [...best.values()].sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
-      const hybrid = reciprocalRankFusion([lexical, semantic.filter(({ score }) => score > 0)], { k: 60 });
+      const hybrid = await searchHybrid({ query: item.query, pages, entries: index.entries, provider: { embedQuery: async () => vector }, limit: Math.max(limit, 10) });
+      if (hybrid.fallbackReason) throw new Error('Hybrid semantic retrieval failed.');
       // At least ten ranks are needed for MRR/nDCG, independent of display limit.
       const cap = Math.max(limit, 10);
       for (const [name, results] of Object.entries({ lexical, semantic, hybrid })) rows[name].push({ item, results: results.slice(0, cap) });
