@@ -7,9 +7,9 @@ import { spawnSync } from 'node:child_process';
 import * as core from '@brainatlas/core';
 import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, redact, vaultId } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from './archive.mjs';
-import { managePath, recordManagedPath, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
+import { managePath, recordManagedWrite, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
 
-const error = (code, message) => Object.assign(new Error(message), { code });
+const error = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details });
 const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp']);
 const validVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
 function compareVersions(left, right) {
@@ -64,6 +64,7 @@ function validateReleaseLink(target, allowNull = true) {
   return target;
 }
 async function switchCurrent(paths, target) {
+  const before = await snapshotPath(paths.currentDir);
   const currentExists = await exists(paths.currentDir);
   if (currentExists) {
     const stat = await lstat(paths.currentDir);
@@ -82,6 +83,8 @@ async function switchCurrent(paths, target) {
     if (target === null) await rm(paths.currentDir, { force: true });
     else { await symlink(target, temp); await rename(temp, paths.currentDir); }
   } catch { await rm(temp, { force: true }); throw error('E_CURRENT_SWITCH', 'Could not switch the current release.'); }
+  const after = await snapshotPath(paths.currentDir);
+  await recordManagedWrite(paths, paths.currentDir, { before, after });
 }
 async function savePrevious(paths, target, env = process.env) {
   if (target === null) { await rm(previousPath(paths), { force: true }); return; }
@@ -136,10 +139,33 @@ async function removeAdapters(cfg, paths, env) {
       if (typeof adapter.remove !== 'function') { warnings.push(`Adapter ${agent} has no remove operation.`); continue; }
       const ctx = { env, config: cfg, paths, scope: cfg.scope, nodePath: cfg.node.path, shimPath: paths.binPath, now: new Date() };
       const planned = typeof adapter.plan === 'function' ? await adapter.plan(ctx) : { changes: [] };
-      const managed = [];
-      for (const change of planned?.changes || []) managed.push(resolve(change.file));
+      const managed = new Map();
+      const manifest = await readInstallManifest(paths);
+      for (const entry of manifest.files) {
+        if (entry.owners?.includes(agent)) managed.set(entry.path, await snapshotPath(entry.path));
+      }
+      for (const change of planned?.changes || []) {
+        const file = resolve(change.file);
+        if (!managed.has(file)) managed.set(file, await snapshotPath(file));
+      }
+      const knownNames = new Map();
+      for (const file of managed.keys()) {
+        const parent = dirname(file);
+        if (!knownNames.has(parent)) knownNames.set(parent, new Set(await readdir(parent).catch(cause => { if (cause.code === 'ENOENT') return []; throw cause; })));
+      }
       await adapter.remove(ctx);
-      for (const file of managed) { const current = await snapshotPath(file); await recordManagedPath(paths, file, current, current); }
+      for (const [file, before] of managed) {
+        const after = await snapshotPath(file);
+        if (before?.sha256 !== after?.sha256 || before?.kind !== after?.kind || before?.mode !== after?.mode) {
+          await recordManagedWrite(paths, file, { before, after, owner: agent });
+        }
+        const parent = dirname(file); const known = knownNames.get(parent) || new Set();
+        for (const name of await readdir(parent).catch(cause => { if (cause.code === 'ENOENT') return []; throw cause; })) {
+          if (!name.startsWith(`${basename(file)}.bak.`) || known.has(name)) continue;
+          const backup = join(parent, name);
+          await recordManagedWrite(paths, backup, { before: null, after: await snapshotPath(backup), owner: agent, role: 'adapter-backup' });
+        }
+      }
     } catch (cause) {
       if (cause?.code === 'E_NOT_IMPLEMENTED' || cause?.code === 'ERR_MODULE_NOT_FOUND') warnings.push(`Adapter ${agent} is unavailable.`);
       else throw cause;
@@ -163,7 +189,8 @@ async function saveTrackedConfig(cfg, paths, env = process.env) {
   const roots = managedRoots(paths, env); const created = home ? await missingDirectories(dirname(paths.configFile), home, roots) : [];
   const before = await snapshotPath(paths.configFile);
   await saveConfig(cfg, { paths });
-  await recordManagedPath(paths, paths.configFile, before);
+  const after = await snapshotPath(paths.configFile);
+  await recordManagedWrite(paths, paths.configFile, { before, after });
   if (created.length && home) await recordCreatedDirectories(paths, created, home, roots);
 }
 
@@ -175,6 +202,7 @@ async function writeInstallEntrypoints(paths, env) {
   const created = [...await missingDirectories(dirname(shim), env.HOME, roots), ...await missingDirectories(localBin, env.HOME, roots)];
   const cli = join(paths.currentDir, 'packages', 'cli', 'bin', 'brainatlas.mjs');
   const shimContent = `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(cli)} "$@"\n`;
+  await recordManagedWrite(paths, paths.currentDir, { before: null, after: await snapshotPath(paths.currentDir) });
   await mkdir(dirname(shim), { recursive: true });
   await managePath(paths, shim, async () => {
     await rm(shim, { force: true });
@@ -193,7 +221,7 @@ async function removeAppDataPreserving(paths, keepFiles = [], vaultPath = null) 
   const dataDir = await resolveManagedPath(paths.dataDir, { followFinal: true });
   const keep = new Set(await Promise.all(keepFiles.map(path => resolveManagedPath(resolve(path), { followFinal: true }))));
   if (vaultPath) keep.add(await resolveManagedPath(resolve(vaultPath), { followFinal: true }));
-  try { const stat = await lstat(paths.dataDir); if (!stat.isDirectory() || stat.isSymbolicLink()) throw error('E_UNINSTALL_CONFLICT', 'Application data directory is unsafe.'); }
+  try { const stat = await lstat(paths.dataDir); if (!stat.isDirectory() || stat.isSymbolicLink()) throw error('E_UNINSTALL_CONFLICT', `Application data directory is unsafe: ${paths.dataDir}.`, { path: paths.dataDir, conflicts: [paths.dataDir] }); }
   catch (cause) { if (cause?.code === 'ENOENT') return; throw cause; }
   async function removeTree(dir) {
     const entries = await readdir(dir, { withFileTypes: true }).catch(cause => { if (cause.code === 'ENOENT') return null; throw cause; });
@@ -470,12 +498,15 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
           }
           if (changes?.trustReviewRequired && typeof adapter.trustReview === 'function') await adapter.trustReview(ctx);
           await adapter.apply(changes, ctx);
-          for (const change of changes?.changes || []) await recordManagedPath(paths, resolve(change.file), before.get(change.file));
+          for (const change of changes?.changes || []) {
+            const file = resolve(change.file);
+            await recordManagedWrite(paths, file, { before: before.get(change.file), after: await snapshotPath(file), owner: agent, role: 'adapter-config' });
+          }
           for (const change of changes?.changes || []) {
             const target = resolve(change.file); const parent = dirname(target); const known = beforeNames.get(parent) || new Set();
             for (const file of await readdir(parent).catch(() => [])) {
               if (file.startsWith(`${basename(target)}.bak.`) && !known.has(file)) {
-                const backup = join(parent, file); await recordManagedPath(paths, backup, null, await snapshotPath(backup));
+                const backup = join(parent, file); await recordManagedWrite(paths, backup, { before: null, after: await snapshotPath(backup), owner: agent, role: 'adapter-backup' });
               }
             }
           }
