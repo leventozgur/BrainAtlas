@@ -722,16 +722,51 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
     output(await adoptPlan(env.HOME)); return;
   }
   if (command === 'init') {
-    let vault = value('--vault');
-    if (!vault && !flag('--yes')) {
+    const requestedVault = value('--vault');
+    const requestedProfile = value('--profile');
+    const requestedAgents = value('--agents');
+    const configExists = await exists(paths.configFile);
+    const original = configExists ? await loadConfig({ paths, env }) : null;
+    let vault = requestedVault;
+    if (!vault && !original && !flag('--yes')) {
       if (!process.stdin.isTTY) throw error('E_ARGUMENT', 'Use --vault or --yes for non-interactive initialization.');
       const rl = createInterface({ input: process.stdin, output: process.stdout });
       try { vault = await rl.question('Vault path: '); } finally { rl.close(); }
     }
-    const cfg = defaultConfig(value('--profile') || 'lite');
-    cfg.vault.path = resolve(vault || join(env.HOME, 'BrainAtlas'));
-    cfg.node.path = process.execPath;
-    const agents = value('--agents'); cfg.agents = agents ? agents.split(',').map(item => item.trim()).filter(Boolean) : [];
+    const cfg = original ? structuredClone(original) : defaultConfig(requestedProfile || 'lite');
+    const changes = {};
+    const recordChange = (key, before, after) => {
+      if (JSON.stringify(before) !== JSON.stringify(after)) changes[key] = { from: before, to: after };
+    };
+    if (!original) {
+      cfg.vault.path = resolve(vault || join(env.HOME, 'BrainAtlas'));
+      cfg.node.path = process.execPath;
+      cfg.agents = requestedAgents ? requestedAgents.split(',').map(item => item.trim()).filter(Boolean) : [];
+      for (const key of ['profile', 'modules', 'vault.path', 'agents']) {
+        const before = null;
+        const after = key === 'vault.path' ? cfg.vault.path : key.split('.').reduce((value, part) => value[part], cfg);
+        recordChange(key, before, after);
+      }
+    } else {
+      if (requestedVault !== undefined) {
+        const next = resolve(requestedVault);
+        recordChange('vault.path', cfg.vault.path, next);
+        cfg.vault.path = next;
+      }
+      if (requestedProfile !== undefined) {
+        const profileConfig = defaultConfig(requestedProfile);
+        recordChange('profile', cfg.profile, requestedProfile);
+        recordChange('modules', cfg.modules, profileConfig.modules);
+        cfg.profile = requestedProfile;
+        cfg.modules = profileConfig.modules;
+      }
+      if (requestedAgents !== undefined) {
+        const next = requestedAgents.split(',').map(item => item.trim()).filter(Boolean);
+        recordChange('agents', cfg.agents, next);
+        cfg.agents = next;
+      }
+    }
+    const agents = cfg.agents;
     const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url));
     let available = []; try { available = await readdir(adapterRoot); } catch {}
     if (cfg.agents.some(a => !/^[a-z0-9-]+$/.test(a))) throw error('E_AGENT_UNKNOWN', 'Invalid agent adapter name.');
@@ -769,12 +804,13 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
         } else if (!plan) warnings.push(`Adapter ${agent} has no apply operation.`);
       } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED' || e.code === 'ERR_MODULE_NOT_FOUND') warnings.push(`Adapter ${agent} is unavailable.`); else throw e; }
     }
-    const vaultSummary = { path: cfg.vault.path, created: await missingVaultInitPaths(cfg.vault.path) };
+    const vaultPath = resolve(cfg.vault.path);
+    const vaultSummary = { path: vaultPath, created: await missingVaultInitPaths(vaultPath) };
     if (!plan) {
-      await initializeVault(cfg.vault.path);
+      await initializeVault(vaultPath);
       await saveTrackedConfig(cfg, paths, env);
     }
-    output({ action: 'init', configFile: paths.configFile, vault: vaultSummary, warnings, adapters: plan ? plannedAdapters.map(item => redactOutput(item.changes, env.HOME)) : undefined }); return;
+    output({ action: 'init', configFile: paths.configFile, config: plan ? { changes } : undefined, vault: vaultSummary, warnings, adapters: plan ? plannedAdapters.map(item => redactOutput(item.changes, env.HOME)) : undefined }); return;
   }
   if (command === 'install' && flag('--finalize')) {
     const createdDirectories = [];
