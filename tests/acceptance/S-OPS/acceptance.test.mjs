@@ -18,7 +18,7 @@ async function fixture(t, head = 'main') {
   const root = await mkdtemp(join(tmpdir(), 's-ops-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const home = join(root, 'home'); await mkdir(home);
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(home, 'gitconfig'), GIT_TERMINAL_PROMPT: '0', BRAINATLAS_OFFLINE: '0' };
+  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(home, 'gitconfig'), GIT_TERMINAL_PROMPT: '0' };
   delete env.GIT_SSH_COMMAND; delete env.GIT_SSH;
   await writeFile(env.GIT_CONFIG_GLOBAL, '[user]\n name = Unwanted Global\n');
   const bare = join(root, 'remote.git');
@@ -31,6 +31,13 @@ async function fixture(t, head = 'main') {
     return { config: { vault: { path: vault }, sync: { transport: 'git', options: {} } }, paths: { stateDir }, transport: tx(id, extra), hostId: id, env };
   };
   return { root, home, env, bare, remote, tx, context };
+}
+
+function withoutOffline(env) { const copy = { ...env }; delete copy.BRAINATLAS_OFFLINE; return copy; }
+function clearProcessOffline(t) {
+  const previous = process.env.BRAINATLAS_OFFLINE;
+  delete process.env.BRAINATLAS_OFFLINE;
+  t.after(() => { if (previous === undefined) delete process.env.BRAINATLAS_OFFLINE; else process.env.BRAINATLAS_OFFLINE = previous; });
 }
 
 test('empty bare remote: two hosts run, exchange updates, report JSON fields and protect vault Git', async t => {
@@ -62,10 +69,12 @@ test('custom branch, author overrides, mismatched default and malformed branch',
 });
 
 test('SSH subprocess is noninteractive, classifies host key failure and respects explicit command', async t => {
+  clearProcessOffline(t);
   const f = await fixture(t), bin = join(f.root, 'bin'); await mkdir(bin);
   const argv = join(f.root, 'argv'), prompt = join(f.root, 'prompt');
   await writeFile(join(bin, 'ssh'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$ARGV_FILE"\nprintf "%s" "$GIT_TERMINAL_PROMPT" > "$PROMPT_FILE"\necho "Host key verification failed" >&2\nexit 255\n', { mode: 0o700 });
-  const env = { ...f.env, PATH: `${bin}:${f.env.PATH}`, ARGV_FILE: argv, PROMPT_FILE: prompt };
+  const cleanEnv = withoutOffline(f.env);
+  const env = { ...cleanEnv, PATH: `${bin}:${cleanEnv.PATH}`, ARGV_FILE: argv, PROMPT_FILE: prompt };
   for (const [id, override] of [['default', undefined], ['custom', 'ssh -o ConnectTimeout=1']]) {
     const tx = f.tx(id, { remote: 'git@example.invalid:repo', env: { ...env, ...(override ? { GIT_SSH_COMMAND: override } : {}) } });
     await assert.rejects(tx.list(), e => ['E_AUTH', 'E_HOST_KEY'].includes(e.code));
@@ -74,12 +83,14 @@ test('SSH subprocess is noninteractive, classifies host key failure and respects
 });
 
 test('HTTPS credentials never reach warning, status, command errors, journal or metrics', async t => {
+  clearProcessOffline(t);
   const f = await fixture(t), secret = ['sk', 'test' + 'x'.repeat(24)].join('-');
   const remote = `https://user:${secret}@example.invalid/repo`, logs = [];
-  const ctx = { config: { sync: { transport: 'git', options: { remote } }, vault: { path: join(f.root, 'vault') } }, paths: { stateDir: join(f.root, 'cred-state') }, env: f.env, logger: { warn: (...x) => logs.push(x), info: (...x) => logs.push(x), error: (...x) => logs.push(x) } };
+  const env = withoutOffline(f.env);
+  const ctx = { config: { sync: { transport: 'git', options: { remote } }, vault: { path: join(f.root, 'vault') } }, paths: { stateDir: join(f.root, 'cred-state') }, env, logger: { warn: (...x) => logs.push(x), info: (...x) => logs.push(x), error: (...x) => logs.push(x) } };
   await mkdir(ctx.config.vault.path); await activate(ctx); assert.ok(logs.length); assert.ok(!JSON.stringify(logs).includes(secret));
   const status = await gitCommands.status(['--json'], ctx); assert.ok(!JSON.stringify(status).includes(secret));
-  ctx.transport = createGitTransport({ stateDir: ctx.paths.stateDir, remote, env: f.env, runCommand: async () => ({ code: 1, stderr: `failed ${remote}`, stdout: '' }) });
+  ctx.transport = createGitTransport({ stateDir: ctx.paths.stateDir, remote, env, runCommand: async () => ({ code: 1, stderr: `failed ${remote}`, stdout: '' }) });
   let error; try { await syncCommands.sync(ctx, { action: 'run' }); } catch (e) { error = e; }
   assert.ok(error); assert.ok(!JSON.stringify([String(error), error.stack, logs]).includes(secret));
   async function files(dir) { const out = []; for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) { const p = join(dir, e.name); if (e.isDirectory()) out.push(...await files(p)); else if (e.isFile()) out.push((await readFile(p)).toString()); } return out; }

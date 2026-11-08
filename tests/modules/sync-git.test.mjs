@@ -36,6 +36,13 @@ async function fixture(t, remoteBranch = 'main') {
   return { root, home, env, bare, remote, create };
 }
 
+function withoutOffline(env) { const copy = { ...env }; delete copy.BRAINATLAS_OFFLINE; return copy; }
+function clearProcessOffline(t) {
+  const previous = process.env.BRAINATLAS_OFFLINE;
+  delete process.env.BRAINATLAS_OFFLINE;
+  t.after(() => { if (previous === undefined) delete process.env.BRAINATLAS_OFFLINE; else process.env.BRAINATLAS_OFFLINE = previous; });
+}
+
 test('Git transport clones under sync state and provides object CAS over a local bare repository', async (t) => {
   const fx = await fixture(t);
   const vaultGit = join(fx.root, 'vault', '.git');
@@ -138,13 +145,15 @@ test('Git status reports redacted remote, branch, counts, last sync and clean st
 });
 
 test('SSH invocation uses BatchMode, keeps terminal prompts disabled, and classifies host-key errors', async (t) => {
+  clearProcessOffline(t);
   const fx = await fixture(t);
   const bin = join(fx.root, 'bin');
   await mkdir(bin);
   const argvFile = join(fx.root, 'ssh-argv.txt');
   const promptFile = join(fx.root, 'ssh-prompt.txt');
   await writeFile(join(bin, 'ssh'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$SSH_ARGV_FILE"\nprintf "%s" "$GIT_TERMINAL_PROMPT" > "$SSH_PROMPT_FILE"\nprintf "Host key verification failed.\\n" >&2\nexit 255\n', { mode: 0o700 });
-  const env = { ...fx.env, PATH: `${bin}:${fx.env.PATH}`, SSH_ARGV_FILE: argvFile, SSH_PROMPT_FILE: promptFile };
+  const cleanEnv = withoutOffline(fx.env);
+  const env = { ...cleanEnv, PATH: `${bin}:${cleanEnv.PATH}`, SSH_ARGV_FILE: argvFile, SSH_PROMPT_FILE: promptFile };
   const transport = createGitTransport({
     stateDir: join(fx.root, 'ssh-host', 'state'), remote: 'git@example.invalid:owner/repository.git', env,
   });
@@ -167,6 +176,7 @@ test('SSH invocation uses BatchMode, keeps terminal prompts disabled, and classi
 });
 
 test('credential-bearing HTTPS remotes warn without exposing credentials in status or errors', async (t) => {
+  clearProcessOffline(t);
   const fx = await fixture(t);
   const username = 'token-user';
   const password = 'private-token-value';
@@ -188,12 +198,12 @@ test('credential-bearing HTTPS remotes warn without exposing credentials in stat
   assert.match(output, /\[redacted\]/);
   for (const secret of [username, password, queryToken]) assert.equal(output.includes(secret), false);
   await assert.rejects(createGitTransport({
-    stateDir: join(fx.root, 'https-failure', 'state'), remote, env: fx.env, runCommand: runCommandFake,
+    stateDir: join(fx.root, 'https-failure', 'state'), remote, env: withoutOffline(fx.env), runCommand: runCommandFake,
   }).list(), (error) => error.code === 'E_AUTH' && !error.message.includes(password) && !error.message.includes(queryToken));
 
   const vaultPath = join(fx.root, 'https-vault'); const stateDir = join(fx.root, 'https-engine', 'state');
   await mkdir(vaultPath);
-  const journalTransport = createGitTransport({ stateDir, remote, env: fx.env, runCommand: runCommandFake });
+  const journalTransport = createGitTransport({ stateDir, remote, env: withoutOffline(fx.env), runCommand: runCommandFake });
   const logs = [];
   const engine = createSyncEngine({ vaultPath, stateDir, transport: journalTransport, logger: { info: (...values) => logs.push(values), warn: (...values) => logs.push(values), error: (...values) => logs.push(values) } });
   await assert.rejects(engine.run(), { code: 'E_AUTH' });
