@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.1.0-rc.3 — 2026-11-08
+## 0.1.0-rc.4 — 2026-11-08
+
+- `init` preserves an existing configuration (vault path from `install.sh --vault`, sync settings, host id); only flags given explicitly change it.
+
+## 0.1.0-rc.3 — 2026-11-08 (built and verified locally, not tagged: `init` reset an existing configuration)
 
 - `init` now creates the vault skeleton (idempotent, never overwrites); `migrate` accepts a destination that only holds an untouched init skeleton.
 - `--json` commands print exactly one JSON value on stdout; errors use `{"ok":false,"error":{…}}`; module logs go to stderr.
