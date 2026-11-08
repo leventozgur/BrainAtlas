@@ -19,6 +19,15 @@ function validateBaseUrl(baseUrl) {
   return `${url.origin}${url.pathname.replace(/\/$/u, '')}`;
 }
 
+export function validateConfiguredProvider(settings) {
+  const url = new URL(validateBaseUrl(settings.baseUrl ?? DEFAULT_BASE_URL));
+  if (settings.allowRemote !== true && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
+    const error = safeError('Embedding provider configuration is invalid.');
+    error.fallbackReason = 'remote-not-allowed';
+    throw error;
+  }
+}
+
 function validateVector(value, dims) {
   if (!Array.isArray(value) || value.length !== dims || !value.every(Number.isFinite)) {
     throw safeError('Embedding provider returned an invalid vector.');

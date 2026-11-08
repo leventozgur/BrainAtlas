@@ -24,7 +24,7 @@ function conceptProvider({ broken = false } = {}) {
 
 test('Ollama provider posts an input batch through injected fetch and validates vectors', async () => {
   let request;
-  const provider = createOllamaProvider({ baseUrl: 'http://example.com:11434/', model: 'embedding-model', dims: 2,
+  const provider = createOllamaProvider({ baseUrl: 'http://example.com:11434/', allowRemote: true, model: 'embedding-model', dims: 2,
     fetchImpl: async (url, options) => {
       request = { url, options };
       const input = JSON.parse(options.body).input;
@@ -151,4 +151,65 @@ test('module remains disabled until evaluation passes and user opts in', async (
   assert.deepEqual(semanticStatus(), { enabled: true, gatePassed: true });
   configureSemantic({ gateResult: { enable: false }, optIn: true });
   assert.deepEqual(semanticStatus(), { enabled: false, gatePassed: false });
+});
+
+test('incremental indexing embeds only changed chunks, drops deleted files and rebuilds invalid caches', async t => {
+  const { updateSemanticIndex } = await import('../../modules/semantic/src/index.mjs');
+  const dir = await temporary(t), corpusDir = path.join(dir, 'wiki'), stateDir = path.join(dir, 'state');
+  await fs.mkdir(corpusDir);
+  await fs.writeFile(path.join(corpusDir, 'one.md'), '# One\nfirst');
+  await fs.writeFile(path.join(corpusDir, 'two.md'), '# Two\nsecond');
+  let embedded = [];
+  const provider = { id: 'fake', dims: 2, fingerprint: 'a', embedDocuments: async texts => { embedded.push(...texts); return texts.map(() => [1, 0]); } };
+  const options = { corpusDir, stateDir, provider, chunkMarkdown: markdownChunks };
+  await updateSemanticIndex(options); assert.equal(embedded.length, 2);
+  embedded = []; await fs.writeFile(path.join(corpusDir, 'one.md'), '# One\nchanged');
+  await fs.rm(path.join(corpusDir, 'two.md'));
+  let index = await updateSemanticIndex(options);
+  assert.equal(embedded.length, 1); assert.match(embedded[0], /changed/); assert.deepEqual(Object.keys(index.fileHashes), ['one.md']);
+  await fs.writeFile(path.join(corpusDir, 'two.md'), '# Two\nsecond');
+  embedded = []; provider.fingerprint = 'b'; await updateSemanticIndex(options); assert.equal(embedded.length, 2);
+  await fs.writeFile(path.join(stateDir, 'semantic/index.json'), '{broken');
+  embedded = []; index = await updateSemanticIndex(options); assert.equal(embedded.length, 2); assert.equal(index.entries.length, 2);
+});
+
+test('concurrent updates share one indexing operation', async t => {
+  const { updateSemanticIndex } = await import('../../modules/semantic/src/index.mjs');
+  const dir = await temporary(t), corpusDir = path.join(dir, 'wiki'), stateDir = path.join(dir, 'state');
+  await fs.mkdir(corpusDir); await fs.writeFile(path.join(corpusDir, 'one.md'), '# One\ncontent');
+  let calls = 0, release; const gate = new Promise(resolve => { release = resolve; });
+  const provider = { id: 'fake', dims: 2, fingerprint: 'a', embedDocuments: async texts => { calls++; await gate; return texts.map(() => [1, 0]); } };
+  const options = { corpusDir, stateDir, provider, chunkMarkdown: markdownChunks };
+  const a = updateSemanticIndex(options), b = updateSemanticIndex(options); assert.equal(a, b); release();
+  await Promise.all([a, b]); assert.equal(calls, 1);
+});
+
+test('configured commands reject remote providers while the standalone provider remains unrestricted', async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; return { ok: true, json: async () => ({ embeddings: [[1, 0]] }) }; };
+  const baseUrl = 'http://remote.invalid:11434';
+  await createOllamaProvider({ baseUrl, model: 'test', dims: 2, fetchImpl }).embed(['private query']);
+  assert.equal(calls, 1);
+  const ctx = { config: { vault: { path: '.' }, semantic: { baseUrl, dims: 2 } }, env: {}, paths: { stateDir: '/unused' }, fetchImpl };
+  await assert.rejects(commands.semanticIndex([], ctx), error => error.code === 'E_SEMANTIC_PROVIDER' && !error.message.includes(baseUrl));
+  await assert.rejects(commands.semanticStatus([], ctx), error => error.code === 'E_SEMANTIC_PROVIDER');
+  assert.equal(calls, 1);
+});
+
+test('core has no static dependency on the optional semantic module', async () => {
+  const walk = async dir => (await Promise.all((await fs.readdir(dir, { withFileTypes: true })).map(async entry => entry.isDirectory() ? walk(path.join(dir, entry.name)) : entry.name.endsWith('.mjs') ? [path.join(dir, entry.name)] : []))).flat();
+  for (const file of await walk('packages/core/src')) {
+    const source = await fs.readFile(file, 'utf8');
+    assert.doesNotMatch(source, /(?:import|export)\s+(?:[^;]*?\s+from\s*)?['"][^'"]*modules\/semantic(?:\/[^'"]*)?['"]/u, file);
+  }
+});
+
+test('provider failures and freshness metrics do not expose query or page content', async t => {
+  const dir = await temporary(t), corpusDir = path.join(dir, 'wiki'), stateDir = path.join(dir, 'state');
+  await fs.mkdir(corpusDir); await fs.writeFile(path.join(corpusDir, 'page.md'), '# Title\nprivatepagecontent');
+  const provider = createOllamaProvider({ model: 'fake', dims: 2, fetchImpl: async () => { throw new Error('privatequery privatepagecontent'); } });
+  await assert.rejects(provider.embedQuery('privatequery'), error => !/privatequery|privatepagecontent/.test(String(error.stack)));
+  const metrics = await measureIndexFreshness({ corpusDir, index: null });
+  assert.doesNotMatch(JSON.stringify(metrics), /privatequery|privatepagecontent/);
+  assert.equal(await readSemanticIndex(stateDir), null);
 });

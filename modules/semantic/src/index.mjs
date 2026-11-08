@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
-import { createOllamaProvider } from './provider.mjs';
+import { createOllamaProvider, validateConfiguredProvider } from './provider.mjs';
 import { markdownChunks } from './chunking.mjs';
-import { buildSemanticIndex, measureIndexFreshness, readSemanticIndex } from './index-store.mjs';
+import { buildSemanticIndex, updateSemanticIndex, measureIndexFreshness, readSemanticIndex } from './index-store.mjs';
 import { cosineSimilarity, reciprocalRankFusion, searchHybrid } from './hybrid.mjs';
 import { semanticGate } from './eval.mjs';
+import { SEMANTIC_DEFAULTS } from '../../../packages/core/src/config/index.mjs';
+import { join, resolve } from 'node:path';
 
 let enabled = false;
 let gatePassed = false;
@@ -22,14 +24,36 @@ export async function activate(ctx) {
   configureSemantic({ gateResult: ctx?.semanticGateResult, optIn: ctx?.config?.semantic?.enabled === true });
 }
 
+function commandOptions(ctx) {
+  const settings = { ...SEMANTIC_DEFAULTS, ...ctx.config.semantic };
+  validateConfiguredProvider(settings);
+  const vault = resolve(ctx.env.HOME ?? '.', ctx.config.vault.path);
+  return { settings, corpusDir: join(vault, 'wiki'), stateDir: ctx.paths.stateDir,
+    provider: createOllamaProvider({ ...settings, fetchImpl: ctx.fetchImpl ?? globalThis.fetch }), chunkMarkdown: markdownChunks };
+}
 export const commands = Object.freeze({
-  semanticStatus() { return semanticStatus(); },
+  async semanticIndex(args, ctx) {
+    const options = commandOptions(ctx);
+    const index = await updateSemanticIndex(options);
+    return { indexed: Object.keys(index.fileHashes).length };
+  },
+  semanticStatus(args, ctx) {
+    if (!ctx) return semanticStatus();
+    return (async () => {
+      const options = commandOptions(ctx);
+      const index = await readSemanticIndex(options.stateDir);
+      const freshness = await measureIndexFreshness({ corpusDir: options.corpusDir, index });
+      return { enabled: options.settings.enabled, model: options.settings.model, ...freshness, fingerprintMatches: Boolean(index && index.providerFingerprint === options.provider.fingerprint) };
+    })();
+  },
 });
 
 export {
   buildSemanticIndex,
+  updateSemanticIndex,
   cosineSimilarity,
   createOllamaProvider,
+  validateConfiguredProvider,
   markdownChunks,
   measureIndexFreshness,
   readSemanticIndex,
