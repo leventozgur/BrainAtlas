@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 import { spawn } from 'node:child_process';
 import { NotImplementedError, BrainAtlasError } from './errors.mjs';
-import { lstat, mkdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import * as fsPromises from 'node:fs/promises';
+import * as fsSync from 'node:fs';
+import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 export { NotImplementedError, BrainAtlasError };
@@ -9,13 +11,33 @@ export { NotImplementedError, BrainAtlasError };
 export async function atomicWriteFile(file, data, options = {}) {
   if (typeof file !== 'string' || data === undefined) throw new NotImplementedError('util.atomicWriteFile');
   const target = resolve(file);
-  const temp = join(dirname(target), `.${target.split(sep).at(-1)}.${randomUUID()}.tmp`);
+  const temp = options.tempPrefix
+    ? join(dirname(target), `${options.tempPrefix}${randomUUID()}`)
+    : join(dirname(target), `.${target.split(sep).at(-1)}.${randomUUID()}.tmp`);
   await mkdir(dirname(target), { recursive: true });
+  const fsOps = options.fsOps ?? fsPromises;
   try {
-    await writeFile(temp, data, { mode: options.mode });
-    await rename(temp, target);
+    await fsOps.writeFile(temp, data, { mode: options.mode });
+    await fsOps.rename(temp, target);
   } catch (error) {
-    try { await unlink(temp); } catch {}
+    try { await fsOps.unlink(temp); } catch {}
+    throw error;
+  }
+}
+/** Synchronous counterpart for synchronous APIs that must persist before returning. */
+export function atomicWriteFileSync(file, data, options = {}) {
+  if (typeof file !== 'string' || data === undefined) throw new NotImplementedError('util.atomicWriteFileSync');
+  const target = resolve(file);
+  const temp = options.tempPrefix
+    ? join(dirname(target), `${options.tempPrefix}${randomUUID()}`)
+    : join(dirname(target), `.${target.split(sep).at(-1)}.${randomUUID()}.tmp`);
+  fsSync.mkdirSync(dirname(target), { recursive: true });
+  const fsOps = options.fsSyncOps ?? fsSync;
+  try {
+    fsOps.writeFileSync(temp, data, { mode: options.mode });
+    fsOps.renameSync(temp, target);
+  } catch (error) {
+    try { fsOps.unlinkSync(temp); } catch {}
     throw error;
   }
 }

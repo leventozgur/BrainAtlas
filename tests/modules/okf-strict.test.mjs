@@ -43,6 +43,13 @@ test('strict mode rejects unverified confirmed pages, date-only generated values
   assert.equal(JSON.stringify(results).includes('private page body'), false);
 });
 
+test('strict mode exempts structural index and log files like core checkVault', async (t) => {
+  const dir = await vault(t);
+  await writeFile(join(dir, 'wiki/index.md'), '# Wiki index\n\n- [Page](wiki/page.md)\n');
+  await writeFile(join(dir, 'wiki/log.md'), '# Wiki log\n\n- Recent activity\n');
+  assert.deepEqual(await check(dir, { asOf: new Date('2026-01-03T00:00:00Z') }), []);
+});
+
 test('a scoped verification source and a non-superseded target pass strict checks', async (t) => {
   const dir = await vault(t);
   await page(dir, 'current.md', 'generated: "2026-01-01T00:00:00Z"\nstatus: confirmed\nsources: [source-a]\nverified: [{date: "2026-01-02", evidence: "checked release notes", scope: "api behavior", source: source-a}]\nstale_after: P4W');

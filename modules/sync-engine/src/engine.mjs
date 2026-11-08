@@ -11,6 +11,7 @@ import { SyncTransportError } from './transport.mjs';
 const SPECIAL = new Set(['wiki/index.md', 'wiki/log.md']);
 const MANIFEST_VERSION = 3;
 const TOMBSTONE_PREFIX = '.brainatlas-sync/meta/tombstones/';
+const PENDING_DELETE_PREFIX = '.brainatlas-sync/meta/pending-deletions/';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const asBytes = (value) => value instanceof Uint8Array ? Buffer.from(value) : Buffer.from(String(value));
 const isMissing = (error) => error?.code === 'ENOENT';
@@ -97,6 +98,7 @@ function entry(path, bytes, mtime, rev) {
 function isSpecial(path) { return SPECIAL.has(path); }
 function isConflictArtifact(path) { return /\.conflict-[a-z0-9_-]+-\d{8}T\d{6}Z(?:-\d+)?\.md$/i.test(path); }
 function tombstonePath(path) { return `${TOMBSTONE_PREFIX}${Buffer.from(path).toString('base64url')}.json`; }
+function pendingDeletePath(path, requester) { return `${PENDING_DELETE_PREFIX}${Buffer.from(path).toString('base64url')}-${requester}.json`; }
 
 /**
  * Build a transport agnostic synchronizer. Each instance owns `stateDir/sync/`.
@@ -213,6 +215,19 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
   }
   async function isPaused() { return (await readJson(settingsPath, {})).paused === true; }
 
+  async function clearPendingDeleteIntents(path, deletedRev) {
+    for (const row of await tx.list(PENDING_DELETE_PREFIX)) {
+      const stored = await tx.get(row.path);
+      if (!stored) continue;
+      let value;
+      try { value = JSON.parse(Buffer.from(stored.bytes).toString('utf8')); } catch { throw new SyncTransportError('E_STATE_INVALID'); }
+      if (value?.version === 1 && value.path === path && value.deletedRev === deletedRev
+          && typeof value.requestedBy === 'string' && row.path === pendingDeletePath(path, value.requestedBy)) {
+        await tx.delete(row.path, { ifRev: stored.rev });
+      }
+    }
+  }
+
   async function buildManifest() {
     const inventory = await inventoryVault({ vaultPath: root, stateDir, config });
     const rows = await tx.list('');
@@ -243,7 +258,8 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
     if (!Array.isArray(conflicts) || !Array.isArray(pendingDeletes)) throw new SyncTransportError('E_STATE_INVALID');
     const unresolved = conflicts.filter((row) => !row.resolvedAt);
     return { status: paused ? 'PAUSED' : journal?.phase === 'interrupted' ? 'INTERRUPTED' : (pendingDeletes.length || unresolved.length ? 'PENDING' : 'SYNCED'),
-      manifestVersion: MANIFEST_VERSION, fileCount: manifest.files.length, conflictCount: unresolved.length, pendingDeleteCount: pendingDeletes.length, paused };
+      manifestVersion: MANIFEST_VERSION, fileCount: manifest.files.length, conflictCount: unresolved.length,
+      pendingDeleteCount: pendingDeletes.length, pendingDeletionPaths: pendingDeletes.map((row) => row.path).filter((path) => typeof path === 'string').sort(), paused };
   }
 
   async function pause() { await ensureState(); await saveJson(settingsPath, { paused: true, updatedAt: now().toISOString() }); return { status: 'PAUSED' }; }
@@ -251,10 +267,15 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
 
   async function approveDeletes(paths) {
     await ensureState();
-    const requested = Array.isArray(paths) ? paths : [paths];
-    if (!requested.length || requested.some((path) => typeof path !== 'string' || !path)) throw new SyncTransportError('E_INVALID_PATH');
+    const all = paths === '--all' || (paths && typeof paths === 'object' && paths.all === true);
     const queued = await readJson(pendingDeletesPath, []);
     if (!Array.isArray(queued)) throw new SyncTransportError('E_STATE_INVALID');
+    const requested = all ? queued.map((row) => row.path) : Array.isArray(paths) ? paths : [paths];
+    if (!requested.length) {
+      if (all) return { approved: [] };
+      throw new SyncTransportError('E_INVALID_PATH');
+    }
+    if (requested.some((path) => typeof path !== 'string' || !path)) throw new SyncTransportError('E_INVALID_PATH');
     const remaining = [...queued], approved = [];
     const journal = { id: randomUUID(), phase: 'running', startedAt: now().toISOString(), operations: [] };
     await saveJson(journalPath, journal);
@@ -263,26 +284,36 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
       const index = remaining.findIndex((row) => row.path === path);
       if (index < 0) throw new SyncTransportError('E_NOT_FOUND');
       const record = remaining[index];
-      try { await lstat(await safeLocalPath(path)); throw new SyncTransportError('E_CONFLICT'); }
-      catch (error) { if (!isMissing(error)) throw error; }
-      if (record.rev) {
-        const key = tombstonePath(path);
-        const object = await tx.get(path);
-        const current = await tx.get(key);
-        if (!object) {
-          let value;
-          try { value = current ? JSON.parse(Buffer.from(current.bytes).toString('utf8')) : null; } catch { throw new SyncTransportError('E_STATE_INVALID'); }
-          if (value?.version !== 1 || value.path !== path || value.deletedRev !== record.rev) throw new SyncTransportError('E_NOT_FOUND');
-        }
-        const operation = { path, action: 'approve-delete', desiredHash: null, state: 'running' };
-        journal.operations.push(operation); await saveJson(journalPath, journal);
-        const tombstone = Buffer.from(`${JSON.stringify({ version: 1, path, deletedRev: record.rev, approvedAt: now().toISOString() })}\n`);
-        if (object) {
-          await tx.put(key, tombstone, current ? { ifRev: current.rev } : { ifAbsent: true });
-          await tx.delete(path, { ifRev: record.rev });
-        }
-        operation.state = 'done'; await saveJson(journalPath, journal);
+      let localBytes = null;
+      try {
+        const localPath = await safeLocalPath(path);
+        await lstat(localPath);
+        localBytes = await readFile(localPath);
+      } catch (error) { if (!isMissing(error)) throw error; }
+      if (localBytes && record.origin !== false) throw new SyncTransportError('E_CONFLICT');
+      if (localBytes && record.hash && sha256(localBytes) !== record.hash) throw new SyncTransportError('E_CONFLICT');
+      if (typeof record.rev !== 'string' || !record.rev) throw new SyncTransportError('E_STATE_INVALID');
+
+      const key = tombstonePath(path);
+      const object = await tx.get(path);
+      const current = await tx.get(key);
+      let existingTombstone = null;
+      try { existingTombstone = current ? JSON.parse(Buffer.from(current.bytes).toString('utf8')) : null; }
+      catch { throw new SyncTransportError('E_STATE_INVALID'); }
+      if (object && (object.rev !== record.rev || (record.hash && sha256(object.bytes) !== record.hash))) throw new SyncTransportError('E_CONFLICT');
+      if (!object && (existingTombstone?.version !== 1 || existingTombstone.path !== path || existingTombstone.deletedRev !== record.rev)) {
+        throw new SyncTransportError('E_NOT_FOUND');
       }
+      const operation = { path, action: 'approve-delete', desiredHash: null, state: 'running' };
+      journal.operations.push(operation); await saveJson(journalPath, journal);
+      if (object) {
+        const tombstone = Buffer.from(`${JSON.stringify({ version: 1, path, deletedRev: record.rev, deletedHash: record.hash ?? sha256(object.bytes), approvedAt: now().toISOString(), approvedBy: host })}\n`);
+        await tx.put(key, tombstone, current ? { ifRev: current.rev } : { ifAbsent: true });
+        await tx.delete(path, { ifRev: record.rev });
+      }
+      await clearPendingDeleteIntents(path, record.rev);
+      if (localBytes) await deleteLocal(path);
+      operation.state = 'done'; await saveJson(journalPath, journal);
       remaining.splice(index, 1); approved.push(path);
       const manifest = await readManifest();
       manifest.files = manifest.files.filter((row) => row.path !== path);
@@ -312,14 +343,33 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
       result.refused.push(...inventory.refused.map(({ path, ruleId }) => ({ path, ruleId })));
       const localFiles = inventory.files;
       const remoteRows = await tx.list('');
-      const remoteFiles = new Map(), tombstones = new Map(), excluded = new Set(inventory.excluded);
+      const remoteFiles = new Map(), tombstones = new Map(), deleteRequests = new Map(), excluded = new Set(inventory.excluded);
+      const scopeAllows = (path) => {
+        try { safePath(path); } catch { return false; }
+        return scope.include.some((glob) => globMatch(glob, path)) && !scope.localOnly.some((glob) => globMatch(glob, path))
+          && scanPath(path, { denyGlobs: scope.deny }).length === 0 && !excluded.has(path);
+      };
       for (const row of remoteRows) {
-        if (row.path.startsWith(TOMBSTONE_PREFIX)) {
+        if (row.path.startsWith(TOMBSTONE_PREFIX) || row.path.startsWith(PENDING_DELETE_PREFIX)) {
           const stored = await tx.get(row.path);
           if (stored) {
             try {
               const value = JSON.parse(Buffer.from(stored.bytes).toString('utf8'));
-              if (value?.version === 1 && typeof value.path === 'string' && typeof value.deletedRev === 'string') tombstones.set(value.path, value);
+              if (row.path.startsWith(TOMBSTONE_PREFIX)) {
+                if (value?.version !== 1 || typeof value.path !== 'string' || typeof value.deletedRev !== 'string'
+                    || row.path !== tombstonePath(value.path)) throw new SyncTransportError('E_STATE_INVALID');
+                if (scopeAllows(value.path)) tombstones.set(value.path, value);
+              } else {
+                if (value?.version !== 1 || typeof value.path !== 'string' || typeof value.deletedRev !== 'string'
+                    || !/^[a-f0-9]{64}$/.test(value.deletedHash ?? '') || typeof value.requestedAt !== 'string'
+                    || typeof value.requestedBy !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(value.requestedBy)
+                    || row.path !== pendingDeletePath(value.path, value.requestedBy)) throw new SyncTransportError('E_STATE_INVALID');
+                if (scopeAllows(value.path)) {
+                  const requests = deleteRequests.get(value.path) ?? [];
+                  requests.push(value);
+                  deleteRequests.set(value.path, requests);
+                }
+              }
             } catch { throw new SyncTransportError('E_STATE_INVALID'); }
           }
           continue;
@@ -338,13 +388,15 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
         if (isConflictArtifact(path)) continue;
         remoteFiles.set(path, { bytes: Buffer.from(remote.bytes), rev: remote.rev, hash: sha256(remote.bytes) });
       }
+      for (const path of [...deleteRequests.keys()]) if (excluded.has(path)) deleteRequests.delete(path);
+      for (const path of [...tombstones.keys()]) if (excluded.has(path)) tombstones.delete(path);
       baseManifest = await readManifest();
       const baseFiles = new Map(baseManifest.files.map((row) => [row.path, row]));
       const nextFiles = new Map(baseFiles);
       for (const path of excluded) nextFiles.delete(path);
       let pendingDeletes = await readJson(pendingDeletesPath, []);
       if (!Array.isArray(pendingDeletes)) throw new SyncTransportError('E_STATE_INVALID');
-      const paths = [...new Set([...localFiles.keys(), ...remoteFiles.keys(), ...baseFiles.keys()])].sort();
+      const paths = [...new Set([...localFiles.keys(), ...remoteFiles.keys(), ...baseFiles.keys(), ...tombstones.keys(), ...deleteRequests.keys()])].sort();
       journal.phase = 'running';
       await saveJson(journalPath, journal);
 
@@ -355,6 +407,28 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
         return operation;
       }
       async function complete(operation) { operation.state = 'done'; await saveJson(journalPath, journal); }
+      async function publishDeleteIntent(path, remote) {
+        const key = pendingDeletePath(path, host);
+        const current = await tx.get(key);
+        if (current) {
+          let existing;
+          try { existing = JSON.parse(Buffer.from(current.bytes).toString('utf8')); } catch { throw new SyncTransportError('E_STATE_INVALID'); }
+          if (existing?.version === 1 && existing.path === path && existing.deletedRev === remote.rev && existing.deletedHash === remote.hash
+              && existing.requestedBy === host) return;
+        }
+        const value = { version: 1, path, deletedRev: remote.rev, deletedHash: remote.hash, requestedBy: host, requestedAt: now().toISOString() };
+        await tx.put(key, Buffer.from(`${JSON.stringify(value)}\n`), current ? { ifRev: current.rev } : { ifAbsent: true });
+      }
+      async function cancelDeleteIntent(request) {
+        const key = pendingDeletePath(request.path, request.requestedBy);
+        const current = await tx.get(key);
+        if (!current) return;
+        let value;
+        try { value = JSON.parse(Buffer.from(current.bytes).toString('utf8')); } catch { throw new SyncTransportError('E_STATE_INVALID'); }
+        if (value?.version === 1 && value.path === request.path && value.deletedRev === request.deletedRev && value.requestedBy === request.requestedBy) {
+          await tx.delete(key, { ifRev: current.rev });
+        }
+      }
       async function refuse(path, ruleId) {
         if (!result.refused.some((row) => row.path === path && row.ruleId === ruleId)) result.refused.push({ path, ruleId });
       }
@@ -436,8 +510,60 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
         const local = localFiles.get(path) ?? null;
         const remote = remoteFiles.get(path) ?? null;
         const base = baseFiles.get(path) ?? null;
-        const pendingIndex = pendingDeletes.findIndex((row) => row.path === path);
-        if (local && pendingIndex >= 0) { pendingDeletes.splice(pendingIndex, 1); await saveJson(pendingDeletesPath, pendingDeletes); }
+        let requests = deleteRequests.get(path) ?? [];
+
+        const tombstone = tombstones.get(path);
+        const approved = base && tombstone?.deletedRev === base.rev && (!tombstone.deletedHash || tombstone.deletedHash === base.sha256)
+          && (!remote || remote.rev === tombstone.deletedRev);
+        if (approved) {
+          const op = await recordOperation(path, 'approved-remote-delete', null);
+          if (remote) await tx.delete(path, { ifRev: remote.rev });
+          await clearPendingDeleteIntents(path, tombstone.deletedRev);
+          pendingDeletes = pendingDeletes.filter((row) => row.path !== path);
+          if (local && sha256(local.bytes) !== base.sha256) {
+            await complete(op);
+            await conflict(path, 'approved-delete-local-changed', local, null, base, null, false);
+            continue;
+          }
+          if (local) await deleteLocal(path);
+          nextFiles.delete(path);
+          await resolveConflicts(path);
+          await complete(op);
+          continue;
+        }
+
+        const ownRequests = requests.filter((request) => request.requestedBy === host);
+        if (local && ownRequests.length) {
+          for (const request of ownRequests) await cancelDeleteIntent(request);
+          requests = requests.filter((request) => request.requestedBy !== host);
+          if (requests.length) deleteRequests.set(path, requests); else deleteRequests.delete(path);
+          pendingDeletes = pendingDeletes.filter((row) => row.path !== path || row.origin === false);
+        }
+        const applicable = requests.filter((request) => remote && request.deletedRev === remote.rev && request.deletedHash === remote.hash);
+        if (requests.length && !applicable.length) {
+          const record = requests[0];
+          const queued = pendingDeletes.find((row) => row.path === path);
+          if (!queued) pendingDeletes.push({ path, rev: record.deletedRev, hash: record.deletedHash, requestedAt: record.requestedAt, requestedBy: record.requestedBy, origin: record.requestedBy === host });
+          await conflict(path, 'delete-request-stale', local, remote, base, remote?.rev ?? null, false);
+          continue;
+        }
+        if (applicable.length) {
+          const ownRequest = applicable.some((request) => request.requestedBy === host);
+          const request = applicable.find((candidate) => candidate.requestedBy === host) ?? applicable[0];
+          const queued = pendingDeletes.find((row) => row.path === path);
+          if (queued) {
+            queued.rev = request.deletedRev; queued.hash = request.deletedHash; queued.requestedAt = request.requestedAt;
+            queued.requestedBy = request.requestedBy; queued.origin = ownRequest;
+          } else pendingDeletes.push({ path, rev: request.deletedRev, hash: request.deletedHash, requestedAt: request.requestedAt, requestedBy: request.requestedBy, origin: ownRequest });
+          if (ownRequest || !local) {
+            if (!ownRequest && !local) await pull(path, remote, null, base);
+            continue;
+          }
+          if (sha256(local.bytes) === request.deletedHash) continue;
+          if (base && sha256(local.bytes) === base.sha256) { await pull(path, remote, local, base); continue; }
+          await conflict(path, 'delete-request-local-changed', local, remote, base, remote.rev, false);
+          continue;
+        }
 
         const recovery = priorOps.get(path);
         if (recovery && recovery.state !== 'refused' && recovery.desiredHash && local && remote
@@ -472,21 +598,15 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
           const op = await recordOperation(path, 'ack-delete', null); await complete(op); continue;
         }
         if (!local && remote) {
-          const record = { path, rev: remote.rev, hash: remote.hash, requestedAt: now().toISOString() };
+          const record = { path, rev: remote.rev, hash: remote.hash, requestedAt: now().toISOString(), requestedBy: host, origin: true };
           if (!pendingDeletes.some((row) => row.path === path)) pendingDeletes.push(record);
-          await saveJson(pendingDeletesPath, pendingDeletes);
+          const operation = await recordOperation(path, 'request-delete', null);
+          await publishDeleteIntent(path, remote);
+          await complete(operation);
           result.pendingDeletes += 1; result.status = result.status === 'CONFLICT' ? result.status : 'PENDING';
-          const op = await recordOperation(path, 'queue-delete', null); await complete(op); continue;
+          continue;
         }
         if (local && !remote) {
-          const tombstone = tombstones.get(path);
-          if (tombstone?.deletedRev === base.rev && local.bytes && sha256(local.bytes) === base.sha256) {
-            const op = await recordOperation(path, 'approved-remote-delete', null);
-            await deleteLocal(path);
-            nextFiles.delete(path);
-            await complete(op);
-            continue;
-          }
           await conflict(path, tombstone ? 'approved-delete-local-changed' : 'remote-delete', local, null, base, null, false); continue;
         }
 

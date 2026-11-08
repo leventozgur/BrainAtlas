@@ -40,8 +40,12 @@ async function dispatch(ctx, args = {}) {
   }
   if (action === 'approve') {
     const positional = Array.isArray(args) ? args.slice(1) : (args.positionals ?? args.args ?? []);
-    const paths = Array.isArray(args) ? positional : (args.paths ?? (args.path ? [args.path] : positional));
-    return engine.approveDeletes(paths);
+    const all = Array.isArray(args) ? positional.includes('--all') : args.all === true;
+    const paths = Array.isArray(args)
+      ? positional.filter((value) => value !== '--all' && value !== '--json')
+      : (args.paths ?? (args.path ? [args.path] : positional));
+    if (all && (Array.isArray(paths) ? paths.length > 0 : Boolean(paths))) throw new BrainAtlasError('E_ARGUMENT', 'Use sync approve <path> or sync approve --all.');
+    return engine.approveDeletes(all ? { all: true } : paths);
   }
   if (action === 'pause') return engine.pause();
   if (action === 'resume') return engine.resume();
