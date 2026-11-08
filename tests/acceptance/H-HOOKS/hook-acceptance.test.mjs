@@ -106,7 +106,9 @@ test('all five client envelopes and supported session-start continuity', async t
 
   const gemini = run(f, 'gemini');
   assertSuccess(gemini, 'gemini prompt');
-  assert.equal(gemini.stdout, '{}');
+  // PM (A-GEMINI2): Gemini CLI now has a documented BeforeAgent hook; prompt context uses hookSpecificOutput.additionalContext.
+  assert.match(JSON.parse(gemini.stdout).hookSpecificOutput.additionalContext, /Topic/);
+  assert.deepEqual(Object.keys(JSON.parse(gemini.stdout)), ['hookSpecificOutput']);
   const geminiStart = run(f, 'gemini', 'session-start');
   assertSuccess(geminiStart, 'gemini session-start');
   assert.equal(geminiStart.stdout, '{}');

@@ -24,8 +24,39 @@ function parseJson(text) {
   try { const value = JSON.parse(text); if (!value || Array.isArray(value) || typeof value !== 'object') throw Error(); return value; }
   catch (error) { if (error?.code) throw error; fail('E_CONFIG_PARSE', 'Configuration JSON is invalid.'); }
 }
-function indentation(text) { return text?.match(/\n([\t ]+)"[^\n]+"\s*:/)?.[1] || '  '; }
-function stringify(value, before) { const nl = before?.includes('\r\n') ? '\r\n' : '\n'; return JSON.stringify(value, null, indentation(before)).replaceAll('\n', nl) + (before?.endsWith('\n') ? nl : ''); }
+// Span-based JSON edits preserve bytes outside adapter-owned values.
+function sourceTree(text) {
+  let i=0; const ws=()=>{while(i<text.length&&/\s/.test(text[i]))i++;};
+  const stringEnd=at=>{let p=at+1;while(p<text.length){if(text[p]==='\\'){p+=2;continue;}if(text[p++]==='"')return p;}throw Error();};
+  function value(){ws();const start=i,ch=text[i];
+    if(ch==='{'){i++;ws();const members=[];while(text[i]!=='}'){ws();const keyStart=i;if(text[i]!=='"')throw Error();const end=stringEnd(i),key=JSON.parse(text.slice(i,end));i=end;ws();if(text[i++]!==':')throw Error();const node=value();members.push({key,keyStart,start:node.start,end:node.end,node});ws();if(text[i]===','){i++;continue;}if(text[i]!=='}')throw Error();}i++;return{type:'object',start,end:i,members};}
+    if(ch==='['){i++;ws();const items=[];while(text[i]!==']'){items.push(value());ws();if(text[i]===','){i++;continue;}if(text[i]!==']')throw Error();}i++;return{type:'array',start,end:i,items};}
+    if(ch==='"'){i=stringEnd(i);return{type:'scalar',start,end:i};}
+    while(i<text.length&&!/[\s,}\]]/.test(text[i]))i++;if(i===start)throw Error();return{type:'scalar',start,end:i};
+  }
+  try{const root=value();ws();if(i!==text.length||root.type!=='object')throw Error();return root;}catch{fail('E_CONFIG_PARSE','Configuration JSON is invalid.');}
+}
+function member(node,key){return node?.type==='object'?node.members.find(x=>x.key===key):undefined;}
+function indentAt(text,at){const line=text.lastIndexOf('\n',at-1)+1;return text.slice(line,at).match(/^[\t ]*/)?.[0]||'';}
+function setMember(text,node,key,value){const old=member(node,key),encoded=JSON.stringify(value);if(old)return text.slice(0,old.start)+encoded+text.slice(old.end);const close=node.end-1,nonempty=node.members.length>0,nl=text.includes('\r\n')?'\r\n':'\n',parent=indentAt(text,node.start),child=nonempty?indentAt(text,node.members[0].keyStart):parent+'  ';return text.slice(0,close)+`${nonempty?',':''}${nl}${child}${JSON.stringify(key)}: ${encoded}${nl}${parent}`+text.slice(close);}
+function appendArray(text,node,value){const close=node.end-1,nl=text.includes('\r\n')?'\r\n':'\n',parent=indentAt(text,node.start),child=node.items.length?indentAt(text,node.items[0].start):parent+'  ';return text.slice(0,close)+`${node.items.length?',':''}${nl}${child}${JSON.stringify(value)}${nl}${parent}`+text.slice(close);}
+function quote(value){return `"${String(value).replaceAll('\\','\\\\').replaceAll('"','\\"')}"`;}
+function geminiSettings(before,ctx){
+  const conf=before===null||before.trim()===''?{}:parseJson(before);let text=before===null||before.trim()===''?'{}':before;
+  if(conf.mcpServers!==undefined&&(!conf.mcpServers||Array.isArray(conf.mcpServers)||typeof conf.mcpServers!=='object'))fail('E_CONFIG_PARSE','MCP server configuration must be an object.');
+  if(conf.hooks!==undefined&&(!conf.hooks||Array.isArray(conf.hooks)||typeof conf.hooks!=='object'))fail('E_CONFIG_PARSE','Hook configuration must be an object.');
+  const entry={command:ctx.nodePath,args:[ctx.shimPath,'mcp']};let root=sourceTree(text),mcp=member(root,'mcpServers');
+  if(!mcp){text=setMember(text,root,'mcpServers',{});root=sourceTree(text);mcp=member(root,'mcpServers');}
+  if(mcp.node.type!=='object')fail('E_CONFIG_PARSE','MCP server configuration must be an object.');
+  if(JSON.stringify(conf.mcpServers?.brainatlas)!==JSON.stringify(entry)){text=setMember(text,mcp.node,'brainatlas',entry);root=sourceTree(text);}
+  const hook={name:'brainatlas-context',type:'command',command:`${quote(ctx.nodePath)} ${quote(ctx.shimPath)} gemini prompt`,timeout:5000,description:'Add relevant BrainAtlas context before the agent responds.'};
+  let hooks=member(root,'hooks');if(!hooks){text=setMember(text,root,'hooks',{});root=sourceTree(text);hooks=member(root,'hooks');}
+  if(hooks.node.type!=='object')fail('E_CONFIG_PARSE','Hook configuration must be an object.');
+  let event=member(hooks.node,'BeforeAgent');if(!event){text=setMember(text,hooks.node,'BeforeAgent',[]);root=sourceTree(text);hooks=member(root,'hooks');event=member(hooks.node,'BeforeAgent');}
+  if(event.node.type!=='array'||!Array.isArray(conf.hooks?.BeforeAgent??[]))fail('E_CONFIG_PARSE','BeforeAgent hooks must be an array.');
+  const exists=(conf.hooks?.BeforeAgent??[]).some(g=>g?.matcher==='*'&&Array.isArray(g.hooks)&&g.hooks.some(h=>h?.name==='brainatlas-context'&&h.type==='command'&&h.command===hook.command));
+  if(!exists)text=appendArray(text,event.node,{matcher:'*',hooks:[hook]});return text;
+}
 async function read(file) { try { return await readFile(file, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } }
 function blockText() {
   const body = 'Use BrainAtlas in pull mode: query relevant project knowledge with the BrainAtlas wiki_query MCP tool when it can inform the task. Treat retrieved pages as evidence, verify them against the current project, and cite page paths when reporting findings.';
@@ -43,15 +74,10 @@ function getBlock(text) {
 function appendBlock(before) { const old = getBlock(before); if (old) return before.slice(0, old.start) + blockText() + before.slice(old.end); return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${blockText()}\n`; }
 function changes(ctx, values) {
   const f = targets(ctx), result = [];
-  const before = values[f.mcp]; const config = before === null ? {} : parseJson(before);
-  if (config.mcpServers !== undefined && (!config.mcpServers || Array.isArray(config.mcpServers) || typeof config.mcpServers !== 'object')) fail('E_CONFIG_PARSE', 'MCP server configuration must be an object.');
-  config.mcpServers ||= {};
-  const entry = { command: ctx.nodePath, args: [ctx.shimPath, 'mcp'] };
+  const before = values[f.mcp];
   if (!ctx.nodePath || !ctx.shimPath) fail('E_ARGUMENT', 'nodePath and shimPath are required.');
-  if (JSON.stringify(config.mcpServers.brainatlas) !== JSON.stringify(entry)) {
-    config.mcpServers.brainatlas = entry;
-    result.push({ file: f.mcp, kind: before === null ? 'create' : 'modify', before, after: stringify(config, before), ownership: 'json-key' });
-  }
+  const updated=geminiSettings(before,ctx);
+  if(updated!==before) result.push({file:f.mcp,kind:before===null?'create':'modify',before,after:updated,ownership:'json-key'});
   const md = values[f.instructions]; const after = appendBlock(md ?? '');
   if (after !== (md ?? '')) result.push({ file: f.instructions, kind: md === null ? 'create' : 'modify', before: md, after, ownership: md === null ? 'whole-file' : 'marked-block' });
   return result;
@@ -111,7 +137,8 @@ export async function doctor(ctx) {
   let shim = false; try { shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile()); } catch {}
   checks.push({ id:'shim',ok:shim,message:shim?'Shim file exists.':'Shim file is missing.' });
   checks.push({ id:'version-drift',ok:true,message:'Version drift cannot be determined from adapter configuration.' });
-  checks.push({ id:'hook-present',ok:true,message:'Gemini CLI adapter uses pull mode; no hook is configured.' });
+  const hookPresent = configText !== null && (parseJson(configText).hooks?.BeforeAgent || []).some(g => g?.matcher === '*' && Array.isArray(g.hooks) && g.hooks.some(h => h?.name === 'brainatlas-context' && h.type === 'command'));
+  checks.push({ id:'hook-present',ok:true,message:hookPresent?'Gemini BeforeAgent hook is registered; enable it in the hooks panel if needed.':'Gemini BeforeAgent hook is not registered; enablement in the hooks panel may be required.' });
   const md = await read(f.instructions); let present = false; if (md !== null) present = Boolean(getBlock(md));
   checks.push({id:'instructions',ok:present,message:present?'BrainAtlas instructions are present.':'BrainAtlas instructions are not present.'});
   return { ok:checks.every(c=>c.ok), checks };

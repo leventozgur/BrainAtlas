@@ -22,7 +22,10 @@ test('client envelopes, session handoff and unsupported events', async t => {
     else assert.equal(JSON.parse(r.stdout).hookSpecificOutput.hookEventName,'UserPromptSubmit');
   }
   assert.equal((await call(f.config,'copilot','prompt')).stdout,'{}');
-  assert.equal((await call(f.config,'gemini')).stdout,'{}');
+  const gemini=await call(f.config,'gemini');
+  assert.equal(gemini.exitCode,0);
+  assert.deepEqual(JSON.parse(gemini.stdout),{hookSpecificOutput:{additionalContext:'Topic (topic.md)\n# Topic\nknowledge topic evidence'}});
+  assert.equal((await runHook({client:'gemini',event:'prompt',stdin:'{}',config:{...f.config,hooks:{mode:'manual'}}})).stdout,'{}');
   assert.equal((await call(f.config,'claude','session-start')).stdout,'{}');
   await writeFile(join(f.state,'handoff.md'),'continuity');
   assert.equal(JSON.parse((await call(f.config,'copilot','session-start')).stdout).additionalContext,'continuity');
