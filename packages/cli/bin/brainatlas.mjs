@@ -14,7 +14,10 @@ try {
       || /(?:^|[\s("'=])(?:\/(?:[^\s,;:'"()]*)|~\/[^\s,;:'"()]*|[A-Za-z]:[\\/][^\s,;:'"()]*(?:[\\/][^\s,;:'"()]*)*|\.\.?[\\/][^\s,;:'"()]*)/.test(redactedMessage)
       || /\b[\w.-]+[\\/][\w./\\-]+/.test(redactedMessage);
     const safeMessage = containsPath ? `${CLI_NAME} command failed.` : redactedMessage;
-    process.stdout.write(`${JSON.stringify({ ok: false, error: { code, message: safeMessage } })}\n`);
+    const home = process.env.HOME || '';
+    const shorten = item => (home && typeof item === 'string' && (item === home || item.startsWith(`${home}/`)) ? `~${item.slice(home.length)}` : item);
+    const details = Array.isArray(error?.conflicts) && error.conflicts.every(item => typeof item === 'string') ? { conflicts: error.conflicts.map(item => redact(shorten(item))) } : {};
+    process.stdout.write(`${JSON.stringify({ ok: false, error: { code, message: safeMessage, ...details } })}\n`);
     console.error(`${code}: ${message}`);
   } else {
     console.error(`${code}: ${message}`);

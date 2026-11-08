@@ -113,7 +113,7 @@ test('install manifest records resolved paths under a symlinked ~/.local and uni
   assert.equal(await readFile(join(localTarget, 'sentinel'), 'utf8'), 'keep\n');
 });
 
-test('uninstall JSON reports a path-free error envelope for a changed external managed file', async t => {
+test('uninstall JSON error envelope lists the changed external managed file (home-relative)', async t => {
   const work = await mkdtemp(join(tmpdir(), 'ba-uninstall-conflict-')); t.after(() => rm(work, { recursive: true, force: true }));
   const home = join(work, 'home'); const out = join(work, 'release'); await mkdir(home);
   const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
@@ -133,8 +133,10 @@ test('uninstall JSON reports a path-free error envelope for a changed external m
   assert.equal(response.ok, false);
   assert.equal(response.error.code, 'E_UNINSTALL_CONFLICT');
   assert.equal(response.error.message, 'brainatlas command failed.');
-  assert.deepEqual(Object.keys(response.error).sort(), ['code', 'message']);
-  assert.ok(!uninstalled.stdout.includes(resolvedChangedFile));
+  // PM: conflicts are listed home-relative so the user can find the changed file; no absolute HOME path on stdout.
+  assert.deepEqual(Object.keys(response.error).sort(), ['code', 'conflicts', 'message']);
+  assert.equal(response.error.conflicts.length, 1); assert.ok(!response.error.conflicts[0].startsWith('/') || !resolvedChangedFile.startsWith(process.env.HOME ?? '\0'));
+  assert.ok(response.error.conflicts[0].endsWith(resolvedChangedFile.split('/').slice(-2).join('/')));
   assert.match(uninstalled.stderr, /E_UNINSTALL_CONFLICT/);
   assert.equal(await readFile(changedFile, 'utf8'), 'user-owned replacement\n');
 });
