@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, stat } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, rename } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { redact } from '../../../packages/core/src/safety/index.mjs';
 import { appendLog, upsertIndexEntry } from '../../../packages/core/src/vault/index.mjs';
@@ -33,13 +33,43 @@ function normalizeCandidates(value) {
   })).filter((item) => item.title || item.summary);
 }
 
-function receiptRoot(ctx) { return join(paths(ctx).stateDir, 'receipts'); }
-function queueRoot(ctx) { return join(receiptRoot(ctx), 'queue'); }
+function assertOwnedDirectory(info) {
+  if (!info.isDirectory() || info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid())) {
+    throw fail('E_RECEIPT_STATE_UNSAFE', 'Receipt state directory is unsafe.');
+  }
+}
+async function secureQueueDirectory(ctx, { create = false, child } = {}) {
+  const { stateDir } = paths(ctx);
+  if (create) await mkdir(stateDir, { recursive: true, mode: 0o700 });
+  let stateInfo;
+  try { stateInfo = await lstat(stateDir); }
+  catch (cause) {
+    if (!create && cause.code === 'ENOENT') return null;
+    throw cause;
+  }
+  assertOwnedDirectory(stateInfo);
+  let current = stateDir;
+  for (const part of ['receipts', 'queue', ...(child ? [child] : [])]) {
+    current = join(current, part);
+    if (create) {
+      try { await mkdir(current, { mode: 0o700 }); }
+      catch (cause) { if (cause.code !== 'EEXIST') throw cause; }
+    }
+    let info;
+    try { info = await lstat(current); }
+    catch (cause) {
+      if (!create && cause.code === 'ENOENT') return null;
+      throw cause;
+    }
+    assertOwnedDirectory(info);
+  }
+  return current;
+}
 function checkId(id) { if (typeof id !== 'string' || !ID.test(id)) throw fail('E_RECEIPT_ID', 'Receipt id is invalid.'); return id; }
 async function readReceipt(file) {
   try {
-    const info = await stat(file);
-    if (!info.isFile() || info.size > 128 * 1024) throw new Error();
+    const info = await lstat(file);
+    if (!info.isFile() || info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid()) || info.size > 128 * 1024) throw new Error();
     const value = JSON.parse(await readFile(file, 'utf8'));
     if (!value || typeof value !== 'object' || !ID.test(value.id) || !Array.isArray(value.candidates)) throw new Error();
     return value;
@@ -50,7 +80,6 @@ async function readReceipt(file) {
 export async function onSessionEnd(ctx, hookInput = {}) {
   const client = hookInput?.client;
   if (!CLIENTS.has(client)) return null;
-  const { stateDir } = paths(ctx);
   const id = randomUUID();
   const receipt = {
     id,
@@ -59,16 +88,16 @@ export async function onSessionEnd(ctx, hookInput = {}) {
     session: digest16(hookInput.session_id ?? hookInput.sessionId),
     candidates: normalizeCandidates(hookInput.brainatlas_receipt),
   };
-  const directory = queueRoot(ctx);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const target = await resolveSafePath(stateDir, `receipts/queue/${id}.json`);
+  const directory = await secureQueueDirectory(ctx, { create: true });
+  const target = await resolveSafePath(directory, `${id}.json`);
   await atomicWriteFile(target, `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
   return { id, queued: true, candidates: receipt.candidates.length };
 }
 
 export async function listReceipts(ctx) {
-  const directory = queueRoot(ctx);
-  const entries = await readdir(directory, { withFileTypes: true }).catch((cause) => { if (cause.code === 'ENOENT') return []; throw cause; });
+  const directory = await secureQueueDirectory(ctx);
+  if (!directory) return [];
+  const entries = await readdir(directory, { withFileTypes: true });
   const items = [];
   for (const entry of entries) {
     if (!entry.isFile() || !ID.test(entry.name.slice(0, -5)) || !entry.name.endsWith('.json')) continue;
@@ -78,7 +107,9 @@ export async function listReceipts(ctx) {
 }
 
 export async function showReceipt(ctx, id) {
-  return readReceipt(await resolveSafePath(queueRoot(ctx), `${checkId(id)}.json`));
+  const directory = await secureQueueDirectory(ctx);
+  if (!directory) throw fail('E_RECEIPT_NOT_FOUND', 'Receipt is unavailable or invalid.');
+  return readReceipt(await resolveSafePath(directory, `${checkId(id)}.json`));
 }
 
 function pagePath(receipt, candidate, index) {
@@ -117,18 +148,16 @@ export async function approveReceipt(ctx, id, { edit } = {}) {
     await appendLog(vault, { action: 'receipt-approved', path: rel }, { now: new Date(receipt.createdAt) });
     approved.push(rel);
   }
-  const source = await resolveSafePath(queueRoot(ctx), `${receipt.id}.json`);
-  const rejected = join(receiptRoot(ctx), 'queue', 'approved');
-  await mkdir(rejected, { recursive: true, mode: 0o700 });
+  const source = await resolveSafePath(await secureQueueDirectory(ctx), `${receipt.id}.json`);
+  const rejected = await secureQueueDirectory(ctx, { create: true, child: 'approved' });
   await rename(source, join(rejected, `${receipt.id}.json`));
   return { id: receipt.id, approved };
 }
 
 export async function rejectReceipt(ctx, id) {
   const receipt = await showReceipt(ctx, id);
-  const source = await resolveSafePath(queueRoot(ctx), `${receipt.id}.json`);
-  const destinationDir = join(queueRoot(ctx), 'rejected');
-  await mkdir(destinationDir, { recursive: true, mode: 0o700 });
+  const source = await resolveSafePath(await secureQueueDirectory(ctx), `${receipt.id}.json`);
+  const destinationDir = await secureQueueDirectory(ctx, { create: true, child: 'rejected' });
   await rename(source, join(destinationDir, `${receipt.id}.json`));
   return { id: receipt.id, rejected: true };
 }
@@ -138,7 +167,8 @@ export async function activate(ctx) {
 }
 
 export const commands = Object.freeze({
-  review: async (ctx, args = []) => {
+  review: async (args = [], ctx) => {
+    if (!Array.isArray(args)) throw fail('E_ARGUMENT', 'Use review list|show <id>|approve <id> [--edit]|reject <id>.');
     const [action, id, ...flags] = args;
     if (action === 'list' && args.length === 1) return listReceipts(ctx);
     if (action === 'show' && id && args.length === 2) return showReceipt(ctx, id);

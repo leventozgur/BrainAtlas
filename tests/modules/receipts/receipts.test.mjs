@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { approveReceipt, commands, listReceipts, onSessionEnd, rejectReceipt, showReceipt } from '../../../modules/receipts/src/index.mjs';
@@ -42,12 +42,21 @@ test('session end redacts candidate text, handles empty candidates, and ignores 
 
 test('review list/show/reject operate on queue and move rejected records out', async () => fixture(async ({ ctx }) => {
   const { id } = await onSessionEnd(ctx, { client: 'claude', session_id: 'review-session', brainatlas_receipt: { title: 'Review me', summary: 'Proposal text.' } });
-  assert.equal((await commands.review(ctx, ['list'])).length, 1);
-  assert.equal((await commands.review(ctx, ['show', id])).id, id);
+  assert.equal((await commands.review(['list'], ctx)).length, 1);
+  assert.equal((await commands.review(['show', id], ctx)).id, id);
   assert.deepEqual(await rejectReceipt(ctx, id), { id, rejected: true });
   assert.deepEqual(await listReceipts(ctx), []);
   assert.deepEqual(await readdir(join(ctx.paths.stateDir, 'receipts/queue/rejected')), [`${id}.json`]);
   await assert.rejects(showReceipt(ctx, id), { code: 'E_RECEIPT_NOT_FOUND' });
+}));
+
+test('review rejects a symlinked rejected directory without moving the receipt outside state', async () => fixture(async ({ ctx, root, stateDir }) => {
+  const outside = join(root, 'outside'); await mkdir(outside);
+  const { id } = await onSessionEnd(ctx, { client: 'claude', brainatlas_receipt: { title: 'Keep in state' } });
+  await symlink(outside, join(stateDir, 'receipts/queue/rejected'));
+  await assert.rejects(rejectReceipt(ctx, id), { code: 'E_RECEIPT_STATE_UNSAFE' });
+  assert.deepEqual(await readdir(outside), []);
+  assert.equal((await listReceipts(ctx)).length, 1);
 }));
 
 test('approval writes a proposed OKF page, index and log only after explicit approval', async () => fixture(async ({ ctx, vault }) => {
