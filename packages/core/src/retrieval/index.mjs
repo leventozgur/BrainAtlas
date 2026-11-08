@@ -88,6 +88,44 @@ function stale(fm, asOf) {
   }
   const time = new Date(expiry).getTime(); return Number.isFinite(time) && time < asOf.getTime();
 }
+// Sections are deliberately derived at query time, after the ranking is final.
+function bestSection(body, terms, index) {
+  const lines = body.split('\n'), sections = [], ancestors = [], used = new Set();
+  let current = null, fenceLength = 0, fenceChar = null;
+  for (const [lineNumber, rawLine] of lines.entries()) {
+    let line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    if (lineNumber === 0 && line.startsWith('\uFEFF')) line = line.slice(1);
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (!fenceLength) { fenceLength = fence[1].length; fenceChar = fence[1][0]; }
+      else if (fence[1][0] === fenceChar && fence[1].length >= fenceLength && !fence[2].trim()) { fenceLength = 0; fenceChar = null; }
+      if (current) current.lines.push(rawLine);
+      continue;
+    }
+    const heading = !fenceLength && line.match(/^(#{1,3})[\t ]+(.+)$/);
+    if (!heading) { if (current) current.lines.push(rawLine); continue; }
+    const level = heading[1].length, title = heading[2].trim();
+    ancestors.length = level - 1; ancestors[level - 1] = title;
+    const base = /[\p{L}\p{N}]/u.test(title) ? normalizeText(title).replace(/[^\p{L}\p{N}_\- ]/gu, '').replace(/ /g, '-') : 'section';
+    let anchor = base, suffix = 0;
+    while (used.has(anchor)) anchor = `${base}-${++suffix}`;
+    used.add(anchor);
+    current = {heading:title, anchor, headingPath:ancestors.filter(Boolean).join(' > '), headingLine:rawLine, lines:[]};
+    sections.push(current);
+  }
+  let best = null, bestScore = 0;
+  for (const section of sections) {
+    const text = section.lines.join('\n').trim();
+    const found = new Set(tokens(text));
+    let score = 0;
+    for (const term of terms) if (found.has(term)) {
+      const count = Object.hasOwn(index.postings, term) ? index.postings[term].length : 0;
+      score += Math.log(1 + (index.docs.length - count + 0.5) / (count + 0.5));
+    }
+    if (score > bestScore) { bestScore = score; best = {...section, text:[section.headingLine, ...section.lines].join('\n').trim()}; }
+  }
+  return best;
+}
 /** Non-string queries raise E_QUERY_INVALID; queries without terms abstain. */
 export function search(index, query, options = {}) {
   if (!index || index.version !== 1 || !Array.isArray(index.docs) || !index.postings || !Array.isArray(index.averages)) fail('E_INDEX_CORRUPT', 'Invalid index');
@@ -113,10 +151,12 @@ export function search(index, query, options = {}) {
   if (!ranked.length || ranked[0].score < threshold) return { results: [], abstained: true, reason: ranked.length ? 'below_threshold' : 'no_match', truncated: false };
   let remaining = Math.floor(budget), truncated = false;
   const results = ranked.slice(0,limit).map(({id,score}) => {
-    const p = index.docs[id].page, fm = p.frontmatter || {}; let snippet = (p.body || '').trim();
+    const p = index.docs[id].page, fm = p.frontmatter || {};
+    const section = bestSection(p.body || '', terms, index);
+    let snippet = section ? section.text : (p.body || '').trim();
     if (snippet.length > remaining) { truncated = true; snippet = remaining > 0 ? snippet.slice(0, Math.max(0, remaining - 1)) + '…' : ''; }
     remaining -= snippet.length;
-    return {path:p.path, title:p.title, score, snippet, stale:stale(fm,asOf), status:typeof fm.status === 'string' ? fm.status : null};
+    return {path:p.path, title:p.title, score, snippet, stale:stale(fm,asOf), status:typeof fm.status === 'string' ? fm.status : null, heading:section?.heading ?? null, anchor:section?.anchor ?? null, headingPath:section?.headingPath ?? null};
   });
   return {results, abstained:false, reason:null, truncated};
 }
