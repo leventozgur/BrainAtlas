@@ -283,14 +283,17 @@ test('scope globs, peer check, scheduler plans and module commands expose the sp
   assert.equal((await commands.run(context)).status, 'SYNCED');
   assert.equal((await commands.status(context)).status, 'SYNCED');
 
-  const mac = planScheduler({ platform: 'darwin', paths: { binPath: '/Users/you/bin/brainatlas', stateDir: '/Users/you/state' }, intervalMin: 15 });
+  const macPaths = { binPath: join(fx.root, 'bin', 'brainatlas'), stateDir: join(fx.root, 'state'), launchAgentsDir: join(fx.root, 'home', 'Library', 'LaunchAgents') };
+  const mac = planScheduler({ platform: 'darwin', paths: macPaths, intervalMin: 15 });
   assert.match(mac.text, /<key>StartInterval<\/key><integer>900<\/integer>/);
-  assert.deepEqual(mac.uninstall, ['/Users/you/state/scheduler/com.brainatlas.sync.plist']);
-  const linux = planScheduler({ platform: 'linux', paths: { binPath: '/Users/you/bin/brainatlas', stateDir: '/Users/you/state' }, intervalMin: 20 });
+  assert.match(mac.text, /<key>Label<\/key><string>org\.brainatlas\.sync<\/string>/);
+  assert.deepEqual(mac.uninstall, [join(macPaths.launchAgentsDir, 'org.brainatlas.sync.plist')]);
+  const linuxPaths = { binPath: join(fx.root, 'bin', 'brainatlas'), stateDir: join(fx.root, 'state'), systemdUserDir: join(fx.root, 'home', '.config', 'systemd', 'user') };
+  const linux = planScheduler({ platform: 'linux', paths: linuxPaths, intervalMin: 20 });
   assert.match(linux.text, /OnUnitActiveSec=20min/);
   assert.equal(linux.files.length, 2);
-  assert.equal(planSchedulerUninstall({ platform: 'linux', paths: { binPath: '/Users/you/bin/brainatlas', stateDir: '/Users/you/state' } }).files.length, 2);
-  assert.deepEqual(Object.keys(commands).sort(), ['approve', 'check', 'pause', 'resume', 'run', 'status', 'sync']);
+  assert.equal(planSchedulerUninstall({ platform: 'linux', paths: linuxPaths }).files.length, 2);
+  assert.deepEqual(Object.keys(commands).sort(), ['approve', 'check', 'pause', 'resume', 'run', 'schedule', 'status', 'sync']);
   assert.equal(await activate({ config: {}, paths: {} }), undefined);
 });
 

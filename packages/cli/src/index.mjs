@@ -424,7 +424,7 @@ function providedTransportName(manifest) {
   return null;
 }
 
-function moduleContext(config, paths, env, entries, ordered) {
+function moduleContext(config, paths, env, entries, ordered, dependencies = {}) {
   const registry = new Map();
   for (const manifest of ordered) {
     const entry = entries.get(manifest.name);
@@ -436,7 +436,7 @@ function moduleContext(config, paths, env, entries, ordered) {
     warn: (...values) => console.error(...values),
     error: (...values) => console.error(...values)
   });
-  return { config, paths, env, core, logger, registry, vaultDir: config.vault?.path };
+  return { config, paths, env, core, logger, registry, vaultDir: config.vault?.path, runCommand: dependencies.runCommand };
 }
 
 async function enabledModuleEntries(releaseDir, cfg) {
@@ -478,7 +478,7 @@ async function queueSessionEndReceipt({ client, hookInput, config, paths, env })
   } finally { clearTimeout(timer); }
 }
 
-async function dispatchModuleCommand(command, args, { paths, env, output }) {
+async function dispatchModuleCommand(command, args, { paths, env, output, dependencies = {} }) {
   const current = await readCurrent(paths);
   const releaseDir = currentReleaseDir(paths, current);
   if (!releaseDir) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
@@ -512,7 +512,7 @@ async function dispatchModuleCommand(command, args, { paths, env, output }) {
     }
   }
   if (!owner) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
-  const ctx = moduleContext(cfg, paths, env, entries, ordered);
+  const ctx = moduleContext(cfg, paths, env, entries, ordered, dependencies);
   await activateEnabledModules(ordered, entries, ctx);
   const commandEntry = entries.get(owner.name).commands[ownerCommand];
   let result;
@@ -525,6 +525,24 @@ async function dispatchModuleCommand(command, args, { paths, env, output }) {
     if (result.output) console.log(result.output);
     process.exitCode = result.exitCode;
   } else if (result !== undefined) output(result);
+}
+
+async function installedSyncSchedule(action, { paths, env, config: cfg, dependencies = {} }) {
+  let current;
+  try { current = await readCurrent(paths); } catch { return null; }
+  const releaseDir = currentReleaseDir(paths, current);
+  if (!releaseDir) return null;
+  let manifest;
+  const syncModuleName = ['sync', 'engine'].join('-');
+  try { manifest = (await discoverModules(releaseDir)).find(item => item.name === syncModuleName); }
+  catch { return null; }
+  if (!manifest) return null;
+  const entry = await loadInstalledModuleEntry(releaseDir, manifest);
+  const entries = new Map([[manifest.name, entry]]);
+  const ctx = moduleContext(cfg, paths, env, entries, [manifest], dependencies);
+  await entry.activate(ctx);
+  if (typeof entry.commands?.sync !== 'function') return null;
+  return entry.commands.sync(['schedule', action, ...(action === 'remove' && dependencies.plan ? ['--plan'] : [])], ctx);
 }
 
 const helpDescriptions = Object.freeze({
@@ -703,7 +721,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
   const json = flag('--json'); const plan = flag('--plan');
   let redactCommandOutput = plan || (json && (command === 'status' || command === 'doctor'));
   const output = data => {
-    const hideHome = plan && ['init', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover'].includes(command);
+    const hideHome = plan && ['init', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover', 'sync'].includes(command);
     const result = redactCommandOutput ? redactOutput(data, hideHome ? env.HOME : undefined) : data;
     console.log(json || plan ? JSON.stringify(result, null, 2) : typeof result === 'string' ? result : JSON.stringify(result, null, 2));
   };
@@ -855,7 +873,11 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
   if (command === 'uninstall') {
     const manifest = await readInstallManifest(paths); const cfg = await loadConfig({ paths, env }).catch(() => defaultConfig('lite'));
     const roots = managedRoots(paths, env);
-    if (plan) { output({ ...(await uninstallManagedFiles(paths, { plan: true })), appDirectory: paths.dataDir, keepVault: true, adapters: cfg.agents || [] }); return; }
+    if (plan) {
+      const scheduler = await installedSyncSchedule('remove', { paths, env, config: cfg, dependencies: { ...dependencies, plan: true } });
+      output({ ...(await uninstallManagedFiles(paths, { plan: true })), appDirectory: paths.dataDir, keepVault: true, adapters: cfg.agents || [], scheduler }); return;
+    }
+    const scheduler = await installedSyncSchedule('remove', { paths, env, config: cfg, dependencies });
     const adapterWarnings = await removeAdapters(cfg, paths, env);
     const activeManifest = await readInstallManifest(paths);
     const configFile = await resolveManagedPath(paths.configFile);
@@ -870,7 +892,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
     await removeAppDataPreserving(paths, preserved);
     await rm(paths.stateDir, { recursive: true, force: true });
     await removeCreatedDirectories(restored.createdDirectories, env.HOME, roots);
-    output({ action: 'uninstall', restored: restored.restored, vaultPreserved: true, warnings: adapterWarnings }); return;
+    output({ action: 'uninstall', restored: restored.restored, vaultPreserved: true, warnings: adapterWarnings, scheduler }); return;
   }
   if (command === 'update' && (flag('--check') || flag('--metadata-only'))) {
     const archivePath = value('--from');
@@ -997,7 +1019,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
     } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.'); throw e; }
     return;
   }
-  if (command && !builtInCommands.has(command)) { await dispatchModuleCommand(command, args, { paths, env, output }); return; }
+  if (command && !builtInCommands.has(command)) { await dispatchModuleCommand(command, args, { paths, env, output, dependencies }); return; }
   throw error(command ? 'E_ARGUMENT' : 'E_COMMAND_UNKNOWN', command ? 'Command arguments are invalid.' : 'Unknown command.');
 }
 export const activate = main;

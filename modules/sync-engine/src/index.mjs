@@ -2,7 +2,7 @@
 import { BrainAtlasError } from '../../../packages/core/src/util/errors.mjs';
 import { createSyncEngine, classifySyncError, SYNC_ERROR_CODES } from './engine.mjs';
 import { createMemoryTransport, SyncTransportError, ConflictError } from './transport.mjs';
-import { planScheduler, planSchedulerUninstall } from './scheduler.mjs';
+import { planScheduler, planSchedulerUninstall, scheduleCommand } from './scheduler.mjs';
 import { mergeCanonicalPath, mergeIndexThreeWay, mergeLogThreeWay } from './merge.mjs';
 import { inventoryVault, resolveSyncScope, globMatch } from './scope.mjs';
 import { resolveHostId } from './host-id.mjs';
@@ -23,6 +23,7 @@ function actionFrom(args) {
 
 async function dispatch(ctx, args = {}) {
   const action = actionFrom(args);
+  if (action === 'schedule') return scheduleCommand(args, ctx);
   const engine = engineFor(ctx);
   if (action === 'status') return engine.status();
   if (action === 'run') return engine.run();
@@ -68,6 +69,11 @@ function syncCommand(argsOrContext, contextOrArgs) {
 
 export const commands = Object.freeze({
   sync: syncCommand,
+  schedule: (argsOrContext, contextOrArgs) => {
+    const firstIsContext = argsOrContext && typeof argsOrContext === 'object'
+      && argsOrContext.config && argsOrContext.paths;
+    return scheduleCommand(firstIsContext ? contextOrArgs ?? {} : argsOrContext ?? {}, firstIsContext ? argsOrContext : contextOrArgs);
+  },
   status: (ctx) => dispatch(ctx, { action: 'status' }),
   run: (ctx) => dispatch(ctx, { action: 'run' }),
   check: (ctx, args) => dispatch(ctx, Array.isArray(args) ? ['check', ...args] : { ...args, action: 'check' }),
@@ -85,6 +91,9 @@ export const help = Object.freeze({
       'brainatlas sync approve <path> | --all',
       'brainatlas sync pause',
       'brainatlas sync resume',
+      'brainatlas sync schedule install [--interval MIN] [--plan] [--json]',
+      'brainatlas sync schedule remove [--plan]',
+      'brainatlas sync schedule status [--json]',
     ]),
     description: 'Run and inspect synchronization, check peers, and manage pending deletions.',
   }),
