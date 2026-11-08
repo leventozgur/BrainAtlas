@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-rc.5 — 2026-11-08
+
+- Codex adapter parses real-world `config.toml` (quoted table headers, inline tables, multi-line arrays and strings, array tables); markers inside strings are ignored; an agent config directory that resolves outside HOME is refused unless `BRAINATLAS_ALLOW_SYMLINKED_ROOT=1`.
+
 ## 0.1.0-rc.4 — 2026-11-08
 
 - `init` preserves an existing configuration (vault path from `install.sh --vault`, sync settings, host id); only flags given explicitly change it.
