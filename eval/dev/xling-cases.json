@@ -1,0 +1,35 @@
+[
+  {"id":"tr2en-01","query":"CI test matrisi büyürken hangi kombinasyonları günlük çalıştırmaya bırakmak mantıklı?","relevant":["natural-31.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-02","query":"Tablo büyüyüp sayfalama derinleşince sonraki sayfayı kayıpsız nasıl bulurum?","relevant":["natural-33.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-03","query":"Arama ifadesindeki noktalama işaretlerinden hangilerini operatör gibi ele almalıyız?","relevant":["natural-35.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-04","query":"Markdown içindeki göreli bağlantıların boşa çıkıp çıkmadığını ağ çağrısı yapmadan nasıl kontrol ederim?","relevant":["natural-36.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-05","query":"Worker kapanış sinyali alınca yeni işleri ne zaman bırakıp eldeki işleri beklemeli?","relevant":["natural-37.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-06","query":"Metric etiketlerinde istek kimliği kullanmak neden serileri şişirir?","relevant":["natural-42.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-07","query":"İki kayıt birbirini tutmadığında arama sonucu kesinmiş gibi görünmesin diye ne işaretlenir?","relevant":["natural-44.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-08","query":"Process sözcüğünü prosedür adımlarından nasıl ayırırım?","relevant":["natural-46.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-09","query":"FIFO bekleme ile öncelik sırasına göre seçim arasındaki fark nedir?","relevant":["natural-48.md"],"category":"xling-tr2en","trToEn":true},
+  {"id":"tr2en-10","query":"Bellekte duran geçici değer uygulama yeniden başlayınca niye kaybolur?","relevant":["natural-50.md"],"category":"xling-tr2en","trToEn":true},
+
+  {"id":"en2tr-01","query":"What should a restore rehearsal verify beyond merely opening the backup archive?","relevant":["natural-01.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-02","query":"In a SwiftUI view, where should a tab choice live if only that screen owns it?","relevant":["natural-07.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-03","query":"How can a Node writer avoid piling up chunks when its consumer falls behind?","relevant":["natural-08.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-04","query":"If saving settings is interrupted midway, how do I keep readers from seeing a fragment?","relevant":["natural-13.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-05","query":"How should keyboard users move through controls when the visual layout differs?","relevant":["natural-14.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-06","query":"Why store event times consistently and adjust them only when displaying locally?","relevant":["natural-15.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-07","query":"How can I test an expiry rule without waiting for real time to pass?","relevant":["natural-18.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-08","query":"How do I stop a supplied relative filename from escaping the permitted directory?","relevant":["natural-20.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-09","query":"How can I tell whether a service is alive versus ready to receive traffic?","relevant":["natural-23.md"],"category":"xling-en2tr"},
+  {"id":"en2tr-10","query":"What should I record to decide whether a database query is consistently slow?","relevant":["natural-25.md"],"category":"xling-en2tr"},
+
+  {"id":"no-answer-tr-01","query":"Bir kullanıcı için günlük API istek kotası kaç olarak belirlenmiş?","relevant":[],"category":"no-answer","abstain":true},
+  {"id":"no-answer-tr-02","query":"Üretim veritabanı kaç düğümlü çoğaltma kümesi üzerinde çalışıyor?","relevant":[],"category":"no-answer","abstain":true},
+  {"id":"no-answer-tr-03","query":"JSON Web Token imzasında hangi algoritma zorunlu tutuluyor?","relevant":[],"category":"no-answer","abstain":true},
+  {"id":"no-answer-tr-04","query":"WebSocket hizmeti aynı anda en fazla kaç bağlantı kabul ediyor?","relevant":[],"category":"no-answer","abstain":true},
+  {"id":"no-answer-tr-05","query":"Görüntü sınıflandırma modelinin doğruluk oranı hangi test kümesinde ölçüldü?","relevant":[],"category":"no-answer","abstain":true},
+
+  {"id":"no-answer-en-01","query":"Which cloud region hosts the primary database?","relevant":[],"category":"no-answer","abstain":true},
+  {"id":"no-answer-en-02","query":"What rotation interval is required for OAuth refresh tokens?","relevant":[],"category":"no-answer","abstain":true},
+  {"id":"no-answer-en-03","query":"How many simultaneous WebSocket sessions may one account open?","relevant":[],"category":"no-answer","abstain":true},
+  {"id":"no-answer-en-04","query":"Which license applies to the image classification model?","relevant":[],"category":"no-answer","abstain":true},
+  {"id":"no-answer-en-05","query":"How long are customer invoices retained before deletion?","relevant":[],"category":"no-answer","abstain":true}
+]
