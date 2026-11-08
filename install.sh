@@ -60,14 +60,53 @@ case "$node_major" in *[!0-9]*|'') node_major=0 ;; esac
 [ "$node_major" -ge 20 ] || { echo "E_NODE_VERSION: Node.js 20 or newer is required." >&2; exit 1; }
 
 script_dir=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
-helper="$script_dir/release/install-archive.mjs"
+helper="$script_dir/release/install-kit.mjs"
 [ -f "$helper" ] || { echo "E_INSTALL: release verification helper is unavailable." >&2; exit 1; }
 if [ -z "$allowed_signers" ]; then
   allowed_signers=${BRAINATLAS_ALLOWED_SIGNERS:-$script_dir/release/allowed_signers}
 fi
+
+# Distribution kits list every payload file in SHA256SUMS. Verify the signed
+# list and its files before executing the packaged helper. Source checkouts
+# remain usable with profile archives built directly by buildRelease().
+kit_sums="$script_dir/SHA256SUMS"
+kit_signature="$kit_sums.sig"
+kit_mode=0
+if [ -f "$kit_sums" ] && grep -q '  install.sh$' "$kit_sums"; then kit_mode=1; fi
+if [ "$kit_mode" -eq 1 ]; then
+  [ -f "$kit_signature" ] || { echo "E_SIGNATURE_INVALID: release signature is unavailable." >&2; exit 1; }
+  if [ "$insecure" -eq 0 ]; then
+    command -v ssh-keygen >/dev/null 2>&1 || { echo "E_SIGNATURE_INVALID: ssh-keygen is required." >&2; exit 1; }
+    [ -f "$allowed_signers" ] || { echo "E_SIGNATURE_INVALID: allowed signers file is unavailable." >&2; exit 1; }
+    if ! ssh-keygen -Y verify -f "$allowed_signers" -I brainatlas-release -n brainatlas-release -s "$kit_signature" < "$kit_sums" >/dev/null 2>&1; then
+      echo "E_SIGNATURE_INVALID: release signature is invalid." >&2; exit 1
+    fi
+  else
+    echo "WARNING: release signature verification is disabled by explicit request." >&2
+  fi
+  seen=' '
+  listed_archive=0
+  while IFS=' ' read -r expected filename; do
+    [ -n "$expected" ] && [ -n "$filename" ] || { echo "E_MANIFEST_INVALID: release checksum list is invalid." >&2; exit 1; }
+    case "$expected" in *[!a-f0-9]*) echo "E_MANIFEST_INVALID: release checksum list is invalid." >&2; exit 1 ;; esac
+    [ "${#expected}" -eq 64 ] || { echo "E_MANIFEST_INVALID: release checksum list is invalid." >&2; exit 1; }
+    case "$filename" in /*|..|../*|*/..|*/../*|*\\*|*' '*) echo "E_MANIFEST_INVALID: release checksum list is invalid." >&2; exit 1 ;; esac
+    case "$seen" in *" $filename "*) echo "E_MANIFEST_INVALID: release checksum list is invalid." >&2; exit 1 ;; esac
+    seen="$seen$filename "
+    file="$script_dir/$filename"
+    [ -f "$file" ] || { echo "E_SHA_MISMATCH: a release kit file is unavailable." >&2; exit 1; }
+    if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$file"); actual=${actual%% *}
+    elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$file"); actual=${actual%% *}
+    else echo "E_SHA_MISMATCH: a SHA-256 utility is required." >&2; exit 1
+    fi
+    [ "$actual" = "$expected" ] || { echo "E_SHA_MISMATCH: a release kit file changed." >&2; exit 1; }
+    [ "$filename" = "$(basename "$archive")" ] && listed_archive=1
+  done < "$kit_sums"
+  [ "$listed_archive" -eq 1 ] || { echo "E_SHA_MISMATCH: selected release archive is not in the distribution kit." >&2; exit 1; }
+fi
 verify_dir=${TMPDIR:-/tmp}/brainatlas-install-verify-$$
 if [ "$insecure" -eq 1 ]; then
-  echo "WARNING: release signature verification is disabled by explicit request." >&2
+  [ "$kit_mode" -eq 1 ] || echo "WARNING: release signature verification is disabled by explicit request." >&2
   signer_arg=${allowed_signers:-/dev/null}
   release_info=$(BRAINATLAS_INSECURE_SKIP_SIGNATURE=1 "$node_bin" "$helper" --archive "$archive" --destination "$verify_dir" --allowed-signers "$signer_arg") || exit 1
 else
