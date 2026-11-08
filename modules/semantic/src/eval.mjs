@@ -2,7 +2,6 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { runEval } from '../../../eval/run-eval.mjs';
 import { loadPages } from '../../../packages/core/src/retrieval/index.mjs';
 import { markdownChunks } from './chunking.mjs';
 import { buildSemanticIndex } from './index-store.mjs';
@@ -15,6 +14,8 @@ export async function semanticGate({ devCases, corpusDir, provider }) {
   try {
     const casesFile = path.join(temporaryDir, 'cases.json');
     await writeFile(casesFile, JSON.stringify(devCases), { mode: 0o600 });
+    // PM hotfix: eval/ is not shipped in releases; load the runner only when the gate actually runs (repo checkout).
+    const { runEval } = await import('../../../eval/run-eval.mjs');
     const lexical = runEval({ corpusDir, casesFile });
     const pages = loadPages(corpusDir);
     const index = await buildSemanticIndex({ corpusDir, stateDir: path.join(temporaryDir, 'state'), provider, chunkMarkdown: markdownChunks });

@@ -196,6 +196,20 @@ async function saveTrackedConfig(cfg, paths, env = process.env) {
 
 function shellQuote(value) { return `'${String(value).replaceAll("'", "'\\''")}'`; }
 
+function setCliConfigValue(cfg, dottedKey, value) {
+  const keys = dottedKey.split('.');
+  if (keys.length <= 2) return setConfigValue(cfg, dottedKey, value);
+  const updated = structuredClone(cfg); let target = updated;
+  for (const key of keys.slice(0, -1)) {
+    if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) throw error('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
+    target = target[key];
+  }
+  target[keys.at(-1)] = structuredClone(value);
+  const validation = validateConfig(updated);
+  if (!validation.ok) throw error('E_CONFIG_INVALID', 'Configuration is invalid.', validation.errors);
+  return updated;
+}
+
 async function writeInstallEntrypoints(paths, env) {
   const shim = paths.binPath; const localBin = join(env.HOME, '.local', 'bin');
   const roots = managedRoots(paths, env);
@@ -321,52 +335,116 @@ async function loadInstalledModuleEntry(releaseDir, manifest) {
   return import(pathToFileURL(actual).href);
 }
 
+function providedTransportName(manifest) {
+  for (const capability of manifest.provides || []) {
+    const [family, name, ...extra] = capability.split(':');
+    if (!name || extra.length || family.split('-').at(-1) !== 'transport') continue;
+    return name;
+  }
+  return null;
+}
+
+function moduleContext(config, paths, env, entries, ordered) {
+  const registry = new Map();
+  for (const manifest of ordered) {
+    const entry = entries.get(manifest.name);
+    registry.set(manifest.name, entry);
+    for (const capability of manifest.provides || []) registry.set(capability, entry);
+  }
+  const logger = Object.freeze({
+    info: (...values) => console.log(...values),
+    warn: (...values) => console.error(...values),
+    error: (...values) => console.error(...values)
+  });
+  return { config, paths, env, core, logger, registry, vaultDir: config.vault?.path };
+}
+
+async function enabledModuleEntries(releaseDir, cfg) {
+  const manifests = await discoverModules(releaseDir);
+  const enabled = new Set(cfg.modules.includes('*') ? manifests.map(item => item.name) : cfg.modules);
+  const ordered = resolveModuleOrder(manifests.filter(item => enabled.has(item.name)));
+  const entries = new Map();
+  for (const manifest of ordered) entries.set(manifest.name, await loadInstalledModuleEntry(releaseDir, manifest));
+  return { ordered, entries };
+}
+
+async function activateEnabledModules(ordered, entries, ctx) {
+  for (const manifest of ordered) {
+    const entry = entries.get(manifest.name);
+    if (typeof entry?.activate !== 'function') throw error('E_MODULE_ENTRY', 'Module entry does not export activate.');
+    await entry.activate(ctx);
+  }
+}
+
+async function queueSessionEndReceipt({ client, hookInput, config, paths, env }) {
+  const operation = (async () => {
+    const current = await readCurrent(paths);
+    const releaseDir = currentReleaseDir(paths, current);
+    if (!releaseDir) return;
+    const { ordered, entries } = await enabledModuleEntries(releaseDir, config);
+    const handler = ordered.map(manifest => entries.get(manifest.name)).find(entry => typeof entry?.onSessionEnd === 'function');
+    if (!handler) return;
+    const ctx = moduleContext(config, paths, env, entries, ordered);
+    await activateEnabledModules(ordered, entries, ctx);
+    await handler.onSessionEnd(ctx, { ...hookInput, client });
+  })();
+  let timer;
+  const deadline = Math.max(1, Number(config.hooks?.deadlineMs) || 1000);
+  try {
+    return await Promise.race([
+      operation.then(() => true, () => false),
+      new Promise(resolve => { timer = setTimeout(() => resolve(false), deadline); })
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
 async function dispatchModuleCommand(command, args, { paths, env, output }) {
   const current = await readCurrent(paths);
   const releaseDir = currentReleaseDir(paths, current);
   if (!releaseDir) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
   const cfg = await loadConfig({ paths, env });
-  const manifests = await discoverModules(releaseDir);
-  const enabled = new Set(cfg.modules.includes('*') ? manifests.map(item => item.name) : cfg.modules);
-  const ordered = resolveModuleOrder(manifests.filter(item => enabled.has(item.name)));
-  const entries = new Map();
-  let owner;
+  const { ordered, entries } = await enabledModuleEntries(releaseDir, cfg);
+  let owner; let ownerCommand = command; let ownerArgs = args;
+  if (command === 'sync' && args.length) {
+    const transportName = args[0];
+    const transport = ordered.find(manifest => providedTransportName(manifest) === transportName);
+    if (transport) {
+      owner = transport;
+      const entry = entries.get(transport.name);
+      const action = args[1];
+      if (typeof entry.commands?.[transportName] === 'function') {
+        ownerCommand = transportName; ownerArgs = args.slice(1);
+      } else if (action && typeof entry.commands?.[action] === 'function') {
+        ownerCommand = action; ownerArgs = args.slice(2);
+      } else if (typeof entry.commands?.sync === 'function') {
+        ownerCommand = 'sync'; ownerArgs = args;
+      } else {
+        throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
+      }
+    }
+  }
   for (const manifest of ordered) {
-    const entry = await loadInstalledModuleEntry(releaseDir, manifest);
-    entries.set(manifest.name, entry);
+    if (owner) break;
+    const entry = entries.get(manifest.name);
     if (entry.commands && Object.hasOwn(entry.commands, command) && typeof entry.commands[command] === 'function') {
       owner = manifest;
       break;
     }
   }
   if (!owner) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
-
-  const required = new Set();
-  const includeDependencies = manifest => {
-    if (required.has(manifest.name)) return;
-    required.add(manifest.name);
-    for (const name of manifest.requires) {
-      const dependency = ordered.find(item => item.name === name);
-      if (!dependency) throw error('E_MODULE_DEPENDENCY', 'A required module is unavailable.');
-      includeDependencies(dependency);
-    }
-  };
-  includeDependencies(owner);
-  const logger = Object.freeze({
-    info: (...values) => console.log(...values),
-    warn: (...values) => console.error(...values),
-    error: (...values) => console.error(...values)
-  });
-  const ctx = { config: cfg, paths, env, core, logger };
-  for (const manifest of ordered) {
-    if (!required.has(manifest.name)) continue;
-    const entry = entries.get(manifest.name) || await loadInstalledModuleEntry(releaseDir, manifest);
-    entries.set(manifest.name, entry);
-    if (typeof entry.activate !== 'function') throw error('E_MODULE_ENTRY', 'Module entry does not export activate.');
-    await entry.activate(ctx);
+  const ctx = moduleContext(cfg, paths, env, entries, ordered);
+  await activateEnabledModules(ordered, entries, ctx);
+  const commandEntry = entries.get(owner.name).commands[ownerCommand];
+  let result;
+  try { result = await commandEntry(ownerArgs, ctx); }
+  catch (cause) {
+    if (cause?.code !== 'E_ARGUMENT' || !ownerArgs.includes('--json')) throw cause;
+    result = await commandEntry(ownerArgs.filter(argument => argument !== '--json'), ctx);
   }
-  const result = await entries.get(owner.name).commands[command](args, ctx);
-  if (result !== undefined) output(result);
+  if (result && typeof result === 'object' && Number.isInteger(result.exitCode) && typeof result.output === 'string') {
+    if (result.output) console.log(result.output);
+    process.exitCode = result.exitCode;
+  } else if (result !== undefined) output(result);
 }
 
 function validateArchiveModule(manifest, name) {
@@ -535,9 +613,9 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   }
   if (command === 'config') {
     const action = args.shift(); const key = args.shift(); const cfg = await config();
-    if (!key || !/^[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)?$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
+    if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
     if (action === 'get') { const result = key.split('.').reduce((v, k) => v?.[k], cfg); if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.'); output(result); return; }
-    if (action === 'set') { const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.'); let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; } const updated = setConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env); output({ action: 'config set', key }); return; }
+    if (action === 'set') { const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.'); let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; } const updated = setCliConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env); output({ action: 'config set', key }); return; }
     throw error('E_ARGUMENT', 'Configuration action is invalid.');
   }
   if (command === 'module') { await moduleCommand(args, { paths, env, output, plan, value }); return; }
@@ -670,7 +748,16 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
         const cfg = await config(); cfg.stateDir = join(paths.stateDir, vaultId(cfg.vault.path));
         const roots = managedRoots(paths, env); const created = await missingDirectories(cfg.stateDir, env.HOME, roots); await mkdir(cfg.stateDir, { recursive: true });
         if (created.length) await recordCreatedDirectories(paths, created, env.HOME, roots);
-        const result = await entry({ client, event, stdin, env, now: new Date(), config: cfg });
+        let result;
+        if (event === 'session-end') {
+          let hookInput = {};
+          try {
+            const parsed = stdin.trim() ? JSON.parse(stdin) : {};
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) hookInput = parsed;
+          } catch { /* The hook component handles malformed payloads fail-open. */ }
+          const queued = await queueSessionEndReceipt({ client, hookInput, config: cfg, paths, env });
+          result = queued ? await entry({ client, event, stdin, env, now: new Date(), config: cfg }) : { stdout: '', exitCode: 0 };
+        } else result = await entry({ client, event, stdin, env, now: new Date(), config: cfg });
         if (result.stdout) process.stdout.write(result.stdout); process.exitCode = result.exitCode;
       }
     } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.'); throw e; }
