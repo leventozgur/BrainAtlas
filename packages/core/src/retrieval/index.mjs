@@ -91,13 +91,14 @@ function stale(fm, asOf) {
 // Sections are deliberately derived at query time, after the ranking is final.
 function bestSection(body, terms, index) {
   const lines = body.split('\n'), sections = [], ancestors = [], used = new Set();
-  let current = null, fenceLength = 0;
-  for (const rawLine of lines) {
-    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
-    const fence = line.match(/^ {0,3}(`{3,})(.*)$/);
+  let current = null, fenceLength = 0, fenceChar = null;
+  for (const [lineNumber, rawLine] of lines.entries()) {
+    let line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    if (lineNumber === 0 && line.startsWith('\uFEFF')) line = line.slice(1);
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (fence) {
-      if (!fenceLength) fenceLength = fence[1].length;
-      else if (fence[1].length >= fenceLength && !fence[2].trim()) fenceLength = 0;
+      if (!fenceLength) { fenceLength = fence[1].length; fenceChar = fence[1][0]; }
+      else if (fence[1][0] === fenceChar && fence[1].length >= fenceLength && !fence[2].trim()) { fenceLength = 0; fenceChar = null; }
       if (current) current.lines.push(rawLine);
       continue;
     }
@@ -105,7 +106,7 @@ function bestSection(body, terms, index) {
     if (!heading) { if (current) current.lines.push(rawLine); continue; }
     const level = heading[1].length, title = heading[2].trim();
     ancestors.length = level - 1; ancestors[level - 1] = title;
-    const base = normalizeText(title).replace(/[^\p{L}\p{N}_\- ]/gu, '').replace(/ /g, '-');
+    const base = /[\p{L}\p{N}]/u.test(title) ? normalizeText(title).replace(/[^\p{L}\p{N}_\- ]/gu, '').replace(/ /g, '-') : 'section';
     let anchor = base, suffix = 0;
     while (used.has(anchor)) anchor = `${base}-${++suffix}`;
     used.add(anchor);

@@ -65,6 +65,33 @@ test('fences, duplicate headings, collisions, and Turkish anchor folding', () =>
   const comment = search(index, 'comment').results[0];
   assert.equal(comment.heading, 'İLK'); assert.match(comment.snippet, /# comment/);
 });
+test('tilde and backtick fences close only with the same character and sufficient length', () => {
+  const body = '# Root\n~~~~js\n# Hidden\n```\n~~~\n# Still hidden\n~~~~\n## Visible\nneedle\n````\n# Also hidden\n~~~\n```\n# Still hidden too\n````\n## End\nfinish';
+  const index = buildIndex([page('a.md', body)], {now});
+  assert.equal(search(index, 'hidden').results[0].heading, 'Root');
+  assert.equal(search(index, 'needle').results[0].heading, 'Visible');
+  assert.equal(search(index, 'finish').results[0].heading, 'End');
+});
+test('symbol-only headings use unique fallback anchors even when names collide', () => {
+  const body = '## section\nfirsttarget\n## 😀💥\nsecondtarget\n## section-2\nthirdtarget\n## ---\nfourthtarget';
+  const index = buildIndex([page('a.md', body)], {now});
+  assert.equal(search(index, 'firsttarget').results[0].anchor, 'section');
+  assert.equal(search(index, 'secondtarget').results[0].anchor, 'section-1');
+  assert.equal(search(index, 'thirdtarget').results[0].anchor, 'section-2');
+  assert.equal(search(index, 'fourthtarget').results[0].anchor, 'section-3');
+});
+test('a BOM before the first heading does not prevent section selection', t => {
+  const dir = temp(t), vault = path.join(dir, 'vault'); fs.mkdirSync(vault);
+  const body = '\uFEFF# İstanbul ve Işık\nneedle';
+  fs.writeFileSync(path.join(vault, 'plain.md'), body);
+  fs.writeFileSync(path.join(vault, 'frontmatter.md'), '\uFEFF---\ntitle: Example\n---\n# Topic\nother');
+  const pages = loadPages(vault), plain = pages.find(p => p.path === 'plain.md');
+  assert.equal(plain.body, body);
+  assert.equal(pages.find(p => p.path === 'frontmatter.md').frontmatter.title, 'Example');
+  const result = search(buildIndex(pages, {now}), 'needle').results[0];
+  assert.equal(result.heading, 'İstanbul ve Işık');
+  assert.equal(result.anchor, 'istanbul-ve-isik');
+});
 test('headingless and section-unmatched pages retain the body snippet', () => {
   const plain = search(buildIndex([page('a.md', 'plain evidence')], {now}), 'plain').results[0];
   assert.equal(plain.snippet, 'plain evidence'); assert.equal(plain.heading, null); assert.equal(plain.anchor, null); assert.equal(plain.headingPath, null);
