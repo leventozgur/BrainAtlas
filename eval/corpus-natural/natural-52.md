@@ -24,4 +24,4 @@ cache.delete("profile:summary")
 
 ## Konuya özgü ayrıntılar
 
-Örneğin bir response kopyası cache içinde tutulur ve kaynak veri değişince eviction ile kaldırılır. Cash drawer sayımında ise banknotlar toplanır ve satış kaydıyla karşılaştırılır. Fuzzy matching bu iki örneği yakın yazım nedeniyle aynı anlam saymamalıdır. Bir pozitif ve bir negatif sorguyu birlikte değerlendirmek, cache sonucunun doğru kalırken kasa aramasının yanlışlıkla ona yönelmesini ortaya çıkarır. Kısa sorgularda bağlam az olduğundan negatif örneklerin sıralamadaki yeri ayrıca incelenir.
+Örneğin bir response kopyası cache içinde tutulur ve kaynak veri değişince eviction ile kaldırılır. Cash register ise bu belgede yalnızca yazım benzerliği örneği olarak geçer; kasa kapanışı ya da nakit sayım yordamı burada anlatılmaz. Fuzzy matching bu iki örneği yakın yazım nedeniyle aynı anlam saymamalıdır. Bir pozitif ve bir negatif sorguyu birlikte değerlendirmek, cache sonucunun doğru kalırken kasa aramasının yanlışlıkla ona yönelmesini ortaya çıkarır. Kısa sorgularda bağlam az olduğundan negatif örneklerin sıralamadaki yeri ayrıca incelenir.
