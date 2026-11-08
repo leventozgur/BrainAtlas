@@ -2,7 +2,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { isAbsolute, join, relative, resolve, sep, posix } from 'node:path';
+import { chmodSync, mkdirSync } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import * as core from '@brainatlas/core';
 
@@ -57,7 +60,19 @@ export function createServer(options) {
   if (typeof requestedVault !== 'string' || !requestedVault) throw mcpError('E_VAULT_PATH', 'A Wiki vault path is required.');
   const vaultDir = resolve(isAbsolute(requestedVault) ? requestedVault : resolve(home ?? process.cwd(), requestedVault));
   const wikiDir = join(vaultDir, 'wiki');
-  const stateDir = paths.stateDir || join(vaultDir, '.brainatlas-state');
+  let stateDir = paths.stateDir;
+  if (typeof stateDir !== 'string' || !stateDir) {
+    if (home) {
+      const platform = env.BRAINATLAS_PLATFORM || process.platform;
+      stateDir = core.resolvePaths({ env, platform }).stateDir;
+    }
+    else {
+      const vaultKey = createHash('sha256').update(vaultDir).digest('hex').slice(0, 16);
+      stateDir = join(tmpdir(), 'brainatlas-state', vaultKey);
+      mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+      chmodSync(stateDir, 0o700);
+    }
+  }
   let searcher = core.createSearcher({ vaultDir: wikiDir, stateDir });
   const server = new McpServer({ name: 'brainatlas-mcp', version: '0.1.0' });
 
