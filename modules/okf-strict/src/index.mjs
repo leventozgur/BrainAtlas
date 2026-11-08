@@ -7,6 +7,7 @@ import { parseFrontmatter } from '../../../packages/core/src/vault/index.mjs';
 
 const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+const STRUCTURAL_PAGES = new Set(['wiki/index.md', 'wiki/log.md']);
 const finding = (path, rule, message) => ({ path, rule, severity: 'error', message });
 const validDate = (value) => typeof value === 'string' && (dateOnly.test(value) || timestamp.test(value)) && Number.isFinite(Date.parse(value)) && new Date(Date.parse(value)).toISOString().slice(0, 10) === value.slice(0, 10);
 const validTimestamp = (value) => typeof value === 'string' && timestamp.test(value) && validDate(value);
@@ -35,6 +36,7 @@ async function readWikiPages(vaultDir) {
 }
 
 function strictPageFindings(path, data, pages) {
+  if (STRUCTURAL_PAGES.has(path)) return [];
   const result = [];
   if (data.status === 'confirmed') {
     const records = Array.isArray(data.verified) ? data.verified : [];
