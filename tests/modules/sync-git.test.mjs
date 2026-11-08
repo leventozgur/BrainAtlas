@@ -7,9 +7,10 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { atomicWriteFile, runCommand } from '../../packages/core/src/util/index.mjs';
 import { readModuleManifest, resolveModuleOrder } from '../../packages/core/src/modules/index.mjs';
-import { createGitTransport, activate } from '../../modules/sync-git/src/index.mjs';
+import { createGitTransport, activate, commands } from '../../modules/sync-git/src/index.mjs';
+import { createSyncEngine } from '../../modules/sync-engine/src/engine.mjs';
 
-async function fixture(t) {
+async function fixture(t, remoteBranch = 'main') {
   const root = await mkdtemp(join(tmpdir(), 'sync-git-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const home = join(root, 'home');
@@ -26,7 +27,7 @@ async function fixture(t) {
   };
   await writeFile(env.GIT_CONFIG_GLOBAL, '', { mode: 0o600 });
   const bare = join(root, 'remote.git');
-  const initialized = await runCommand('git', ['init', '--bare', '--initial-branch=main', bare], { cwd: root, env, timeoutMs: 10_000 });
+  const initialized = await runCommand('git', ['init', '--bare', `--initial-branch=${remoteBranch}`, bare], { cwd: root, env, timeoutMs: 10_000 });
   assert.equal(initialized.code, 0);
   const remote = pathToFileURL(bare).href;
   const create = (id, options = {}) => createGitTransport({
@@ -52,15 +53,155 @@ test('Git transport clones under sync state and provides object CAS over a local
   assert.equal(stored.rev.length, 64);
   assert.deepEqual(Buffer.from((await first.get('wiki/data.bin')).bytes), Buffer.from(payload));
   await assert.rejects(first.put('wiki/data.bin', Buffer.from('stale'), { ifRev: 'old-revision' }), { code: 'E_CONFLICT' });
+  await first.put('wiki/page.md', Buffer.from('# Shared page\n'), { ifAbsent: true });
+  const author = await runCommand('git', ['--git-dir', fx.bare, 'log', '-1', '--format=%an%x00%ae'], { cwd: fx.root, env: fx.env });
+  assert.equal(author.code, 0);
+  assert.equal(author.stdout.trim(), 'BrainAtlas Sync (worker-a)\0sync@brainatlas.invalid');
 
   const second = fx.create('worker-b');
   const rows = await second.list('wiki/');
-  assert.deepEqual(rows.map(({ path }) => path), ['wiki/data.bin']);
+  assert.deepEqual(rows.map(({ path }) => path), ['wiki/data.bin', 'wiki/page.md']);
   assert.equal(rows[0].rev, stored.rev);
+  assert.equal(Buffer.from((await second.get('wiki/page.md')).bytes).toString(), '# Shared page\n');
   assert.equal((await second.status()).mode, 'git');
   await second.delete('wiki/data.bin', { ifRev: stored.rev });
   await first.pull();
   assert.equal(await first.get('wiki/data.bin'), null);
+});
+
+test('configured branch is used for an empty remote and mismatched remote defaults fail clearly', async (t) => {
+  const customFx = await fixture(t, 'release');
+  const custom = customFx.create('custom-branch', { branch: 'release' });
+  await custom.put('wiki/page.md', Buffer.from('release branch\n'), { ifAbsent: true });
+  assert.equal((await custom.status()).branch, 'release');
+
+  const mismatchFx = await fixture(t, 'legacy');
+  const seed = join(mismatchFx.root, 'seed-repository');
+  await mkdir(seed);
+  const initialized = await runCommand('git', ['init', '--initial-branch=legacy', seed], { cwd: mismatchFx.root, env: mismatchFx.env });
+  assert.equal(initialized.code, 0);
+  await writeFile(join(seed, 'seed.md'), 'seed\n');
+  for (const args of [
+    ['-c', 'user.name=Seed Agent', '-c', 'user.email=seed@brainatlas.invalid', '-C', seed, 'add', '--all'],
+    ['-c', 'user.name=Seed Agent', '-c', 'user.email=seed@brainatlas.invalid', '-C', seed, 'commit', '-m', 'seed'],
+    ['-C', seed, 'remote', 'add', 'origin', mismatchFx.remote],
+    ['-C', seed, 'push', 'origin', 'HEAD:refs/heads/legacy'],
+  ]) {
+    const result = await runCommand('git', args, { cwd: mismatchFx.root, env: mismatchFx.env });
+    assert.equal(result.code, 0, result.stderr);
+  }
+  const mismatch = mismatchFx.create('wrong-default');
+  await assert.rejects(mismatch.list(), (error) => error.code === 'E_DEGRADED' && /default branch does not match/.test(error.message));
+});
+
+test('Git uses configured commit identity and never reads or writes global Git configuration', async (t) => {
+  const fx = await fixture(t);
+  const originalConfig = '[user]\n\tname = Global Config Identity\n\temail = global@brainatlas.invalid\n';
+  await writeFile(fx.env.GIT_CONFIG_GLOBAL, originalConfig);
+  const commandEnvironments = [];
+  const transport = fx.create('identity-host', {
+    authorName: 'Configured Sync Agent', authorEmail: 'configured@brainatlas.invalid',
+    runCommand: async (command, args, options) => {
+      commandEnvironments.push(options.env);
+      return runCommand(command, args, options);
+    },
+  });
+  await transport.put('wiki/identity.md', Buffer.from('identity\n'), { ifAbsent: true });
+  const author = await runCommand('git', ['--git-dir', fx.bare, 'log', '-1', '--format=%an%x00%ae'], { cwd: fx.root, env: fx.env });
+  assert.equal(author.stdout.trim(), 'Configured Sync Agent\0configured@brainatlas.invalid');
+  assert.ok(commandEnvironments.length > 0);
+  assert.ok(commandEnvironments.every((env) => env.GIT_CONFIG_NOSYSTEM === '1'));
+  assert.ok(commandEnvironments.every((env) => env.GIT_CONFIG_GLOBAL !== fx.env.GIT_CONFIG_GLOBAL));
+  assert.equal(await readFile(fx.env.GIT_CONFIG_GLOBAL, 'utf8'), originalConfig);
+});
+
+test('Git status reports redacted remote, branch, counts, last sync and clean state', async (t) => {
+  const fx = await fixture(t);
+  const stateDir = join(fx.root, 'status-host', 'state');
+  const transport = createGitTransport({ stateDir, remote: fx.remote, env: fx.env, hostId: 'status-host' });
+  await transport.put('wiki/page.md', Buffer.from('page\n'), { ifAbsent: true });
+  await mkdir(join(stateDir, 'sync'), { recursive: true });
+  await writeFile(join(stateDir, 'sync', 'last-synced-manifest.json'), JSON.stringify({ generatedAt: '2026-11-08T10:11:12.000Z' }));
+  const context = { config: { sync: { transport: 'git' } }, transport };
+  const status = await commands.status(['--json'], context);
+  assert.equal(status.mode, 'git');
+  assert.equal(status.initialized, true);
+  assert.equal(status.remote, fx.remote);
+  assert.equal(status.branch, 'main');
+  assert.equal(status.ahead, 0);
+  assert.equal(status.behind, 0);
+  assert.equal(status.clean, true);
+  assert.equal(status.lastSuccessfulSync, '2026-11-08T10:11:12.000Z');
+  await writeFile(join(stateDir, 'sync', 'git', 'untracked'), 'dirty\n');
+  assert.equal((await transport.status()).clean, false);
+});
+
+test('SSH invocation uses BatchMode, keeps terminal prompts disabled, and classifies host-key errors', async (t) => {
+  const fx = await fixture(t);
+  const bin = join(fx.root, 'bin');
+  await mkdir(bin);
+  const argvFile = join(fx.root, 'ssh-argv.txt');
+  const promptFile = join(fx.root, 'ssh-prompt.txt');
+  await writeFile(join(bin, 'ssh'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$SSH_ARGV_FILE"\nprintf "%s" "$GIT_TERMINAL_PROMPT" > "$SSH_PROMPT_FILE"\nprintf "Host key verification failed.\\n" >&2\nexit 255\n', { mode: 0o700 });
+  const env = { ...fx.env, PATH: `${bin}:${fx.env.PATH}`, SSH_ARGV_FILE: argvFile, SSH_PROMPT_FILE: promptFile };
+  const transport = createGitTransport({
+    stateDir: join(fx.root, 'ssh-host', 'state'), remote: 'git@example.invalid:owner/repository.git', env,
+  });
+  await assert.rejects(transport.list(), { code: 'E_AUTH' });
+  const argv = (await readFile(argvFile, 'utf8')).trim().split('\n');
+  assert.ok(argv.includes('-o'));
+  assert.ok(argv.includes('BatchMode=yes'));
+  assert.equal(await readFile(promptFile, 'utf8'), '0');
+
+  const customArgvFile = join(fx.root, 'ssh-custom-argv.txt');
+  const custom = createGitTransport({
+    stateDir: join(fx.root, 'ssh-custom-host', 'state'),
+    remote: 'alias:owner/repository.git',
+    env: { ...env, GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=yes', SSH_ARGV_FILE: customArgvFile },
+  });
+  await assert.rejects(custom.list(), { code: 'E_AUTH' });
+  const customArgv = (await readFile(customArgvFile, 'utf8')).trim().split('\n');
+  assert.ok(customArgv.includes('StrictHostKeyChecking=yes'));
+  assert.equal(customArgv.includes('BatchMode=yes'), false);
+});
+
+test('credential-bearing HTTPS remotes warn without exposing credentials in status or errors', async (t) => {
+  const fx = await fixture(t);
+  const username = 'token-user';
+  const password = 'private-token-value';
+  const queryToken = 'private-query-value';
+  const remote = `https://${username}:${password}@example.invalid/repository.git?access_token=${queryToken}`;
+  const warnings = [];
+  const ctx = {
+    config: { sync: { transport: 'git', options: { remote } } },
+    paths: { stateDir: join(fx.root, 'https-host', 'state') }, env: fx.env,
+    logger: { warn: (...values) => warnings.push(values) },
+  };
+  const runCommandFake = async (_command, args) => args.includes('check-ref-format')
+    ? { code: 0, stdout: '', stderr: '' }
+    : { code: 128, stdout: '', stderr: `Authentication failed for ${remote}` };
+  await activate(ctx);
+  assert.equal(warnings.length, 1);
+  const status = await ctx.transport.status();
+  const output = JSON.stringify({ warning: warnings, status });
+  assert.match(output, /\[redacted\]/);
+  for (const secret of [username, password, queryToken]) assert.equal(output.includes(secret), false);
+  await assert.rejects(createGitTransport({
+    stateDir: join(fx.root, 'https-failure', 'state'), remote, env: fx.env, runCommand: runCommandFake,
+  }).list(), (error) => error.code === 'E_AUTH' && !error.message.includes(password) && !error.message.includes(queryToken));
+
+  const vaultPath = join(fx.root, 'https-vault'); const stateDir = join(fx.root, 'https-engine', 'state');
+  await mkdir(vaultPath);
+  const journalTransport = createGitTransport({ stateDir, remote, env: fx.env, runCommand: runCommandFake });
+  const logs = [];
+  const engine = createSyncEngine({ vaultPath, stateDir, transport: journalTransport, logger: { info: (...values) => logs.push(values), warn: (...values) => logs.push(values), error: (...values) => logs.push(values) } });
+  await assert.rejects(engine.run(), { code: 'E_AUTH' });
+  const journal = await readFile(engine.journalPath, 'utf8');
+  assert.match(journal, /"errorCode": "E_AUTH"/);
+  for (const secret of [username, password, queryToken]) {
+    assert.equal(journal.includes(secret), false);
+    assert.equal(JSON.stringify(logs).includes(secret), false);
+  }
 });
 
 test('a push race between two fake hosts retries after rebasing and retains both objects', async (t) => {

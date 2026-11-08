@@ -88,7 +88,7 @@ async function templateFor(name) {
 async function inspectSource(source) {
   const record = { files: [], directories: [], instructions: [], skipped: { git: 0, gitHistory: 'use git bundle, not copied', obsidian: 0, trash: 0, symlinks: 0, invalidCategory: 0, unsupportedInstructions: 0, otherRootFiles: 0 } };
   for (const category of categories) await scanTree(source, category, record, record.skipped);
-  record.skipped.git = await countExcludedTree(join(source, '.git'));
+  record.skipped.git = (await pathInfo(join(source, '.git'))) ? 1 : 0;
   record.skipped.obsidian = await countExcludedTree(join(source, '.obsidian'));
   record.skipped.trash = await countExcludedTree(join(source, '.trash'));
   const rootEntries = await readdir(source, { withFileTypes: true });
