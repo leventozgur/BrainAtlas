@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-rc.2 — 2026-11-08
+
+- Added a self-contained release distribution folder and install kit (R-KIT).
+- Added Git transport setup and sync operations (S-OPS), plus stable host identity configuration (S-HOSTID).
+- Added Gemini CLI `BeforeAgent` and `SessionStart` hooks (A-GEMINI2).
+- Hardened output redaction and health reporting (I-HARDEN).
+- Added the MIT attribution for avenoxbeyin in `THIRD_PARTY_NOTICES.md`.
+
 ## 0.1.0-rc.1 — 2026-11-08 (local release candidate; signed with a development key, not published)
 
 - Added Lite and Full release profiles with signed archive verification and install/update/rollback support.

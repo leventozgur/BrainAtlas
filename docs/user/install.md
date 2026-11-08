@@ -1,29 +1,39 @@
 # Install and verify
 
-BrainAtlas requires Node.js 20 or newer. The release installer supports macOS and Linux and requires `ssh-keygen` for normal signature verification.
+BrainAtlas requires Node.js 20 or newer. The release installer supports macOS and Linux and requires `ssh-keygen` for signature verification.
+
+## Build a distribution folder
+
+From a BrainAtlas checkout, create a self-contained distribution folder. It contains Lite and Full archives, the installer, a `release/` install kit and checksums:
+
+```sh
+node release/build-release.mjs --version <v> --out <dir>
+```
+
+The output includes `brainatlas-<v>-lite.tgz`, `brainatlas-<v>-full.tgz`, `install.sh`, `release/`, and `SHA256SUMS`. Sign the checksum list with the release signing key:
+
+```sh
+ssh-keygen -Y sign -n brainatlas-release -f <private-key> SHA256SUMS
+```
+
+This creates `SHA256SUMS.sig`. Distribute the complete folder, including `release/allowed_signers`, to the installation host. Do not publish a signing private key.
 
 ## Online acquisition
 
-The repository does not define a public download URL or online installer. Obtain the release archive, `SHA256SUMS`, `SHA256SUMS.sig`, and the trusted `release/allowed_signers` file from the project's verified release channel. **Verify before publishing:** document the canonical channel and exact verification commands here when they are established. Do not treat an archive downloaded from an unverified location as trusted.
+GitHub Releases is the planned online channel; no release has been published yet. **Verify before publishing:** there is no release download URL or online bootstrap command to use today. Until a verified release is available, obtain the full distribution folder through a trusted offline handoff.
 
-After obtaining and verifying the files, run the installer against the archive:
+## Install from the distribution folder
+
+Run the installer while in the copied distribution folder. No other checkout is needed:
 
 ```sh
-./install.sh --from brainatlas-<v>-lite.tgz
+sh install.sh --from brainatlas-<v>-lite.tgz --allowed-signers release/allowed_signers --yes
 brainatlas doctor
 ```
 
-## Offline installation
+To select a vault during installation, add `--vault PATH`. The installer verifies the signed checksums and archive before extraction. Installation directories reached through symlinks that resolve outside `HOME` are rejected by default; use `--allow-symlinked-root` only when that layout is intentional.
 
-Copy the signed Lite or Full `.tgz` to the target computer along with the matching signature files and allowed-signers file. The installer verifies the release before extracting it. By default it uses the adjacent `release/allowed_signers`; use `--allowed-signers <file>` to select the trusted signer list explicitly.
-
-```sh
-./install.sh --from brainatlas-<v>-lite.tgz --allowed-signers ./allowed_signers
-brainatlas init --profile lite --agents claude-code,copilot-vscode,kiro
-brainatlas doctor
-```
-
-Replace `<v>` with the actual version. The archive must match the requested profile. `--insecure-skip-signature` explicitly disables signature verification and should only be used when you accept that risk.
+Replace `<v>` with the actual version. Run `brainatlas doctor` to check installation and configured adapters. Doctor module-health rows are warnings and do not make overall `ok:false`.
 
 ## Manage releases
 
@@ -33,4 +43,4 @@ Replace `<v>` with the actual version. The archive must match the requested prof
 - Preview supported operations with `--plan`.
 - Uninstall with `brainatlas uninstall`. The configured vault is preserved.
 
-Run `brainatlas doctor` after installation or update. It reports installation and configured adapter checks.
+See [Agent setup](agents.md) for adapter configuration and trust review.
