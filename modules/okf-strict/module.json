@@ -1,0 +1,9 @@
+{
+  "name": "okf-strict",
+  "version": "0.1.0-dev",
+  "description": "Strict validation gates for the local OKF inspired metadata profile.",
+  "requires": [],
+  "provides": ["okf-strict"],
+  "profiles": ["full", "custom"],
+  "entry": "src/index.mjs"
+}

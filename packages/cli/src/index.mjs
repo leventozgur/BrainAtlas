@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
-import { readdir, access, mkdir, readFile, readlink, lstat, rename, rm, symlink, unlink, writeFile, chmod } from 'node:fs/promises';
-import { basename, dirname, join, resolve, relative, sep } from 'node:path';
+import { readdir, access, mkdir, readFile, readlink, lstat, rename, rm, symlink, unlink, writeFile, chmod, realpath } from 'node:fs/promises';
+import { basename, dirname, join, resolve, relative, sep, isAbsolute } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { spawnSync } from 'node:child_process';
-import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, vaultId } from '@brainatlas/core';
+import * as core from '@brainatlas/core';
+import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, redact, vaultId } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from './archive.mjs';
 import { managePath, recordManagedPath, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
 
 const error = (code, message) => Object.assign(new Error(message), { code });
+const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp']);
 const validVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
 function compareVersions(left, right) {
   const parse = value => /^(?:v)?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
@@ -111,7 +113,7 @@ async function doctorResult(paths, env) {
   try { await access(paths.currentDir); checks.release = true; } catch { checks.release = false; }
   const warnings = [];
   if (checks.release && cfg.agents?.length) {
-    const adapterRoot = resolve(new URL('../../adapters/', import.meta.url).pathname);
+    const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url));
     for (const agent of cfg.agents) {
       try {
         const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
@@ -127,7 +129,7 @@ async function doctorResult(paths, env) {
   return { ok: Object.values(checks).every(Boolean), checks, profile: cfg.profile, modules: cfg.modules, warnings };
 }
 async function removeAdapters(cfg, paths, env) {
-  const adapterRoot = resolve(new URL('../../adapters/', import.meta.url).pathname); const warnings = [];
+  const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url)); const warnings = [];
   for (const agent of cfg.agents || []) {
     try {
       const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
@@ -263,6 +265,82 @@ async function recoverUpdate(paths, env) {
 
 function currentReleaseDir(paths, current) { return current ? join(paths.dataDir, current) : null; }
 
+function redactPlanCopy(value) {
+  const copy = structuredClone(value);
+  function visit(item) {
+    if (!item || typeof item !== 'object') return;
+    if (Array.isArray(item)) { for (const child of item) visit(child); return; }
+    for (const [key, child] of Object.entries(item)) {
+      if ((key === 'before' || key === 'after') && typeof child === 'string') item[key] = redact(child);
+      else visit(child);
+    }
+  }
+  visit(copy);
+  return copy;
+}
+
+async function loadInstalledModuleEntry(releaseDir, manifest) {
+  const releaseRoot = await realpath(releaseDir);
+  const moduleDir = await realpath(join(releaseRoot, 'modules', manifest.name));
+  const relativeModuleDir = relative(releaseRoot, moduleDir);
+  if (!relativeModuleDir || relativeModuleDir === '..' || relativeModuleDir.startsWith(`..${sep}`) || isAbsolute(relativeModuleDir)) throw error('E_MODULE_ENTRY', 'Module directory must remain inside its release.');
+  const target = resolve(moduleDir, manifest.entry);
+  const relativeTarget = relative(moduleDir, target);
+  if (!relativeTarget || relativeTarget === '..' || relativeTarget.startsWith(`..${sep}`) || isAbsolute(relativeTarget)) throw error('E_MODULE_ENTRY', 'Module entry must remain inside its module directory.');
+  const actual = await realpath(target);
+  const actualRelative = relative(moduleDir, actual);
+  if (!actualRelative || actualRelative === '..' || actualRelative.startsWith(`..${sep}`) || isAbsolute(actualRelative)) throw error('E_MODULE_ENTRY', 'Module entry must remain inside its module directory.');
+  return import(pathToFileURL(actual).href);
+}
+
+async function dispatchModuleCommand(command, args, { paths, env, output }) {
+  const current = await readCurrent(paths);
+  const releaseDir = currentReleaseDir(paths, current);
+  if (!releaseDir) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
+  const cfg = await loadConfig({ paths, env });
+  const manifests = await discoverModules(releaseDir);
+  const enabled = new Set(cfg.modules.includes('*') ? manifests.map(item => item.name) : cfg.modules);
+  const ordered = resolveModuleOrder(manifests.filter(item => enabled.has(item.name)));
+  const entries = new Map();
+  let owner;
+  for (const manifest of ordered) {
+    const entry = await loadInstalledModuleEntry(releaseDir, manifest);
+    entries.set(manifest.name, entry);
+    if (entry.commands && Object.hasOwn(entry.commands, command) && typeof entry.commands[command] === 'function') {
+      owner = manifest;
+      break;
+    }
+  }
+  if (!owner) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
+
+  const required = new Set();
+  const includeDependencies = manifest => {
+    if (required.has(manifest.name)) return;
+    required.add(manifest.name);
+    for (const name of manifest.requires) {
+      const dependency = ordered.find(item => item.name === name);
+      if (!dependency) throw error('E_MODULE_DEPENDENCY', 'A required module is unavailable.');
+      includeDependencies(dependency);
+    }
+  };
+  includeDependencies(owner);
+  const logger = Object.freeze({
+    info: (...values) => console.log(...values),
+    warn: (...values) => console.error(...values),
+    error: (...values) => console.error(...values)
+  });
+  const ctx = { config: cfg, paths, env, core, logger };
+  for (const manifest of ordered) {
+    if (!required.has(manifest.name)) continue;
+    const entry = entries.get(manifest.name) || await loadInstalledModuleEntry(releaseDir, manifest);
+    entries.set(manifest.name, entry);
+    if (typeof entry.activate !== 'function') throw error('E_MODULE_ENTRY', 'Module entry does not export activate.');
+    await entry.activate(ctx);
+  }
+  const result = await entries.get(owner.name).commands[command](args, ctx);
+  if (result !== undefined) output(result);
+}
+
 function validateArchiveModule(manifest, name) {
   const allowed = new Set(['name', 'version', 'description', 'requires', 'provides', 'profiles', 'entry', 'experimental']);
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest) || Object.keys(manifest).some(key => !allowed.has(key)) || manifest.name !== name || !/^[a-z0-9][a-z0-9._-]*$/.test(manifest.name) || typeof manifest.version !== 'string' || !manifest.version.trim() || typeof manifest.description !== 'string' || !manifest.description.trim() || !Array.isArray(manifest.requires) || !manifest.requires.every(item => typeof item === 'string' && /^[a-z0-9][a-z0-9._-]*$/.test(item)) || !Array.isArray(manifest.provides) || !manifest.provides.every(item => typeof item === 'string' && item.trim()) || !Array.isArray(manifest.profiles) || !manifest.profiles.length || !manifest.profiles.every(item => ['lite', 'full', 'custom'].includes(item)) || typeof manifest.entry !== 'string' || !manifest.entry || manifest.entry === '.' || manifest.entry.startsWith('/') || manifest.entry.includes('\\') || manifest.entry.split('/').some(part => !part || part === '.' || part === '..') || (manifest.experimental !== undefined && typeof manifest.experimental !== 'boolean')) throw error('E_MODULE_MANIFEST', 'Module manifest is invalid.');
@@ -371,7 +449,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     cfg.vault.path = resolve(vault || join(env.HOME, 'BrainAtlas'));
     cfg.node.path = process.execPath;
     const agents = value('--agents'); cfg.agents = agents ? agents.split(',').map(item => item.trim()).filter(Boolean) : [];
-    const adapterRoot = resolve(new URL('../../adapters/', import.meta.url).pathname);
+    const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url));
     let available = []; try { available = await readdir(adapterRoot); } catch {}
     if (cfg.agents.some(a => !/^[a-z0-9-]+$/.test(a))) throw error('E_AGENT_UNKNOWN', 'Invalid agent adapter name.');
     const warnings = []; const plannedAdapters = [];
@@ -406,7 +484,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
       } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED' || e.code === 'ERR_MODULE_NOT_FOUND') warnings.push(`Adapter ${agent} is unavailable.`); else throw e; }
     }
     if (!plan) await saveTrackedConfig(cfg, paths, env);
-    output({ action: 'init', configFile: paths.configFile, warnings, adapters: plan ? plannedAdapters.map(item => item.changes) : undefined }); return;
+    output({ action: 'init', configFile: paths.configFile, warnings, adapters: plan ? plannedAdapters.map(item => redactPlanCopy(item.changes)) : undefined }); return;
   }
   if (command === 'install' && flag('--finalize')) {
     const createdDirectories = [];
@@ -429,6 +507,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     if (!key || !/^[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)?$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
     if (action === 'get') { const result = key.split('.').reduce((v, k) => v?.[k], cfg); if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.'); output(result); return; }
     if (action === 'set') { const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.'); let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; } const updated = setConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env); output({ action: 'config set', key }); return; }
+    throw error('E_ARGUMENT', 'Configuration action is invalid.');
   }
   if (command === 'module') { await moduleCommand(args, { paths, env, output, plan, value }); return; }
   if (command === 'uninstall') {
@@ -566,6 +645,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.'); throw e; }
     return;
   }
-  throw error('E_NOT_IMPLEMENTED', 'Command is not implemented.');
+  if (command && !builtInCommands.has(command)) { await dispatchModuleCommand(command, args, { paths, env, output }); return; }
+  throw error(command ? 'E_ARGUMENT' : 'E_COMMAND_UNKNOWN', command ? 'Command arguments are invalid.' : 'Unknown command.');
 }
 export const activate = main;
