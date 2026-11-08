@@ -5,6 +5,8 @@
 - Signed with the maintainer release key (fingerprint `SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40`); earlier candidates used a development key.
 - Secret filter: Markdown page titles containing "secret" are no longer refused on their own; `brainatlas safety allow|list|revoke` records fingerprinted exceptions for reviewed false positives (new or changed matches are still refused).
 - Releases are published on GitHub Releases.
+- Agent MCP/hook launch: `bin/brainatlas` runs under both sh and node (MCP connections were closing on start).
+- Claude Code and Gemini hooks use the CLI hook contract (`hook <client> <event>`); legacy entries are upgraded on install.
 
 ## 0.1.0-rc.6 — 2026-11-08
 
