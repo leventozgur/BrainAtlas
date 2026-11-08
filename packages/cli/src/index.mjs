@@ -117,7 +117,7 @@ async function doctorResult(paths, env) {
   catch { cfg = defaultConfig('lite'); configOk = false; }
   const checks = { config: configOk };
   try { await access(paths.currentDir); checks.release = true; } catch { checks.release = false; }
-  const warnings = [];
+  const warnings = []; const moduleHealth = [];
   if (checks.release && cfg.agents?.length) {
     const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url));
     for (const agent of cfg.agents) {
@@ -131,8 +131,39 @@ async function doctorResult(paths, env) {
       }
     }
   }
+  if (checks.release && cfg.modules?.length) {
+    try {
+      const current = await readCurrent(paths); const releaseDir = currentReleaseDir(paths, current);
+      if (releaseDir) {
+        const { ordered, entries } = await enabledModuleEntries(releaseDir, cfg);
+        const ctx = moduleContext(cfg, paths, env, entries, ordered);
+        await activateEnabledModules(ordered, entries, ctx);
+        const syncModule = ordered.find(item => (item.provides || []).includes('sync'));
+        if (syncModule) {
+          let sync = null;
+          try { sync = await entries.get(syncModule.name)?.commands?.status?.(ctx); }
+          catch { warnings.push('Sync health is unavailable.'); }
+          let lastSync = null;
+          try {
+            const manifest = JSON.parse(await readFile(join(paths.stateDir, 'sync', 'last-synced-manifest.json'), 'utf8'));
+            if (typeof manifest.generatedAt === 'string') lastSync = manifest.generatedAt;
+          } catch { /* No successful sync has been recorded. */ }
+          moduleHealth.push({ name: 'sync', transport: cfg.sync?.transport ?? null, status: sync?.status ?? 'unknown', lastSync });
+        }
+        if (ordered.some(item => item.name === 'semantic')) {
+          let freshness = null;
+          try {
+            const semantic = entries.get('semantic'); const index = await semantic?.readSemanticIndex?.(paths.stateDir);
+            freshness = index ? await semantic.measureIndexFreshness({ corpusDir: cfg.vault.path, index }) : null;
+            if (!index) warnings.push('Semantic index is not available.');
+          } catch { warnings.push('Semantic index freshness is unavailable.'); }
+          moduleHealth.push({ name: 'semantic', freshness });
+        }
+      }
+    } catch { warnings.push('Module health summary is unavailable.'); }
+  }
   if (env.BRAINATLAS_TEST_DOCTOR_FAIL === '1') checks.injected = false;
-  return { ok: Object.values(checks).every(Boolean), checks, profile: cfg.profile, modules: cfg.modules, warnings };
+  return { ok: Object.values(checks).every(Boolean), checks, profile: cfg.profile, modules: cfg.modules, moduleHealth, warnings };
 }
 async function removeAdapters(cfg, paths, env) {
   const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url)); const warnings = [];
@@ -322,6 +353,13 @@ function redactPlanCopy(value) {
   }
   visit(copy);
   return copy;
+}
+
+function redactPlanOutput(value, home) {
+  if (typeof value === 'string') return redact(home ? value.split(home).join('~') : value);
+  if (Array.isArray(value)) return value.map(item => redactPlanOutput(item, home));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, /(?:password|passwd|secret|token|credential|private[_-]?key)/i.test(key) && typeof item === 'string' ? '[REDACTED]' : redactPlanOutput(item, home)]));
+  return value;
 }
 
 async function loadInstalledModuleEntry(releaseDir, manifest) {
@@ -585,14 +623,17 @@ async function moduleCommand(args, { paths, env, output, plan, value }) {
 export function enableOffline(env = process.env) {
   if (env.BRAINATLAS_OFFLINE === '1') globalThis.fetch = async () => { throw error('E_OFFLINE', 'Network access is disabled.'); };
 }
-export async function main(argv = process.argv.slice(2), env = process.env) {
-  enableOffline(env);
+export async function main(argv = process.argv.slice(2), env = process.env, dependencies = {}) {
   const args = [...argv]; const command = args.shift();
   const flag = name => args.includes(name);
   const value = name => { const i = args.indexOf(name); if (i < 0) return undefined; if (!args[i + 1] || args[i + 1].startsWith('--')) throw error('E_ARGUMENT', `Missing value for ${name}.`); return args[i + 1]; };
   const paths = resolvePaths({ platform: env.BRAINATLAS_PLATFORM || process.platform, env });
   const json = flag('--json'); const plan = flag('--plan');
-  const output = data => console.log(json || plan ? JSON.stringify(data, null, 2) : typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+  const output = data => {
+    const protectedPlan = plan && ['init', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover'].includes(command);
+    const result = protectedPlan ? redactPlanOutput(data, env.HOME) : data;
+    console.log(json || plan ? JSON.stringify(result, null, 2) : typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+  };
   const config = () => loadConfig({ paths, env });
   if (command === '--help' || command === '-h' || command === 'help') {
     const topic = command === 'help' ? args.find(argument => !argument.startsWith('--')) : undefined;
@@ -677,8 +718,19 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   if (command === 'config') {
     const action = args.shift(); const key = args.shift(); const cfg = await config();
     if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
-    if (action === 'get') { const result = key.split('.').reduce((v, k) => v?.[k], cfg); if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.'); output(result); return; }
-    if (action === 'set') { const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.'); let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; } const updated = setCliConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env); output({ action: 'config set', key }); return; }
+    if (action === 'get') { const result = key.split('.').reduce((v, k) => v?.[k], cfg); if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.'); output(typeof result === 'string' ? redact(result) : result); return; }
+    if (action === 'set') {
+      const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.');
+      let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+      const updated = setCliConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env);
+      let credentialUrl = false;
+      if (key === 'sync.options.remote' && typeof parsed === 'string' && /^https:\/\//i.test(parsed)) {
+        try { const remote = new URL(parsed); credentialUrl = Boolean(remote.username || remote.password); } catch {}
+      }
+      const warnings = credentialUrl ? ['Remote URL contains embedded credentials; use a credential helper instead.'] : [];
+      if (warnings.length) console.error(warnings[0]);
+      output({ action: 'config set', key, ...(warnings.length ? { warnings } : {}) }); return;
+    }
     throw error('E_ARGUMENT', 'Configuration action is invalid.');
   }
   if (command === 'module') { await moduleCommand(args, { paths, env, output, plan, value }); return; }
@@ -714,7 +766,8 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     const metadataUrl = env.BRAINATLAS_UPDATE_METADATA_URL;
     if (!metadataUrl) { output({ status: 'unknown', reason: 'metadata-unavailable' }); return; }
     try {
-      const response = await fetch(metadataUrl, { headers: { accept: 'application/json' } });
+      const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+      const response = await fetchImpl(metadataUrl, { headers: { accept: 'application/json' } });
       if (!response.ok) throw new Error();
       const metadata = await response.json();
       if (!validVersion(metadata?.version)) throw new Error();

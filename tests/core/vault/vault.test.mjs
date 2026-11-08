@@ -41,3 +41,11 @@ test('read, list, append-only log, and index upsert work on vault-relative paths
   const index = await readFile(join(dir, 'wiki/index.md'), 'utf8'); assert.equal(index.match(/wiki\/entities\/a.md/g).length, 1); assert.match(index, /A2/);
   await assert.rejects(readPage(dir, '../escape.md'), (e) => e.code === 'E_PATH_ESCAPE');
 });
+
+test('interrupted atomic log replacement preserves the previous complete log', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'ba-vault-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  await initVault(dir);
+  const file = join(dir, 'wiki/log.md'); const before = await readFile(file, 'utf8');
+  await assert.rejects(appendLog(dir, { action: 'updated' }, { atomicWriter: async () => { throw new Error('simulated interruption'); } }), /simulated interruption/);
+  assert.equal(await readFile(file, 'utf8'), before);
+});
