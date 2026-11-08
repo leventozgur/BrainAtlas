@@ -224,7 +224,7 @@ export function createServer(options) {
 /** @returns {Promise<void>} */
 export async function main() {
   const env = process.env;
-  const paths = core.resolvePaths({ env, platform: process.platform });
+  const paths = core.resolvePaths({ env, platform: env.BRAINATLAS_PLATFORM || process.platform });
   if (env.BRAINATLAS_CONFIG) paths.configFile = resolve(env.BRAINATLAS_CONFIG);
   const config = await core.loadConfig({ paths, env });
   const server = createServer({ config, paths, env });

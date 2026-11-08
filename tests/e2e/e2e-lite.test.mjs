@@ -202,12 +202,15 @@ async function callInstalledMcp(cli, env) {
   const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp'], env, cwd: root, stderr: 'pipe' });
   const client = new Client({ name: 'e2e-check', version: '1.0.0' });
   let connected = false;
+  let stage = 'connect';
   try {
     await client.connect(transport);
     connected = true;
+    stage = 'query';
     const query = await client.callTool({ name: 'wiki_query', arguments: { query: 'offline approval context lane evidence', limit: 5 } });
     const queryResult = query.content?.[0]?.text ? JSON.parse(query.content[0].text) : {};
     const secret = syntheticSecret();
+    stage = 'write';
     const write = await client.callTool({
       name: 'wiki_write_page',
       arguments: {
@@ -226,7 +229,8 @@ async function callInstalledMcp(cli, env) {
     };
   } catch (cause) {
     const known = ['Error', 'McpError', 'AbortError', 'AggregateError'].includes(cause?.name) ? cause.name : 'Other';
-    return { clientFailed: true, connected, clientErrorKind: known };
+    const message = cause?.message === 'MCP error -32000: Connection closed' ? 'connection-closed' : 'operation-failed';
+    return { clientFailed: true, connected, clientErrorKind: known, clientErrorStage: stage, clientErrorMessage: message };
   } finally {
     await client.close().catch(() => {});
   }
@@ -386,6 +390,7 @@ test('company Mac Lite lifecycle works offline and restores the fake HOME', asyn
         if (!mcpOutcome?.querySucceeded) issues.push('mcp-wiki-query');
         if (mcpOutcome?.clientFailed) issues.push('mcp-stdio-client-failed');
         if (mcpOutcome?.clientErrorKind) issues.push(`mcp-client-error-${mcpOutcome.clientErrorKind}`);
+        if (mcpOutcome?.clientErrorStage) issues.push(`mcp-${mcpOutcome.clientErrorStage}-${mcpOutcome.clientErrorMessage}`);
         if (mcpOutcome?.queryFailed) issues.push('mcp-query-returned-error');
         if (mcpOutcome?.queryCount === 0) issues.push('mcp-query-empty');
         if (!mcpOutcome?.writeRefused) issues.push('mcp-secret-write-refusal');

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, cp, readFile, rm, writeFile, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, cp, readFile, rm, writeFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { defaultConfig } from '../../packages/core/src/config/index.mjs';
+import { resolvePaths } from '../../packages/core/src/paths/index.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const writeTools = ['wiki_write_page', 'wiki_update_page', 'wiki_create_entity', 'wiki_create_concept', 'wiki_add_crosslinks', 'wiki_update_index'];
@@ -88,6 +89,25 @@ test('readOnly stdio server omits every write tool', async (t) => {
   assert.deepEqual(names.sort(), ['wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_index', 'wiki_read_page', 'wiki_status'].sort());
   assert.equal(names.some((name) => writeTools.includes(name)), false);
 });
+
+for (const override of [true, false]) {
+  test(`stdio MCP loads the ${override ? 'overridden' : 'native'} platform configuration`, async (t) => {
+    const fixture = await setup(true);
+    t.after(async () => rm(fixture.home, { recursive: true, force: true }));
+    const platform = override ? (process.platform === 'darwin' ? 'linux' : 'darwin') : process.platform;
+    const env = { HOME: fixture.home, XDG_CONFIG_HOME: resolve(fixture.home, 'xdg-config'), XDG_DATA_HOME: resolve(fixture.home, 'xdg-data'), XDG_STATE_HOME: resolve(fixture.home, 'xdg-state'), PATH: process.env.PATH ?? '' };
+    if (override) env.BRAINATLAS_PLATFORM = platform;
+    const paths = resolvePaths({ env, platform });
+    await mkdir(dirname(paths.configFile), { recursive: true });
+    await cp(fixture.configFile, paths.configFile);
+    const transport = new StdioClientTransport({ command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root, env, stderr: 'pipe' });
+    const client = new Client({ name: 'platform-test', version: '1.0.0' });
+    t.after(async () => { await client.close(); await transport.close(); });
+    await client.connect(transport);
+    assert.equal((await invoke(client, 'wiki_status', {})).readOnly, true);
+    assert.equal((await invoke(client, 'wiki_query', { query: 'synthetic evidence', limit: 2 })).abstained, false);
+  });
+}
 
 test('Wiki read tools return E_VAULT_MISSING when the wiki directory is absent', async (t) => {
   const env = await setup(true); t.after(async () => rm(env.home, { recursive: true, force: true }));
