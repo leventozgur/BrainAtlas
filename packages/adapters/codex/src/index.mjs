@@ -18,7 +18,9 @@ function paths(ctx) {
   const platform = ctx.platform || ctx.env.BRAINATLAS_PLATFORM || process.platform;
   const resolved = ctx.paths || resolvePaths({ platform, env: ctx.env });
   const base = ctx.scope === 'vault' ? ctx.vaultDir || ctx.config?.vault?.path : ctx.env.HOME;
-  if (ctx.scope === 'vault' && (!base || !path.isAbsolute(base))) err('E_VAULT_PATH', 'Vault path must be absolute.');
+  if (ctx.scope === 'vault' && typeof base === 'string' && base.split(/[\\/]+/).includes('..')) err('E_PATH_ESCAPE', 'Vault path must not contain parent path segments.');
+  if (ctx.scope === 'vault' && base && !path.isAbsolute(base)) err('E_PATH_ESCAPE', 'Vault path must be absolute.');
+  if (ctx.scope === 'vault' && !base) err('E_VAULT_PATH', 'Vault path must be absolute.');
   return {
     toml: ctx.scope === 'vault' ? path.join(base, '.codex', 'config.toml') : path.join(ctx.env.HOME, '.codex', 'config.toml'),
     hooks: ctx.scope === 'vault' ? null : path.join(ctx.env.HOME, '.codex', 'hooks.json'),
@@ -36,6 +38,7 @@ function checkText(text) {
 }
 function parseJson(text) {
   checkText(text);
+  if (text === '') return {};
   try { return JSON.parse(text); } catch { err('E_CONFIG_PARSE', 'Configuration file is invalid.'); }
 }
 function serializeJson(obj, before) {
@@ -54,7 +57,7 @@ function tomlCheck(text) {
   const begins = [...text.matchAll(/^# brainatlas:begin\s*$/gm)].length;
   const ends = [...text.matchAll(/^# brainatlas:end\s*$/gm)].length;
   const tables = [...text.matchAll(/^\[mcp_servers\.brainatlas\]\s*$/gm)].length;
-  if (begins !== ends || begins > 1 || tables > 1 || tables !== begins) err('E_CONFIG_PARSE', 'TOML structure around the managed table is invalid.');
+  if (begins !== ends || begins > 1 || tables > 1 || (begins && tables !== begins)) err('E_CONFIG_PARSE', 'TOML structure around the managed table is invalid.');
   // Reject malformed table headers and unterminated strings, while leaving unrelated TOML bytes untouched.
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -81,6 +84,18 @@ function withBlock(before, block, begin, end) {
     if (start < 0 || finish < start) err('E_CONFIG_PARSE', 'Managed block structure is invalid.');
     return before.slice(0, start) + block + before.slice(finish + end.length);
   }
+  if (begin === BEGIN) {
+    const table = /^\[mcp_servers\.brainatlas\]\s*$/m.exec(before);
+    if (table) {
+      const startTable = table.index;
+      const next = /^\[\[?[A-Za-z0-9_.-]+\]\]?\s*(?:#.*)?$/gm;
+      next.lastIndex = table.index + table[0].length;
+      const nextHeader = next.exec(before);
+      if (nextHeader) return before.slice(0, startTable) + block + '\n\n' + before.slice(nextHeader.index);
+      const trailing = before.match(/(?:\r?\n)*$/)?.[0] || '';
+      return before.slice(0, startTable) + block + trailing;
+    }
+  }
   const sep = before.endsWith('\n') ? '' : '\n';
   return `${before}${sep}\n${block}\n`;
 }
@@ -90,9 +105,10 @@ function mdBlock() {
   return `${MD_BEGIN}\n<!-- brainatlas:sha256=${hash} -->\n${body}\n${MD_END}`;
 }
 function mdCheck(text) {
+  checkText(text);
   const start = text.indexOf(MD_BEGIN), end = text.indexOf(MD_END);
   if (start < 0 && end < 0) return;
-  if (start < 0 || end < start) err('E_CONFIG_PARSE', 'Managed instructions block is malformed.');
+  if (start < 0 || end < start || text.indexOf(MD_BEGIN, start + MD_BEGIN.length) >= 0 || text.indexOf(MD_END, end + MD_END.length) >= 0) err('E_MANAGED_BLOCK_EDITED', 'Managed instructions block is malformed.');
   const block = text.slice(start, end + MD_END.length);
   const body = block.split('\n').slice(2, -1).join('\n');
   const claimed = block.match(/<!-- brainatlas:sha256=([a-f0-9]{12}) -->/)?.[1];
@@ -140,9 +156,18 @@ export function plan(ctx) {
 export async function apply(planResult, ctx) {
   if (!planResult || !Array.isArray(planResult.changes)) err('E_ARGUMENT', 'Plan is invalid.');
   const p = paths(ctx), originalsDir = path.join(p.state, 'originals');
+  // Replanning validates every current target (including BOMs and managed hashes)
+  // and establishes the only files this adapter may write in this scope.
+  const allowed = new Set(plan(ctx).changes.map(change => change.file));
+  for (const change of planResult.changes) {
+    if (!change || typeof change.file !== 'string' || !allowed.has(change.file)) err('E_PLAN_TARGET', 'Plan contains a file outside this adapter plan.');
+  }
   for (const change of planResult.changes) {
     const current = await read(change.file);
     if (current !== change.before) err('E_CONFIG_CHANGED', 'Configuration changed after planning.');
+  }
+  for (const change of planResult.changes) {
+    const current = change.before;
     if (current !== null) {
       const stamp = (ctx.now instanceof Date ? ctx.now : new Date()).toISOString().replace(/[:.]/g, '-');
       await atomicWriteFile(`${change.file}.bak.${stamp}`, current, { mode: 0o600 });
@@ -157,23 +182,30 @@ export async function apply(planResult, ctx) {
 /** @param {object} ctx */
 export async function remove(ctx) {
   const p = paths(ctx), files = [p.toml, p.hooks, p.instructions].filter(Boolean);
+  const actions = [];
+  // Validate the entire removal set before constructing or applying any action.
   for (const file of files) {
     const current = await read(file);
     if (current === null) continue;
+    if (file === p.toml) tomlCheck(current);
+    else if (file === p.hooks) parseJson(current);
+    else mdCheck(current);
+  }
+  for (const file of files) {
+    const current = await read(file);
     const recordPath = path.join(p.state, 'originals', `${createHash('sha256').update(file).digest('hex')}.json`);
-    let record;
-    try { record = JSON.parse(await readFile(recordPath, 'utf8')); } catch { continue; }
-    if (record.file !== file) continue;
-    if (record.original === null) { await unlink(file); continue; }
-    if (current === record.after) { await atomicWriteFile(file, record.original, { mode: 0o600 }); continue; }
+    let record = null;
+    try { record = JSON.parse(await readFile(recordPath, 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') err('E_STATE_CORRUPT', 'Adapter state is invalid.'); }
+    if (record && (record.file !== file || (record.original !== null && typeof record.original !== 'string') || typeof record.after !== 'string')) err('E_STATE_CORRUPT', 'Adapter state is invalid.');
+    if (current === null || !record) continue;
+    if (current === record.after) { actions.push({ file, write: record.original }); continue; }
     if (file === p.toml) {
-      tomlCheck(current);
       const start = current.indexOf(BEGIN), end = current.indexOf(END);
       if (start < 0 || end < start) continue;
       const after = current.slice(0, start).replace(/\n+$/, '') + current.slice(end + END.length);
       const clean = after.replace(/^\n+/, '');
-      if (clean === record.original || clean.trim() === '') await atomicWriteFile(file, record.original, { mode: 0o600 });
-      else await atomicWriteFile(file, clean, { mode: 0o600 });
+      actions.push({ file, write: clean === record.original || clean.trim() === '' ? record.original : clean });
     } else if (file === p.hooks) {
       const obj = parseJson(current);
       if (obj.hooks?.UserPromptSubmit) {
@@ -182,15 +214,17 @@ export async function remove(ctx) {
         if (!Object.keys(obj.hooks).length) delete obj.hooks;
       }
       const clean = serializeJson(obj, current);
-      if (clean === record.original.replace(/\s+$/, '') + (record.original.endsWith('\n') ? '\n' : '')) await atomicWriteFile(file, record.original, { mode: 0o600 });
-      else await atomicWriteFile(file, clean, { mode: 0o600 });
+      actions.push({ file, write: record.original !== null && clean === record.original.replace(/\s+$/, '') + (record.original.endsWith('\n') ? '\n' : '') ? record.original : clean });
     } else {
-      mdCheck(current);
       const start = current.indexOf(MD_BEGIN), end = current.indexOf(MD_END);
       if (start < 0 || end < start) continue;
       const clean = current.slice(0, start).replace(/\n+$/, '') + current.slice(end + MD_END.length);
-      await atomicWriteFile(file, clean || record.original, { mode: 0o600 });
+      actions.push({ file, write: clean || record.original || '' });
     }
+  }
+  for (const action of actions) {
+    if (action.write === null) await unlink(action.file);
+    else await atomicWriteFile(action.file, action.write, { mode: 0o600 });
   }
 }
 
