@@ -12,6 +12,7 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const schedulerStatePath = (stateDir) => join(stateDir, 'sync', 'scheduler.json');
 const schedulerLogPath = (stateDir) => join(stateDir, 'sync', 'scheduler.log');
 const commandError = () => new BrainAtlasError('E_SCHEDULER_COMMAND', 'Scheduler command failed.');
+const schedulerStopError = () => new BrainAtlasError('E_SCHEDULER_COMMAND', 'Could not stop the sync scheduler.');
 const pathEscape = () => new BrainAtlasError('E_PATH_ESCAPE', 'Scheduler paths must resolve within HOME.');
 
 function isWithin(root, path) {
@@ -224,7 +225,29 @@ async function invoke(ctx, command, args) {
   try { result = await run(command, args, { env: ctx.env ?? process.env, timeoutMs: 15_000 }); }
   catch { throw commandError(); }
   const code = Number.isInteger(result?.code) ? result.code : Number.isInteger(result?.exitCode) ? result.exitCode : 0;
-  return { code, stdout: typeof result?.stdout === 'string' ? result.stdout : '' };
+  return {
+    code,
+    stdout: typeof result?.stdout === 'string' ? result.stdout : '',
+    stderr: typeof result?.stderr === 'string' ? result.stderr : '',
+  };
+}
+
+function isAlreadyStopped(platform, result) {
+  if (platform === 'darwin' && result.code === 3) return true;
+  const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
+  if (platform === 'darwin') {
+    return /no such process|could not find service|service[^\n]*(?:not found|does not exist)/.test(output);
+  }
+  return /not-found|not found|not loaded|could not be found|unit file[^\n]*does not exist|already disabled|not enabled|\bdisabled\b/.test(output);
+}
+
+async function stopScheduler(ctx, platform, files) {
+  const [[command, args]] = hostCommands('remove', platform, ctx, files);
+  let result;
+  try { result = await invoke(ctx, command, args); }
+  catch { throw schedulerStopError(); }
+  if (result.code !== 0 && !isAlreadyStopped(platform, result)) throw schedulerStopError();
+  return { command, args, code: result.code, stdout: result.stdout, stderr: result.stderr };
 }
 
 async function runCommands(ctx, calls, { allowFailure = false } = {}) {
@@ -307,7 +330,7 @@ async function removeScheduler(ctx, platform, paths) {
   let results = [];
   if (hasManagedFiles) {
     await assertSchedulerPaths(ctx, paths, protectedPaths);
-    results = await runCommands(ctx, hostCommands('remove', platform, ctx, plan.files), { allowFailure: true });
+    results = [await stopScheduler(ctx, platform, plan.files)];
   }
   const removed = []; const preserved = [];
   const rows = new Map((manifest?.files ?? []).map((row) => [row.path, row]));
