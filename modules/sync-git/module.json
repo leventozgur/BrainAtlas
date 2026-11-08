@@ -1,0 +1,9 @@
+{
+  "name": "sync-git",
+  "version": "0.1.0-dev",
+  "description": "Git based transport for local and remote vault synchronization.",
+  "requires": ["sync-engine"],
+  "provides": ["sync-transport:git"],
+  "profiles": ["full", "custom"],
+  "entry": "src/index.mjs"
+}
