@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-rc.6 — 2026-11-08
+
+- `brainatlas sync schedule install|remove|status` installs a LaunchAgent (macOS, label `org.brainatlas.sync`) or a systemd user timer (Linux); safe temp files, HOME containment, failed stops keep files and can be retried; `uninstall` removes the schedule.
+- A never-synced host's untouched init-template files yield to remote content on first sync (no seed conflicts).
+- Tests no longer inherit `BRAINATLAS_OFFLINE` from the environment.
+
 ## 0.1.0-rc.5 — 2026-11-08
 
 - Codex adapter parses real-world `config.toml` (quoted table headers, inline tables, multi-line arrays and strings, array tables); markers inside strings are ignored; an agent config directory that resolves outside HOME is refused unless `BRAINATLAS_ALLOW_SYMLINKED_ROOT=1`.
