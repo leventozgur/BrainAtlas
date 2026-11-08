@@ -17,7 +17,7 @@ BrainAtlas barındırılan bir bilgi servisi veya ajanın kanıtı izleyeceği g
 | Lite | Yalnızca çekirdek; isteğe bağlı modül yok | Gizli bilgi filtresi açık, telemetri kapalı. Başlangıç için önerilir. |
 | Full | Seçilen sürümde Full için işaretli modüller ve çekirdek | İsteğe bağlı modüller senkronizasyon, semantik retrieval, makbuzlar ve sıkı OKF esinli kontrolleri içerir. Kullanılabilirlik sürüme bağlıdır. |
 
-Semantik retrieval deneysel olup değerlendirme kapısının arkasında varsayılan olarak kapalıdır. Klasör senkronizasyonu deneysel durumdadır.
+Semantik retrieval deneysel, isteğe bağlı, yerel Ollama kullanır ve varsayılan olarak kapalıdır; diller arası retrieval'da ölçülen bir fark görülmüştür. Ayrıntılar: [Retrieval](docs/user/retrieval.md) ve [Semantik retrieval](docs/user/semantic.md). Klasör senkronizasyonu deneysel durumdadır.
 
 ## Desteklenen ajanlar
 

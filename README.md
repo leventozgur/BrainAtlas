@@ -17,7 +17,7 @@ BrainAtlas is not a hosted knowledge service, a general-purpose agent, or a guar
 | Lite | Core only; no optional modules | Secret filtering enabled; telemetry off. Recommended starting profile. |
 | Full | Core plus modules marked for Full in the selected release | Optional modules include sync, semantic retrieval, receipts, and strict OKF-inspired checks. Availability depends on release contents. |
 
-Semantic retrieval is experimental and off by default behind an evaluation gate. Folder sync is experimental. Review module status before enabling optional functionality.
+Semantic retrieval is experimental, opt-in, uses local Ollama, and is off by default; a measured difference was observed in cross-language retrieval. See [Retrieval](docs/user/retrieval.md) and [Semantic retrieval](docs/user/semantic.md) for details. Folder sync is experimental. Review module status before enabling optional functionality.
 
 ## Supported agents
 
@@ -74,6 +74,7 @@ This is a high-level comparison of project types, not a feature benchmark. Verif
 
 - [Install and verify releases](docs/user/install.md)
 - [Agent integrations and trust review](docs/user/agents.md)
+- [Retrieval behavior and measured quality](docs/user/retrieval.md)
 - [OKF-inspired metadata](docs/user/okf.md)
 - [Sync behavior](docs/user/sync.md)
 - [Troubleshooting](docs/user/troubleshooting.md)
