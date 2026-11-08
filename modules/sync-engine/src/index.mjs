@@ -5,13 +5,14 @@ import { createMemoryTransport, SyncTransportError, ConflictError } from './tran
 import { planScheduler, planSchedulerUninstall } from './scheduler.mjs';
 import { mergeCanonicalPath, mergeIndexThreeWay, mergeLogThreeWay } from './merge.mjs';
 import { inventoryVault, resolveSyncScope, globMatch } from './scope.mjs';
+import { resolveHostId } from './host-id.mjs';
 
 function engineFor(ctx = {}) {
   const vaultPath = ctx.config?.vault?.path;
   const stateDir = ctx.paths?.stateDir;
   if (typeof vaultPath !== 'string' || typeof stateDir !== 'string') throw new BrainAtlasError('E_MODULE_CONTEXT', 'Sync context is incomplete.');
   const transport = ctx.transport ?? ctx.core?.syncTransport ?? ctx.core?.transport ?? ctx.config?.sync?.options?.transport;
-  return createSyncEngine({ vaultPath, stateDir, config: ctx.config, transport, hostId: ctx.hostId ?? ctx.env?.BRAINATLAS_HOST_ID, logger: ctx.logger });
+  return createSyncEngine({ vaultPath, stateDir, config: ctx.config, transport, env: ctx.env ?? process.env, hostId: ctx.hostId, logger: ctx.logger });
 }
 
 function actionFrom(args) {
@@ -92,3 +93,4 @@ export const help = Object.freeze({
 export { createSyncEngine, classifySyncError, SYNC_ERROR_CODES, createMemoryTransport, SyncTransportError, ConflictError,
   planScheduler, planSchedulerUninstall, mergeCanonicalPath, mergeIndexThreeWay, mergeLogThreeWay,
   inventoryVault, resolveSyncScope, globMatch };
+export { resolveHostId };

@@ -5,6 +5,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { BrainAtlasError, atomicWriteFile, runCommand as coreRunCommand } from '../../../packages/core/src/util/index.mjs';
 import { mergeCanonicalPath } from '../../sync-engine/src/merge.mjs';
 import { ConflictError, SyncTransportError, validateTransportPath } from '../../sync-engine/src/transport.mjs';
+import { resolveHostId } from '../../sync-engine/src/host-id.mjs';
 
 const RETRIES = 3;
 const COMMAND_TIMEOUT_MS = 120_000;
@@ -91,15 +92,22 @@ function strictUtf8(bytes) {
 /**
  * A Git backed object transport. It owns only `stateDir/sync/git`; it never
  * opens or modifies the vault's Git metadata.
- * @param {{stateDir:string,remote:string,branch?:string,authorName?:string,authorEmail?:string,env?:Record<string,string|undefined>,runCommand?:Function,now?:()=>Date,hostId?:string}} options
+ * @param {{stateDir:string,remote:string,branch?:string,authorName?:string,authorEmail?:string,env?:Record<string,string|undefined>,config?:object,hostId?:string,runCommand?:Function,now?:()=>Date}} options
  */
-export function createGitTransport({ stateDir, remote, branch = 'main', authorName, authorEmail, env = process.env, runCommand = coreRunCommand, now = () => new Date(), hostId = 'host', atomicWriter = atomicWriteFile } = {}) {
+export function createGitTransport({ stateDir, remote, branch = 'main', authorName, authorEmail, env = process.env, config = {}, hostId: legacyHostId, runCommand = coreRunCommand, now = () => new Date(), atomicWriter = atomicWriteFile } = {}) {
   if (typeof stateDir !== 'string' || !stateDir) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Git transport state is incomplete.');
   if (typeof runCommand !== 'function') throw new BrainAtlasError('E_ARGUMENT', 'Git command runner is invalid.');
   const syncDir = join(resolve(stateDir), 'sync');
   const repoDir = join(syncDir, 'git');
-  const host = String(hostId).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 32) || 'host';
-  const commitName = typeof authorName === 'string' && authorName.trim() ? authorName.trim() : `BrainAtlas Sync (${host})`;
+  let hostId;
+  let hostIdResolution;
+  async function getHostId() {
+    if (hostId) return hostId;
+    if (!hostIdResolution) hostIdResolution = resolveHostId({ stateDir, env, config, hostId: legacyHostId });
+    hostId = await hostIdResolution;
+    return hostId;
+  }
+  function commitName() { return typeof authorName === 'string' && authorName.trim() ? authorName.trim() : `BrainAtlas Sync (${hostId})`; }
   const commitEmail = typeof authorEmail === 'string' && authorEmail.trim() ? authorEmail.trim() : 'sync@brainatlas.invalid';
   let ready = false;
   let initialization;
@@ -129,7 +137,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   }
 
   function gitArgs(args) {
-    return ['-c', `user.name=${commitName}`, '-c', `user.email=${commitEmail}`, ...args];
+    return ['-c', `user.name=${commitName()}`, '-c', `user.email=${commitEmail}`, ...args];
   }
 
   async function execute(args, { cwd = repoDir, allowFailure = false } = {}) {
@@ -151,6 +159,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   }
 
   async function ensureReady() {
+    await getHostId();
     if (ready) return;
     if (initialization) return initialization;
     initialization = (async () => {
@@ -424,7 +433,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       if (plan.conflictContent) {
         let copyPath;
         for (let index = 0; index < 100; index += 1) {
-          const candidate = conflictCopyPath(plan.path, host, stamp, index);
+          const candidate = conflictCopyPath(plan.path, hostId, stamp, index);
           if (!(await readObject(candidate))) { copyPath = candidate; break; }
         }
         if (!copyPath) throw new SyncTransportError('E_DEGRADED');
@@ -501,11 +510,12 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     pull,
     commitAndPush,
     async status() {
+      const hostId = await getHostId();
       if (!ready) {
         try { await lstat(repoDir); }
         catch (error) {
           if (missing(error)) return {
-            mode: 'git', initialized: false, remote: redactRemote(configuredRemote()), branch,
+            mode: 'git', hostId, initialized: false, remote: redactRemote(configuredRemote()), branch,
             ahead: 0, behind: 0, clean: true, lastSuccessfulSync: await lastSuccessfulSync(),
           };
           throw error;
@@ -521,7 +531,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
         if (counts.code === 0) [ahead, behind] = counts.stdout.trim().split(/\s+/).map((value) => Number(value) || 0);
       }
       return {
-        mode: 'git', initialized: true, remote: redactRemote(configuredRemote()),
+        mode: 'git', hostId, initialized: true, remote: redactRemote(configuredRemote()),
         branch: currentBranch.code === 0 ? currentBranch.stdout.trim() : null,
         clean: status.stdout.length === 0, ahead, behind, lastSuccessfulSync: await lastSuccessfulSync(),
       };
@@ -556,7 +566,7 @@ export async function activate(ctx) {
     authorName: options.authorName,
     authorEmail: options.authorEmail,
     env: ctx.env ?? process.env,
-    hostId: ctx.env?.BRAINATLAS_HOST_ID,
+    config: ctx.config,
   });
 }
 

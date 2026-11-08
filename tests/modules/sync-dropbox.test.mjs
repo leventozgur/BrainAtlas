@@ -199,7 +199,7 @@ test('two hosts sync over the fake Dropbox API through the sync engine', async (
     const vaultPath = join(root, name, 'vault');
     const stateDir = join(root, name, 'state');
     await mkdir(vaultPath, { recursive: true });
-    return { vaultPath, stateDir, engine: createSyncEngine({ vaultPath, stateDir, transport, config: { sync: { options: {} } }, hostId: name }) };
+    return { vaultPath, stateDir, engine: createSyncEngine({ vaultPath, stateDir, transport, config: { sync: { options: {} } }, env: { BRAINATLAS_HOST_ID: name } }) };
   }
   const first = await host('replica-one');
   const second = await host('replica-two');
@@ -229,15 +229,19 @@ test('nested Dropbox sync command parses the explicit app-key option', async () 
   assert.equal(JSON.parse(saved).appKey, 'sample-app-key');
 });
 
-test('module activation installs the configured Dropbox object transport', async () => {
+test('module activation installs the configured Dropbox object transport', async (t) => {
+  const stateRoot = await mkdtemp(join(tmpdir(), 'sync-dropbox-state-'));
+  t.after(() => rm(stateRoot, { recursive: true, force: true }));
   const fake = fakeDropbox();
   const context = {
     config: { sync: { transport: 'dropbox', options: { root: '/BrainAtlas' } } },
-    paths: {},
+    paths: { stateDir: join(stateRoot, 'state') },
+    env: {},
     credentialStore: { async get() { return JSON.stringify({ version: 1, appKey: 'sample-app-key', accessToken: 'active-token', refreshToken: 'refresh-token', expiresAt: Date.now() + 60_000_000 }); }, async set() {} },
     fetch: fake.fetch,
   };
   assert.equal(await activate(context), undefined);
   assert.equal(context.transport.capabilities.mode, 'object');
+  assert.match(context.transport.hostId, /^[a-z0-9-]+$/);
   assert.deepEqual(await context.transport.list(), []);
 });

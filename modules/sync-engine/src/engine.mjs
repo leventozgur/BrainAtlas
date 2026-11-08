@@ -7,6 +7,7 @@ import { BrainAtlasError } from '../../../packages/core/src/util/errors.mjs';
 import { globMatch, inventoryVault, isLocalOnlyFrontmatter, resolveSyncScope } from './scope.mjs';
 import { mergeCanonicalPath } from './merge.mjs';
 import { SyncTransportError } from './transport.mjs';
+import { resolveHostId } from './host-id.mjs';
 
 const SPECIAL = new Set(['wiki/index.md', 'wiki/log.md']);
 const MANIFEST_VERSION = 3;
@@ -102,14 +103,13 @@ function pendingDeletePath(path, requester) { return `${PENDING_DELETE_PREFIX}${
 
 /**
  * Build a transport agnostic synchronizer. Each instance owns `stateDir/sync/`.
- * @param {{vaultPath:string,stateDir:string,config?:object,transport?:object,hostId?:string,now?:()=>Date,logger?:object}} options
+ * @param {{vaultPath:string,stateDir:string,config?:object,transport?:object,env?:Record<string,string|undefined>,hostId?:string,now?:()=>Date,logger?:object}} options
  */
-export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, hostId = 'host', now = () => new Date(), logger = {} } = {}) {
+export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, env = process.env, hostId, now = () => new Date(), logger = {} } = {}) {
   if (typeof vaultPath !== 'string' || typeof stateDir !== 'string') throw new SyncTransportError('E_STATE_INVALID');
   const unavailable = async () => { throw new SyncTransportError('E_TRANSPORT_UNAVAILABLE'); };
   const tx = transport ?? { list: unavailable, get: unavailable, put: unavailable, delete: unavailable };
   if (typeof tx.list !== 'function' || typeof tx.get !== 'function' || typeof tx.put !== 'function' || typeof tx.delete !== 'function') throw new SyncTransportError('E_TRANSPORT_UNAVAILABLE');
-  const host = String(hostId).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 32) || 'host';
   const root = resolve(vaultPath), syncDir = join(stateDir, 'sync');
   const manifestPath = join(syncDir, 'last-synced-manifest.json');
   const journalPath = join(syncDir, 'journal.json');
@@ -118,6 +118,14 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
   const settingsPath = join(syncDir, 'settings.json');
   const basesDir = join(syncDir, 'bases');
   const conflictDir = join(syncDir, 'conflicts');
+  let resolvedHost;
+  let hostIdResolution;
+  async function getHostId() {
+    if (resolvedHost) return resolvedHost;
+    if (!hostIdResolution) hostIdResolution = resolveHostId({ stateDir, env, config, hostId });
+    resolvedHost = await hostIdResolution;
+    return resolvedHost;
+  }
 
   async function ensureState() { await mkdir(basesDir, { recursive: true, mode: 0o700 }); await mkdir(conflictDir, { recursive: true, mode: 0o700 }); }
   async function saveJson(path, value) { await atomicWrite(path, Buffer.from(`${JSON.stringify(value, null, 2)}\n`)); }
@@ -180,6 +188,7 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
     return { version: MANIFEST_VERSION, generatedAt: now().toISOString(), files: [...entries.values()].sort((a, b) => a.path.localeCompare(b.path)) };
   }
   async function addConflict({ path, kind, base, local, remote, remoteRev, copyRemote = true }) {
+    const host = await getHostId();
     const record = { id: randomUUID(), path, kind, baseHash: base?.sha256 ?? null, localHash: local ? sha256(local.bytes) : null,
       remoteHash: remote ? sha256(remote.bytes) : null, remoteRev: remoteRev ?? null, host, createdAt: now().toISOString() };
     const rows = await readJson(conflictsPath, []);
@@ -252,6 +261,7 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
   }
 
   async function status() {
+    const hostId = await getHostId();
     const [manifest, conflicts, pendingDeletes, paused, journal, transportStatus] = await Promise.all([
       readManifest(), readJson(conflictsPath, []), readJson(pendingDeletesPath, []), isPaused(), readJson(journalPath),
       typeof tx.status === 'function' ? tx.status() : null,
@@ -264,7 +274,7 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
         ? 'Folder sync cannot guarantee compare-and-swap; an external sync client may also create conflict copies.'
         : undefined;
     return { status: paused ? 'PAUSED' : degraded ? 'DEGRADED' : journal?.phase === 'interrupted' ? 'INTERRUPTED' : (pendingDeletes.length || unresolved.length ? 'PENDING' : 'SYNCED'),
-      manifestVersion: MANIFEST_VERSION, fileCount: manifest.files.length, conflictCount: unresolved.length,
+      hostId, manifestVersion: MANIFEST_VERSION, fileCount: manifest.files.length, conflictCount: unresolved.length,
       pendingDeleteCount: pendingDeletes.length, pendingDeletionPaths: pendingDeletes.map((row) => row.path).filter((path) => typeof path === 'string').sort(), paused,
       ...(transportStatus ? { transport: transportStatus } : {}),
       ...(degradedReason ? { degradedReason } : {}) };
@@ -274,6 +284,7 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
   async function resume() { await ensureState(); await saveJson(settingsPath, { paused: false, updatedAt: now().toISOString() }); return { status: 'RESUMED' }; }
 
   async function approveDeletes(paths) {
+    const host = await getHostId();
     await ensureState();
     const all = paths === '--all' || (paths && typeof paths === 'object' && paths.all === true);
     const queued = await readJson(pendingDeletesPath, []);
@@ -285,7 +296,7 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
     }
     if (requested.some((path) => typeof path !== 'string' || !path)) throw new SyncTransportError('E_INVALID_PATH');
     const remaining = [...queued], approved = [];
-    const journal = { id: randomUUID(), phase: 'running', startedAt: now().toISOString(), operations: [] };
+    const journal = { id: randomUUID(), hostId: host, phase: 'running', startedAt: now().toISOString(), operations: [] };
     await saveJson(journalPath, journal);
     for (const path of requested) {
       safePath(path);
@@ -336,12 +347,13 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
   }
 
   async function run() {
+    const host = await getHostId();
     await ensureState();
     if (await isPaused()) return { status: 'PAUSED', pushed: 0, pulled: 0, merged: 0, pendingDeletes: 0, conflicts: [], refused: [] };
     const previousJournal = await readJson(journalPath);
     const priorRecoverable = previousJournal && previousJournal.phase !== 'complete' ? previousJournal : null;
     const priorOps = new Map((priorRecoverable?.operations ?? []).map((operation) => [operation.path, operation]));
-    const journal = { id: randomUUID(), phase: 'planning', startedAt: now().toISOString(), operations: [] };
+    const journal = { id: randomUUID(), hostId: host, phase: 'planning', startedAt: now().toISOString(), operations: [] };
     await saveJson(journalPath, journal);
     const result = { status: 'SYNCED', pushed: 0, pulled: 0, merged: 0, pendingDeletes: 0, conflicts: [], refused: [] };
     let baseManifest;

@@ -135,8 +135,10 @@ test('activation wires selected folder transport and the manifest declares its d
     manifest,
     { name: 'sync-engine', version: '0.1.0-rc.1', description: 'engine', requires: [], provides: ['sync'], profiles: ['full'], entry: 'src/index.mjs' },
   ]).map((item) => item.name), ['sync-engine', 'sync-folder']);
-  const ctx = { config: { vault: { path: fx.vault }, sync: { transport: 'folder', options: { path: fx.share } } }, paths: {} };
+  const ctx = { config: { vault: { path: fx.vault }, sync: { transport: 'folder', options: { path: fx.share } } }, paths: { stateDir: join(fx.root, 'state') }, env: {} };
   await activate(ctx);
   assert.deepEqual(ctx.transport.capabilities, { cas: false, mode: 'object' });
+  assert.match(ctx.transport.hostId, /^[a-z0-9-]+$/);
+  assert.equal((await ctx.transport.status()).hostId, ctx.transport.hostId);
   assert.deepEqual(await ctx.transport.list(), []);
 });
