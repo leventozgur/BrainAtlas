@@ -12,7 +12,7 @@ import { scanText } from '../../../packages/core/src/safety/index.mjs';
 export function expandFixture(text) {
   // Prefixes are assembled from parts so this file never contains a provider-format literal either.
   const prefixes = {
-    SK_DASH: ['s', 'k-'], GH_P: ['gh', 'p_'], GH_O: ['gh', 'o_'], GH_S: ['gh', 's_'], GH_R: ['gh', 'r_'], GH_U: ['gh', 'u_'],
+    SK_DASH: ['s', 'k-'], GH_P: ['gh', 'p_'], GH_O: ['gh', 'o_'], GH_S: ['gh', 's_'], GH_R: ['gh', 'r_'], GH_U: ['gh', 'u_'], GH_PAT: ['git', 'hub_pat_'],
     XOX_B: ['xo', 'xb-'], XOX_P: ['xo', 'xp-'], XOX_A: ['xo', 'xa-'], XOX_R: ['xo', 'xr-'], XOX_S: ['xo', 'xs-'],
     AWS_AKIA: ['AK', 'IA'], GOOGLE_AIZA: ['AI', 'za'], PEM_BEGIN: ['-----BEG', 'IN'], PEM_END: ['-----E', 'ND'],
   };
