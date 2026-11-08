@@ -72,3 +72,12 @@ test('command parses strict, changed, as-of, and json options and reports an exi
   await assert.rejects(checkCommand({ vaultDir: dir }, ['--strict', '--changed', '../outside.md']), TypeError);
   await assert.rejects(checkCommand({ vaultDir: dir }, ['--as-of', 'not-a-date']), TypeError);
 });
+
+test('generic okf command returns JSON findings and an error exit code', async (t) => {
+  const dir = await vault(t);
+  await page(dir, 'bad.md', 'generated: "2026-01-01"\nstatus: confirmed\nsources: []\nverified: []\nstale_after: P2W');
+  const result = await commands.okf(['check', '--strict', '--json'], { vaultDir: dir });
+  assert.equal(result.exitCode, 1);
+  const output = JSON.parse(result.output);
+  assert.ok(output.findings.some((item) => item.path === 'wiki/bad.md' && item.rule === 'confirmed.unverified'));
+});

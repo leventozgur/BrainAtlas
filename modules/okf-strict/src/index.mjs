@@ -2,6 +2,7 @@
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { checkVault as coreCheckVault } from '../../../packages/core/src/okf/index.mjs';
+import { resolveSafePath } from '../../../packages/core/src/util/index.mjs';
 import { parseFrontmatter } from '../../../packages/core/src/vault/index.mjs';
 
 const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
@@ -59,6 +60,7 @@ export async function check(vaultDir, options = {}) {
   const selected = options.changed === undefined ? null : [...new Set(options.changed)];
   const asOf = options.asOf === undefined ? new Date() : options.asOf;
   if (asOf instanceof Date ? !Number.isFinite(asOf.getTime()) : (typeof asOf !== 'string' || !validDate(asOf))) throw new TypeError('asOf must be a valid UTC date or timestamp.');
+  if (selected !== null) await Promise.all(selected.map((path) => resolveSafePath(vaultDir, path)));
   const core = options.core ?? {};
   const checkVault = typeof core.checkVault === 'function' ? core.checkVault : coreCheckVault;
   const findings = await checkVault(vaultDir, { ...(options.asOf === undefined ? {} : { asOf }), ...(selected === null ? {} : { changed: selected }) });
@@ -116,13 +118,30 @@ function parseArgs(args) {
 export async function checkCommand(ctx, args = []) {
   if (typeof ctx?.vaultDir !== 'string' || !ctx.vaultDir) throw new TypeError('OKF command needs a vaultDir.');
   const options = parseArgs(args);
-  const findings = await check(ctx.vaultDir, { ...options, core: ctx.core });
+  let findings;
+  try {
+    findings = await check(ctx.vaultDir, { ...options, core: ctx.core });
+  } catch (cause) {
+    if (cause?.code !== 'E_PATH_ESCAPE') throw cause;
+    return { ok: false, findings: [], errorCode: 'E_PATH_ESCAPE', exitCode: 1, json: options.json };
+  }
   const errorCount = findings.filter((item) => item.severity === 'error').length;
   return { ok: errorCount === 0, findings, errorCount, warningCount: findings.length - errorCount, exitCode: errorCount ? 1 : 0, json: options.json };
+}
+
+/** Generic CLI module command entry. Args may include the module's `check` verb. */
+export async function okfCommand(args, ctx) {
+  if (!Array.isArray(args)) throw new TypeError('Command arguments must be an array.');
+  const checkArgs = args[0] === 'check' ? args.slice(1) : args;
+  const result = await checkCommand(ctx, checkArgs);
+  const output = result.json
+    ? JSON.stringify({ findings: result.findings, ...(result.errorCode ? { errorCode: result.errorCode } : {}) })
+    : result.findings.map((item) => `${item.severity}: ${item.path} ${item.rule} — ${item.message}`).join('\n');
+  return { exitCode: result.exitCode, output };
 }
 
 export async function activate(ctx) {
   if (!ctx || typeof ctx !== 'object') throw new TypeError('Module activation context is required.');
 }
 
-export const commands = Object.freeze({ check: checkCommand });
+export const commands = Object.freeze({ check: checkCommand, okf: okfCommand });
