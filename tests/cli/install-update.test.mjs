@@ -113,7 +113,7 @@ test('install manifest records resolved paths under a symlinked ~/.local and uni
   assert.equal(await readFile(join(localTarget, 'sentinel'), 'utf8'), 'keep\n');
 });
 
-test('uninstall JSON reports the path of a changed external managed file', async t => {
+test('uninstall JSON reports a path-free error envelope for a changed external managed file', async t => {
   const work = await mkdtemp(join(tmpdir(), 'ba-uninstall-conflict-')); t.after(() => rm(work, { recursive: true, force: true }));
   const home = join(work, 'home'); const out = join(work, 'release'); await mkdir(home);
   const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
@@ -128,11 +128,14 @@ test('uninstall JSON reports the path of a changed external managed file', async
   await rm(changedFile); await writeFile(changedFile, 'user-owned replacement\n');
   const uninstalled = spawnSync(process.execPath, [cli, 'uninstall', '--json'], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
   assert.equal(uninstalled.status, 1);
-  const response = JSON.parse(uninstalled.stderr.trim());
-  assert.equal(response.code, 'E_UNINSTALL_CONFLICT');
-  assert.match(response.message, new RegExp(resolvedChangedFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.deepEqual(response.conflicts, [resolvedChangedFile]);
-  assert.doesNotMatch(response.message, /user-owned replacement/);
+  const response = JSON.parse(uninstalled.stdout.trim());
+  assert.deepEqual(Object.keys(response), ['ok', 'error']);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'E_UNINSTALL_CONFLICT');
+  assert.equal(response.error.message, 'brainatlas command failed.');
+  assert.deepEqual(Object.keys(response.error).sort(), ['code', 'message']);
+  assert.ok(!uninstalled.stdout.includes(resolvedChangedFile));
+  assert.match(uninstalled.stderr, /E_UNINSTALL_CONFLICT/);
   assert.equal(await readFile(changedFile, 'utf8'), 'user-owned replacement\n');
 });
 
