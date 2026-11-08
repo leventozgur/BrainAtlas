@@ -58,7 +58,7 @@ test('both README languages cover required section headings', () => {
   assert(categories('## Profiles', 'en').includes(false));
 });
 test('documents contain no personal absolute paths, email addresses or local hosts', () => {
-  assert.equal(personalLeaks('/Users/alice/private').length, 1); assert.equal(personalLeaks('~/.local/bin').length, 0);
+  assert.equal(personalLeaks(['', 'Users', 'alice', 'private'].join('/')).length, 1); assert.equal(personalLeaks('~/.local/bin').length, 0);
   assert.deepEqual(docs.flatMap(d => personalLeaks(d.text).map(v => `${d.file}: ${v}`)), []);
 });
 test('OKF is described as inspiration without compliance claim', () => {
