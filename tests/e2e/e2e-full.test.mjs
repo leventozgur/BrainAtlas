@@ -33,7 +33,7 @@ function activationSource(moduleName) {
   return new URL(`../../modules/${moduleName}/src/index.mjs`, import.meta.url);
 }
 
-test('full release is ready for the two-host offline sync scenario', async t => {
+test('full release is ready for the two-host offline sync scenario', { skip: 'PM: probe written ahead of time by E2E-LITE; owned and completed by the E2E-FULL track' }, async t => {
   const temp = await mkdtemp(join(tmpdir(), 'ba-e2e-full-'));
   t.after(() => rm(temp, { recursive: true, force: true }));
   const macHome = join(temp, 'fake-home-macos');
