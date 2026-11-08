@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-import { createHash } from 'node:crypto';
-import { O_APPEND, O_CREAT, O_NOFOLLOW, O_WRONLY } from 'node:constants';
-import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { O_APPEND, O_CREAT, O_EXCL, O_NOFOLLOW, O_WRONLY } from 'node:constants';
+import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { runCommand as defaultRunCommand } from '@brainatlas/core';
 import { BrainAtlasError } from '../../../packages/core/src/util/errors.mjs';
@@ -149,30 +149,35 @@ async function readManifest(path, expectedPaths) {
   return parsed;
 }
 
-async function writeManifest(path, manifest) {
+async function writeSchedulerFile(path, contents, ctx, paths, errorCode, message) {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const temp = `${path}.tmp-${process.pid}`;
+  const temp = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`);
+  let handle;
+  let created = false;
   try {
-    await writeFile(temp, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'w', mode: 0o600 });
-    await chmod(temp, 0o600);
+    await assertSchedulerPaths(ctx, paths, [path]);
+    handle = await open(temp, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600);
+    created = true;
+    await handle.writeFile(contents);
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    await assertSchedulerPaths(ctx, paths, [path]);
     await rename(temp, path);
-  } catch {
-    await rm(temp, { force: true });
-    throw new BrainAtlasError('E_STATE_WRITE', 'Could not update scheduler state.');
+  } catch (cause) {
+    await handle?.close().catch(() => {});
+    if (created) await rm(temp, { force: true }).catch(() => {});
+    if (cause?.code === 'E_PATH_ESCAPE') throw cause;
+    throw new BrainAtlasError(errorCode, message);
   }
 }
 
-async function writeManagedFile(file) {
-  await mkdir(dirname(file.path), { recursive: true, mode: 0o700 });
-  const temp = `${file.path}.tmp-${process.pid}`;
-  try {
-    await writeFile(temp, file.contents, { flag: 'w', mode: 0o600 });
-    await chmod(temp, 0o600);
-    await rename(temp, file.path);
-  } catch {
-    await rm(temp, { force: true });
-    throw new BrainAtlasError('E_SCHEDULER_WRITE', 'Could not write scheduler files.');
-  }
+async function writeManifest(path, manifest, ctx, paths) {
+  await writeSchedulerFile(path, `${JSON.stringify(manifest, null, 2)}\n`, ctx, paths, 'E_STATE_WRITE', 'Could not update scheduler state.');
+}
+
+async function writeManagedFile(file, ctx, paths) {
+  await writeSchedulerFile(file.path, file.contents, ctx, paths, 'E_SCHEDULER_WRITE', 'Could not write scheduler files.');
 }
 
 async function ensureLogFile(path) {
@@ -263,12 +268,12 @@ async function installScheduler(ctx, platform, paths, intervalMin) {
   let schedulerStartAttempted = false;
   try {
     await assertSchedulerPaths(ctx, paths, protectedPaths);
-    for (const file of plan.files) await writeManagedFile(file);
+    for (const file of plan.files) await writeManagedFile(file, ctx, paths);
     await ensureLogFile(plan.logPath);
     await assertSchedulerPaths(ctx, paths, protectedPaths);
     schedulerStartAttempted = true;
     await runCommands(ctx, hostCommands('install', platform, ctx, plan.files));
-    await writeManifest(statePath, { schemaVersion: 1, platform, intervalMin, files: newRows });
+    await writeManifest(statePath, { schemaVersion: 1, platform, intervalMin, files: newRows }, ctx, paths);
   } catch (cause) {
     if (schedulerStartAttempted && cause?.code !== 'E_PATH_ESCAPE') {
       await runCommands(ctx, hostCommands('remove', platform, ctx, plan.files), { allowFailure: true }).catch(() => {});
@@ -280,7 +285,7 @@ async function installScheduler(ctx, platform, paths, intervalMin) {
       if (!current || digest(current) !== digest(Buffer.from(file.contents))) continue;
       const original = originals.get(file.path);
       if (original) {
-        await writeManagedFile({ path: file.path, contents: original.bytes }).catch(() => {});
+        await writeManagedFile({ path: file.path, contents: original.bytes }, ctx, paths).catch(() => {});
         await chmod(file.path, original.mode).catch(() => {});
       } else await rm(file.path, { force: true }).catch(() => {});
     }
