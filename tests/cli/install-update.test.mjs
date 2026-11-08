@@ -2,9 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { buildRelease } from '../../release/build-release.mjs';
 import { signRelease } from '../../release/sign.mjs';
 
@@ -40,6 +40,14 @@ test('offline install, update, doctor rollback, rollback and interrupted journal
   assert.equal(await readlink(join(home, '.local/bin/brainatlas')), join(data, 'bin/brainatlas'));
   assert.equal(await readlink(join(home, '.local/bin/ba')), join(data, 'bin/brainatlas'));
   const status = run('status', '--json'); assert.equal(status.status, 0); assert.equal(JSON.parse(status.stdout).checks.config, true);
+  const metadataOffline = run('update', '--metadata-only', '--json');
+  assert.equal(metadataOffline.status, 0, metadataOffline.stderr);
+  assert.deepEqual(JSON.parse(metadataOffline.stdout), { status: 'unknown', reason: 'offline' });
+  const metadataArchive = run('update', '--metadata-only', '--from', v2, '--json');
+  assert.equal(metadataArchive.status, 0, metadataArchive.stderr);
+  assert.equal(JSON.parse(metadataArchive.stdout).status, 'available');
+  assert.equal(JSON.parse(metadataArchive.stdout).currentVersion, '0.1.0-test.1');
+  assert.equal(JSON.parse(metadataArchive.stdout).offeredVersion, '0.1.0-test.2');
   const updated = run('update', '--from', v2, '--json'); assert.equal(updated.status, 0, updated.stderr);
   assert.equal(await readlink(current), 'releases/0.1.0-test.2');
   const failed = spawnSync(process.execPath, [cliPath, 'update', '--from', v3, '--json'], { cwd: resolve('.'), env: { ...env, BRAINATLAS_TEST_DOCTOR_FAIL: '1' }, encoding: 'utf8' });
@@ -56,6 +64,33 @@ test('offline install, update, doctor rollback, rollback and interrupted journal
   assert.equal(JSON.parse(recovered.stdout).action, 'restored-previous-release');
   assert.equal(await readlink(current), 'releases/0.1.0-test.1');
   await assert.rejects(readFile(journalFile), { code: 'ENOENT' });
+});
+
+test('install manifest records resolved paths under a symlinked ~/.local and uninstall removes them', async t => {
+  const work = await mkdtemp(join(tmpdir(), 'ba-install-symlink-home-')); t.after(() => rm(work, { recursive: true, force: true }));
+  const home = join(work, 'home'); const localTarget = join(work, 'local-target'); const out = join(work, 'release');
+  await mkdir(home); await mkdir(localTarget); await writeFile(join(localTarget, 'sentinel'), 'keep\n');
+  await symlink(localTarget, join(home, '.local'));
+  const resolvedLocalTarget = await realpath(localTarget);
+  const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
+  const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
+  const archive = await signedLite(out, '0.1.0-symlink.1', key);
+  const env = { ...process.env, HOME: home, BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1', BRAINATLAS_ALLOWED_SIGNERS: signers };
+  const install = spawnSync('sh', [resolve('install.sh'), '--from', archive, '--allowed-signers', signers, '--prefix-home', home, '--yes'], { cwd: resolve('.'), env, encoding: 'utf8' });
+  assert.equal(install.status, 0, install.stderr);
+  const data = join(resolvedLocalTarget, 'share', 'brainatlas');
+  const manifestPath = join(data, 'install-manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  assert.ok(manifest.files.some(item => item.path === join(resolvedLocalTarget, 'bin', 'brainatlas')));
+  assert.ok(manifest.files.some(item => item.path.startsWith(`${data}${sep}`)));
+  assert.ok(manifest.files.every(item => !item.path.startsWith(join(home, '.local'))));
+
+  const cli = join(data, 'current', 'packages', 'cli', 'bin', 'brainatlas.mjs');
+  const uninstalled = spawnSync(process.execPath, [cli, 'uninstall', '--json'], { cwd: resolve('.'), env, encoding: 'utf8' });
+  assert.equal(uninstalled.status, 0, uninstalled.stderr);
+  await assert.rejects(lstat(data), { code: 'ENOENT' });
+  await assert.rejects(lstat(join(localTarget, 'bin')), { code: 'ENOENT' });
+  assert.equal(await readFile(join(localTarget, 'sentinel'), 'utf8'), 'keep\n');
 });
 
 test('install rejects a wrong checksum and an invalid signature before creating a current release', async t => {

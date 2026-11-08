@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline/promises';
 import { spawnSync } from 'node:child_process';
 import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, vaultId } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from './archive.mjs';
-import { managePath, recordManagedPath, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
+import { managePath, recordManagedPath, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
 
 const error = (code, message) => Object.assign(new Error(message), { code });
 const validVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
@@ -32,7 +32,7 @@ function compareVersions(left, right) {
 function managedRoots(paths, env) {
   const home = env.HOME; const platform = env.BRAINATLAS_PLATFORM || process.platform;
   if (platform === 'darwin') return [home];
-  return [home, env.XDG_DATA_HOME || join(home, '.local', 'share'), env.XDG_CONFIG_HOME || join(home, '.config'), env.XDG_STATE_HOME || join(home, '.local', 'state')];
+  return [home, join(home, '.local'), env.XDG_DATA_HOME || join(home, '.local', 'share'), env.XDG_CONFIG_HOME || join(home, '.config'), env.XDG_STATE_HOME || join(home, '.local', 'state')];
 }
 const journalPath = paths => join(paths.stateDir, 'update-journal.json');
 const previousPath = paths => join(paths.stateDir, 'previous-release');
@@ -188,8 +188,9 @@ async function writeInstallEntrypoints(paths, env) {
 }
 
 async function removeAppDataPreserving(paths, keepFiles = [], vaultPath = null) {
-  const keep = new Set(keepFiles.map(path => resolve(path)));
-  if (vaultPath) keep.add(resolve(vaultPath));
+  const dataDir = await resolveManagedPath(paths.dataDir, { followFinal: true });
+  const keep = new Set(await Promise.all(keepFiles.map(path => resolveManagedPath(resolve(path), { followFinal: true }))));
+  if (vaultPath) keep.add(await resolveManagedPath(resolve(vaultPath), { followFinal: true }));
   try { const stat = await lstat(paths.dataDir); if (!stat.isDirectory() || stat.isSymbolicLink()) throw error('E_UNINSTALL_CONFLICT', 'Application data directory is unsafe.'); }
   catch (cause) { if (cause?.code === 'ENOENT') return; throw cause; }
   async function removeTree(dir) {
@@ -210,7 +211,7 @@ async function removeAppDataPreserving(paths, keepFiles = [], vaultPath = null) 
     if (!retained && !exact) await rm(dir, { recursive: true, force: true });
     return retained || exact;
   }
-  await removeTree(paths.dataDir);
+  await removeTree(dataDir);
 }
 
 export async function hookCommandFor({ client, event, paths, config }) {
@@ -436,11 +437,13 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     if (plan) { output({ ...(await uninstallManagedFiles(paths, { plan: true })), appDirectory: paths.dataDir, keepVault: true, adapters: cfg.agents || [] }); return; }
     const adapterWarnings = await removeAdapters(cfg, paths, env);
     const activeManifest = await readInstallManifest(paths);
-    const priorConfig = activeManifest.files.find(item => item.path === paths.configFile && item.beforeSha256 && item.backupPath);
+    const configFile = await resolveManagedPath(paths.configFile);
+    const priorConfig = activeManifest.files.find(item => item.path === configFile && item.beforeSha256 && item.backupPath);
     let priorVault = null;
     if (priorConfig) try { priorVault = JSON.parse(await readFile(priorConfig.backupPath, 'utf8'))?.vault?.path; } catch {}
     const restored = await uninstallManagedFiles(paths, { home: env.HOME, roots });
-    const preserved = activeManifest.files.filter(item => item.beforeSha256 && item.path.startsWith(`${paths.dataDir}${sep}`)).map(item => item.path);
+    const dataDir = await resolveManagedPath(paths.dataDir, { followFinal: true });
+    const preserved = activeManifest.files.filter(item => item.beforeSha256 && item.path.startsWith(`${dataDir}${sep}`)).map(item => item.path);
     if (cfg.vault.path) preserved.push(resolve(cfg.vault.path));
     if (priorVault && typeof priorVault === 'string' && priorVault.startsWith('/')) preserved.push(priorVault);
     await removeAppDataPreserving(paths, preserved);
@@ -448,7 +451,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     await removeCreatedDirectories(restored.createdDirectories, env.HOME, roots);
     output({ action: 'uninstall', restored: restored.restored, vaultPreserved: true, warnings: adapterWarnings }); return;
   }
-  if (command === 'update' && flag('--check')) {
+  if (command === 'update' && (flag('--check') || flag('--metadata-only'))) {
     const archivePath = value('--from');
     if (archivePath) {
       const { manifest } = await inspectReleaseArchive(resolve(archivePath), releaseSigner(paths, env));

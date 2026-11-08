@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cp, lstat, mkdir, mkdtemp, readFile, readlink, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, readFile, readlink, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { buildRelease } from '../../release/build-release.mjs';
@@ -81,7 +81,8 @@ test('offline install, module lifecycle, doctor rollback and uninstall restore H
   assert.equal(await readlink(join(dataDir, 'current')), 'releases/0.1.0-test.1');
   const installManifest = JSON.parse(await readFile(join(dataDir, 'install-manifest.json'), 'utf8'));
   assert.ok(installManifest.files.length >= 4);
-  const configEntry = installManifest.files.find(item => item.path === join(dataDir, 'config.json'));
+  const configPath = await realpath(join(dataDir, 'config.json'));
+  const configEntry = installManifest.files.find(item => item.path === configPath);
   assert.match(configEntry.beforeSha256, /^[a-f0-9]{64}$/); assert.match(configEntry.afterSha256, /^[a-f0-9]{64}$/); assert.ok(configEntry.backupPath);
   await mkdir(activeVault, { recursive: true }); await writeFile(join(activeVault, 'keep.md'), 'vault bytes\n');
   const unavailableEval = run('eval', '--json'); assert.equal(unavailableEval.status, 1); assert.match(unavailableEval.stderr, /E_COMPONENT_MISSING/);

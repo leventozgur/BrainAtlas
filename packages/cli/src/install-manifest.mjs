@@ -1,13 +1,36 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile, chmod, rename, rmdir } from 'node:fs/promises';
-import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
+import { lstat, mkdir, readFile, readlink, realpath, rm, symlink, writeFile, chmod, rename, rmdir } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const manifestPath = paths => paths.installManifest;
 const within = (file, root) => { const rel = relative(resolve(root), resolve(file)); return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)); };
 const matchingRoot = (file, roots) => [...roots].map(root => resolve(root)).filter(root => within(file, root)).sort((a, b) => b.length - a.length)[0];
+
+/** Resolve symlinked parent directories while keeping the final path itself intact. */
+export async function resolveManagedPath(file, { followFinal = false } = {}) {
+  checkedPath(file);
+  if (followFinal) {
+    try { return await realpath(file); }
+    catch (cause) { if (cause?.code !== 'ENOENT') throw cause; }
+  }
+  const tail = followFinal ? [] : [basename(file)];
+  let current = followFinal ? file : dirname(file);
+  while (true) {
+    try {
+      const root = await realpath(current);
+      return resolve(root, ...tail);
+    } catch (cause) {
+      if (cause?.code !== 'ENOENT') throw cause;
+      const parent = dirname(current);
+      if (parent === current) throw cause;
+      tail.unshift(basename(current));
+      current = parent;
+    }
+  }
+}
 
 function checkedPath(file) {
   if (typeof file !== 'string' || !isAbsolute(file) || normalize(file) !== file || file.split(/[\\/]/).includes('..')) throw fail('E_MANIFEST_INVALID', 'Install manifest path is invalid.');
@@ -16,7 +39,7 @@ function checkedPath(file) {
 
 /** Return a stable snapshot without following the final symlink. */
 export async function snapshotPath(file) {
-  checkedPath(file);
+  file = await resolveManagedPath(file);
   try {
     const stat = await lstat(file);
     if (stat.isSymbolicLink()) {
@@ -53,14 +76,15 @@ async function writeManifest(paths, value) {
 
 /** Preserve the original state for uninstall and record the new managed state. */
 export async function recordManagedPath(paths, file, before, after = undefined) {
-  checkedPath(file);
+  file = await resolveManagedPath(file);
   const manifest = await readManifest(paths);
   const index = manifest.files.findIndex(item => item.path === file);
   const prior = index >= 0 ? manifest.files[index] : null;
   let backupPath = prior?.backupPath || null;
   if (!prior && before) {
-    const backupDir = join(paths.dataDir, 'install-backups');
-    const rel = relative(paths.dataDir, backupDir);
+    const backupDir = await resolveManagedPath(join(paths.dataDir, 'install-backups'), { followFinal: true });
+    const dataDir = await resolveManagedPath(paths.dataDir, { followFinal: true });
+    const rel = relative(dataDir, backupDir);
     if (rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw fail('E_MANIFEST_INVALID', 'Install backup path is invalid.');
     await mkdir(backupDir, { recursive: true });
     backupPath = join(backupDir, `${digest(Buffer.from(file))}.before`);
@@ -92,8 +116,9 @@ export async function managePath(paths, file, action) {
 }
 
 export async function missingDirectories(directory, home, roots = [home]) {
-  const target = resolve(directory);
-  if (!matchingRoot(target, roots)) throw fail('E_MANIFEST_INVALID', 'Install directory is outside managed roots.');
+  const target = await resolveManagedPath(directory, { followFinal: true });
+  const resolvedRoots = await Promise.all(roots.map(root => resolveManagedPath(root, { followFinal: true })));
+  if (!matchingRoot(target, resolvedRoots)) throw fail('E_MANIFEST_INVALID', 'Install directory is outside managed roots.');
   const missing = []; let current = target;
   while (true) {
     try { const stat = await lstat(current); if (!stat.isDirectory() || stat.isSymbolicLink()) throw fail('E_MANIFEST_INVALID', 'Install directory path is unsafe.'); break; }
@@ -104,9 +129,11 @@ export async function missingDirectories(directory, home, roots = [home]) {
 
 export async function recordCreatedDirectories(paths, directories = [], home, roots = [home]) {
   const manifest = await readManifest(paths); const known = new Set(manifest.createdDirectories);
+  const resolvedRoots = await Promise.all(roots.map(root => resolveManagedPath(root, { followFinal: true })));
+  const resolvedHome = await resolveManagedPath(home, { followFinal: true });
   for (const directory of directories) {
-    const checked = checkedPath(directory);
-    if ((!matchingRoot(checked, roots) && !roots.some(root => within(root, checked))) || resolve(checked) === resolve(home)) throw fail('E_MANIFEST_INVALID', 'Install directory is outside managed roots.');
+    const checked = await resolveManagedPath(directory, { followFinal: true });
+    if ((!matchingRoot(checked, resolvedRoots) && !resolvedRoots.some(root => within(root, checked))) || checked === resolvedHome) throw fail('E_MANIFEST_INVALID', 'Install directory is outside managed roots.');
     known.add(checked);
   }
   manifest.createdDirectories = [...known].sort((a, b) => b.split(sep).length - a.split(sep).length || a.localeCompare(b));
@@ -114,9 +141,11 @@ export async function recordCreatedDirectories(paths, directories = [], home, ro
 }
 
 export async function removeCreatedDirectories(directories, home, roots = [home]) {
+  const resolvedRoots = await Promise.all(roots.map(root => resolveManagedPath(root, { followFinal: true })));
+  const resolvedHome = await resolveManagedPath(home, { followFinal: true });
   for (const directory of [...directories].sort((a, b) => b.split(sep).length - a.split(sep).length)) {
-    const checked = checkedPath(directory);
-    if ((!matchingRoot(checked, roots) && !roots.some(root => within(root, checked))) || resolve(checked) === resolve(home)) throw fail('E_MANIFEST_INVALID', 'Install directory is outside managed roots.');
+    const checked = await resolveManagedPath(directory, { followFinal: true });
+    if ((!matchingRoot(checked, resolvedRoots) && !resolvedRoots.some(root => within(root, checked))) || checked === resolvedHome) throw fail('E_MANIFEST_INVALID', 'Install directory is outside managed roots.');
     try { await rmdir(checked); }
     catch (cause) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(cause?.code)) throw cause; }
   }
@@ -146,9 +175,10 @@ async function checkSafeParents(file, stopAt) {
 
 async function readBackup(paths, file) {
   const backup = checkedPath(file); const backupRoot = join(paths.dataDir, 'install-backups');
-  const rel = relative(backupRoot, backup);
+  const resolvedBackupRoot = await resolveManagedPath(backupRoot, { followFinal: true });
+  const rel = relative(resolvedBackupRoot, backup);
   if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw fail('E_MANIFEST_INVALID', 'Install backup path is invalid.');
-  await checkSafeParents(backup, paths.dataDir);
+  await checkSafeParents(backup, await resolveManagedPath(paths.dataDir, { followFinal: true }));
   try { const stat = await lstat(backup); if (!stat.isFile() || stat.isSymbolicLink()) throw fail('E_MANIFEST_INVALID', 'Install backup is unsafe.'); }
   catch (cause) { if (cause?.code === 'ENOENT') throw fail('E_MANIFEST_INVALID', 'Install backup is missing.'); throw cause; }
   return readFile(backup);
@@ -192,6 +222,7 @@ export async function uninstallManagedFiles(paths, { plan = false, home, roots =
   const manifest = await readManifest(paths);
   if (plan) return { action: 'uninstall', files: manifest.files.map(({ path, beforeSha256, afterSha256 }) => ({ path, beforeSha256, afterSha256 })), createdDirectories: manifest.createdDirectories };
   if (typeof home !== 'string' || !isAbsolute(home)) throw fail('E_MANIFEST_INVALID', 'Install home is invalid.');
+  roots = await Promise.all(roots.map(root => resolveManagedPath(root, { followFinal: true })));
   for (const entry of [...manifest.files].reverse()) {
     if (!matchingRoot(entry.path, roots)) throw fail('E_MANIFEST_INVALID', 'Install manifest path is outside managed roots.');
     await preflightEntry(paths, entry, roots);
