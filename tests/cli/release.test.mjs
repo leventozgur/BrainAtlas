@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildDistribution, buildRelease, verifyRelease, extractRelease } from '../../release/build-release.mjs';
@@ -72,6 +72,31 @@ test('lite release excludes modules while permitting third-party content', async
   assert.deepEqual(manifest.modules, []);
   assert.ok([...files.keys()].every(name => !name.startsWith('brainatlas-0.1.0-test.1/modules/')));
   assert.ok([...files].some(([name, bytes]) => name.includes('/node_modules/@modelcontextprotocol/sdk/') && /SYSTEMDRIVE/i.test(bytes.toString('utf8'))));
+});
+
+test('installer helper blocks an external symlinked root unless explicitly opted in', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'ba-root-escape-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const [archive] = await buildRelease({ version: '0.1.0-test.root', profile: 'lite', out: dir });
+  const home = join(dir, 'home'); const outside = join(dir, 'outside'); const dataRoot = join(home, '.local', 'share', 'brainatlas');
+  await mkdir(join(home, '.local', 'share'), { recursive: true }); await mkdir(outside);
+  await symlink(outside, dataRoot);
+  const helper = join(process.cwd(), 'release', 'install-kit.mjs');
+  const signers = join(dir, 'unused-signers');
+  const run = (destination, extraEnv = {}) => spawnSync(process.execPath, [helper, '--archive', archive, '--destination', destination, '--allowed-signers', signers], {
+    env: cleanEnv({ HOME: home, BRAINATLAS_INSECURE_SKIP_SIGNATURE: '1', ...extraEnv }), encoding: 'utf8', shell: false,
+  });
+
+  const rejected = run(join(dataRoot, 'releases', '.staging-rejected'));
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr, /E_PATH_ESCAPE/);
+  assert.deepEqual(await readdir(outside), [], 'default rejection leaves the external target empty');
+
+  const destination = join(dataRoot, 'releases', '.staging-allowed');
+  await mkdir(join(outside, 'releases'));
+  const allowed = run(destination, { BRAINATLAS_ALLOW_SYMLINKED_ROOT: '1' });
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.match(allowed.stderr, /WARNING: a BrainAtlas installation directory resolves outside HOME/);
+  assert.equal(JSON.parse(await readFile(join(destination, 'release-manifest.json'), 'utf8')).version, '0.1.0-test.root');
 });
 
 test('offline distribution is reproducible, self-contained, and rejects changed kit files', async t => {
@@ -151,4 +176,17 @@ test('offline distribution is reproducible, self-contained, and rejects changed 
   });
   assert.equal(doctor.status, 0, 'installed CLI doctor succeeds');
   assert.equal(JSON.parse(doctor.stdout).ok, true);
+
+  const linkedHome = join(dir, 'fake-home-linked'); const linkedOutside = join(dir, 'linked-outside');
+  const linkedDataHome = join(linkedHome, '.local', 'share');
+  await mkdir(linkedDataHome, { recursive: true }); await mkdir(linkedOutside);
+  await symlink(linkedOutside, join(linkedDataHome, 'brainatlas'));
+  const linkedInstall = spawnSync('sh', [join(copied, 'install.sh'), '--from', archive, '--allowed-signers', signers, '--vault', join(dir, 'linked-vault'), '--yes', '--allow-symlinked-root'], {
+    cwd: elsewhere,
+    env: cleanEnv({ HOME: linkedHome, TMPDIR: temp, XDG_DATA_HOME: linkedDataHome, XDG_CONFIG_HOME: join(linkedHome, '.config'), XDG_STATE_HOME: join(linkedHome, '.local', 'state'), BRAINATLAS_PLATFORM: 'linux' }),
+    encoding: 'utf8', shell: false,
+  });
+  assert.equal(linkedInstall.status, 0, linkedInstall.stderr);
+  assert.match(linkedInstall.stderr, /WARNING: a BrainAtlas installation directory resolves outside HOME/);
+  assert.ok((await readdir(linkedOutside)).includes('current'), 'the explicit installer opt-in follows the symlinked root');
 });

@@ -2,14 +2,15 @@
 // Self-contained installer helper. This file is copied unchanged into release kits.
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFile, mkdir, writeFile, rm, lstat, rename, symlink } from 'node:fs/promises';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { readFile, mkdir, writeFile, rm, lstat, readlink, rename, symlink } from 'node:fs/promises';
+import { basename, dirname, join, resolve, relative as relativePath, isAbsolute, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const safeVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
+const installOwnedDirectoryNames = new Set(['brainatlas', 'releases', 'current']);
 
 function readTar(buffer) {
   const files = new Map(); let ended = false;
@@ -32,6 +33,74 @@ function readTar(buffer) {
   }
   if (!ended) throw fail('E_MANIFEST_INVALID', 'Release archive is truncated.');
   return files;
+}
+
+/** Resolve existing symlinks, including dangling ones, without creating paths. */
+async function resolvePathForSafety(input) {
+  let current = sep;
+  const pending = resolve(input).split(sep).filter(Boolean);
+  let links = 0;
+  while (pending.length) {
+    const part = pending.shift();
+    if (part === '.') continue;
+    if (part === '..') { current = dirname(current); continue; }
+    const candidate = join(current, part);
+    let stat;
+    try { stat = await lstat(candidate); }
+    catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return resolve(current, part, ...pending);
+      throw fail('E_PATH_ESCAPE', 'Could not safely resolve the installation path.');
+    }
+    if (stat.isSymbolicLink()) {
+      if (++links > 40) throw fail('E_PATH_ESCAPE', 'Installation path contains too many symbolic links.');
+      let target;
+      try { target = await readlink(candidate); }
+      catch { throw fail('E_PATH_ESCAPE', 'Could not safely resolve the installation path.'); }
+      if (target.startsWith(sep)) current = sep;
+      pending.unshift(...target.split(sep).filter(Boolean));
+    } else current = candidate;
+  }
+  return current;
+}
+
+async function assertInstallRootSafe(installRoot) {
+  const homeInput = process.env.HOME;
+  if (!homeInput) throw fail('E_PATH_ESCAPE', 'HOME is required to validate the installation path.');
+  const home = await resolvePathForSafety(homeInput);
+  const isOutsideHome = root => {
+    const relative = relativePath(home, root);
+    return relative === '..' || relative.startsWith(`..${sep}`) || isAbsolute(relative);
+  };
+  const isInside = (base, target) => {
+    const relative = relativePath(base, target);
+    return relative === '' || (relative !== '..' && !relative.startsWith(`..${sep}`) && !isAbsolute(relative));
+  };
+  const allowSymlinkedRoot = process.env.BRAINATLAS_ALLOW_SYMLINKED_ROOT === '1' || args.includes('--allow-symlinked-root');
+  const absolute = resolve(installRoot);
+  let prefix = sep;
+  let dataRoot;
+  let followedExternalBrainAtlasRoot = false;
+  for (const part of absolute.split(sep).filter(Boolean)) {
+    prefix = join(prefix, part);
+    if (part.toLowerCase() === 'brainatlas') dataRoot = await resolvePathForSafety(prefix);
+    if (!installOwnedDirectoryNames.has(part.toLowerCase())) continue;
+    let stat;
+    try { stat = await lstat(prefix); }
+    catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') continue;
+      throw fail('E_PATH_ESCAPE', 'Could not safely inspect the installation path.');
+    }
+    if (!stat.isSymbolicLink()) continue;
+    const resolved = await resolvePathForSafety(prefix);
+    if (!isOutsideHome(resolved) || (part.toLowerCase() !== 'brainatlas' && dataRoot && isInside(dataRoot, resolved))) continue;
+    if (allowSymlinkedRoot) {
+      console.error('WARNING: a BrainAtlas installation directory resolves outside HOME because of a symbolic link; continuing by explicit request.');
+      if (part.toLowerCase() === 'brainatlas') followedExternalBrainAtlasRoot = true;
+      continue;
+    }
+    throw fail('E_PATH_ESCAPE', 'A BrainAtlas installation directory resolves outside HOME. Use --allow-symlinked-root only if this is intentional.');
+  }
+  return followedExternalBrainAtlasRoot;
 }
 
 /** Verify checksums, signature, and the manifest before exposing archive entries. */
@@ -96,10 +165,38 @@ const args = process.argv.slice(2);
 const value = name => { const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1]; };
 
 async function main() {
+  if (args.includes('--resolve-path')) {
+    const input = value('--resolve-path');
+    if (!input) throw fail('E_ARGUMENT', 'Path is required.');
+    process.stdout.write(`${await resolvePathForSafety(input)}\n`);
+    return;
+  }
+  if (args.includes('--check-install-root')) {
+    const roots = [];
+    for (let index = 0; index < args.length; index++) {
+      if (args[index] !== '--check-install-root') continue;
+      if (!args[index + 1] || args[index + 1].startsWith('--')) throw fail('E_ARGUMENT', 'Installation root is required.');
+      roots.push(args[index + 1]);
+      index++;
+    }
+    let followedExternalBrainAtlasRoot = false;
+    for (const root of roots) followedExternalBrainAtlasRoot = await assertInstallRootSafe(root) || followedExternalBrainAtlasRoot;
+    if (followedExternalBrainAtlasRoot) process.stdout.write('symlinked-root\n');
+    return;
+  }
+  if (args.includes('--inspect')) {
+    const archive = value('--inspect') || value('--archive');
+    const signers = value('--allowed-signers');
+    if (!archive || !signers) throw fail('E_ARGUMENT', 'Archive and trusted signers are required.');
+    const { manifest } = await inspectReleaseArchive(resolve(archive), resolve(signers));
+    process.stdout.write(`${manifest.version} ${manifest.profile}\n`);
+    return;
+  }
   if (args.includes('--switch-link')) {
     const link = value('--link'); const target = value('--target');
     if (!link || !/^releases\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(target || '')) throw fail('E_ARGUMENT', 'Invalid release switch request.');
     const destination = resolve(link); const temp = `${destination}.next-${process.pid}`;
+    await assertInstallRootSafe(destination);
     try { const stat = await lstat(destination); if (!stat.isSymbolicLink()) throw fail('E_PATH_CONFLICT', 'Current release path is not a symbolic link.'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     await rm(temp, { force: true }); await symlink(target, temp);
@@ -117,6 +214,7 @@ async function main() {
   }
   const archive = value('--archive'); const destination = value('--destination'); const signers = value('--allowed-signers');
   if (!archive || !destination || !signers) throw fail('E_ARGUMENT', 'Archive, destination, and trusted signers are required.');
+  await assertInstallRootSafe(resolve(destination));
   const manifest = await extractVerifiedRelease(resolve(archive), resolve(destination), resolve(signers));
   process.stdout.write(`${manifest.version} ${manifest.profile}\n`);
 }
@@ -124,7 +222,7 @@ async function main() {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try { await main(); }
   catch (error) {
-    const safeCodes = new Set(['E_ARGUMENT', 'E_ARCHIVE_READ', 'E_SHA_MISMATCH', 'E_SIGNATURE_INVALID', 'E_MANIFEST_INVALID', 'E_PROFILE_MISMATCH', 'E_PATH_CONFLICT', 'E_CURRENT_SWITCH']);
+    const safeCodes = new Set(['E_ARGUMENT', 'E_ARCHIVE_READ', 'E_SHA_MISMATCH', 'E_SIGNATURE_INVALID', 'E_MANIFEST_INVALID', 'E_PROFILE_MISMATCH', 'E_PATH_CONFLICT', 'E_CURRENT_SWITCH', 'E_PATH_ESCAPE']);
     const code = safeCodes.has(error?.code) ? error.code : 'E_INSTALL';
     const message = safeCodes.has(error?.code) ? error.message : 'Install helper could not complete the requested operation.';
     console.error(`${code}: ${message}`);

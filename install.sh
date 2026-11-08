@@ -9,6 +9,7 @@ prefix_home=
 allowed_signers=
 yes=0
 insecure=0
+allow_symlinked_root=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -27,9 +28,14 @@ while [ "$#" -gt 0 ]; do
       ;;
     --yes) yes=1; shift ;;
     --insecure-skip-signature) insecure=1; shift ;;
+    --allow-symlinked-root) allow_symlinked_root=1; shift ;;
     *) echo "E_ARGUMENT: unknown installer option." >&2; exit 1 ;;
   esac
 done
+
+if [ "$allow_symlinked_root" -eq 1 ]; then
+  BRAINATLAS_ALLOW_SYMLINKED_ROOT=1; export BRAINATLAS_ALLOW_SYMLINKED_ROOT
+fi
 
 [ -n "$archive" ] || { echo "E_ARGUMENT: --from <release.tgz> is required for offline installation." >&2; exit 1; }
 [ -f "$archive" ] || { echo "E_ARCHIVE_READ: release archive is unavailable." >&2; exit 1; }
@@ -104,26 +110,6 @@ if [ "$kit_mode" -eq 1 ]; then
   done < "$kit_sums"
   [ "$listed_archive" -eq 1 ] || { echo "E_SHA_MISMATCH: selected release archive is not in the distribution kit." >&2; exit 1; }
 fi
-verify_dir=${TMPDIR:-/tmp}/brainatlas-install-verify-$$
-if [ "$insecure" -eq 1 ]; then
-  [ "$kit_mode" -eq 1 ] || echo "WARNING: release signature verification is disabled by explicit request." >&2
-  signer_arg=${allowed_signers:-/dev/null}
-  release_info=$(BRAINATLAS_INSECURE_SKIP_SIGNATURE=1 "$node_bin" "$helper" --archive "$archive" --destination "$verify_dir" --allowed-signers "$signer_arg") || exit 1
-else
-  command -v ssh-keygen >/dev/null 2>&1 || { echo "E_SIGNATURE_INVALID: ssh-keygen is required; use --insecure-skip-signature only when explicitly accepting this risk." >&2; exit 1; }
-  [ -f "$allowed_signers" ] || { echo "E_SIGNATURE_INVALID: allowed signers file is unavailable." >&2; exit 1; }
-  if ! release_info=$("$node_bin" "$helper" --archive "$archive" --destination "$verify_dir" --allowed-signers "$allowed_signers"); then
-    rm -rf "$verify_dir"
-    exit 1
-  fi
-fi
-rm -rf "$verify_dir"
-set -- $release_info
-version=${1:-}
-archive_profile=${2:-}
-case "$version" in ''|*[!A-Za-z0-9._-]*) echo "E_MANIFEST_INVALID: release version is invalid." >&2; exit 1 ;; esac
-if [ -n "$profile" ] && [ "$archive_profile" != "$profile" ]; then echo "E_PROFILE_MISMATCH: requested profile does not match the release." >&2; exit 1; fi
-profile=$archive_profile
 
 if [ "$platform" = darwin ]; then
   data_dir="$HOME/Library/Application Support/BrainAtlas"
@@ -131,6 +117,24 @@ else
   data_home=${XDG_DATA_HOME:-$HOME/.local/share}
   data_dir="$data_home/brainatlas"
 fi
+root_path_status=$("$node_bin" "$helper" --check-install-root "$data_dir" --check-install-root "$data_dir/releases" --check-install-root "$data_dir/current")
+
+if [ "$insecure" -eq 1 ]; then
+  [ "$kit_mode" -eq 1 ] || echo "WARNING: release signature verification is disabled by explicit request." >&2
+  signer_arg=${allowed_signers:-/dev/null}
+  release_info=$(BRAINATLAS_INSECURE_SKIP_SIGNATURE=1 "$node_bin" "$helper" --inspect "$archive" --allowed-signers "$signer_arg") || exit 1
+else
+  command -v ssh-keygen >/dev/null 2>&1 || { echo "E_SIGNATURE_INVALID: ssh-keygen is required; use --insecure-skip-signature only when explicitly accepting this risk." >&2; exit 1; }
+  [ -f "$allowed_signers" ] || { echo "E_SIGNATURE_INVALID: allowed signers file is unavailable." >&2; exit 1; }
+  if ! release_info=$("$node_bin" "$helper" --inspect "$archive" --allowed-signers "$allowed_signers"); then exit 1; fi
+fi
+set -- $release_info
+version=${1:-}
+archive_profile=${2:-}
+case "$version" in ''|*[!A-Za-z0-9._-]*) echo "E_MANIFEST_INVALID: release version is invalid." >&2; exit 1 ;; esac
+if [ -n "$profile" ] && [ "$archive_profile" != "$profile" ]; then echo "E_PROFILE_MISMATCH: requested profile does not match the release." >&2; exit 1; fi
+profile=$archive_profile
+
 release_dir="$data_dir/releases/$version"
 current="$data_dir/current"
 stage="$data_dir/releases/.staging-$$"
@@ -155,7 +159,12 @@ fi
 
 export BRAINATLAS_ALLOWED_SIGNERS=$allowed_signers
 cli="$current/packages/cli/bin/brainatlas.mjs"
-"$node_bin" "$cli" install --finalize --json "$@" >/dev/null
+if [ "$root_path_status" = symlinked-root ]; then
+  finalize_home=$("$node_bin" "$helper" --resolve-path "$data_dir")
+  HOME=$finalize_home "$node_bin" "$cli" install --finalize --json "$@" >/dev/null
+else
+  "$node_bin" "$cli" install --finalize --json "$@" >/dev/null
+fi
 if [ "$yes" -eq 1 ]; then
   if [ -n "$vault" ]; then "$node_bin" "$cli" init --yes --profile "$profile" --vault "$vault" --json >/dev/null
   else "$node_bin" "$cli" init --yes --profile "$profile" --json >/dev/null
