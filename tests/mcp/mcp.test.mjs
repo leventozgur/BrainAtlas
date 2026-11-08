@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, cp, readFile, rm, writeFile, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, cp, readFile, readdir, rm, stat, writeFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { defaultConfig } from '../../packages/core/src/config/index.mjs';
 import { resolvePaths } from '../../packages/core/src/paths/index.mjs';
+import { createServer } from '../../packages/mcp/src/index.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const writeTools = ['wiki_write_page', 'wiki_update_page', 'wiki_create_entity', 'wiki_create_concept', 'wiki_add_crosslinks', 'wiki_update_index'];
@@ -31,6 +33,17 @@ async function connect(env) {
 function payload(result) {
   const text = result.content.find((item) => item.type === 'text')?.text;
   try { return JSON.parse(text); } catch { return text; }
+}
+async function treePaths(root, current = root) {
+  const entries = await readdir(current, { withFileTypes: true });
+  const paths = [];
+  for (const entry of entries) {
+    const absolute = resolve(current, entry.name);
+    const rel = absolute.slice(root.length + 1).split('\\').join('/');
+    paths.push(rel);
+    if (entry.isDirectory()) paths.push(...await treePaths(root, absolute));
+  }
+  return paths.sort();
 }
 async function invoke(client, name, args) {
   const result = await client.callTool({ name, arguments: args });
@@ -88,6 +101,31 @@ test('readOnly stdio server omits every write tool', async (t) => {
   const names = (await client.listTools()).tools.map((item) => item.name);
   assert.deepEqual(names.sort(), ['wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_index', 'wiki_read_page', 'wiki_status'].sort());
   assert.equal(names.some((name) => writeTools.includes(name)), false);
+});
+
+test('createServer without a stateDir keeps the vault tree unchanged and uses resolved state paths', async (t) => {
+  const fixture = await setup(true);
+  t.after(async () => rm(fixture.home, { recursive: true, force: true }));
+  const env = { HOME: fixture.home, XDG_DATA_HOME: resolve(fixture.home, 'xdg-data'), XDG_STATE_HOME: resolve(fixture.home, 'xdg-state') };
+  const config = defaultConfig('lite'); config.readOnly = true; config.vault.path = fixture.vault;
+  const before = await treePaths(fixture.vault);
+  createServer({ config, paths: {}, env });
+  assert.deepEqual(await treePaths(fixture.vault), before);
+  const expectedStateDir = resolvePaths({ env, platform: env.BRAINATLAS_PLATFORM || process.platform }).stateDir;
+  assert.ok((await readdir(expectedStateDir)).includes('retrieval-index.json'));
+});
+
+test('createServer without HOME uses a private temporary cache and leaves the vault unchanged', async (t) => {
+  const fixture = await setup(true);
+  const vaultKey = createHash('sha256').update(fixture.vault).digest('hex').slice(0, 16);
+  const stateDir = resolve(tmpdir(), 'brainatlas-state', vaultKey);
+  t.after(async () => { await rm(fixture.home, { recursive: true, force: true }); await rm(stateDir, { recursive: true, force: true }); });
+  const config = defaultConfig('lite'); config.readOnly = true; config.vault.path = fixture.vault;
+  const before = await treePaths(fixture.vault);
+  createServer({ config, paths: {}, env: {} });
+  assert.deepEqual(await treePaths(fixture.vault), before);
+  assert.ok((await readdir(stateDir)).includes('retrieval-index.json'));
+  assert.equal((await stat(stateDir)).mode & 0o777, 0o700);
 });
 
 for (const override of [true, false]) {
