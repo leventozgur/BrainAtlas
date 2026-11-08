@@ -7,11 +7,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { defaultConfig, resolvePaths, vaultId } from '../../packages/core/src/index.mjs';
 import { hookCommandFor } from '../../packages/cli/src/index.mjs';
+import { cleanEnv } from './clean-env.mjs';
 
 test('init, config, plan and doctor use an isolated HOME', async t => {
   const home = await mkdtemp(join(tmpdir(), 'ba-cli-')); t.after(() => rm(home, { recursive: true, force: true }));
-  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1' };
-  const run = (...args) => spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), ...args], { env, encoding: 'utf8' });
+  const env = cleanEnv({ HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1' });
+  const run = (...args) => spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), ...args], { env, encoding: 'utf8', shell: false });
   assert.equal(run('init', '--yes', '--vault', join(home, 'vault')).status, 0);
   const file = join(home, 'config', 'brainatlas', 'config.json'); const before = await readFile(file, 'utf8');
   assert.equal(run('config', 'set', 'hooks.deadlineMs', '1234', '--plan').status, 0);
@@ -28,12 +29,12 @@ test('init, config, plan and doctor use an isolated HOME', async t => {
   const evaluation = run('eval', '--json');
   assert.equal(evaluation.status, 0, evaluation.stderr);
   assert.ok(JSON.parse(evaluation.stdout).n > 0);
-  const hook = spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), 'hook', 'codex', 'prompt'], { env, encoding: 'utf8', input: '{}' });
+  const hook = spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), 'hook', 'codex', 'prompt'], { env, encoding: 'utf8', input: '{}', shell: false });
   assert.equal(hook.status, 0, hook.stderr); assert.deepEqual(JSON.parse(hook.stdout), {});
   assert.equal(JSON.parse(run('config', 'get', 'vault.path', '--json').stdout), join(home, 'BrainAtlas'));
   await mkdir(join(home, 'BrainAtlas', 'wiki'), { recursive: true });
   await lstat(join(home, 'BrainAtlas', 'wiki'));
-  const mcp = spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), 'mcp'], { env: { ...env, BRAINATLAS_VAULT: join(home, 'BrainAtlas') }, encoding: 'utf8', input: '', timeout: 5000 });
+  const mcp = spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), 'mcp'], { env: cleanEnv({ ...env, BRAINATLAS_VAULT: join(home, 'BrainAtlas') }), encoding: 'utf8', input: '', timeout: 5000, shell: false });
   assert.equal(mcp.status, 0, mcp.stderr);
   const state = join(home, 'state', 'brainatlas');
   await lstat(state);

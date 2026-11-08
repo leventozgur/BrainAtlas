@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolvePaths } from '@brainatlas/core';
 import { signRelease } from '../../release/sign.mjs';
+import { cleanEnv } from './clean-env.mjs';
 
 const root = resolve(join(fileURLToPath(new URL('.', import.meta.url)), '../..'));
 
@@ -35,7 +36,7 @@ test('installed full release wires transports, strict OKF, review commands and s
   await mkdir(output, { recursive: true });
   await writeFile(gitConfig, '');
 
-  const baseEnv = {
+  const baseEnv = cleanEnv({
     PATH: process.env.PATH || '/usr/bin:/bin',
     TMPDIR: temp,
     BRAINATLAS_PLATFORM: 'linux',
@@ -44,7 +45,7 @@ test('installed full release wires transports, strict OKF, review commands and s
     GIT_CONFIG_GLOBAL: gitConfig,
     GIT_CONFIG_NOSYSTEM: '1',
     LC_ALL: 'C'
-  };
+  });
   const hostEnv = (home, hostId) => ({
     ...baseEnv,
     HOME: home,
