@@ -20,6 +20,7 @@ function targets(ctx) {
 }
 function parseJson(text) {
   if (text.startsWith('\uFEFF')) fail('E_BOM', 'Configuration contains a UTF-8 BOM.');
+  if (text.trim() === '') return {};
   try { const value = JSON.parse(text); if (!value || Array.isArray(value) || typeof value !== 'object') throw Error(); return value; }
   catch (error) { if (error?.code) throw error; fail('E_CONFIG_PARSE', 'Configuration JSON is invalid.'); }
 }

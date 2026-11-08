@@ -39,6 +39,16 @@ for (const fixture of ['empty','existing']) test(`apply then remove restores byt
   assert.deepEqual(await readFile(f.md).catch(()=>null),originals.md);
 });
 
+for (const [name, content] of [['zero-byte', ''], ['whitespace-only', ' \t\r\n']]) test(`apply then remove restores an existing ${name} settings file exactly`, async t => {
+  const x=await setup(), f=files(x.root); t.after(()=>cleanup(x.base));
+  await mkdir(join(x.root,'.gemini'),{recursive:true});
+  await writeFile(f.mcp,content);
+  const p=adapter.plan(x.ctx);
+  await adapter.apply(p,x.ctx);
+  await adapter.remove(x.ctx);
+  assert.equal(await readFile(f.mcp,'utf8'),content);
+});
+
 for (const [name,content,code] of [['broken','{oops','E_CONFIG_PARSE'],['BOM','\uFEFF{}','E_BOM']]) test(`refuses ${name} config without changes`, async t => {
   const x=await setup(), f=files(x.root); t.after(()=>cleanup(x.base));
   await mkdir(join(x.root,'.gemini'),{recursive:true}); await writeFile(f.mcp,content);
