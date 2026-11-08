@@ -5,6 +5,7 @@ on:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
         node: [20, 22]
