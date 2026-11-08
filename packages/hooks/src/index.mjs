@@ -16,6 +16,7 @@ function envelope(client, event, context) {
   if (!context) return empty(client);
   if (client === 'kiro') return context;
   if (client === 'copilot') return JSON.stringify({additionalContext: context});
+  if (client === 'gemini') return JSON.stringify({hookSpecificOutput:{additionalContext:context}});
   return JSON.stringify({hookSpecificOutput:{hookEventName:event === 'session-start' ? 'SessionStart' : 'UserPromptSubmit',additionalContext:context}});
 }
 // Open the inode itself without following links; check its identity and permissions before use.
@@ -81,9 +82,10 @@ export async function runHook(input = {}) {
     if (stdin.trim()) { data = JSON.parse(stdin); if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('input'); }
     session = typeof (data.session_id ?? data.sessionId) === 'string' ? (data.session_id ?? data.sessionId) : '';
     const prompt = client === 'kiro' && typeof env.USER_PROMPT === 'string' ? env.USER_PROMPT : data.prompt;
-    if (client === 'gemini' || event === 'session-end' || (client === 'copilot' && event === 'prompt') || (event === 'session-start' && !['claude','copilot'].includes(client))) { /* unsupported */ }
+    if (event === 'session-end' || (client === 'copilot' && event === 'prompt') || (event === 'session-start' && !['claude','copilot','gemini'].includes(client))) { /* unsupported */ }
     else if (event === 'session-start') {
-      if (stateDir) { try { context = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch {} }
+      const geminiStartup = client !== 'gemini' || ['startup','resume','clear'].includes(data.source);
+      if (stateDir && geminiStartup) { try { context = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch {} }
     } else if (typeof prompt === 'string' && prompt.trim() && stateDir && config.vault?.path) {
       const trigger = /(^|\s)(?:\/sb|@sb)(?=\s|$)/i.test(prompt);
       const query = prompt.replace(/(^|\s)(?:\/sb|@sb)(?=\s|$)/gi, '$1').trim();
