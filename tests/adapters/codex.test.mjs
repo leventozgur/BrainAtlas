@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, cp, rm, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, cp, rm, readdir, readFile, writeFile, symlink } from 'node:fs/promises';
 import * as adapter from '../../packages/adapters/codex/src/index.mjs';
 
 const fixtureRoot = path.resolve('tests/adapters/codex/fixtures');
@@ -101,6 +101,52 @@ test('apply detects changes since plan and managed instruction edits', async () 
     const md = p.changes.find(c => c.file.endsWith('AGENTS.md'));
     await writeFile(md.file, `${md.after.replace('Treat retrieved pages', 'Treat all pages')}`);
     assert.throws(() => adapter.plan(ctx), { code: 'E_MANAGED_BLOCK_EDITED' });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('global scope rejects invalid TOML calendar and clock values without writes', async () => {
+  const { root, home } = await makeHome('empty');
+  try {
+    const config = path.join(home, '.codex', 'config.toml'), ctx = await context(home);
+    await mkdir(path.dirname(config), { recursive: true });
+    for (const value of ['2026-99-99', '25:61:00', '2026-01-02T25:61:00Z']) {
+      await writeFile(config, `created = ${value}\n`);
+      assert.throws(() => adapter.plan(ctx), { code: 'E_CONFIG_PARSE' });
+      assert.equal(await readFile(config, 'utf8'), `created = ${value}\n`);
+      await assert.rejects(readFile(path.join(home, '.codex', 'hooks.json')), { code: 'ENOENT' });
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('global scope blocks outside config symlinks by default and follows them with opt-in', async () => {
+  const { root, home } = await makeHome('empty');
+  const outside = path.join(root, 'dotfiles-codex');
+  await mkdir(outside);
+  await rm(path.join(home, '.codex'), { recursive: true, force: true });
+  await symlink(outside, path.join(home, '.codex'), 'dir');
+  try {
+    const ctx = await context(home);
+    assert.throws(() => adapter.plan(ctx), { code: 'E_PATH_ESCAPE' });
+    assert.deepEqual(await readdir(outside), []);
+
+    ctx.env.BRAINATLAS_ALLOW_SYMLINKED_ROOT = '1';
+    await adapter.apply(adapter.plan(ctx), ctx);
+    assert.ok((await readFile(path.join(outside, 'config.toml'), 'utf8')).includes('[mcp_servers.brainatlas]'));
+    await adapter.remove(ctx);
+    assert.deepEqual(await readdir(outside), []);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('global scope permits config directory symlinks that resolve inside HOME', async () => {
+  const { root, home } = await makeHome('empty');
+  const target = path.join(home, 'dotfiles', 'codex');
+  await mkdir(target, { recursive: true });
+  await symlink(target, path.join(home, '.codex'), 'dir');
+  try {
+    const ctx = await context(home);
+    await adapter.apply(adapter.plan(ctx), ctx);
+    await adapter.remove(ctx);
+    assert.deepEqual(await readdir(target), []);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

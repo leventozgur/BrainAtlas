@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync, lstatSync, readlinkSync } from 'node:fs';
 import { readFile, access, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -13,6 +13,37 @@ const MD_BEGIN = '<!-- brainatlas:begin -->';
 const MD_END = '<!-- brainatlas:end -->';
 
 function err(code, message) { throw new BrainAtlasError(code, message); }
+function resolvedPathForSafety(target, depth = 0) {
+  if (depth > 40) err('E_PATH_ESCAPE', 'Configuration path contains too many symbolic links.');
+  const absolute = path.resolve(target);
+  try { return realpathSync(absolute); }
+  catch (error) {
+    if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+    try {
+      if (lstatSync(absolute).isSymbolicLink()) {
+        const link = readlinkSync(absolute);
+        return resolvedPathForSafety(path.isAbsolute(link) ? link : path.resolve(path.dirname(absolute), link), depth + 1);
+      }
+    } catch (linkError) {
+      if (linkError.code !== 'ENOENT' && linkError.code !== 'ENOTDIR') throw linkError;
+    }
+    const parent = path.dirname(absolute);
+    if (parent === absolute) return absolute;
+    return path.resolve(resolvedPathForSafety(parent, depth + 1), path.basename(absolute));
+  }
+}
+function isWithin(root, target) {
+  const relative = path.relative(root, target);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+function assertGlobalPathsSafe(paths, home, env) {
+  if (env.BRAINATLAS_ALLOW_SYMLINKED_ROOT === '1') return;
+  const resolvedHome = resolvedPathForSafety(home);
+  const targets = [path.join(home, '.codex'), paths.toml, paths.hooks, paths.instructions].filter(Boolean);
+  if (targets.some(target => !isWithin(resolvedHome, resolvedPathForSafety(target)))) {
+    err('E_PATH_ESCAPE', 'Codex configuration paths must resolve inside HOME.');
+  }
+}
 function paths(ctx) {
   if (!ctx?.env?.HOME) err('E_NO_HOME', 'HOME must be provided.');
   const platform = ctx.platform || ctx.env.BRAINATLAS_PLATFORM || process.platform;
@@ -21,13 +52,15 @@ function paths(ctx) {
   if (ctx.scope === 'vault' && typeof base === 'string' && base.split(/[\\/]+/).includes('..')) err('E_PATH_ESCAPE', 'Vault path must not contain parent path segments.');
   if (ctx.scope === 'vault' && base && !path.isAbsolute(base)) err('E_PATH_ESCAPE', 'Vault path must be absolute.');
   if (ctx.scope === 'vault' && !base) err('E_VAULT_PATH', 'Vault path must be absolute.');
-  return {
+  const result = {
     toml: ctx.scope === 'vault' ? path.join(base, '.codex', 'config.toml') : path.join(ctx.env.HOME, '.codex', 'config.toml'),
     hooks: ctx.scope === 'vault' ? null : path.join(ctx.env.HOME, '.codex', 'hooks.json'),
     instructions: ctx.scope === 'vault' ? path.join(base, 'AGENTS.md') : path.join(ctx.env.HOME, '.codex', 'AGENTS.md'),
     state: path.join(resolved.stateDir, 'adapters', 'codex'),
     shim: ctx.shimPath
   };
+  if (ctx.scope !== 'vault') assertGlobalPathsSafe(result, ctx.env.HOME, ctx.env);
+  return result;
 }
 function read(file) {
   try { return readFileSync(file, 'utf8'); }
@@ -51,50 +84,320 @@ function tomlBlock(ctx) {
   const hash = createHash('sha256').update(`${ctx.nodePath}\0${ctx.shimPath}`).digest('hex').slice(0, 12);
   return `${BEGIN}\n# brainatlas:sha256=${hash}\n[mcp_servers.brainatlas]\ncommand = ${quoteToml(ctx.nodePath)}\nargs = [${quoteToml(ctx.shimPath)}, "mcp"]\n${END}`;
 }
+function parseToml(text) {
+  const invalid = () => err('E_CONFIG_PARSE', 'TOML structure is invalid.');
+  const root = { kind: 'table', children: new Map(), explicit: true, origin: 'root' };
+  const headers = [], comments = [];
+  let index = 0, current = root;
+  const isHorizontal = ch => ch === ' ' || ch === '\t';
+  const isLineBreak = ch => ch === '\n' || ch === '\r';
+  const isHex = ch => /^[0-9a-f]$/i.test(ch || '');
+  const table = (origin, explicit = false, inline = false) => ({ kind: 'table', children: new Map(), explicit, origin, inline });
+
+  function consumeLineBreak() {
+    if (text[index] === '\r') {
+      if (text[index + 1] !== '\n') invalid();
+      index += 2;
+    } else if (text[index] === '\n') index++;
+  }
+  function skipHorizontal() { while (isHorizontal(text[index])) index++; }
+  function skipValueTrivia() {
+    while (index < text.length) {
+      if (isHorizontal(text[index]) || isLineBreak(text[index])) {
+        if (text[index] === '\r' && text[index + 1] !== '\n') invalid();
+        if (isLineBreak(text[index])) consumeLineBreak(); else index++;
+      } else if (text[index] === '#') {
+        collectComment();
+      } else break;
+    }
+  }
+  function collectComment() {
+    const start = index;
+    while (index < text.length && !isLineBreak(text[index])) index++;
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    comments.push({ start: lineStart, end: index, line: text.slice(lineStart, index) });
+  }
+  function skipTopTrivia() {
+    while (index < text.length) {
+      if (isHorizontal(text[index])) { index++; continue; }
+      if (isLineBreak(text[index])) { consumeLineBreak(); continue; }
+      if (text[index] === '#') {
+        collectComment();
+        continue;
+      }
+      break;
+    }
+  }
+  function parseString(allowMultiline = true) {
+    const start = index, quote = text[index];
+    if (quote !== '"' && quote !== "'") invalid();
+    const basic = quote === '"', multiline = allowMultiline && text.startsWith(quote.repeat(3), index);
+    if (text.startsWith(quote.repeat(3), index) && !allowMultiline) invalid();
+    index += multiline ? 3 : 1;
+    if (multiline && isLineBreak(text[index])) consumeLineBreak();
+    const contentStart = index;
+    while (index < text.length) {
+      const ch = text[index];
+      if (basic && ch === '\\') {
+        index++;
+        if (index >= text.length) invalid();
+        if (multiline && isLineBreak(text[index])) {
+          consumeLineBreak();
+          while (isHorizontal(text[index]) || isLineBreak(text[index])) {
+            if (text[index] === '\r' && text[index + 1] !== '\n') invalid();
+            if (isLineBreak(text[index])) consumeLineBreak(); else index++;
+          }
+          continue;
+        }
+        const escape = text[index];
+        if ('btnfr"\\'.includes(escape)) { index++; continue; }
+        if (escape === 'u' || escape === 'U') {
+          const digits = escape === 'u' ? 4 : 8, hex = text.slice(index + 1, index + 1 + digits);
+          if (hex.length !== digits || [...hex].some(c => !isHex(c))) invalid();
+          const point = Number.parseInt(hex, 16);
+          if (point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff)) invalid();
+          index += digits + 1; continue;
+        }
+        invalid();
+      }
+      if (ch === quote) {
+        if (!multiline) {
+          const raw = text.slice(contentStart, index);
+          index++;
+          let value = raw;
+          if (basic) {
+            try { value = JSON.parse(text.slice(start, index)); } catch { invalid(); }
+          }
+          return { value, multiline };
+        }
+        let run = 1;
+        while (text[index + run] === quote) run++;
+        if (run >= 3) {
+          if (run > 5) invalid();
+          const raw = text.slice(contentStart, index);
+          index += run;
+          return { value: raw, multiline };
+        }
+        index += run; continue;
+      }
+      const code = text.charCodeAt(index);
+      if ((!multiline && isLineBreak(ch)) || (code < 0x20 && ch !== '\t' && !isLineBreak(ch)) || code === 0x7f) invalid();
+      if (ch === '\r' && text[index + 1] !== '\n') invalid();
+      index++;
+    }
+    invalid();
+  }
+  function parseKeyPath() {
+    const parts = [];
+    while (true) {
+      skipHorizontal();
+      const ch = text[index];
+      if (ch === '"' || ch === "'") {
+        const parsed = parseString(false);
+        parts.push(parsed.value);
+      } else {
+        const start = index;
+        while (/[A-Za-z0-9_-]/.test(text[index] || '')) index++;
+        if (index === start) invalid();
+        parts.push(text.slice(start, index));
+      }
+      skipHorizontal();
+      if (text[index] !== '.') break;
+      index++;
+    }
+    return parts;
+  }
+  function assign(node, parts, value, inlineAllowed = false) {
+    let parent = node;
+    for (const part of parts.slice(0, -1)) {
+      if (parent.kind !== 'table' || (parent.inline && !inlineAllowed)) invalid();
+      let child = parent.children.get(part);
+      if (!child) { child = table('dotted'); parent.children.set(part, child); }
+      if (child.kind === 'array-table') child = child.items.at(-1);
+      if (child.kind !== 'table' || (child.inline && !inlineAllowed)) invalid();
+      parent = child;
+    }
+    if (parent.kind !== 'table' || (parent.inline && !inlineAllowed) || parent.children.has(parts.at(-1))) invalid();
+    parent.children.set(parts.at(-1), value);
+  }
+  function parseValue() {
+    const ch = text[index];
+    if (ch === '"' || ch === "'") { parseString(); return { kind: 'value' }; }
+    if (ch === '[') {
+      index++; skipValueTrivia();
+      if (text[index] === ']') { index++; return { kind: 'value' }; }
+      while (index < text.length) {
+        parseValue(); skipValueTrivia();
+        if (text[index] === ']') { index++; return { kind: 'value' }; }
+        if (text[index] !== ',') invalid();
+        index++; skipValueTrivia();
+        if (text[index] === ']') { index++; return { kind: 'value' }; }
+      }
+      invalid();
+    }
+    if (ch === '{') {
+      index++;
+      const inline = table('inline', true, true);
+      skipValueTrivia();
+      if (text[index] === '}') { index++; return inline; }
+      while (index < text.length) {
+        const key = parseKeyPath(); skipHorizontal();
+        if (text[index] !== '=') invalid();
+        index++; skipHorizontal();
+        assign(inline, key, parseValue(), true);
+        skipValueTrivia();
+        if (text[index] === '}') { index++; return inline; }
+        if (text[index] !== ',') invalid();
+        index++; skipValueTrivia();
+        if (text[index] === '}') invalid();
+      }
+      invalid();
+    }
+    const start = index;
+    while (index < text.length && !isHorizontal(text[index]) && !isLineBreak(text[index]) && !',]}#'.includes(text[index])) index++;
+    let scalar = text.slice(start, index);
+    if (!scalar) invalid();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(scalar) && isHorizontal(text[index])) {
+      let end = index;
+      while (isHorizontal(text[end])) end++;
+      const time = text.slice(end).match(/^\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})?/);
+      if (time) { scalar += ` ${time[0]}`; index = end + time[0].length; }
+    }
+    const integer = /^[+-]?(?:0|[1-9](?:_?[0-9])*)$/;
+    const nonDecimalInteger = /^0(?:x[0-9a-f](?:_?[0-9a-f])*|o[0-7](?:_?[0-7])*|b[01](?:_?[01])*)$/i;
+    const float = /^[+-]?(?:0|[1-9](?:_?[0-9])*)(?:\.(?:[0-9](?:_?[0-9])*))?(?:[eE][+-]?[0-9](?:_?[0-9])*)?$/;
+    const dateTime = /^(\d{4}-\d{2}-\d{2})(?:[Tt ](\d{2}:\d{2}:\d{2}(?:\.\d+)?)(?:([Zz]|[+-]\d{2}:\d{2}))?)?$|^(\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/;
+    const dateTimeMatch = scalar.match(dateTime);
+    const validDate = value => {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return false;
+      const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+      const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+      const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1];
+    };
+    const validTime = value => {
+      const match = value.match(/^(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?$/);
+      return !!match && Number(match[1]) <= 23 && Number(match[2]) <= 59 && Number(match[3]) <= 60;
+    };
+    const validOffset = value => !value || /^[Zz]$/.test(value) || (() => {
+      const match = value.match(/^[+-](\d{2}):(\d{2})$/);
+      return !!match && Number(match[1]) <= 23 && Number(match[2]) <= 59;
+    })();
+    const validDateTime = !!dateTimeMatch && (dateTimeMatch[4]
+      ? validTime(dateTimeMatch[4])
+      : validDate(dateTimeMatch[1]) && (!dateTimeMatch[2] || (validTime(dateTimeMatch[2]) && validOffset(dateTimeMatch[3]))));
+    if (!['true', 'false', 'inf', '+inf', '-inf', 'nan', '+nan', '-nan'].includes(scalar) && !integer.test(scalar) && !nonDecimalInteger.test(scalar) && !(float.test(scalar) && /[.eE]/.test(scalar)) && !validDateTime) invalid();
+    return { kind: 'value' };
+  }
+  function resolveHeader(parts, array) {
+    let parent = root;
+    for (const part of parts.slice(0, -1)) {
+      if (parent.kind !== 'table') invalid();
+      let child = parent.children.get(part);
+      if (!child) { child = table('header-parent'); parent.children.set(part, child); }
+      if (child.kind === 'array-table') child = child.items.at(-1);
+      if (child.kind !== 'table') invalid();
+      parent = child;
+    }
+    if (parent.kind !== 'table') invalid();
+    const name = parts.at(-1), prior = parent.children.get(name);
+    if (array) {
+      if (prior && prior.kind !== 'array-table') invalid();
+      const list = prior || { kind: 'array-table', items: [] };
+      const item = table('array-header', true);
+      list.items.push(item);
+      if (!prior) parent.children.set(name, list);
+      return item;
+    }
+    if (!prior) {
+      const declared = table('header', true);
+      parent.children.set(name, declared);
+      return declared;
+    }
+    if (prior.kind !== 'table' || prior.explicit || prior.origin !== 'header-parent') invalid();
+    prior.explicit = true;
+    prior.origin = 'header';
+    return prior;
+  }
+
+  while (index < text.length) {
+    skipTopTrivia();
+    if (index >= text.length) break;
+    if (text[index] === '[') {
+      const lineStart = text.lastIndexOf('\n', index - 1) + 1;
+      index++;
+      const array = text[index] === '[';
+      if (array) index++;
+      const parts = parseKeyPath();
+      if (text[index] !== ']') invalid();
+      index++;
+      if (array) { if (text[index] !== ']') invalid(); index++; }
+      const end = index;
+      skipHorizontal();
+      if (index < text.length && !isLineBreak(text[index]) && text[index] !== '#') invalid();
+      current = resolveHeader(parts, array);
+      headers.push({ path: parts, array, start: lineStart, end });
+      continue;
+    }
+    const parts = parseKeyPath(); skipHorizontal();
+    if (text[index] !== '=') invalid();
+    index++; skipHorizontal();
+    const value = parseValue();
+    assign(current, parts, value);
+    skipHorizontal();
+    if (index < text.length && !isLineBreak(text[index]) && text[index] !== '#') invalid();
+  }
+  return { headers, comments };
+}
 function tomlCheck(text) {
   checkText(text);
-  if (!text) return;
-  const begins = [...text.matchAll(/^# brainatlas:begin\s*$/gm)].length;
-  const ends = [...text.matchAll(/^# brainatlas:end\s*$/gm)].length;
-  const tables = [...text.matchAll(/^\[mcp_servers\.brainatlas\]\s*$/gm)].length;
-  if (begins !== ends || begins > 1 || tables > 1 || (begins && tables !== begins)) err('E_CONFIG_PARSE', 'TOML structure around the managed table is invalid.');
-  // Reject malformed table headers and unterminated strings, while leaving unrelated TOML bytes untouched.
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('[') && !/^\[\[?[A-Za-z0-9_.-]+\]\]?\s*(?:#.*)?$/.test(trimmed)) err('E_CONFIG_PARSE', 'TOML structure is invalid.');
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('[')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq < 1 || ((trimmed.match(/"/g) || []).length % 2)) err('E_CONFIG_PARSE', 'TOML structure is invalid.');
-  }
-  if (begins) {
-    const block = text.match(/^# brainatlas:begin\s*$[\s\S]*?^# brainatlas:end\s*$/m)?.[0] || '';
+  if (!text) return { headers: [], comments: [] };
+  const parsed = parseToml(text);
+  const { begins, ends } = tomlMarkers(parsed);
+  const tables = parsed.headers.filter(header => !header.array && header.path.length === 2 && header.path[0] === 'mcp_servers' && header.path[1] === 'brainatlas');
+  if (begins.length !== ends.length || begins.length > 1 || tables.length > 1 || (begins.length && tables.length !== begins.length)) err('E_CONFIG_PARSE', 'TOML structure around the managed table is invalid.');
+  if (begins.length) {
+    const start = begins[0].start, end = ends[0].end;
+    if (end < start) err('E_CONFIG_PARSE', 'TOML structure around the managed table is invalid.');
+    const block = text.slice(start, end);
     const hashLine = block.split(/\r?\n/)[1] || '';
     const claimed = hashLine.match(/^# brainatlas:sha256=([a-f0-9]{12})$/)?.[1];
     if (!claimed) err('E_MANAGED_BLOCK_EDITED', 'Managed TOML block was edited.');
-    // Checksum is recomputed from the command and args owned by this block.
     const command = block.match(/^command\s*=\s*"((?:[^"\\]|\\.)*)"$/m)?.[1];
     const args = block.match(/^args\s*=\s*\["((?:[^"\\]|\\.)*)",\s*"mcp"\]$/m)?.[1];
     if (!command || !args || createHash('sha256').update(`${JSON.parse(`"${command}"`)}\0${JSON.parse(`"${args}"`)}`).digest('hex').slice(0, 12) !== claimed) err('E_MANAGED_BLOCK_EDITED', 'Managed TOML block was edited.');
   }
+  return parsed;
+}
+function tomlMarkers(parsed) {
+  return {
+    begins: parsed.comments.filter(comment => /^\s*# brainatlas:begin\s*$/.test(comment.line)),
+    ends: parsed.comments.filter(comment => /^\s*# brainatlas:end\s*$/.test(comment.line))
+  };
 }
 function withBlock(before, block, begin, end) {
   if (before === null || before === '') return `${block}\n`;
+  if (begin === BEGIN) {
+    const parsed = parseToml(before), { begins, ends } = tomlMarkers(parsed);
+    if (begins.length || ends.length) {
+      if (begins.length !== 1 || ends.length !== 1 || ends[0].start < begins[0].start) err('E_CONFIG_PARSE', 'Managed block structure is invalid.');
+      return before.slice(0, begins[0].start) + block + before.slice(ends[0].end);
+    }
+    const table = parsed.headers.find(header => !header.array && header.path.length === 2 && header.path[0] === 'mcp_servers' && header.path[1] === 'brainatlas');
+    if (table) {
+      const nextHeader = parsed.headers.find(header => header.start > table.start);
+      if (nextHeader) return before.slice(0, table.start) + block + '\n\n' + before.slice(nextHeader.start);
+      const trailing = before.slice(table.start).match(/(?:\r?\n)*$/)?.[0] || '';
+      return before.slice(0, table.start) + block + trailing;
+    }
+    const sep = before.endsWith('\n') ? '' : '\n';
+    return `${before}${sep}\n${block}\n`;
+  }
   const start = before.indexOf(begin), finish = before.indexOf(end);
   if (start >= 0 || finish >= 0) {
     if (start < 0 || finish < start) err('E_CONFIG_PARSE', 'Managed block structure is invalid.');
     return before.slice(0, start) + block + before.slice(finish + end.length);
-  }
-  if (begin === BEGIN) {
-    const table = /^\[mcp_servers\.brainatlas\]\s*$/m.exec(before);
-    if (table) {
-      const startTable = table.index;
-      const next = /^\[\[?[A-Za-z0-9_.-]+\]\]?\s*(?:#.*)?$/gm;
-      next.lastIndex = table.index + table[0].length;
-      const nextHeader = next.exec(before);
-      if (nextHeader) return before.slice(0, startTable) + block + '\n\n' + before.slice(nextHeader.index);
-      const trailing = before.match(/(?:\r?\n)*$/)?.[0] || '';
-      return before.slice(0, startTable) + block + trailing;
-    }
   }
   const sep = before.endsWith('\n') ? '' : '\n';
   return `${before}${sep}\n${block}\n`;
@@ -136,6 +439,7 @@ export function plan(ctx) {
   const p = paths(ctx), changes = [];
   const tomlBefore = readPlanFile(p.toml, 'toml');
   const tomlAfter = withBlock(tomlBefore, tomlBlock(ctx), BEGIN, END);
+  tomlCheck(tomlAfter);
   if (tomlBefore !== tomlAfter) changes.push({ file: p.toml, kind: tomlBefore === null ? 'create' : 'modify', before: tomlBefore, after: tomlAfter, ownership: 'toml-table' });
   if (p.hooks) {
     const before = readPlanFile(p.hooks, 'json');
@@ -201,9 +505,9 @@ export async function remove(ctx) {
     if (current === null || !record) continue;
     if (current === record.after) { actions.push({ file, write: record.original }); continue; }
     if (file === p.toml) {
-      const start = current.indexOf(BEGIN), end = current.indexOf(END);
-      if (start < 0 || end < start) continue;
-      const after = current.slice(0, start).replace(/\n+$/, '') + current.slice(end + END.length);
+      const { begins, ends } = tomlMarkers(parseToml(current));
+      if (begins.length !== 1 || ends.length !== 1 || ends[0].start < begins[0].start) continue;
+      const after = current.slice(0, begins[0].start).replace(/\n+$/, '') + current.slice(ends[0].end);
       const clean = after.replace(/^\n+/, '');
       actions.push({ file, write: clean === record.original || clean.trim() === '' ? record.original : clean });
     } else if (file === p.hooks) {
@@ -233,9 +537,13 @@ export async function doctor(ctx) {
   const p = paths(ctx), toml = await read(p.toml), instructions = await read(p.instructions), hooks = p.hooks ? await read(p.hooks) : null;
   let registered = false, hookPresent = false, versionDrift = false;
   try {
-    tomlCheck(toml); registered = !!toml?.includes('[mcp_servers.brainatlas]');
+    const parsed = tomlCheck(toml);
+    registered = !!parsed.headers.some(header => !header.array && header.path.length === 2 && header.path[0] === 'mcp_servers' && header.path[1] === 'brainatlas');
     if (registered) {
-      const block = toml.match(/^# brainatlas:begin\s*$[\s\S]*?^# brainatlas:end\s*$/m)?.[0] || '';
+      const { begins, ends } = tomlMarkers(parsed);
+      const block = begins.length === 1 && ends.length === 1 && ends[0].start >= begins[0].start
+        ? toml.slice(begins[0].start, ends[0].end)
+        : '';
       const command = block.match(/^command\s*=\s*("(?:[^"\\]|\\.)*")$/m)?.[1];
       const args = block.match(/^args\s*=\s*\[("(?:[^"\\]|\\.)*"),\s*"mcp"\]$/m)?.[1];
       versionDrift = !command || !args || JSON.parse(command) !== ctx.nodePath || JSON.parse(args) !== ctx.shimPath;
