@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
 import { O_APPEND, O_CREAT, O_NOFOLLOW, O_WRONLY } from 'node:constants';
-import { chmod, lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { runCommand as defaultRunCommand } from '@brainatlas/core';
 import { BrainAtlasError } from '../../../packages/core/src/util/errors.mjs';
 import { SyncTransportError } from './transport.mjs';
@@ -12,6 +12,51 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const schedulerStatePath = (stateDir) => join(stateDir, 'sync', 'scheduler.json');
 const schedulerLogPath = (stateDir) => join(stateDir, 'sync', 'scheduler.log');
 const commandError = () => new BrainAtlasError('E_SCHEDULER_COMMAND', 'Scheduler command failed.');
+const pathEscape = () => new BrainAtlasError('E_PATH_ESCAPE', 'Scheduler paths must resolve within HOME.');
+
+function isWithin(root, path) {
+  const rel = relative(root, path);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+async function realpathWithMissingTail(path) {
+  let current = resolve(path);
+  const tail = [];
+  while (true) {
+    try {
+      const actual = await realpath(current);
+      return resolve(actual, ...tail);
+    } catch (cause) {
+      if (!['ENOENT', 'ENOTDIR'].includes(cause?.code)) throw pathEscape();
+      let info;
+      try { info = await lstat(current); }
+      catch (statError) { if (statError?.code !== 'ENOENT' && statError?.code !== 'ENOTDIR') throw pathEscape(); }
+      // A dangling symlink cannot be safely approximated by appending a missing tail.
+      if (info?.isSymbolicLink()) throw pathEscape();
+      const parent = dirname(current);
+      if (parent === current) throw pathEscape();
+      tail.unshift(basename(current));
+      current = parent;
+    }
+  }
+}
+
+async function assertSchedulerPaths(ctx, paths, files) {
+  const allowOutside = ctx.env?.BRAINATLAS_ALLOW_SYMLINKED_ROOT === '1';
+  let home;
+  try { home = await realpath(paths.home); }
+  catch { throw pathEscape(); }
+  for (const file of files) {
+    let info;
+    try { info = await lstat(file); }
+    catch (cause) { if (cause?.code !== 'ENOENT') throw pathEscape(); }
+    // Never replace or remove a symlink at the managed file path, even with opt-in.
+    if (info?.isSymbolicLink()) throw pathEscape();
+    const directoryPath = await realpathWithMissingTail(dirname(file));
+    const filePath = info ? await realpathWithMissingTail(file) : resolve(directoryPath, basename(file));
+    if (!allowOutside && (!isWithin(home, directoryPath) || !isWithin(home, filePath))) throw pathEscape();
+  }
+}
 
 function unitEscape(value) {
   return String(value).replaceAll('\\', '\\\\').replaceAll(' ', '\\x20').replaceAll('"', '\\"');
@@ -196,6 +241,8 @@ async function runCommands(ctx, calls, { allowFailure = false } = {}) {
 async function installScheduler(ctx, platform, paths, intervalMin) {
   const plan = planScheduler({ platform, paths, intervalMin });
   const statePath = schedulerStatePath(paths.stateDir);
+  const protectedPaths = [...plan.files.map((file) => file.path), plan.logPath, statePath];
+  await assertSchedulerPaths(ctx, paths, protectedPaths);
   const previous = await readManifest(statePath, plan.uninstall);
   const previousRows = new Map((previous?.files ?? []).map((row) => [row.path, row]));
   const originals = new Map();
@@ -215,16 +262,20 @@ async function installScheduler(ctx, platform, paths, intervalMin) {
   const newRows = plan.files.map((file) => ({ path: file.path, sha256: digest(Buffer.from(file.contents)), mode: 0o600 }));
   let schedulerStartAttempted = false;
   try {
+    await assertSchedulerPaths(ctx, paths, protectedPaths);
     for (const file of plan.files) await writeManagedFile(file);
     await ensureLogFile(plan.logPath);
+    await assertSchedulerPaths(ctx, paths, protectedPaths);
     schedulerStartAttempted = true;
     await runCommands(ctx, hostCommands('install', platform, ctx, plan.files));
     await writeManifest(statePath, { schemaVersion: 1, platform, intervalMin, files: newRows });
   } catch (cause) {
-    if (schedulerStartAttempted) {
+    if (schedulerStartAttempted && cause?.code !== 'E_PATH_ESCAPE') {
       await runCommands(ctx, hostCommands('remove', platform, ctx, plan.files), { allowFailure: true }).catch(() => {});
     }
     for (const file of plan.files) {
+      try { await assertSchedulerPaths(ctx, paths, [file.path]); }
+      catch { continue; }
       const current = await readFile(file.path).catch(() => null);
       if (!current || digest(current) !== digest(Buffer.from(file.contents))) continue;
       const original = originals.get(file.path);
@@ -233,7 +284,7 @@ async function installScheduler(ctx, platform, paths, intervalMin) {
         await chmod(file.path, original.mode).catch(() => {});
       } else await rm(file.path, { force: true }).catch(() => {});
     }
-    if (platform === 'linux') await runCommands(ctx, [['systemctl', ['--user', 'daemon-reload']]], { allowFailure: true }).catch(() => {});
+    if (platform === 'linux' && cause?.code !== 'E_PATH_ESCAPE') await runCommands(ctx, [['systemctl', ['--user', 'daemon-reload']]], { allowFailure: true }).catch(() => {});
     if (!logExisted) await rm(plan.logPath, { force: true }).catch(() => {});
     if (cause?.code === 'E_SCHEDULER_EXISTS' || cause?.code === 'E_SCHEDULER_CONFLICT' || cause?.code === 'E_SCHEDULER_COMMAND') throw cause;
     throw cause;
@@ -244,14 +295,19 @@ async function installScheduler(ctx, platform, paths, intervalMin) {
 async function removeScheduler(ctx, platform, paths) {
   const plan = planScheduler({ platform, paths });
   const statePath = schedulerStatePath(paths.stateDir);
+  const protectedPaths = [...plan.files.map((file) => file.path), schedulerLogPath(paths.stateDir), statePath];
+  await assertSchedulerPaths(ctx, paths, protectedPaths);
   const manifest = await readManifest(statePath, plan.uninstall);
   const hasManagedFiles = Boolean(manifest?.files.length);
-  const results = hasManagedFiles
-    ? await runCommands(ctx, hostCommands('remove', platform, ctx, plan.files), { allowFailure: true })
-    : [];
+  let results = [];
+  if (hasManagedFiles) {
+    await assertSchedulerPaths(ctx, paths, protectedPaths);
+    results = await runCommands(ctx, hostCommands('remove', platform, ctx, plan.files), { allowFailure: true });
+  }
   const removed = []; const preserved = [];
   const rows = new Map((manifest?.files ?? []).map((row) => [row.path, row]));
   for (const file of plan.files) {
+    await assertSchedulerPaths(ctx, paths, [file.path]);
     const owned = rows.get(file.path);
     if (!owned) { preserved.push(file.path); continue; }
     let bytes; let stat;
@@ -262,7 +318,10 @@ async function removeScheduler(ctx, platform, paths) {
     } else preserved.push(file.path);
   }
   if (platform === 'linux' && hasManagedFiles) results.push(...await runCommands(ctx, [['systemctl', ['--user', 'daemon-reload']]], { allowFailure: true }));
-  if (manifest) await rm(statePath, { force: true });
+  if (manifest) {
+    await assertSchedulerPaths(ctx, paths, [statePath]);
+    await rm(statePath, { force: true });
+  }
   return { action: 'remove', platform, removed, preserved, commands: results.map(({ command, args, code }) => ({ command, args, code })) };
 }
 
