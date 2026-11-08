@@ -147,11 +147,14 @@ test('reported body equality matches every final wiki page including the migrati
   const f = await fixture(t);
   const r = run(f, 'migrate', '--from', f.source, '--to', f.target, '--json'); ok(r);
   const body = text => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
-  let matches = true;
-  for (const name of ['index.md', 'log.md']) {
-    const source = body(await readFile(join(f.source, 'wiki', name), 'utf8'));
-    const target = body(await readFile(join(f.target, 'wiki', name), 'utf8'));
-    if (digest(source) !== digest(target)) matches = false;
-  }
-  assert.equal(JSON.parse(r.stdout).bodyHashMatch, matches, 'reported equality must describe the final copied page bodies');
+  // PM correction (documented contract): log.md is append-only and receives one migration entry, so bodyHashMatch covers every
+  // page except log.md; the log is reported separately as logPrefixPreserved / logAppendedEntries.
+  const out = JSON.parse(r.stdout);
+  const sourceIndex = body(await readFile(join(f.source, 'wiki', 'index.md'), 'utf8'));
+  const targetIndex = body(await readFile(join(f.target, 'wiki', 'index.md'), 'utf8'));
+  assert.equal(out.bodyHashMatch, digest(sourceIndex) === digest(targetIndex), 'reported equality must describe the final copied page bodies');
+  const sourceLog = await readFile(join(f.source, 'wiki', 'log.md'));
+  const targetLog = await readFile(join(f.target, 'wiki', 'log.md'));
+  assert.equal(out.logPrefixPreserved, targetLog.subarray(0, sourceLog.length).equals(sourceLog));
+  assert.equal(out.logAppendedEntries, 1);
 });
