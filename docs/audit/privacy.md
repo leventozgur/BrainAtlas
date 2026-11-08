@@ -1,0 +1,168 @@
+# Privacy and secret scan
+
+Scope: repository text files excluding node_modules/ and .git/. Entries contain only file:line:class. Secret detection applies @brainatlas/core scanText rules. Non-fixture secret-class hits are scanner matches in source/config text, not a claim that a usable credential was exposed; all are recorded as location and class only. User-path matching excludes /Users/you and /Users/example*; IP matching excludes loopback and documentation ranges.
+
+## Non-fixture hits
+
+- modules/sync-dropbox/src/credentials.mjs:43:secret:secret-assignment
+- modules/sync-dropbox/src/credentials.mjs:82:secret:secret-assignment
+- modules/sync-dropbox/src/mac-keychain-helper.swift:31:secret:secret-assignment
+- modules/sync-dropbox/src/oauth.mjs:7:secret:high-entropy-assignment
+- packages/core/src/config/index.mjs:19:secret:secret-assignment
+- packages/core/src/config/index.mjs:70:secret:secret-assignment
+- packages/core/src/config/index.mjs:77:secret:secret-assignment
+- packages/core/src/config/migrations/000-to-1.mjs:14:secret:secret-assignment
+- packages/core/src/safety/index.mjs:40:secret:aws-secret-key
+- packages/core/src/safety/index.mjs:40:secret:secret-assignment
+- packages/core/src/safety/index.mjs:6:secret:secret-assignment
+- packages/mcp/src/index.mjs:24:secret:secret-assignment
+- vendor/llmwiki-core/NOTICE:1027:email
+- vendor/llmwiki-core/NOTICE:1086:email
+- vendor/llmwiki-core/NOTICE:1149:email
+- vendor/llmwiki-core/NOTICE:1289:email
+- vendor/llmwiki-core/NOTICE:1292:email
+- vendor/llmwiki-core/NOTICE:1295:email
+- vendor/llmwiki-core/NOTICE:1298:email
+- vendor/llmwiki-core/NOTICE:1299:email
+- vendor/llmwiki-core/NOTICE:1302:email
+- vendor/llmwiki-core/NOTICE:1303:email
+- vendor/llmwiki-core/NOTICE:1305:email
+- vendor/llmwiki-core/NOTICE:1306:email
+- vendor/llmwiki-core/NOTICE:1310:email
+- vendor/llmwiki-core/NOTICE:1311:email
+- vendor/llmwiki-core/NOTICE:1314:email
+- vendor/llmwiki-core/NOTICE:1315:email
+- vendor/llmwiki-core/NOTICE:1517:email
+- vendor/llmwiki-core/NOTICE:1755:email
+- vendor/llmwiki-core/NOTICE:197:email
+- vendor/llmwiki-core/NOTICE:198:email
+- vendor/llmwiki-core/NOTICE:229:email
+- vendor/llmwiki-core/NOTICE:230:email
+- vendor/llmwiki-core/NOTICE:2556:email
+- vendor/llmwiki-core/NOTICE:260:email
+- vendor/llmwiki-core/NOTICE:2647:email
+- vendor/llmwiki-core/NOTICE:2798:email
+- vendor/llmwiki-core/NOTICE:290:email
+- vendor/llmwiki-core/NOTICE:291:email
+- vendor/llmwiki-core/NOTICE:3075:email
+- vendor/llmwiki-core/NOTICE:3105:email
+- vendor/llmwiki-core/NOTICE:3106:email
+- vendor/llmwiki-core/NOTICE:3107:email
+- vendor/llmwiki-core/NOTICE:3155:email
+- vendor/llmwiki-core/NOTICE:3174:email
+- vendor/llmwiki-core/NOTICE:321:email
+- vendor/llmwiki-core/NOTICE:322:email
+- vendor/llmwiki-core/NOTICE:323:email
+- vendor/llmwiki-core/NOTICE:3416:email
+- vendor/llmwiki-core/NOTICE:3417:email
+- vendor/llmwiki-core/NOTICE:3477:email
+- vendor/llmwiki-core/NOTICE:3777:email
+- vendor/llmwiki-core/NOTICE:3868:email
+- vendor/llmwiki-core/NOTICE:3898:email
+- vendor/llmwiki-core/NOTICE:480:email
+- vendor/llmwiki-core/NOTICE:481:email
+- vendor/llmwiki-core/NOTICE:578:email
+- vendor/llmwiki-core/NOTICE:579:email
+- vendor/llmwiki-core/NOTICE:610:email
+- vendor/llmwiki-core/NOTICE:611:email
+- vendor/llmwiki-core/NOTICE:642:email
+- vendor/llmwiki-core/NOTICE:643:email
+- vendor/llmwiki-core/NOTICE:674:email
+- vendor/llmwiki-core/NOTICE:705:email
+- vendor/llmwiki-core/NOTICE:706:email
+- vendor/llmwiki-core/NOTICE:769:email
+- vendor/llmwiki-core/NOTICE:801:email
+- vendor/llmwiki-core/NOTICE:802:email
+- vendor/llmwiki-core/NOTICE:834:email
+- vendor/llmwiki-core/NOTICE:835:email
+- vendor/llmwiki-core/NOTICE:866:email
+- vendor/llmwiki-core/NOTICE:867:email
+- vendor/llmwiki-core/NOTICE:898:email
+
+## Synthetic fixtures and test-only examples
+
+- tests/acceptance/A-CLAUDE/acceptance.test.mjs:9:secret:secret-assignment
+- tests/acceptance/A-CODEX/acceptance.test.mjs:97:secret:secret-assignment
+- tests/acceptance/A-COPILOT/acceptance.test.mjs:26:secret:secret-assignment
+- tests/acceptance/A-COPILOT/acceptance.test.mjs:92:secret:secret-assignment
+- tests/acceptance/A-GEMINI/acceptance.test.mjs:63:secret:secret-assignment
+- tests/acceptance/A-KIRO/acceptance.test.mjs:74:secret:secret-assignment
+- tests/acceptance/C1-CONFIG/acceptance.test.mjs:19:secret:secret-assignment
+- tests/acceptance/C2-RETRIEVAL/acceptance.test.mjs:283:secret:secret-assignment
+- tests/acceptance/C3-SAFETY/fixtures/holdout.mjs:148:email
+- tests/acceptance/C3-SAFETY/fixtures/holdout.mjs:185:secret:secret-assignment
+- tests/acceptance/C3-SAFETY/fixtures/holdout.mjs:23:secret:jwt
+- tests/acceptance/C3-SAFETY/fixtures/holdout.mjs:59:secret:secret-assignment
+- tests/acceptance/C3-SAFETY/fixtures/holdout.mjs:74:secret:secret-assignment
+- tests/acceptance/C3-SAFETY/integration-contract.test.mjs:48:secret:secret-assignment
+- tests/acceptance/C3-SAFETY/integration-contract.test.mjs:59:secret:secret-assignment
+- tests/acceptance/C4-VAULT/acceptance.test.mjs:43:secret:secret-assignment
+- tests/acceptance/C4-VAULT/acceptance.test.mjs:63:secret:secret-assignment
+- tests/acceptance/C4-VAULT/acceptance.test.mjs:72:secret:secret-assignment
+- tests/acceptance/H-HOOKS/hook-acceptance.test.mjs:207:secret:secret-assignment
+- tests/acceptance/H-HOOKS/hook-acceptance.test.mjs:314:secret:secret-assignment
+- tests/acceptance/I-INSTALL/acceptance.test.mjs:109:secret:secret-assignment
+- tests/acceptance/M-MCP/acceptance.test.mjs:14:secret:secret-assignment
+- tests/acceptance/P0-SKEL/acceptance.test.mjs:88:secret:secret-assignment
+- tests/acceptance/S-ENGINE/acceptance.test.mjs:64:secret:secret-assignment
+- tests/acceptance/S-FOLDER/acceptance.test.mjs:103:secret:secret-assignment
+- tests/acceptance/S-GIT/transport.test.mjs:88:email
+- tests/acceptance/S-GIT/transport.test.mjs:96:secret:secret-assignment
+- tests/acceptance/X-OKF/acceptance.test.mjs:12:secret:secret-assignment
+- tests/acceptance/X-RECEIPTS/acceptance.test.mjs:39:secret:secret-assignment
+- tests/acceptance/X-SEMANTIC/semantic.test.mjs:10:secret:secret-assignment
+- tests/cli/space-path.test.mjs:24:secret:secret-assignment
+- tests/core/safety/fixtures/holdout/positive/01.txt:1:secret:github
+- tests/core/safety/fixtures/holdout/positive/02.txt:1:secret:github
+- tests/core/safety/fixtures/holdout/positive/03.txt:1:secret:slack
+- tests/core/safety/fixtures/holdout/positive/04.txt:1:secret:aws-access-key
+- tests/core/safety/fixtures/holdout/positive/05.txt:1:secret:stripe
+- tests/core/safety/fixtures/holdout/positive/06.txt:1:secret:npm
+- tests/core/safety/fixtures/holdout/positive/07.txt:1:secret:high-entropy-assignment
+- tests/core/safety/fixtures/holdout/positive/08.txt:1:secret:secret-assignment
+- tests/core/safety/fixtures/holdout/positive/09.txt:1:secret:connection-credentials
+- tests/core/safety/fixtures/holdout/positive/10.txt:1:private-key-block
+- tests/core/safety/fixtures/holdout/positive/10.txt:1:secret:private-key
+- tests/core/safety/fixtures/positive/01.txt:1:secret:openai
+- tests/core/safety/fixtures/positive/02.txt:1:secret:anthropic
+- tests/core/safety/fixtures/positive/03.txt:1:secret:github
+- tests/core/safety/fixtures/positive/04.txt:1:secret:github
+- tests/core/safety/fixtures/positive/05.txt:1:secret:slack
+- tests/core/safety/fixtures/positive/06.txt:1:secret:aws-access-key
+- tests/core/safety/fixtures/positive/07.txt:1:secret:google
+- tests/core/safety/fixtures/positive/08.txt:1:secret:cloud-storage-token
+- tests/core/safety/fixtures/positive/09.txt:1:secret:stripe
+- tests/core/safety/fixtures/positive/10.txt:1:secret:npm
+- tests/core/safety/fixtures/positive/11.txt:1:secret:jwt
+- tests/core/safety/fixtures/positive/12.txt:1:secret:secret-assignment
+- tests/core/safety/fixtures/positive/13.txt:1:secret:secret-assignment
+- tests/core/safety/fixtures/positive/14.txt:1:secret:secret-assignment
+- tests/core/safety/fixtures/positive/15.txt:1:secret:high-entropy-assignment
+- tests/core/safety/fixtures/positive/16.txt:1:secret:aws-secret-key
+- tests/core/safety/fixtures/positive/17.txt:1:secret:connection-credentials
+- tests/core/safety/fixtures/positive/18.txt:1:private-key-block
+- tests/core/safety/fixtures/positive/18.txt:1:secret:private-key
+- tests/core/safety/fixtures/positive/19.txt:1:secret:github
+- tests/core/safety/fixtures/positive/20.txt:1:secret:stripe
+- tests/core/stubs/config.test.mjs:21:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:210:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:225:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:247:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:278:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:380:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:416:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:90:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:91:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:92:secret:secret-assignment
+- tests/e2e/e2e-lite.test.mjs:93:secret:secret-assignment
+- tests/mcp/mcp.test.mjs:64:secret:secret-assignment
+- tests/modules/sync-dropbox.test.mjs:173:secret:secret-assignment
+- tests/modules/sync-engine.test.mjs:111:secret:high-entropy-assignment
+
+## Empty classes
+- User-specific absolute paths: none
+- Non-exempt IP addresses: none
+
+## Guard
+
+npm run guard: PASS — abs-path, lite-purity, forbidden-api, license-header, lockfile.
