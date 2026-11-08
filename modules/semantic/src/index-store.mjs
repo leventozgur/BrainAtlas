@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, lstat, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { PREPROCESS_VERSION } from './provider.mjs';
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -30,7 +31,7 @@ async function rejectSymlink(target) {
 
 /** Build and atomically persist a local embedding index and source hash manifest. */
 export async function buildSemanticIndex({ corpusDir, stateDir, provider, chunkMarkdown }) {
-  if (!provider || typeof provider.embed !== 'function' || !Number.isInteger(provider.dims)) throw new TypeError('Invalid embedding provider.');
+  if (!provider || (typeof provider.embed !== 'function' && typeof provider.embedDocuments !== 'function') || !Number.isInteger(provider.dims)) throw new TypeError('Invalid embedding provider.');
   const root = await realpath(corpusDir);
   const files = (await markdownFiles(root)).sort((a, b) => a.relativePath.localeCompare(b.relativePath));
   const chunks = [];
@@ -40,12 +41,12 @@ export async function buildSemanticIndex({ corpusDir, stateDir, provider, chunkM
     hashes[file.relativePath] = sha256(source);
     chunks.push(...chunkMarkdown(source, file.relativePath));
   }
-  const vectors = chunks.length ? await provider.embed(chunks.map((chunk) => chunk.text)) : [];
+  const vectors = chunks.length ? await (provider.embedDocuments ?? provider.embed).call(provider, chunks.map((chunk) => chunk.text)) : [];
   if (vectors.length !== chunks.length || vectors.some((vector) => vector.length !== provider.dims)) {
     throw new Error('Embedding provider returned invalid vectors.');
   }
   const createdAt = new Date().toISOString();
-  const index = { version: 1, providerId: provider.id, dims: provider.dims, createdAt, fileHashes: hashes,
+  const index = { version: 1, providerId: provider.id, providerFingerprint: provider.fingerprint ?? null, preprocessVersion: provider.preprocessVersion ?? PREPROCESS_VERSION, dims: provider.dims, createdAt, fileHashes: hashes,
     entries: chunks.map((chunk, i) => ({ ...chunk, vector: Array.from(vectors[i]) })) };
   // stateDir itself may be a user-directed symlink; descendants are owned paths.
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
