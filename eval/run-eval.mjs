@@ -4,8 +4,10 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { buildIndex, loadPages, search } from '../packages/core/src/retrieval/index.mjs';
+import { scanText } from '../packages/core/src/safety/index.mjs';
 
-const safeCaseId = (item, index) => typeof item?.id === 'string' && /^[\w-]{1,64}$/u.test(item.id) ? item.id : String(index + 1);
+const redactSensitive = (value) => scanText(value).length ? '[redacted]' : value;
+const safeCaseId = (item, index) => redactSensitive(typeof item?.id === 'string' && /^[\w-]{1,64}$/u.test(item.id) ? item.id : String(index + 1));
 const reciprocalRank = (results, relevant, limit) => {
   const rank = results.slice(0, limit).findIndex((result) => relevant.includes(result.path));
   return rank < 0 ? 0 : 1 / (rank + 1);
@@ -28,10 +30,11 @@ const percentile = (values, p) => {
 
 /**
  * Evaluate retrieval metrics. Existing metric semantics and keys are preserved.
- * @param {{corpusDir:string,casesFile:string,now?:Date,verbose?:boolean,repeat?:number}} options
+ * @param {{corpusDir:string,casesFile:string,now?:Date,verbose?:boolean,repeat?:number,abstainThreshold?:number}} options
  */
-export function runEval({corpusDir, casesFile, now = new Date(), verbose = false, repeat = 3}) {
+export function runEval({corpusDir, casesFile, now = new Date(), verbose = false, repeat = 3, abstainThreshold = 0, rejectInvalidQueries = false}) {
   if (!Number.isInteger(repeat) || repeat < 1 || repeat > 1000) throw new Error('Invalid repeat');
+  if (typeof abstainThreshold !== 'number' || !Number.isFinite(abstainThreshold) || abstainThreshold < 0 || abstainThreshold > 1) throw new Error('Invalid abstain threshold');
   const cases = JSON.parse(readFileSync(casesFile, 'utf8'));
   if (!Array.isArray(cases)) throw new Error('Invalid cases');
   const buildStart = performance.now();
@@ -46,7 +49,7 @@ export function runEval({corpusDir, casesFile, now = new Date(), verbose = false
   for (const [i, item] of cases.entries()) {
     const relevant = Array.isArray(item?.relevant) ? item.relevant : [];
     const abstain = Boolean(item?.abstain || !relevant.length);
-    const category = typeof item?.category === 'string' && /^[\w-]{1,64}$/u.test(item.category) ? item.category : 'uncategorized';
+    const category = typeof item?.category === 'string' && Array.from(item.category).length <= 64 && /^[\p{L}\p{N}\p{Zs}_-]+$/u.test(item.category) ? item.category : 'uncategorized';
     let categoryMetrics = categories.get(category);
     if (!categoryMetrics) {
       categoryMetrics = {n: 0, recall: 0, reciprocal: 0, answerable: 0};
@@ -54,12 +57,14 @@ export function runEval({corpusDir, casesFile, now = new Date(), verbose = false
     }
     categoryMetrics.n++;
 
+    if (rejectInvalidQueries && typeof item?.query !== 'string') throw new Error('Invalid query');
+
     // Warm the same query once without including that call in reported latency.
     let result;
-    try { result = search(index, item?.query, {limit:10, asOf:now}); } catch { result = null; }
+    try { result = search(index, item.query, {limit:10, asOf:now, abstainThreshold}); } catch { result = null; }
     for (let attempt = 0; attempt < repeat; attempt++) {
       const start = performance.now();
-      try { result = search(index, item?.query, {limit:10, asOf:now}); } catch { result = null; }
+      try { result = search(index, item.query, {limit:10, asOf:now, abstainThreshold}); } catch { result = null; }
       timings.push(Math.max(0, performance.now() - start));
     }
 
@@ -69,8 +74,8 @@ export function runEval({corpusDir, casesFile, now = new Date(), verbose = false
     const excluded = Array.isArray(item?.excluded) ? item.excluded : [];
     const excludedHits = results.filter((entry) => excluded.includes(entry.path));
     const caseId = safeCaseId(item, i);
-    if (abstain && results.length) falsePositives.push({caseId, path: results[0].path});
-    for (const entry of excludedHits) falsePositives.push({caseId, path: entry.path});
+    if (abstain && results.length) falsePositives.push({caseId, path: redactSensitive(results[0].path)});
+    for (const entry of excludedHits) falsePositives.push({caseId, path: redactSensitive(entry.path)});
 
     if (abstain) {
       abstainCount++;
@@ -104,6 +109,7 @@ export function runEval({corpusDir, casesFile, now = new Date(), verbose = false
     abstainAccuracy: abstainCount ? abstainRight / abstainCount : 0,
     trToEnRecallAt5: trCount ? trRecall / trCount : 0,
     n: cases.length,
+    abstainThreshold,
     mrrAt10: rankedCount ? reciprocal / rankedCount : 0,
     ndcgAt10: rankedCount ? ndcgTotal / rankedCount : 0,
     latencyMs: {p50: percentile(timings, 0.5), p95: percentile(timings, 0.95), count: timings.length},
@@ -114,8 +120,8 @@ export function runEval({corpusDir, casesFile, now = new Date(), verbose = false
 }
 
 function parseArgs(args) {
-  const options = {verbose: args.includes('--verbose'), json: args.includes('--json'), repeat: 3};
-  const valueFlags = new Set(['--corpus', '--cases', '--now', '--repeat']);
+  const options = {verbose: args.includes('--verbose'), json: args.includes('--json'), repeat: 3, abstainThreshold: 0};
+  const valueFlags = new Set(['--corpus', '--cases', '--now', '--repeat', '--abstain-threshold']);
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === '--verbose' || flag === '--json') continue;
@@ -124,6 +130,9 @@ function parseArgs(args) {
     if (flag === '--repeat') {
       if (!/^\d+$/u.test(value)) throw new Error('Invalid repeat');
       options.repeat = Number(value);
+    } else if (flag === '--abstain-threshold') {
+      options.abstainThreshold = Number(value);
+      if (!Number.isFinite(options.abstainThreshold) || options.abstainThreshold < 0 || options.abstainThreshold > 1) throw new Error('Invalid abstain threshold');
     } else options[flag.slice(2)] = value;
   }
   return options;
@@ -139,6 +148,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       now: args.now ? new Date(args.now) : new Date(),
       verbose: args.verbose,
       repeat: args.repeat,
+      abstainThreshold: args.abstainThreshold,
+      rejectInvalidQueries: true,
     });
     console.log(JSON.stringify(result, null, args.json ? 0 : 2));
   } catch {

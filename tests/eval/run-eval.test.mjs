@@ -70,6 +70,34 @@ test('legacy dev metrics retain their original values and original keys', () => 
   });
 });
 
+test('abstain threshold is passed to retrieval and reported; invalid values fail safely', (t) => {
+  const paths = fixture(t, [{id: 'no-answer', query: 'shared needle', relevant: [], abstain: true}]);
+  const withoutThreshold = runEval({...paths, now: new Date('2025-01-01T00:00:00Z')});
+  const withThreshold = runEval({...paths, now: new Date('2025-01-01T00:00:00Z'), abstainThreshold: 1});
+  assert.equal(withoutThreshold.abstainThreshold, 0);
+  assert.equal(withoutThreshold.abstainAccuracy, 0);
+  assert.equal(withThreshold.abstainThreshold, 1);
+  assert.equal(withThreshold.abstainAccuracy, 1);
+  assert.deepEqual(withThreshold.falsePositives, []);
+
+  for (const threshold of [-0.1, 1.1, NaN, Infinity, '0.5']) {
+    assert.throws(() => runEval({...paths, abstainThreshold: threshold}), /Invalid abstain threshold/);
+  }
+
+  const cli = spawnSync(process.execPath, [
+    path.join(root, 'eval/run-eval.mjs'), '--json', '--abstain-threshold', '1',
+    '--corpus', paths.corpusDir, '--cases', paths.casesFile,
+  ], {cwd: root, encoding: 'utf8'});
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.equal(JSON.parse(cli.stdout).abstainThreshold, 1);
+  const invalidCli = spawnSync(process.execPath, [
+    path.join(root, 'eval/run-eval.mjs'), '--json', '--abstain-threshold', '1.01',
+  ], {cwd: root, encoding: 'utf8'});
+  assert.notEqual(invalidCli.status, 0);
+  assert.equal(invalidCli.stdout, '');
+  assert.equal(invalidCli.stderr.trim(), 'Eval failed');
+});
+
 test('CLI --json emits one valid JSON document and accepts repeat count', () => {
   const proc = spawnSync(process.execPath, [
     path.join(root, 'eval/run-eval.mjs'), '--json', '--repeat', '1',
