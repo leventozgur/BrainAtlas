@@ -27,7 +27,7 @@ for (const scope of ['global','vault']) for (const platform of ['linux','darwin'
     assert.equal((await kiro.doctor(f.ctx)).checks.find(c=>c.id==='registered').ok,false);
     const p=await kiro.plan(f.ctx); assert.equal(p.changes.length,3); assert.equal(await get(f.mcp),null);
     await kiro.apply(p,f.ctx); assert.equal((await kiro.plan(f.ctx)).changes.length,0);
-    const health=await kiro.doctor(f.ctx); assert.equal(health.checks.find(c=>c.id==='registered').ok,true); assert.equal(health.checks.find(c=>c.id==='hook').ok,true); assert.equal(health.checks.find(c=>c.id==='trigger-verified').ok,false);
+    const health=await kiro.doctor(f.ctx); assert.equal(health.checks.find(c=>c.id==='registered').ok,true); assert.equal(health.checks.find(c=>c.id==='hook').ok,true); assert.equal(health.checks.find(c=>c.id==='trigger-verified').warning,true); // PM hotfix: warning, not a failing check
     const review=await kiro.trustReview(f.ctx); assert.equal(review.client,'Kiro'); assert.equal(review.required,true); assert.match(review.steps.join(' '),/Kiro/); assert.match(review.steps.join(' '),/hook/i);
     await kiro.remove(f.ctx); for(const file of [f.mcp,f.hook,f.steering]) assert.equal(await get(file),null); assert.equal(await get(f.sentinel),'untouched');
   });

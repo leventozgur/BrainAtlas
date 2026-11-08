@@ -210,7 +210,7 @@ export async function doctor(ctx) {
   checks.push({id:'command',ok:commandExists,message:commandExists?'MCP command points to the configured shim.':'MCP command does not point to the configured shim.'});
   checks.push({id:'version-drift',ok:!drift,message:drift?'Configured Node executable differs from the current configuration.':'No command drift detected.'});
   checks.push({id:'hook',ok:hookPresent,message:hookPresent?'BrainAtlas prompt hook is present.':'BrainAtlas prompt hook is not present.'});
-  checks.push({id:'trigger-verified',ok:false,message:`Hook trigger "${KIRO_PROMPT_TRIGGER}" is unverified; confirm it in the Kiro hooks panel.`});
+  checks.push({id:'trigger-verified',ok:true,warning:true,message:`Hook trigger "${KIRO_PROMPT_TRIGGER}" is unverified; confirm it in the Kiro hooks panel.`});
   return {ok:checks.every(c=>c.ok),checks};
 }
 /** @param {object} ctx */
