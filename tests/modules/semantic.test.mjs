@@ -68,6 +68,23 @@ test('local semantic index records per-file hashes and reports stale, missing, a
   assert.deepEqual(await fs.readdir(path.join(state, 'semantic')), ['index.json']);
 });
 
+test('semantic index rejects symlink descendants and treats corrupt JSON as a cache miss', async (t) => {
+  const dir = await temporary(t), corpus = path.join(dir, 'corpus'), state = path.join(dir, 'state'), outside = path.join(dir, 'outside');
+  await fs.mkdir(corpus); await fs.mkdir(outside);
+  await fs.writeFile(path.join(corpus, 'one.md'), '# One\ncar transport');
+  await fs.mkdir(state);
+  await fs.symlink(outside, path.join(state, 'semantic'));
+  await assert.rejects(buildSemanticIndex({ corpusDir: corpus, stateDir: state, provider: conceptProvider(), chunkMarkdown: markdownChunks }), { code: 'E_SEMANTIC_STATE' });
+  assert.deepEqual(await fs.readdir(outside), []);
+
+  await fs.rm(path.join(state, 'semantic'), { force: true });
+  await fs.mkdir(path.join(state, 'semantic'));
+  await fs.writeFile(path.join(state, 'semantic', 'index.json'), '{broken');
+  assert.equal(await readSemanticIndex(state), null);
+  const rebuilt = await buildSemanticIndex({ corpusDir: corpus, stateDir: state, provider: conceptProvider(), chunkMarkdown: markdownChunks });
+  assert.equal((await readSemanticIndex(state)).entries.length, rebuilt.entries.length);
+});
+
 test('cosine similarity and RRF combine rankings deterministically with k=60 default', () => {
   assert.equal(cosineSimilarity([1, 0], [0, 1]), 0);
   const fused = reciprocalRankFusion([
@@ -84,6 +101,27 @@ test('hybrid search fuses core BM25F with semantic ranks', async () => {
   const results = await searchHybrid({ query: 'araba', pages, entries, provider: conceptProvider() });
   assert.equal(results[0].path, 'car.md');
   assert.equal(results[0].sourceRanks[0], 1);
+});
+
+test('hybrid search falls back to lexical results when the semantic provider fails', async () => {
+  const pages = [{ path: 'car.md', title: 'Car', aliases: [], keywords: [], headings: [], body: 'car transport', frontmatter: {} }];
+  const results = await searchHybrid({ query: 'car', pages, entries: [], provider: { embed: async () => { throw Object.assign(new Error('provider failed'), { code: 'E_SEMANTIC_PROVIDER' }); } } });
+  assert.deepEqual(results.map(({ path }) => path), ['car.md']);
+});
+
+test('hybrid semantic candidates obey core path and OKF filters and carry stale status', async () => {
+  const pages = [
+    { path: 'valid.md', title: 'Valid', aliases: [], keywords: [], headings: [], body: 'unmatched', frontmatter: { stale_after: '2000-01-01', status: 'confirmed' } },
+    { path: 'superseded.md', title: 'Superseded', aliases: [], keywords: [], headings: [], body: '', frontmatter: { status: 'superseded' } },
+    { path: 'targeted.md', title: 'Targeted', aliases: [], keywords: [], headings: [], body: '', frontmatter: { superseded_by: 'wiki/new.md' } },
+    { path: '../outside.md', title: 'Outside', aliases: [], keywords: [], headings: [], body: '', frontmatter: {} },
+    { path: '/absolute.md', title: 'Absolute', aliases: [], keywords: [], headings: [], body: '', frontmatter: {} },
+  ];
+  const entries = pages.map(({ path, title }) => ({ path, title, vector: [1, 0] }));
+  const results = await searchHybrid({ query: 'no lexical hit', pages, entries, provider: { embed: async () => [[1, 0]] } });
+  assert.deepEqual(results.map(({ path }) => path), ['valid.md']);
+  assert.equal(results[0].stale, true);
+  assert.equal(results[0].status, 'confirmed');
 });
 
 test('semantic gate passes only with the specified Turkish recall gain and precision bound', async (t) => {

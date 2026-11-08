@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, realpath, rename, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, lstat, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
@@ -15,6 +15,17 @@ async function markdownFiles(root, dir = root, files = []) {
     }
   }
   return files;
+}
+
+async function rejectSymlink(target) {
+  try {
+    const info = await lstat(target);
+    if (info.isSymbolicLink()) throw Object.assign(new Error('Semantic state path must not be a symlink.'), { code: 'E_SEMANTIC_STATE' });
+    return info;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
 }
 
 /** Build and atomically persist a local embedding index and source hash manifest. */
@@ -36,24 +47,42 @@ export async function buildSemanticIndex({ corpusDir, stateDir, provider, chunkM
   const createdAt = new Date().toISOString();
   const index = { version: 1, providerId: provider.id, dims: provider.dims, createdAt, fileHashes: hashes,
     entries: chunks.map((chunk, i) => ({ ...chunk, vector: Array.from(vectors[i]) })) };
+  // stateDir itself may be a user-directed symlink; descendants are owned paths.
+  await mkdir(stateDir, { recursive: true, mode: 0o700 });
   const semanticDir = path.join(stateDir, 'semantic');
-  await mkdir(semanticDir, { recursive: true, mode: 0o700 });
+  const semanticInfo = await rejectSymlink(semanticDir);
+  if (semanticInfo && !semanticInfo.isDirectory()) throw Object.assign(new Error('Semantic state path is invalid.'), { code: 'E_SEMANTIC_STATE' });
+  if (!semanticInfo) await mkdir(semanticDir, { mode: 0o700 });
   const destination = path.join(semanticDir, 'index.json');
-  const temporary = `${destination}.tmp-${process.pid}`;
-  await writeFile(temporary, `${JSON.stringify(index)}\n`, { mode: 0o600 });
-  await rename(temporary, destination);
+  const destinationInfo = await rejectSymlink(destination);
+  if (destinationInfo && !destinationInfo.isFile()) throw Object.assign(new Error('Semantic index path is invalid.'), { code: 'E_SEMANTIC_STATE' });
+  const temporary = `${destination}.tmp-${process.pid}-${randomUUID()}`;
+  await rejectSymlink(temporary);
+  await writeFile(temporary, `${JSON.stringify(index)}\n`, { mode: 0o600, flag: 'wx' });
+  try { await rename(temporary, destination); }
+  catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
   return index;
 }
 
 /** Read a stored index without exposing file contents in errors. */
 export async function readSemanticIndex(stateDir) {
   try {
-    const parsed = JSON.parse(await readFile(path.join(stateDir, 'semantic', 'index.json'), 'utf8'));
-    if (parsed?.version !== 1 || !Array.isArray(parsed.entries) || !parsed.fileHashes) throw new Error();
+    const semanticDir = path.join(stateDir, 'semantic');
+    const semanticInfo = await rejectSymlink(semanticDir);
+    if (semanticInfo && !semanticInfo.isDirectory()) return null;
+    const indexPath = path.join(semanticDir, 'index.json');
+    const indexInfo = await rejectSymlink(indexPath);
+    if (indexInfo && !indexInfo.isFile()) return null;
+    const parsed = JSON.parse(await readFile(indexPath, 'utf8'));
+    if (parsed?.version !== 1 || !Array.isArray(parsed.entries) || !parsed.fileHashes || typeof parsed.fileHashes !== 'object') return null;
     return parsed;
   } catch (error) {
     if (error?.code === 'ENOENT') return null;
-    throw Object.assign(new Error('Semantic index is unreadable.'), { code: 'E_SEMANTIC_INDEX' });
+    if (error?.code === 'E_SEMANTIC_STATE') return null;
+    return null;
   }
 }
 
