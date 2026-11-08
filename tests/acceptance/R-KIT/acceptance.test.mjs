@@ -104,6 +104,25 @@ test('offline release kit acceptance', { timeout: 180000 }, async t => {
     assert.deepEqual(await readdir(outside), [], 'installation must not write through a symlink outside HOME');
     assert.notEqual(r.status, 0, 'redirected installation must fail');
   });
+  await t.test('external installation roots require explicit opt-in; external XDG and .local remain supported', async () => {
+    for (const mode of ['flag', 'environment', 'external-xdg', 'local-symlink']) {
+      const h = join(base, `home-${mode}`), outside = join(base, `outside-${mode}`);
+      await mkdir(h); await mkdir(outside);
+      const e = { ...env, HOME: h, XDG_DATA_HOME: join(h, 'data'), XDG_CONFIG_HOME: join(h, 'config'), XDG_STATE_HOME: join(h, 'state') };
+      const extra = [];
+      if (mode === 'flag' || mode === 'environment') {
+        await mkdir(e.XDG_DATA_HOME); await symlink(outside, join(e.XDG_DATA_HOME, 'brainatlas'));
+        if (mode === 'flag') extra.push('--allow-symlinked-root');
+        else e.BRAINATLAS_ALLOW_SYMLINKED_ROOT = '1';
+      } else if (mode === 'external-xdg') e.XDG_DATA_HOME = outside;
+      else { delete e.XDG_DATA_HOME; await symlink(outside, join(h, '.local')); }
+      const r = run('sh', [join(kit, 'install.sh'), '--from', join(kit, archiveName), '--allowed-signers', signers, '--vault', join(h, 'vault'), '--yes', ...extra], { cwd: work, env: e });
+      assert.equal(r.status, 0, `${mode}: ${r.stderr}`);
+      const data = mode === 'flag' || mode === 'environment' ? outside : mode === 'external-xdg' ? join(outside, 'brainatlas') : join(outside, 'share/brainatlas');
+      const d = run(process.execPath, [join(data, 'current/packages/cli/bin/brainatlas.mjs'), 'doctor', '--json'], { cwd: work, env: { ...e, BRAINATLAS_ALLOWED_SIGNERS: signers } });
+      assert.equal(d.status, 0, `${mode}: ${d.stderr}`); assert.equal(JSON.parse(d.stdout).ok, true, mode);
+    }
+  });
   await t.test('copied kit installs from a different cwd, doctor succeeds and output does not disclose vault secret', async () => {
     const r = install(); assert.equal(r.status, 0, r.stderr); assert.ok(!(r.stdout + r.stderr).includes(secret));
     const cli = join(home, 'data/brainatlas/current/packages/cli/bin/brainatlas.mjs');
