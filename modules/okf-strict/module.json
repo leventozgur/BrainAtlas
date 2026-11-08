@@ -1,6 +1,6 @@
 {
   "name": "okf-strict",
-  "version": "0.1.0-rc.6",
+  "version": "0.1.0-rc.7",
   "description": "Strict validation gates for the local OKF inspired metadata profile.",
   "requires": [],
   "provides": ["okf-strict"],

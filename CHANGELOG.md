@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-rc.7 — 2026-11-08 (first public pre-release)
+
+- Signed with the maintainer release key (fingerprint `SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40`); earlier candidates used a development key.
+- Secret filter: Markdown page titles containing "secret" are no longer refused on their own; `brainatlas safety allow|list|revoke` records fingerprinted exceptions for reviewed false positives (new or changed matches are still refused).
+- Releases are published on GitHub Releases.
+
 ## 0.1.0-rc.6 — 2026-11-08
 
 - `brainatlas sync schedule install|remove|status` installs a LaunchAgent (macOS, label `org.brainatlas.sync`) or a systemd user timer (Linux); safe temp files, HOME containment, failed stops keep files and can be retried; `uninstall` removes the schedule.

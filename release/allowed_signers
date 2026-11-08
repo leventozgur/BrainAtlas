@@ -1,4 +1,4 @@
 # Trusted release signing keys (ssh-keygen -Y allowed_signers format).
 # Maintainer release key (ed25519, fingerprint SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40), set 2026-11-08.
-# Releases up to v0.1.0-rc.6 were signed with a development key and do not verify against this file.
+# Releases up to v0.1.0-rc.7 were signed with a development key and do not verify against this file.
 brainatlas-release namespaces="brainatlas-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINvt2p/WeeIxKdKdNBOlRN/CXewRXKL5FrhSVV/tslpq
