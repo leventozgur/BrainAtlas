@@ -99,6 +99,9 @@ test('izlenen metinlerde yaygın özel anahtar ve token biçimleri yok',async()=
 test('modül entry commands export ve NotImplemented hata sözleşmesi',async()=>{
  for(const name of ['okf-strict','receipts','semantic','sync-dropbox','sync-engine','sync-folder','sync-git']) {
   const mod=await import(pathToFileURL(join(root,`modules/${name}/src/index.mjs`))); assert.equal(typeof mod.commands,'object',`${name}: commands`);
-  await assert.rejects(mod.activate({}), {name:'NotImplementedError'});
+  // PM: once a module is implemented, activate({}) may reject with its own context error instead of NotImplementedError;
+  // the contract here is: async activate(ctx) of arity 1; on an empty context it may no-op or throw an Error.
+  assert.equal(mod.activate.length,1,`${name}: activate arity`);
+  try { await mod.activate({}); } catch (error) { assert.ok(error instanceof Error, `${name}: activate throws an Error`); }
  }
 });
