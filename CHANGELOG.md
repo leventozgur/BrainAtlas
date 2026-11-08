@@ -6,7 +6,7 @@
 - Added Git transport setup and sync operations (S-OPS), plus stable host identity configuration (S-HOSTID).
 - Added Gemini CLI `BeforeAgent` and `SessionStart` hooks (A-GEMINI2).
 - Hardened output redaction and health reporting (I-HARDEN).
-- Added the MIT attribution for avenoxbeyin in `THIRD_PARTY_NOTICES.md`.
+- Added the MIT attribution for avenoxbeyin in `THIRD_PARTY_NOTICES`.
 
 ## 0.1.0-rc.1 — 2026-11-08 (local release candidate; signed with a development key, not published)
 

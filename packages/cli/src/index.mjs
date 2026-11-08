@@ -496,7 +496,7 @@ const helpDescriptions = Object.freeze({
   migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', help: 'Show built-in and active module commands.'
 });
 const helpUsages = Object.freeze({
-  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
+  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
   config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
@@ -512,11 +512,38 @@ async function availableHelpCommands(paths, env) {
     try {
       const { ordered, entries } = await enabledModuleEntries(releaseDir, cfg);
       const seen = new Set(commands.map(item => item.name));
+      const moduleHelp = new Map();
       for (const manifest of ordered) {
-        for (const name of Object.keys(entries.get(manifest.name)?.commands || {}).sort()) {
-          if (seen.has(name)) continue;
-          seen.add(name); commands.push({ name, kind: 'module', module: manifest.name, usage: `brainatlas ${name} [ARGS]`, description: `Command provided by the ${manifest.name} module.` });
+        const entry = entries.get(manifest.name);
+        for (const [name, help] of Object.entries(entry?.help || {})) {
+          if (!moduleHelp.has(name)) moduleHelp.set(name, { usage: [], description: help?.description });
+          const target = moduleHelp.get(name);
+          for (const line of Array.isArray(help?.usage) ? help.usage : help?.usage ? [help.usage] : []) {
+            if (!target.usage.includes(line)) target.usage.push(line);
+          }
+          if (!target.description && help?.description) target.description = help.description;
         }
+        const transportName = providedTransportName(manifest);
+        if (transportName && typeof entry?.commands?.status === 'function') {
+          if (!moduleHelp.has('sync')) moduleHelp.set('sync', { usage: [] });
+          moduleHelp.get('sync').usage.push(`brainatlas sync ${transportName} status [--json]`);
+        }
+        for (const name of Object.keys(entry?.commands || {}).sort()) {
+          if (seen.has(name)) continue;
+          seen.add(name);
+          const help = moduleHelp.get(name);
+          const usage = help?.usage?.length ? help.usage : [`brainatlas ${name} [ARGS]`];
+          commands.push({ name, kind: 'module', module: manifest.name, usage: usage.length === 1 ? usage[0] : usage, description: help?.description || `Command provided by the ${manifest.name} module.` });
+        }
+      }
+      // A transport module may add subcommands to sync without owning a top-level command.
+      const sync = commands.find(item => item.name === 'sync');
+      const syncHelp = moduleHelp.get('sync');
+      if (sync && syncHelp?.usage?.length) {
+        const existing = Array.isArray(sync.usage) ? sync.usage : [sync.usage];
+        const usage = [...existing];
+        for (const line of syncHelp.usage) if (!usage.includes(line)) usage.push(line);
+        sync.usage = usage;
       }
     } catch { /* Help remains usable when an installed module is damaged. */ }
   }
@@ -527,8 +554,14 @@ async function showHelp(topic, { paths, env, output, json }) {
   const commands = await availableHelpCommands(paths, env);
   if (topic) {
     const command = commands.find(item => item.name === topic);
+    if (!command && topic === 'sync') {
+      const moduleName = ['sync', 'engine'].join('-');
+      const description = `sync is provided by the Full profile modules; install/enable ${moduleName}`;
+      output(json ? { name: 'sync', kind: 'unavailable', usage: '', description } : description); return;
+    }
     if (!command) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
-    output(json ? command : `${command.usage}\n${command.description}`); return;
+    const usage = Array.isArray(command.usage) ? command.usage.join('\n') : command.usage;
+    output(json ? command : `${usage}\n${command.description}`); return;
   }
   const result = { commands };
   const lines = ['BrainAtlas commands:', ...commands.map(item => `  ${item.name.padEnd(14)} ${item.description}`), '', 'Run "brainatlas help <command>" for command usage.'];

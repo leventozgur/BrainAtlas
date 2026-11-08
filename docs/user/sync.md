@@ -2,6 +2,27 @@
 
 Synchronization is optional and belongs to Full/Custom modules. Review where vault files will be stored and how credentials are handled before enabling it. No application key is embedded in the repository.
 
+## Command syntax
+
+With `sync-engine` enabled, the supported commands are:
+
+```text
+brainatlas sync run [--json]
+brainatlas sync status [--json]
+brainatlas sync check --peer STATE_DIR [--json]
+brainatlas sync approve <path> | --all
+brainatlas sync pause
+brainatlas sync resume
+```
+
+When the Git sync module is also enabled, it adds:
+
+```text
+brainatlas sync git status [--json]
+```
+
+`approve <path>` approves one reviewed pending deletion; `approve --all` approves all pending deletions. The sync commands are available only after installing a Full release and enabling `sync-engine`.
+
 ## GitHub with a private repository and SSH
 
 Use an empty **Private** GitHub repository (do not initialize it with a README). Vault content is stored in that repository. BrainAtlas filters supported writes for secret-like content, but this is not a complete secret scanner and there is no client-side encryption. Keep the repository private and review what you sync.
@@ -31,7 +52,7 @@ Use an empty **Private** GitHub repository (do not initialize it with a README).
    brainatlas sync check --peer <stateDir>
    ```
 
-   Review any findings. Use `brainatlas sync approve …` only for a specific pending operation you have reviewed; run `brainatlas help sync` for available module commands and exact syntax.
+   Review any findings. Use `brainatlas sync approve <path>` only for a specific pending deletion you have reviewed, or `brainatlas sync approve --all` to approve all pending deletions. `brainatlas help sync` also shows the commands available in the enabled modules.
 
 Git uses SSH BatchMode, so configure keys and agent access before running sync. Sync can retain unresolved conflicts for review; deletions require approval.
 
