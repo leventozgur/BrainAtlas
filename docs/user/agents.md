@@ -8,6 +8,8 @@
 | GitHub Copilot in VS Code | MCP config, hook JSON, instructions Markdown | Session-start hook and pull-mode MCP; per-prompt hooks are unsupported by Copilot. Global instructions path is unverified. Workspace hooks may require workspace trust. |
 | Kiro | `.kiro/settings/mcp.json`, `.kiro/steering/brainatlas.md`, `.kiro/hooks/brainatlas.json` | MCP, steering instructions, prompt hook. **Prompt trigger name is unverified.** |
 | Codex CLI | Agent MCP and instruction configuration | MCP and pull-mode instruction pointer. Confirm the exact behavior in the installed Codex CLI. |
-| Gemini CLI | Agent MCP and instruction configuration | MCP and pull mode; adapter reports that it does not configure a hook. |
+| Gemini CLI | `~/.gemini/settings.json` | MCP and managed instructions plus `BeforeAgent` (`brainatlas-context`) and `SessionStart` (`brainatlas-session`) hooks. Enable them from Gemini CLI's `/hooks` panel if needed. |
 
 Exact global versus workspace locations depend on adapter scope and agent conventions. Trust-review each planned edit before relying on it. Uninstall removes only changes it can identify as managed and preserves the configured vault.
+
+The Gemini CLI integration targets Gemini CLI. The free/Google One offering was replaced by Antigravity CLI on 2026-06-18; verify which CLI is available to your account before following these steps.

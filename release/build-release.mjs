@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFile, readdir, mkdir, writeFile, lstat, rm } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile, lstat, rm, rename, cp } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -10,6 +10,17 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hash = b => createHash('sha256').update(b).digest('hex');
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const safe = s => typeof s === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s) && s !== '..';
+
+async function atomicWrite(path, bytes, mode = 0o644) {
+  const temp = `${path}.tmp-${process.pid}-${randomBytes(6).toString('hex')}`;
+  try {
+    await writeFile(temp, bytes, { flag: 'wx', mode });
+    await rename(temp, path);
+  } catch (error) {
+    await rm(temp, { force: true });
+    throw error;
+  }
+}
 
 async function walk(base, rel = '') {
   const path = join(base, rel); let stat;
@@ -106,11 +117,65 @@ export async function buildRelease(options) {
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   const archive = gzipSync(tar(files.map(f => ({ ...f, path: `brainatlas-${version}/${f.path}` }))), { level: 9, mtime: 0 });
   await mkdir(out, { recursive: true }); const name = `brainatlas-${version}-${profile}.tgz`; const dest = join(out, name);
-  await writeFile(dest, archive);
+  await atomicWrite(dest, archive);
   const sumsPath = join(out, 'SHA256SUMS'); let lines = [];
   try { lines = (await readFile(sumsPath, 'utf8')).split('\n').filter(line => line && !line.endsWith(`  ${name}`)); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-  lines.push(`${hash(archive)}  ${name}`); lines.sort(); await writeFile(sumsPath, `${lines.join('\n')}\n`);
+  lines.push(`${hash(archive)}  ${name}`); lines.sort(); await atomicWrite(sumsPath, `${lines.join('\n')}\n`);
   return [dest, sumsPath];
+}
+
+/** Build a self-contained offline distribution directory for both release profiles. */
+export async function buildDistribution(options = {}) {
+  const sourceRoot = resolve(process.env.BRAINATLAS_RELEASE_SOURCE || root);
+  const packageInfo = JSON.parse(await readFile(join(sourceRoot, 'package.json'), 'utf8'));
+  const version = options.version ?? packageInfo.version;
+  const builtAt = options.builtAt ?? '1970-01-01T00:00:00.000Z';
+  const out = resolve(options.out || join(root, 'release', 'dist'));
+  if (!safe(version) || typeof builtAt !== 'string') throw fail('E_MANIFEST_INVALID', 'Invalid release options.');
+
+  const parent = dirname(out);
+  await mkdir(parent, { recursive: true });
+  const stage = join(parent, `.${basename(out)}.staging-${process.pid}-${randomBytes(6).toString('hex')}`);
+  const backup = `${out}.previous-${process.pid}-${randomBytes(6).toString('hex')}`;
+  await mkdir(stage);
+  let movedPrevious = false;
+  try {
+    for (const profile of ['lite', 'full']) await buildRelease({ version, profile, builtAt, out: stage });
+    await mkdir(join(stage, 'release'));
+    await cp(join(sourceRoot, 'install.sh'), join(stage, 'install.sh'));
+    await cp(join(sourceRoot, 'release', 'install-kit.mjs'), join(stage, 'release', 'install-kit.mjs'));
+    await cp(join(sourceRoot, 'release', 'allowed_signers'), join(stage, 'release', 'allowed_signers'));
+
+    const names = (await readdir(stage, { withFileTypes: true }))
+      .filter(entry => entry.isFile() && entry.name !== 'SHA256SUMS' && entry.name !== 'SHA256SUMS.sig')
+      .map(entry => entry.name);
+    names.push('release/install-kit.mjs', 'release/allowed_signers');
+    const lines = [];
+    for (const name of [...new Set(names)].sort()) {
+      const bytes = await readFile(join(stage, name));
+      lines.push(`${hash(bytes)}  ${name}`);
+    }
+    await atomicWrite(join(stage, 'SHA256SUMS'), `${lines.join('\n')}\n`);
+
+    try { await lstat(out); await rename(out, backup); movedPrevious = true; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    try { await rename(stage, out); }
+    catch (error) {
+      if (movedPrevious) { await rename(backup, out); movedPrevious = false; }
+      throw error;
+    }
+    if (movedPrevious) {
+      movedPrevious = false;
+      await rm(backup, { recursive: true, force: true }).catch(() => {});
+    }
+    return [join(out, `brainatlas-${version}-lite.tgz`), join(out, `brainatlas-${version}-full.tgz`), join(out, 'SHA256SUMS')];
+  } catch (error) {
+    await rm(stage, { recursive: true, force: true });
+    if (movedPrevious) {
+      try { await lstat(out); } catch (missing) { if (missing.code === 'ENOENT') await rename(backup, out); }
+    }
+    throw error;
+  }
 }
 
 /** @param {string} archivePath @param {string} checksumPath @param {string} signaturePath @returns {Promise<object>} */
@@ -154,6 +219,9 @@ export async function extractRelease(archivePath, checksumPath, signaturePath, d
   return manifest;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const args = process.argv.slice(2); const get = key => args[args.indexOf(key) + 1];
-  try { await buildRelease({ version: get('--version'), profile: get('--profile'), out: get('--out') }); } catch (e) { console.error(`${e.code || 'E_RELEASE'}: ${e.message}`); process.exitCode = 1; }
+  const args = process.argv.slice(2); const get = key => { const index = args.indexOf(key); return index < 0 ? undefined : args[index + 1]; };
+  try {
+    if (get('--profile')) await buildRelease({ version: get('--version'), profile: get('--profile'), out: get('--out') });
+    else await buildDistribution({ version: get('--version'), out: get('--out') });
+  } catch (e) { console.error(`${e.code || 'E_RELEASE'}: ${e.message}`); process.exitCode = 1; }
 }

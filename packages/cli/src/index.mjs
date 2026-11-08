@@ -117,7 +117,7 @@ async function doctorResult(paths, env) {
   catch { cfg = defaultConfig('lite'); configOk = false; }
   const checks = { config: configOk };
   try { await access(paths.currentDir); checks.release = true; } catch { checks.release = false; }
-  const warnings = [];
+  const warnings = []; const moduleHealth = [];
   if (checks.release && cfg.agents?.length) {
     const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url));
     for (const agent of cfg.agents) {
@@ -131,8 +131,39 @@ async function doctorResult(paths, env) {
       }
     }
   }
+  if (checks.release && cfg.modules?.length) {
+    try {
+      const current = await readCurrent(paths); const releaseDir = currentReleaseDir(paths, current);
+      if (releaseDir) {
+        const { ordered, entries } = await enabledModuleEntries(releaseDir, cfg);
+        const ctx = moduleContext(cfg, paths, env, entries, ordered);
+        await activateEnabledModules(ordered, entries, ctx);
+        const syncModule = ordered.find(item => (item.provides || []).includes('sync'));
+        if (syncModule) {
+          let sync = null;
+          try { sync = await entries.get(syncModule.name)?.commands?.status?.(ctx); }
+          catch { warnings.push('Sync health is unavailable.'); }
+          let lastSync = null;
+          try {
+            const manifest = JSON.parse(await readFile(join(paths.stateDir, 'sync', 'last-synced-manifest.json'), 'utf8'));
+            if (typeof manifest.generatedAt === 'string') lastSync = manifest.generatedAt;
+          } catch { /* No successful sync has been recorded. */ }
+          moduleHealth.push({ name: 'sync', transport: cfg.sync?.transport ?? null, status: sync?.status ?? 'unknown', lastSync });
+        }
+        if (ordered.some(item => item.name === 'semantic')) {
+          let freshness = null;
+          try {
+            const semantic = entries.get('semantic'); const index = await semantic?.readSemanticIndex?.(paths.stateDir);
+            freshness = index ? await semantic.measureIndexFreshness({ corpusDir: cfg.vault.path, index }) : null;
+            if (!index) warnings.push('Semantic index is not available.');
+          } catch { warnings.push('Semantic index freshness is unavailable.'); }
+          moduleHealth.push({ name: 'semantic', freshness });
+        }
+      }
+    } catch { warnings.push('Module health summary is unavailable.'); }
+  }
   if (env.BRAINATLAS_TEST_DOCTOR_FAIL === '1') checks.injected = false;
-  return { ok: Object.values(checks).every(Boolean), checks, profile: cfg.profile, modules: cfg.modules, warnings };
+  return { ok: Object.values(checks).every(Boolean), checks, profile: cfg.profile, modules: cfg.modules, moduleHealth, warnings };
 }
 async function removeAdapters(cfg, paths, env) {
   const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url)); const warnings = [];
@@ -310,18 +341,25 @@ async function recoverUpdate(paths, env) {
 
 function currentReleaseDir(paths, current) { return current ? join(paths.dataDir, current) : null; }
 
-function redactPlanCopy(value) {
-  const copy = structuredClone(value);
-  function visit(item) {
-    if (!item || typeof item !== 'object') return;
-    if (Array.isArray(item)) { for (const child of item) visit(child); return; }
-    for (const [key, child] of Object.entries(item)) {
-      if ((key === 'before' || key === 'after') && typeof child === 'string') item[key] = redact(child);
-      else visit(child);
-    }
-  }
-  visit(copy);
-  return copy;
+function redactOutput(value, home) {
+  const redactString = text => {
+    let result = home ? text.split(home).join('~') : text;
+    // The core redactor catches user:password@, but URL userinfo can also be
+    // username-only. Remove the entire userinfo component for every URL form.
+    result = result.replace(/\b([a-z][a-z0-9+.-]{0,31}:\/\/)([^\s/?#]*)/gi, (match, scheme, authority) => {
+      const at = authority.lastIndexOf('@');
+      return at < 0 ? match : `${scheme}[REDACTED]@${authority.slice(at + 1)}`;
+    });
+    return redact(result);
+  };
+  const visit = (item, key = '') => {
+    if (/(?:password|passwd|passphrase|(?:^|[_ .-])pwd|secret|token|api[_ .-]?key|access[_ .-]?key|credential|private[_-]?key)/i.test(key)) return '[REDACTED]';
+    if (typeof item === 'string') return redactString(item);
+    if (Array.isArray(item)) return item.map(child => visit(child));
+    if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([childKey, child]) => [childKey, visit(child, childKey)]));
+    return item;
+  };
+  return visit(value);
 }
 
 async function loadInstalledModuleEntry(releaseDir, manifest) {
@@ -458,8 +496,8 @@ const helpDescriptions = Object.freeze({
   migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', help: 'Show built-in and active module commands.'
 });
 const helpUsages = Object.freeze({
-  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
-  config: 'brainatlas config get KEY | set KEY VALUE [--plan]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
+  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
+  config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
   migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', help: 'brainatlas --help | brainatlas help [COMMAND]'
@@ -474,11 +512,38 @@ async function availableHelpCommands(paths, env) {
     try {
       const { ordered, entries } = await enabledModuleEntries(releaseDir, cfg);
       const seen = new Set(commands.map(item => item.name));
+      const moduleHelp = new Map();
       for (const manifest of ordered) {
-        for (const name of Object.keys(entries.get(manifest.name)?.commands || {}).sort()) {
-          if (seen.has(name)) continue;
-          seen.add(name); commands.push({ name, kind: 'module', module: manifest.name, usage: `brainatlas ${name} [ARGS]`, description: `Command provided by the ${manifest.name} module.` });
+        const entry = entries.get(manifest.name);
+        for (const [name, help] of Object.entries(entry?.help || {})) {
+          if (!moduleHelp.has(name)) moduleHelp.set(name, { usage: [], description: help?.description });
+          const target = moduleHelp.get(name);
+          for (const line of Array.isArray(help?.usage) ? help.usage : help?.usage ? [help.usage] : []) {
+            if (!target.usage.includes(line)) target.usage.push(line);
+          }
+          if (!target.description && help?.description) target.description = help.description;
         }
+        const transportName = providedTransportName(manifest);
+        if (transportName && typeof entry?.commands?.status === 'function') {
+          if (!moduleHelp.has('sync')) moduleHelp.set('sync', { usage: [] });
+          moduleHelp.get('sync').usage.push(`brainatlas sync ${transportName} status [--json]`);
+        }
+        for (const name of Object.keys(entry?.commands || {}).sort()) {
+          if (seen.has(name)) continue;
+          seen.add(name);
+          const help = moduleHelp.get(name);
+          const usage = help?.usage?.length ? help.usage : [`brainatlas ${name} [ARGS]`];
+          commands.push({ name, kind: 'module', module: manifest.name, usage: usage.length === 1 ? usage[0] : usage, description: help?.description || `Command provided by the ${manifest.name} module.` });
+        }
+      }
+      // A transport module may add subcommands to sync without owning a top-level command.
+      const sync = commands.find(item => item.name === 'sync');
+      const syncHelp = moduleHelp.get('sync');
+      if (sync && syncHelp?.usage?.length) {
+        const existing = Array.isArray(sync.usage) ? sync.usage : [sync.usage];
+        const usage = [...existing];
+        for (const line of syncHelp.usage) if (!usage.includes(line)) usage.push(line);
+        sync.usage = usage;
       }
     } catch { /* Help remains usable when an installed module is damaged. */ }
   }
@@ -489,8 +554,14 @@ async function showHelp(topic, { paths, env, output, json }) {
   const commands = await availableHelpCommands(paths, env);
   if (topic) {
     const command = commands.find(item => item.name === topic);
+    if (!command && topic === 'sync') {
+      const moduleName = ['sync', 'engine'].join('-');
+      const description = `sync is provided by the Full profile modules; install/enable ${moduleName}`;
+      output(json ? { name: 'sync', kind: 'unavailable', usage: '', description } : description); return;
+    }
     if (!command) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
-    output(json ? command : `${command.usage}\n${command.description}`); return;
+    const usage = Array.isArray(command.usage) ? command.usage.join('\n') : command.usage;
+    output(json ? command : `${usage}\n${command.description}`); return;
   }
   const result = { commands };
   const lines = ['BrainAtlas commands:', ...commands.map(item => `  ${item.name.padEnd(14)} ${item.description}`), '', 'Run "brainatlas help <command>" for command usage.'];
@@ -585,14 +656,18 @@ async function moduleCommand(args, { paths, env, output, plan, value }) {
 export function enableOffline(env = process.env) {
   if (env.BRAINATLAS_OFFLINE === '1') globalThis.fetch = async () => { throw error('E_OFFLINE', 'Network access is disabled.'); };
 }
-export async function main(argv = process.argv.slice(2), env = process.env) {
-  enableOffline(env);
+export async function main(argv = process.argv.slice(2), env = process.env, dependencies = {}) {
   const args = [...argv]; const command = args.shift();
   const flag = name => args.includes(name);
   const value = name => { const i = args.indexOf(name); if (i < 0) return undefined; if (!args[i + 1] || args[i + 1].startsWith('--')) throw error('E_ARGUMENT', `Missing value for ${name}.`); return args[i + 1]; };
   const paths = resolvePaths({ platform: env.BRAINATLAS_PLATFORM || process.platform, env });
   const json = flag('--json'); const plan = flag('--plan');
-  const output = data => console.log(json || plan ? JSON.stringify(data, null, 2) : typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+  let redactCommandOutput = plan || (json && (command === 'status' || command === 'doctor'));
+  const output = data => {
+    const hideHome = plan && ['init', 'config', 'module', 'uninstall', 'update', 'rollback', 'recover'].includes(command);
+    const result = redactCommandOutput ? redactOutput(data, hideHome ? env.HOME : undefined) : data;
+    console.log(json || plan ? JSON.stringify(result, null, 2) : typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+  };
   const config = () => loadConfig({ paths, env });
   if (command === '--help' || command === '-h' || command === 'help') {
     const topic = command === 'help' ? args.find(argument => !argument.startsWith('--')) : undefined;
@@ -656,7 +731,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
       } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED' || e.code === 'ERR_MODULE_NOT_FOUND') warnings.push(`Adapter ${agent} is unavailable.`); else throw e; }
     }
     if (!plan) await saveTrackedConfig(cfg, paths, env);
-    output({ action: 'init', configFile: paths.configFile, warnings, adapters: plan ? plannedAdapters.map(item => redactPlanCopy(item.changes)) : undefined }); return;
+    output({ action: 'init', configFile: paths.configFile, warnings, adapters: plan ? plannedAdapters.map(item => redactOutput(item.changes, env.HOME)) : undefined }); return;
   }
   if (command === 'install' && flag('--finalize')) {
     const createdDirectories = [];
@@ -676,9 +751,25 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   }
   if (command === 'config') {
     const action = args.shift(); const key = args.shift(); const cfg = await config();
-    if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
-    if (action === 'get') { const result = key.split('.').reduce((v, k) => v?.[k], cfg); if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.'); output(result); return; }
-    if (action === 'set') { const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.'); let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; } const updated = setCliConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env); output({ action: 'config set', key }); return; }
+    if (action === 'get') {
+      if (key && !key.startsWith('--') && !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
+      const result = key && !key.startsWith('--') ? key.split('.').reduce((v, k) => v?.[k], cfg) : cfg;
+      if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.');
+      redactCommandOutput = true; output(result); return;
+    }
+    if (action === 'set') {
+      if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
+      const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.');
+      let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+      const updated = setCliConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env);
+      let credentialUrl = false;
+      if (key === 'sync.options.remote' && typeof parsed === 'string' && /^https:\/\//i.test(parsed)) {
+        try { const remote = new URL(parsed); credentialUrl = Boolean(remote.username || remote.password); } catch {}
+      }
+      const warnings = credentialUrl ? ['Remote URL contains embedded credentials; use a credential helper instead.'] : [];
+      if (warnings.length) console.error(warnings[0]);
+      output({ action: 'config set', key, ...(warnings.length ? { warnings } : {}) }); return;
+    }
     throw error('E_ARGUMENT', 'Configuration action is invalid.');
   }
   if (command === 'module') { await moduleCommand(args, { paths, env, output, plan, value }); return; }
@@ -714,7 +805,8 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     const metadataUrl = env.BRAINATLAS_UPDATE_METADATA_URL;
     if (!metadataUrl) { output({ status: 'unknown', reason: 'metadata-unavailable' }); return; }
     try {
-      const response = await fetch(metadataUrl, { headers: { accept: 'application/json' } });
+      const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+      const response = await fetchImpl(metadataUrl, { headers: { accept: 'application/json' } });
       if (!response.ok) throw new Error();
       const metadata = await response.json();
       if (!validVersion(metadata?.version)) throw new Error();

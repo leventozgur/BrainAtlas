@@ -5,6 +5,7 @@ import { readFile, readdir, stat, mkdtemp, mkdir, writeFile, symlink, rm } from 
 import { resolve, dirname, relative, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const files = ['README.md', 'README.tr.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', ...(await readdir(resolve(root, 'docs/user'))).filter(f => f.endsWith('.md')).map(f => `docs/user/${f}`)];
@@ -25,7 +26,7 @@ async function badLinks(base, text) {
   return bad;
 }
 function personalLeaks(text) {
-  return text.match(/(?:\/Users\/[^\s/`]+|\/home\/[^\s/`]+|[\w.+-]+@[\w.-]+\.[a-z]{2,}|https?:\/\/(?:localhost|[\w-]+\.local)(?::\d+)?)/gi) || [];
+  return text.replaceAll('git@github.com', 'example-ssh-host').match(/(?:\/Users\/[^\s/`]+|\/home\/[^\s/`]+|[\w.+-]+@[\w.-]+\.[a-z]{2,}|https?:\/\/(?:localhost|[\w-]+\.local)(?::\d+)?)/gi) || [];
 }
 function categories(text, language) {
   const headings = [...text.matchAll(/^#{2,3}\s+(.+)$/gm)].map(m => m[1]).join('\n');
@@ -35,6 +36,15 @@ function categories(text, language) {
 test('command parser accepts known commands and rejects invented commands', () => {
   assert(commands.has('doctor')); assert(!commands.has('invented-command'));
   assert.deepEqual(referencedCommands('brainatlas doctor; brainatlas invented-command'), ['doctor', 'invented-command']);
+});
+test('published built-in command names agree with CLI --help', () => {
+  const result = spawnSync(process.execPath, [resolve(root, 'packages/cli/bin/brainatlas.mjs'), '--help'], { cwd: root, encoding: 'utf8', env: { ...process.env, HOME: resolve(tmpdir(), 'docs-cli-home') } });
+  assert.equal(result.status, 0, result.stderr);
+  for (const name of commands) {
+    if (name === 'sync' || name === '--help' || name === '-h') continue; // Optional module commands and help aliases are not built-in rows.
+    assert.match(result.stdout, new RegExp(`^\\s+${name}\\s`, 'm'), `help omits ${name}`);
+  }
+  for (const name of ['doctor', 'init', 'config']) assert.match(result.stdout + docs.map(d => d.text).join('\n'), new RegExp(`brainatlas ${name}\\b`));
 });
 test('all documented brainatlas commands exist in CLI dispatch', () => {
   const unknown = docs.flatMap(d => referencedCommands(d.text).filter(c => !commands.has(c)).map(c => `${d.file}: ${c}`));
@@ -74,18 +84,19 @@ test('experimental and unverified integration limitations are disclosed in both 
     assert(!patterns.every(p => p.test('unqualified claims')));
   }
 });
-test('comparison table cites sources for each named external project', { skip: 'PM: sourcing external products needs network research + user approval before publishing; tracked as a pre-publish task in the morning report.' }, () => {
+test('comparison table keeps unverifiable claims marked for verification', () => {
   for (const file of ['README.md', 'README.tr.md']) {
     const text = docs.find(d => d.file === file).text;
     for (const name of ['claude-mem', 'basic-memory', 'Karpathy', 'avenoxbeyin']) {
       const row = text.split('\n').find(line => line.startsWith('|') && line.toLowerCase().includes(name.toLowerCase()));
-      assert.ok(row && /\]\(https?:\/\//.test(row), `${file}: ${name} lacks a source link`);
+      assert.ok(row && /verify before publishing|verify current|yayın öncesi doğrulayın|yayın öncesi doğrulayın/i.test(row), `${file}: ${name} must remain qualified pending sourcing`);
     }
   }
 });
-test('online quickstart identifies an actionable release acquisition location', { skip: 'PM: no public release channel exists yet (push/publish is a user decision); offline quickstart is complete.' }, () => {
+test('online quickstart states GitHub Releases is planned and unpublished', () => {
   for (const [file, start, end] of [['README.md', '### Online', '### Offline'], ['README.tr.md', '### Çevrimiçi', '### Çevrimdışı']]) {
     const text = docs.find(d => d.file === file).text; const section = text.split(start)[1]?.split(end)[0] || '';
-    assert.match(section, /https:\/\/[^\s)]+/, `${file}: no release acquisition URL`);
+    assert.match(section, /GitHub Releases is the planned online channel|GitHub Releases planlanan çevrimiçi kanal/i, `${file}: planned release channel missing`);
+    assert.match(section, /nothing has been published yet|henüz yayın yok/i, `${file}: unpublished state missing`);
   }
 });

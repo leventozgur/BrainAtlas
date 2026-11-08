@@ -27,20 +27,20 @@ Semantik retrieval deneysel olup değerlendirme kapısının arkasında varsayı
 | GitHub Copilot in VS Code | MCP, oturum başlangıç hook'u, yönetilen talimatlar | Prompt başına hook desteklenmiyor; oturum başlangıcı ve pull-mode MCP kullanılır. Global talimat yolu doğrulanmamıştır. |
 | Kiro | MCP, steering dosyası, prompt hook'u | Prompt tetikleyicisinin adı ve uyumluluğu doğrulanmamıştır. |
 | Codex CLI | MCP ve yönetilen talimat işaretçisi; hook desteği adaptöre bağlıdır | MCP ve talimat yapılandırmasını inceleyin. |
-| Gemini CLI | MCP, yönetilen talimat işaretçisi, pull mode | Hook yapılandırılmaz; gerektiğinde MCP sorgulanır. |
+| Gemini CLI | MCP, yönetilen talimat işaretçisi, `BeforeAgent` ve `SessionStart` hook'ları | Gerekirse Gemini `/hooks` panelinden etkinleştirin. |
 
 ## Hızlı başlangıç
 
 ### Çevrimiçi
 
-Lite sürüm arşivini, `SHA256SUMS` ve `SHA256SUMS.sig` dosyalarını doğrulanmış proje yayın kanalından indirin ve yayın talimatlarına göre imzayı kontrol edin. **Yayımlamadan önce doğrulayın:** bu depoda herkese açık yayın adresi veya çevrimiçi bootstrap komutu tanımlı değil. Doğrulanmış arşiv elinizdeyse aşağıdaki çevrimdışı akışı kullanın. Node.js 20+ ve `ssh-keygen` gerekir.
+GitHub Releases planlanan çevrimiçi kanaldır; henüz yayın yoktur. **Yayımlamadan önce doğrulayın:** bugün kullanılabilir yayın indirme adresi bulunmuyor. Şimdilik güvenilir kaynaktan alınan çevrimdışı dağıtım klasörünü kullanın. Node.js 20+ ve `ssh-keygen` gerekir.
 
 ### Çevrimdışı
 
-Güvendiğiniz kaynaktan Lite arşivini, eşleşen imza dosyalarını ve allowed-signers dosyasını alın. Sürüm yer tutucusunu gerçek sürümle değiştirin.
+Güvendiğiniz kaynaktan Lite dağıtım klasörünün tamamını alın. Klasör arşivi, imzalı checksum dosyalarını ve allowed-signers dosyasını içerir. Sürüm yer tutucusunu gerçek sürümle değiştirin.
 
 ```sh
-./install.sh --from brainatlas-<v>-lite.tgz
+sh install.sh --from brainatlas-<v>-lite.tgz --allowed-signers release/allowed_signers --yes
 brainatlas init --profile lite --agents claude-code,copilot-vscode,kiro
 brainatlas doctor
 ```
@@ -63,5 +63,5 @@ Bu tablo genel yaklaşımı karşılaştırır, performans ölçümü değildir.
 |---|---|---|
 | claude-mem | Claude Code için kalıcı bellek/bağlam | BrainAtlas çoklu ajan, yerel Markdown kanıt kasası ve MCP retrieval odaklıdır. Güncel özellikleri yayın öncesi doğrulayın. |
 | basic-memory | Ajan entegrasyonlu Markdown bilgi yönetimi | BrainAtlas kodlama ajanları için kanıt retrieval'ı, kontrollü yazma ve gizlilik filtrelerine odaklanır. Güncel özellikleri yayın öncesi doğrulayın. |
-| Karpathy tarzı LLM Wiki kurulumları | Betik ve promptlarla yönetilen Wiki/notlar | BrainAtlas yapılandırılmış yerel Wiki, retrieval arayüzleri, güvenlik kontrolleri ve sürüm araçları sunar. Kurulumlar farklılık gösterir. |
+| Karpathy tarzı LLM Wiki kurulumları | Betik ve promptlarla yönetilen Wiki/notlar | BrainAtlas yapılandırılmış yerel Wiki, retrieval arayüzleri, güvenlik kontrolleri ve sürüm araçları sunar. Kurulumlar farklılık gösterir; yayın öncesi doğrulayın. |
 | avenoxbeyin | Geliştirme brief'inde anılan referans | Kimliği ve yetenekleri çevrimdışı depodan doğrulanamıyor. Yayın öncesi doğrulayın; karşılaştırmalı iddia yoktur. |
