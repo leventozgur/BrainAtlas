@@ -7,6 +7,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { buildIndex, search, createSearcher, loadPages, stem } from '../../../packages/core/src/retrieval/index.mjs';
 import { runEval } from '../../../eval/run-eval.mjs';
+import { atomicWriteFileSync } from '../../../packages/core/src/util/index.mjs';
 const now = new Date('2025-01-01T00:00:00Z');
 const page = (name, body, frontmatter = {}) => ({path:name,title:'Backup',aliases:[],keywords:[],headings:[],body,frontmatter});
 test('unsafe paths and stacked suffixes are handled consistently', () => {
@@ -40,6 +41,16 @@ test('loader, cache invalidation and corrupt cache recovery', async t => {
   const s=createSearcher({vaultDir:vault,stateDir:state,now}); assert.equal(s.search('alpha').results[0].stale,true);
   fs.writeFileSync(file,'---\ntitle: Bravo\n---\n# Bravo\nbravo body'); await s.refresh(); assert.equal(s.search('bravo').results[0].title,'Bravo');
   fs.writeFileSync(path.join(state,'retrieval-index.json'),'{'); const recovered=createSearcher({vaultDir:vault,stateDir:state,now}); assert.equal(recovered.search('bravo').results.length,1);
+});
+test('retrieval cache rename failure preserves the previous cache and cleans its temporary file', async t => {
+  const dir=temp(t), vault=path.join(dir,'vault'), state=path.join(dir,'state'); fs.mkdirSync(vault);
+  fs.writeFileSync(path.join(vault,'x.md'),'# Alpha\nalpha body'); fs.mkdirSync(state);
+  const cache=path.join(state,'retrieval-index.json'); fs.writeFileSync(cache,'old cache');
+  const fsOps={...await import('node:fs'), renameSync: () => { throw new Error('injected rename failure'); }};
+  const atomicWriter=(file,data,options)=>atomicWriteFileSync(file,data,{...options,fsSyncOps:fsOps});
+  const s=createSearcher({vaultDir:vault,stateDir:state,now,atomicWriter}); await s.refresh();
+  assert.equal(fs.readFileSync(cache,'utf8'),'old cache');
+  assert.deepEqual(fs.readdirSync(state),['retrieval-index.json']);
 });
 test('dev eval and excluded superseded pages', () => {
   const corpusDir='eval/corpus',casesFile='eval/dev/cases.json'; const result=runEval({corpusDir,casesFile,now}); assert.ok(result.n>=40); assert.ok(result.recallAt5>=0.8); assert.equal(result.abstainAccuracy,1); assert.equal(result.trToEnRecallAt5,1);

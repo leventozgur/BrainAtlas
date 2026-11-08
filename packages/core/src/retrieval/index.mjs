@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
+import { atomicWriteFileSync } from '../util/index.mjs';
 
 const weights = [4, 3, 2, 1];
 const stops = new Set('the a an and or of to in for on is are with how what which when where who why does do will this that bir ve veya ile icin nasil nedir ne hangi bu su de da mi mu'.split(' '));
@@ -118,7 +119,7 @@ export function search(index, query, options = {}) {
   return {results, abstained:false, reason:null, truncated};
 }
 export function createSearcher(options) {
-  const {vaultDir, stateDir, now} = options || {};
+  const {vaultDir, stateDir, now, atomicWriter = atomicWriteFileSync} = options || {};
   if (typeof vaultDir !== 'string' || typeof stateDir !== 'string') fail('E_INVALID_INPUT', 'Expected vault and state directories');
   let index;
   function refreshSync() {
@@ -128,7 +129,10 @@ export function createSearcher(options) {
     const key = fingerprint.digest('hex'), cache = path.join(stateDir, 'retrieval-index.json');
     try { const data = JSON.parse(fs.readFileSync(cache, 'utf8')); if (data.key === key && data.index.version === 1 && Array.isArray(data.index.docs) && data.index.postings && Array.isArray(data.index.averages) && data.index.docs.every(d => d && d.page && safePath(d.page.path) && typeof d.page.title === 'string' && Array.isArray(d.lengths) && d.lengths.length === 4 && d.lengths.every(Number.isFinite)) && data.index.averages.length === 4 && data.index.averages.every(Number.isFinite) && Object.values(data.index.postings).every(list => Array.isArray(list) && list.every(item => Array.isArray(item) && Number.isInteger(item[0]) && item[0] >= 0 && item[0] < data.index.docs.length && Array.isArray(item[1]) && item[1].length === 4 && item[1].every(Number.isFinite)))) { index = data.index; index.now = (now || new Date()).toISOString(); return; } } catch { /* Rebuild malformed or missing cache. */ }
     index = buildIndex(pages, {now});
-    try { fs.mkdirSync(stateDir, {recursive:true}); fs.writeFileSync(cache, JSON.stringify({key,index})); } catch { /* Search still works without a writable cache. */ }
+    try {
+      fs.mkdirSync(stateDir, {recursive:true});
+      atomicWriter(cache, JSON.stringify({key,index}));
+    } catch { /* Search still works without a writable cache. */ }
   }
   refreshSync();
   return {search: (q,opts) => search(index,q,opts), refresh: async () => { refreshSync(); }};
