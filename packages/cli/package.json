@@ -17,6 +17,8 @@
     "ba": "./bin/brainatlas.mjs"
   },
   "dependencies": {
-    "@brainatlas/core": "*"
+    "@brainatlas/core": "*",
+    "@brainatlas/hooks": "*",
+    "@brainatlas/mcp": "*"
   }
 }
