@@ -64,6 +64,33 @@ test('Gemini session-start returns handoff context',async t=>{
  const f=await fixture(t); await writeFile(join(f.state,'handoff.md'),'continuity');
  const r=await runHook({client:'gemini',event:'session-start',stdin:'{"source":"resume"}',env:{HOME:f.home},config:{stateDir:f.state}}); assert.equal(r.exitCode,0); assert.deepEqual(JSON.parse(r.stdout),{hookSpecificOutput:{additionalContext:'continuity'}});
 });
+test('SessionStart registration preserves foreign hooks and round trips',async t=>{
+ const f=await fixture(t), original='{"hooks":{"SessionStart":[{"matcher":"resume","hooks":[{"name":"foreign","type":"command","command":"true"}]}]}}\n';
+ await putSettings(f,original); await adapter.apply(adapter.plan(f.ctx),f.ctx);
+ const content=await readFile(f.settings,'utf8'), groups=JSON.parse(content).hooks.SessionStart;
+ assert.ok(content.includes('{"name":"foreign","type":"command","command":"true"}'));
+ const group=groups.find(g=>g.hooks?.some(h=>h.name==='brainatlas-session'));
+ assert.equal(group.matcher,'*'); const hook=group.hooks.find(h=>h.name==='brainatlas-session');
+ assert.equal(hook.type,'command'); assert.ok(hook.timeout>0&&hook.timeout<=5000); assert.match(hook.command,/gemini session-start$/);
+ await adapter.remove(f.ctx); assert.equal(await readFile(f.settings,'utf8'),original);
+});
+test('invalid SessionStart configuration is rejected without writes',async t=>{
+ const f=await fixture(t), original='{"hooks":{"SessionStart":{}}}'; await putSettings(f,original);
+ assert.throws(()=>adapter.plan(f.ctx),e=>e.code==='E_CONFIG_PARSE');
+ assert.equal(await readFile(f.settings,'utf8'),original); assert.equal(await read(f.md),null);
+});
+test('SessionStart sources and malformed input fail open with exact Gemini envelope',async t=>{
+ const f=await fixture(t); await writeFile(join(f.state,'handoff.md'),'continuity');
+ const call=stdin=>runHook({client:'gemini',event:'session-start',stdin,env:{HOME:f.home},config:{stateDir:f.state}});
+ for(const source of ['startup','resume','clear']) {
+  const r=await call(JSON.stringify({source})); assert.equal(r.exitCode,0);
+  assert.deepEqual(JSON.parse(r.stdout),{hookSpecificOutput:{additionalContext:'continuity'}});
+ }
+ for(const stdin of ['{}','{"source":"other"}','{','[]']) {
+  const r=await call(stdin); assert.equal(r.exitCode,0); assert.equal(r.stdout,'{}');
+ }
+ await rm(join(f.state,'handoff.md')); const empty=await call('{"source":"startup"}'); assert.equal(empty.exitCode,0); assert.equal(empty.stdout,'{}');
+});
 test('actual process emits one JSON object and fails open on bad stdin',async t=>{
  const f=await fixture(t), bin=resolve('packages/hooks/bin/brainatlas-hook.mjs'); const env={PATH:process.env.PATH,HOME:f.home,XDG_CONFIG_HOME:join(f.root,'config'),XDG_STATE_HOME:f.state,XDG_DATA_HOME:join(f.root,'data')};
  for(const input of ['{}','{']) {const r=spawnSync(process.execPath,[bin,'gemini','prompt'],{input,env,encoding:'utf8',timeout:6000}); assert.equal(r.status,0); assert.deepEqual(JSON.parse(r.stdout),{}); assert.equal(r.stderr,'');}
