@@ -49,13 +49,15 @@ function stale(fm, asOf) {
 }
 
 /** Combine the core BM25F results with page-level cosine-ranked chunks. */
-export async function searchHybrid({ query, pages, entries, provider, limit = 5, k = 60, asOf = new Date() }) {
+export async function searchHybrid({ query, pages, entries, provider, limit = 5, k = 60, asOf = new Date(), indexMeta }) {
   if (typeof query !== 'string' || !Array.isArray(pages) || !Array.isArray(entries)) throw new TypeError('Invalid hybrid search input.');
   const lexicalIndex = buildIndex(pages);
   const lexical = search(lexicalIndex, query, { limit: Math.max(limit * 4, 20) }).results;
   const eligiblePages = new Map(lexicalIndex.docs.map(({ page }) => [page.path, page]));
+  const fallback = (reason) => { const results = lexical.slice(0, limit); results.fallbackReason = reason; return results; };
+  if (indexMeta != null && (!provider?.fingerprint || !indexMeta.providerFingerprint || provider.fingerprint !== indexMeta.providerFingerprint)) return fallback('fingerprint-mismatch');
   try {
-    const [queryVector] = await provider.embed([query]);
+    const queryVector = typeof provider.embedQuery === 'function' ? await provider.embedQuery(query) : (await provider.embed([query]))[0];
     const bestByPath = new Map();
     for (const entry of entries) {
       const page = eligiblePages.get(entry?.path);
@@ -63,7 +65,7 @@ export async function searchHybrid({ query, pages, entries, provider, limit = 5,
       const score = cosineSimilarity(queryVector, entry.vector);
       if (!bestByPath.has(entry.path) || score > bestByPath.get(entry.path).semanticScore) {
         bestByPath.set(entry.path, { path: entry.path, title: page.title, status: typeof page.frontmatter?.status === 'string' ? page.frontmatter.status : null,
-          stale: stale(page.frontmatter || {}, asOf), semanticScore: score });
+          stale: stale(page.frontmatter || {}, asOf), semanticScore: score, snippet: entry.text, headingPath: entry.headingPath });
       }
     }
     const semantic = [...bestByPath.values()].filter((item) => item.semanticScore > 0)
@@ -71,6 +73,6 @@ export async function searchHybrid({ query, pages, entries, provider, limit = 5,
     return reciprocalRankFusion([lexical, semantic], { k }).slice(0, limit);
   } catch {
     // Semantic retrieval is an optional enhancement; provider failures leave BM25F usable.
-    return lexical.slice(0, limit);
+    return fallback('provider-error');
   }
 }
