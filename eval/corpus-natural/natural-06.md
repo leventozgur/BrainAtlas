@@ -13,18 +13,15 @@ Ekran kapanırken devam eden ağ isteğini iptal etmek, gereksiz işi ve eski ya
 
 ## Uygulama notları
 
-Yeniden deneme politikası yalnız geçici ağ sorunlarını hedeflemelidir. Aynı isteğin iki kez uygulanması yan etki üretiyorsa idempotency anahtarı veya sunucu tarafında tekilleştirme düşünülür. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Yeniden deneme politikası yalnız geçici ağ sorunlarını hedeflemelidir. Aynı isteğin iki kez uygulanması yan etki üretiyorsa idempotency anahtarı veya sunucu tarafında tekilleştirme düşünülür.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 let task = URLSession.shared.dataTask(with: request)
 ```
 
-## İnceleme ölçütü
 
-- iOS isteklerinde iptal davranışı: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Görünüm isteği başlatırken görev başvurusunu saklar ve kapanma olayında `cancel()` çağırır. Ardından iptal hatası kullanıcıya bağlantı arızası olarak gösterilmez. Deneme için yanıtı geciktiren sahte bir servis kullanın: ekran kapandıktan sonra yanıt serbest bırakıldığında modelin güncellenmediğini sınayın. Tekrar açılış yeni bir görev oluşturabilir; eski görevin tamamlanması bu yeni görevin durumunu değiştirmemelidir. İptalin sunucu tarafındaki işlemi geri aldığı varsayılmamalı; yan etki ayrı olarak ele alınmalıdır.

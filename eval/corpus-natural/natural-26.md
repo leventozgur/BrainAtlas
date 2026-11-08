@@ -13,18 +13,15 @@ Mobil arayüzde büyük bir görseli ilk kareden itibaren tam boyutta indirmek, 
 
 ## Uygulama notları
 
-Önbellek anahtarı görsel varyantını da içermelidir; aynı kaynak için küçük ve büyük kopyalar birbirini ezmemelidir. Erişilebilir alternatif metin görselin aktarım başarısına bağlı kalmaz. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Önbellek anahtarı görsel varyantını da içermelidir; aynı kaynak için küçük ve büyük kopyalar birbirini ezmemelidir. Erişilebilir alternatif metin görselin aktarım başarısına bağlı kalmaz.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 imageURL.appending(path: "thumb")
 ```
 
-## İnceleme ölçütü
 
-- Görüntü yüklemede kademeli boyut: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Liste hücresi başka bir kayda dönüştürüldüğünde önceki isteğin sonucu görsel kimliğiyle karşılaştırılır. Küçük önizleme ile büyük kaynak farklı boyut anahtarları altında tutulur. İndirme başarısızsa boş bir alan yerine erişilebilir açıklama ve yeniden deneme durumu gösterilebilir. Ölçümde ilk görselin görünme süresi ile tam çözünürlüğün tamamlanma süresi ayrı ele alınır; ikisini karıştırmak algılanan iyileşmeyi gizler. Ekran yoğunluğuna uygun görsel boyutu seçmek gereksiz aktarımı azaltabilir.

@@ -13,18 +13,15 @@ SwiftUI ekranı açılırken `Task` ile başlayan asenkron yükleme, view tekrar
 
 ## Uygulama notları
 
-Loading, empty ve failure durumları birbirinden ayrılır. Kullanıcı ekranı terk ederse cancellation yayılır; tekrar açılışta önbellek politikası ile taze veri isteği birlikte değerlendirilir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Loading, empty ve failure durumları birbirinden ayrılır. Kullanıcı ekranı terk ederse cancellation yayılır; tekrar açılışta önbellek politikası ile taze veri isteği birlikte değerlendirilir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 .task(id: recordID) { await model.load(recordID) }
 ```
 
-## İnceleme ölçütü
 
-- SwiftUI içinde async yükleme: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+`.task(id: recordID)` ekran görünür olduğunda ilgili kayıt için load başlatır; kimlik değişirse önceki task iptal edilip yeni kimlikle yeniden çalışır. Tekrar açılışta görünümün task yaşam döngüsü yeniden başlar; cache politikası ağ isteği gerekip gerekmediğini belirler. Her response işlenmeden önce kimliğin hâlâ geçerli olduğundan emin olun. Geciktirilmiş iki yanıtı ters sırada bırakan test, eski verinin yeni state değerini ezmediğini gösterir. Aynı recordID ile gereksiz yinelenen load istekleri model katmanında birleştirilebilir.

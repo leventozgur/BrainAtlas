@@ -14,18 +14,15 @@ Yedekleme planının işe yaradığı, dosyaların yazıldığı gün değil ger
 
 ## Uygulama notları
 
-Bir arşiv okunabiliyor diye içindeki her kaydın tutarlı olduğu varsayılmaz; örnekleme ve bütünlük özeti ayrı kontrollerdir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Bir arşiv okunabiliyor diye içindeki her kaydın tutarlı olduğu varsayılmaz; örnekleme ve bütünlük özeti ayrı kontrollerdir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 restore --source snapshot-17 --target scratch-vault
 ```
 
-## İnceleme ölçütü
 
-- Yedekleme için geri yükleme provası: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Aylık bir prova için rastgele iki arşiv seçilir ve ayrı bir deneme deposuna yüklenir. Dosya sayısı envanterle karşılaştırılır; örnek kayıtların uygulama tarafından açılması da kontrol edilir. Bozuk ya da eksik bir dosya bulunursa arşiv tarihi, beklenen sayı ve gözlenen fark kayda geçirilir. Anahtarın varlığı tek başına çözme yetkisinin çalıştığını göstermez; prova sırasında çözme adımı da tamamlanmalıdır. Başarısız deneme, sonraki yedek alınana kadar açık bir sorun olarak izlenir.

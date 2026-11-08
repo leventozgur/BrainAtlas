@@ -8,24 +8,21 @@ aliases: ["Process reference"]
 
 # Process versus procedure
 
-## Neden ele alınıyor
+## Context
 
 An operating system process is a running program with an address space and scheduling state. A procedure is an ordered set of instructions people or automation follow to complete a task. The shared everyday word does not make the technical concepts interchangeable.
 
-## Uygulama notları
+## Design considerations
 
-Search guidance can use nearby terms such as PID, memory, and scheduler for the first meaning, while checklist and approval steps point toward the second. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Search guidance can use nearby terms such as PID, memory, and scheduler for the first meaning, while checklist and approval steps point toward the second.
 
-## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
+## Example
 
 ```text
 processId = child.pid
 ```
 
-## İnceleme ölçütü
 
-- Process versus procedure: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Practical details
+
+To inspect a child process identifier, read `child.pid` after the operating system has started it; the value identifies that running process, not a written procedure. On a command line, a process listing can show identifiers alongside command names. A PID may be reused after exit, so it should not be treated as a permanent identity. Check whether the child has exited before using an old identifier for another operation.

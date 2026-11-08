@@ -13,18 +13,15 @@ stale_after: "2025-01-01"
 
 ## Uygulama notları
 
-Timeout ve cancellation ayrı sonuç türleri olarak ele alınır. Telemetri request içeriğini yazmadan süre sınıfını ve endpoint kategorisini belirtir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Timeout ve cancellation ayrı sonuç türleri olarak ele alınır. Telemetri request içeriğini yazmadan süre sınıfını ve endpoint kategorisini belirtir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 configuration.timeoutIntervalForRequest = 20
 ```
 
-## İnceleme ölçütü
 
-- iOS URLSession timeout katmanları: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+`timeoutIntervalForRequest`, istek sırasında ek veri beklenirken kullanılacak süreyi belirler; resource için toplam süre ayrı `timeoutIntervalForResource` ayarıyla sınırlandırılır. Kullanıcının iptali cancellation olarak, bekleme sınırının aşılması timeout olarak sayılır. Her iki sonuç da request gövdesi kaydedilmeden ölçülebilir. Geciken sahte yanıt ve açık iptal içeren iki test, telemetride bu sınıfların birleşmediğini gösterir. Request timeout ilerleme oldukça yeniden başlayabilir; bu yüzden uzun bir resource aktarımı ayrıca toplam süre sınırına ihtiyaç duyar. Ölçülen sonuç, kullanıcının işlemi bilerek durdurduğu durumla aynı sayaçta birleştirilmez.

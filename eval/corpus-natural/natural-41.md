@@ -7,24 +7,21 @@ stale_after: "2025-01-01"
 
 # Binary compatibility in a shared module
 
-## Neden ele alınıyor
+## Context
 
 A module can keep its source API stable while changing a serialized representation that downstream tools depend on. Compatibility review should inspect public exports, data shape, and runtime assumptions separately. A small consumer fixture often reveals accidental coupling.
 
-## Uygulama notları
+## Design considerations
 
-Version the persisted format when old readers cannot safely ignore new fields. Migration code should remain available for the documented support window and have a clear failure path. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Version the persisted format when old readers cannot safely ignore new fields. Migration code should remain available for the documented support window and have a clear failure path.
 
-## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
+## Example
 
 ```text
 export { parseRecord, FORMAT_VERSION }
 ```
 
-## İnceleme ölçütü
 
-- Binary compatibility in a shared module: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Practical details
+
+Give the serialized representation an explicit format version and reject unknown incompatible versions with an actionable error. Provide a migration from the previous supported version and keep a fixture for each supported reader. A field that older readers reject cannot safely be introduced as an unversioned optional addition. Test a round trip through the migration and document the point at which support for the old format ends.

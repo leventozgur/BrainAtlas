@@ -14,18 +14,15 @@ CI job süresi yalnız komutun çalışma zamanı değildir; queue beklemesi ve 
 
 ## Uygulama notları
 
-Ölçüm raporunda p50 ile p95 ayrı verilir. `packages/core/src/x.mjs` değişikliğinin hangi iş zincirini tetiklediği kaydedilirse gereksiz matris genişlemesi ayırt edilebilir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Ölçüm raporunda p50 ile p95 ayrı verilir. `packages/core/src/x.mjs` değişikliğinin hangi iş zincirini tetiklediği kaydedilirse gereksiz matris genişlemesi ayırt edilebilir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 job: { timeout-minutes: 12 }
 ```
 
-## İnceleme ölçütü
 
-- CI job süresinde cache etkisi: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Bu örnek CI politikası clean build işini her gece ve her release adayı için çalıştırır; normal commit işlerinde cache kullanılabilir. Risk yükselirse ekip sıklığı artırabilir, ancak her gece karşılaştırması eksik cache key etkisini erken ortaya çıkarır. Clean job önce cache restore adımını atlar ve bağımlılıkları kilit dosyasından kurar. Cache'li job ile çıktı farklıysa key girdileri ve üretilen dosyalar incelenir. Release job çıktısı aynı revision için cache kullanılan job çıktısıyla karşılaştırılır.

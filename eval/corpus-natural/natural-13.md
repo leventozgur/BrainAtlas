@@ -13,18 +13,15 @@ Bir yapılandırma dosyası doğrudan üzerine yazılırken işlem kesilirse oku
 
 ## Uygulama notları
 
-Yazma izni olmayan bir hedefte hata kontrollü biçimde ele alınır. Geçici dosya adı sabit olmamalı; paralel süreçlerin birbirinin hazırlığını ezmesine izin verilmemelidir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Yazma izni olmayan bir hedefte hata kontrollü biçimde ele alınır. Geçici dosya adı sabit olmamalı; paralel süreçlerin birbirinin hazırlığını ezmesine izin verilmemelidir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 rename("settings.tmp-42", "settings.json")
 ```
 
-## İnceleme ölçütü
 
-- Eşzamanlı yazımda atomik dosya değişimi: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Geçici dosya tamamlandıktan sonra kapatılır ve hedefin bulunduğu dizinde yeniden adlandırılır. Kalıcılık gereksinimi varsa dosyanın ve uygun durumlarda dizinin diske aktarılması ayrıca ele alınır. Okuyucu denemelerinde eski veya yeni içeriğin tamamı görülmeli, kesilmiş bir JSON parçası görülmemelidir. Yazma başarısız olursa geçici dosya temizlenir ve önceki ayar korunur; farklı dosya sistemleri arasında atomiklik varsayılmaz. Paralel yazıcılar ayrı geçici adlar kullanmalı ve son güncelleme politikası belirlenmelidir.

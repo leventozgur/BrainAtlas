@@ -14,19 +14,16 @@ Bir süreç çalışıyor olabilir ama henüz istek kabul etmeye hazır olmayabi
 
 ## Uygulama notları
 
-Başlangıçta uzun süren göç için ayrı bir başlangıç eşiği tanımlanır. Hazır olmayan birim trafikten çıkarılır; yaşayan fakat takılmış süreç için farklı müdahale yolu işletilir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Başlangıçta uzun süren göç için ayrı bir başlangıç eşiği tanımlanır. Hazır olmayan birim trafikten çıkarılır; yaşayan fakat takılmış süreç için farklı müdahale yolu işletilir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 /health/live  -> process responds
 /health/ready -> dependencies checked
 ```
 
-## İnceleme ölçütü
 
-- Uygulama sağlığı ve hazır olma ayrımı: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Örneğin veri deposu kısa süre ulaşılamazsa hazır olma denetimi başarısız olur ve yönlendirici yeni istek göndermez. Süreç yanıt vermeye devam ediyorsa yaşam denetimi başarılı kalabilir. Başlangıç göçü sırasında hazır olmama beklenir; hemen yeniden başlatmak göçün hiç bitmemesine yol açabilir. Her kontrolün zaman aşımı ve başarısızlık sayısı ayrı ayarlanır; bağımlılıkları denetlemenin kendisi aşırı yük oluşturmamalıdır.

@@ -13,18 +13,15 @@ Arka plan kuyruğu geçici kesintilere dayanırken eski işleri sonsuza kadar sa
 
 ## Uygulama notları
 
-Son kullanma anından sonra yapılacak işlem iş türüne bağlıdır: bazı kayıtlar atılır, bazıları inceleme için ayrı bir alana taşınır. Bu karar gözlemlenebilir sayaçlarla desteklenir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Son kullanma anından sonra yapılacak işlem iş türüne bağlıdır: bazı kayıtlar atılır, bazıları inceleme için ayrı bir alana taşınır. Bu karar gözlemlenebilir sayaçlarla desteklenir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 retryAfterMs = Math.min(base * 2 ** attempt, ceiling)
 ```
 
-## İnceleme ölçütü
 
-- Kuyrukta tekrar ve son kullanma: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Örnek politikada ilk başarısızlıktan sonra iki saniye, ikinci denemeden önce dört saniye beklenir; küçük rastgele sapma eşzamanlı yükü dağıtır. Deneme sayısı beşe ulaşınca iş inceleme kuyruğuna taşınır. Süresi dolmuş bir işi tekrar göndermek iş kuralına aykırı olabilir, bu yüzden son kullanma zamanı her denemeden önce değerlendirilir. Kalıcı doğrulama hataları geçici kesinti gibi tekrar edilmez. Kalıcı hataya sahip öğeler bekletilmek yerine ayrı inceleme akışına alınabilir.

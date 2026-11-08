@@ -13,18 +13,15 @@ Bir sorgu doğru anahtar sözcüğü içerse bile yanlış konuya ait olabilir. 
 
 ## Uygulama notları
 
-Değerlendirme örneği hem `relevant` hem `excluded` yol içerir. Böylece yalnız recall değil, özellikle dikkat edilmesi istenen negatif adayın ilk sonuçlarda yer alıp almadığı da görülebilir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Değerlendirme örneği hem `relevant` hem `excluded` yol içerir. Böylece yalnız recall değil, özellikle dikkat edilmesi istenen negatif adayın ilk sonuçlarda yer alıp almadığı da görülebilir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 excluded: ["natural-052-process-procedure.md"]
 ```
 
-## İnceleme ölçütü
 
-- Search near miss için excluded belge: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Örnekte işletim sistemi process belgesi pozitif, fixture yenileme procedure belgesi negatif adaydır. Her ikisinde benzer sözcükler bulunabilir; PID ve scheduler gibi bağlamlar ilk anlamı güçlendirir. Sonuç listesinde pozitif adayın bulunması recall için önemlidir, fakat negatif adayın yüksek sıraya çıkması ayrıca incelenmelidir. Etiketler sorgunun tam niyetini yansıtmalı; yalnız ortak terime göre verilmemelidir. Negatif adayın belgede bulunması beklenir; yalnız alakasız bir belge seçmek yakın anlam sınamasını zayıflatır.

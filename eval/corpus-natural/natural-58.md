@@ -14,18 +14,15 @@ Security log içinde `Authorization` header veya token saklamak, olay incelemesi
 
 ## Uygulama notları
 
-Test fixture içindeki değerler sahte ve açıkça geçersiz biçimde seçilir. Hata yolu da maskelemeyi korur; exception nesnesinin ham request nesnesini taşıması engellenir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Test fixture içindeki değerler sahte ve açıkça geçersiz biçimde seçilir. Hata yolu da maskelemeyi korur; exception nesnesinin ham request nesnesini taşıması engellenir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 safeHeaders = redact(headers, ["authorization", "cookie"])
 ```
 
-## İnceleme ölçütü
 
-- Güvenlik raporunda redaction: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Redaction istek sınırında, herhangi bir logger çağrısından önce uygulanır; `Authorization` header değeri olay nesnesine hiç aktarılmaz. Allowlist yalnız yöntem, sonuç sınıfı ve güvenli korelasyon alanı gibi gerekli bilgileri seçer. Sentetik fixture ile hem başarılı yanıt hem exception yolu sınanır. Exception ham request nesnesini taşıyorsa yalnız üst düzey mesajı maskelemek yeterli değildir; tüm serileştirme yolu incelenir. Allowlist dışında kalan alanlar varsayılan olarak log içine alınmaz; yeni alanlar ayrıca gözden geçirilir.

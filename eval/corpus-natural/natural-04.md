@@ -15,18 +15,15 @@ Uygulama günlükleri tanılama için yararlıdır; ancak istek gövdelerini vey
 
 ## Uygulama notları
 
-İnceleme araçları örnek kayıtları sentetik tutmalı ve hata mesajlarını kullanıcı girdisiyle birleştirmemelidir. Saklama süresi, üretim ihtiyacına göre seçilir; sınırsız tutma varsayılan davranış olmamalıdır. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+İnceleme araçları örnek kayıtları sentetik tutmalı ve hata mesajlarını kullanıcı girdisiyle birleştirmemelidir. Saklama süresi, üretim ihtiyacına göre seçilir; sınırsız tutma varsayılan davranış olmamalıdır.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 logger.info({ event: "sync_failed", requestId })
 ```
 
-## İnceleme ölçütü
 
-- Gizli değerleri günlüklerden ayırma: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+İzin listesine olay adı, zaman ve sonuç sınıfı alınabilir; kimlik doğrulama başlığı ile gövde alınmaz. Günlükleyiciye ulaşmadan önce başlıkları ayıklamak, farklı hata yollarının aynı kurala uymasını sağlar. Sentetik bir istekle hem başarı hem hata kaydı üretilir ve hassas alanların bulunmadığı kontrol edilir. Bir alanın adı bilinse bile değeri rapora kopyalanmamalıdır; inceleme için olay kimliği yeterli olabilir.

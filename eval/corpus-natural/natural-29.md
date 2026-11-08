@@ -7,24 +7,21 @@ stale_after: "2031-12-31"
 
 # Swift concurrency cancellation
 
-## Neden ele alınıyor
+## Context
 
 Cancellation in structured concurrency is a signal that work is no longer needed, not a magical interruption of every function. Long loops and adapters must check the task state and pass cancellation to underlying operations where possible. Cleanup still belongs in a well-defined defer path.
 
-## Uygulama notları
+## Design considerations
 
-A cancelled search should not publish partial results as if they were complete. Tests can suspend a fake service, cancel its parent task, and assert that no later UI update occurs. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+A cancelled search should not publish partial results as if they were complete. Tests can suspend a fake service, cancel its parent task, and assert that no later UI update occurs.
 
-## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
+## Example
 
 ```text
 try Task.checkCancellation()
 ```
 
-## İnceleme ölçütü
 
-- Swift concurrency cancellation: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Practical details
+
+A view can tie its load task to its lifecycle, causing disappearance to request cancellation. In a long loop, `Task.checkCancellation()` throws when cancellation has been requested, so later iterations and publication are skipped. Wrap cleanup in `defer` and distinguish cancellation from an unexpected failure. A fake service that suspends until released can demonstrate that a cancelled task does not update the view after the screen closes.

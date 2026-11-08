@@ -13,18 +13,15 @@ Bir sorgunun yavaş olduğunu söylemek için tek bir uç değer yeterli değild
 
 ## Uygulama notları
 
-İyileştirme sonrası aynı plan ve benzer donanım koşulu yeniden kullanılır. Ortalama süre tek başına kuyruktaki az sayıdaki çok yavaş isteği gizleyebilir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+İyileştirme sonrası aynı plan ve benzer donanım koşulu yeniden kullanılır. Ortalama süre tek başına kuyruktaki az sayıdaki çok yavaş isteği gizleyebilir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 SELECT plan, duration_ms FROM query_sample
 ```
 
-## İnceleme ölçütü
 
-- Yavaş sorgu için ölçüm planı: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Bin sentetik sorguluk bir çalışmada en hızlı yarının sınırı ile en yavaş yüzde beşin başladığı değer ayrı raporlanabilir. Veri kümesi boyutu, eşzamanlı istek sayısı ve sorgu planı sonuçla birlikte saklanır. Değişiklik öncesinde ve sonrasında aynı hazırlık adımları uygulanmazsa karşılaştırma yanıltıcı olur. Soğuk başlangıç ölçümü ayrıca yapılabilir; ikisini tek ortalamada birleştirmek önbelleğin etkisini gizler. Ölçüm tekrarı sırasında eşzamanlılık ve veri hacmi aynı tutulmalıdır.

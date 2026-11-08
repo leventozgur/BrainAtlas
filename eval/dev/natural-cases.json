@@ -659,7 +659,7 @@
     "id": "near-miss-01",
     "query": "How do I check the operating system process identifier?",
     "relevant": [
-      "natural-50.md"
+      "natural-46.md"
     ],
     "category": "near-miss",
     "excluded": [
@@ -692,11 +692,11 @@
     "id": "near-miss-04",
     "query": "How do I change the external status label for a record?",
     "relevant": [
-      "natural-56.md"
+      "natural-47.md"
     ],
     "category": "near-miss",
     "excluded": [
-      "natural-47.md"
+      "natural-56.md"
     ]
   },
   {
@@ -773,7 +773,7 @@
     ],
     "category": "stale-superseded",
     "excluded": [
-      "natural-03.md"
+      "natural-05.md"
     ]
   },
   {

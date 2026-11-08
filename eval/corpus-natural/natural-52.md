@@ -13,18 +13,15 @@ Cache, tekrar erişimi hızlandırmak için geçici bir kopya tutar; cash regist
 
 ## Uygulama notları
 
-Fuzzy matching yazım hatalarını toparlarken kavramsal uzaklığı korumalıdır. Negatif örnekleri kaldırmak, kısa sorgularda alakasız dokümanların üst sıralara çıkmasını fark etmeyi zorlaştırır. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Fuzzy matching yazım hatalarını toparlarken kavramsal uzaklığı korumalıdır. Negatif örnekleri kaldırmak, kısa sorgularda alakasız dokümanların üst sıralara çıkmasını fark etmeyi zorlaştırır.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 cache.delete("profile:summary")
 ```
 
-## İnceleme ölçütü
 
-- Cache ve nakit kasası ayrımı: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Örneğin bir response kopyası cache içinde tutulur ve kaynak veri değişince eviction ile kaldırılır. Cash drawer sayımında ise banknotlar toplanır ve satış kaydıyla karşılaştırılır. Fuzzy matching bu iki örneği yakın yazım nedeniyle aynı anlam saymamalıdır. Bir pozitif ve bir negatif sorguyu birlikte değerlendirmek, cache sonucunun doğru kalırken kasa aramasının yanlışlıkla ona yönelmesini ortaya çıkarır. Kısa sorgularda bağlam az olduğundan negatif örneklerin sıralamadaki yeri ayrıca incelenir.

@@ -15,18 +15,15 @@ Yeni sürümün bütün istekleri aynı anda alması, geri dönüş kararını p
 
 ## Uygulama notları
 
-İlerleme adımı, gözlenen sonuca göre büyür. Eşik aşıldığında otomasyon trafiği durdurur ve eski hedefi tekrar seçer; operatörün ezberden komut çalıştırması beklenmez. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+İlerleme adımı, gözlenen sonuca göre büyür. Eşik aşıldığında otomasyon trafiği durdurur ve eski hedefi tekrar seçer; operatörün ezberden komut çalıştırması beklenmez.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 route --revision v1.2.3 --weight 10
 ```
 
-## İnceleme ölçütü
 
-- Dağıtımda kademeli trafik aktarımı: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Örnek bir geçişte önce yüzde beşlik dilim on dakika izlenir; hata oranı önceki sürümün iki katına çıkarsa aktarım durdurulur. Eski hedefin kapasitesi geri dönüş boyunca korunur. İstek sayısı çok azsa süre uzatılır, çünkü birkaç başarılı yanıt tüm trafiği temsil etmez. Geri dönüş tamamlandıktan sonra hata oranının normale dönmesi ve bekleyen bağlantıların boşalması kontrol edilir. Bu eşikler uygulamanın olağan yüküne göre ayrıca belirlenmelidir.

@@ -14,19 +14,16 @@ Sürüm notu yalnız değişen dosyaların listesi değildir; tüketicinin neyi 
 
 ## Uygulama notları
 
-Geriye uyumlu düzeltmelerle kırıcı değişiklikler farklı başlıklarda tutulur. `v1.2.3` gibi örnek etiket, gerçek bir yayıma işaret etmek zorunda değildir; sentetik dokümanlarda yalnız biçimi gösterir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Geriye uyumlu düzeltmelerle kırıcı değişiklikler farklı başlıklarda tutulur. `v1.2.3` gibi örnek etiket, gerçek bir yayıma işaret etmek zorunda değildir; sentetik dokümanlarda yalnız biçimi gösterir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 ## v1.2.3
 - Changed default retry window
 ```
 
-## İnceleme ölçütü
 
-- Sürüm notunda davranış değişikliği: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Örneğin eski sürümde üç kez denenen bir işlem artık iki kez deneniyorsa etkilenen ayarın adı ve önceki davranış yazılır. Kullanıcı daha uzun pencereye ihtiyaç duyuyorsa uygulanacak yapılandırma da gösterilir. İç değişikliklerin listesi bu açıklamanın yerini tutmaz. Kaldırılacak bir seçenek için geçiş dönemi ve kaldırma sürümü belirtilir; örnek etiket yalnız bu anlatımı somutlaştırır. Yükseltme örneği, değişen varsayılanı isteyen kullanıcının açık ayarını da gösterir.

@@ -13,18 +13,15 @@ Klavye ile ilerleyen bir kullanıcı, odak göstergesini kaybetmeden ekrandaki e
 
 ## Uygulama notları
 
-Otomatik odak taşıma yalnız bağlam gerçekten değiştiğinde yapılmalıdır. Modal açıldığında odak içine alınır, kapanınca önceki noktaya döndürülür; sayfa yüklenirken kullanıcıdan habersiz sıçrama yapılmaz. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Otomatik odak taşıma yalnız bağlam gerçekten değiştiğinde yapılmalıdır. Modal açıldığında odak içine alınır, kapanınca önceki noktaya döndürülür; sayfa yüklenirken kullanıcıdan habersiz sıçrama yapılmaz.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 document.activeElement?.getAttribute("aria-label")
 ```
 
-## İnceleme ölçütü
 
-- Arayüzde erişilebilir odak sırası: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Yalnız Tab ve Shift-Tab kullanarak bağlantılar, form alanları ve düğmeler dolaşılır. Görünür odak halkası her adımda seçili öğeyi göstermeli, gizli bir denetime odak düşmemelidir. Bir modal açıldığında ilk anlamlı denetime geçiş ve kapatıldığında tetikleyiciye dönüş denenir. Örneğin üç alanlı formda görsel sıra ile klavye sırası uyuşmuyorsa önce belge sırası düzeltilir. Form doğrulama hatasında ilgili alana geçiş yapılırken hata açıklaması da erişilebilir olmalıdır.

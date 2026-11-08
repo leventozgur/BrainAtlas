@@ -14,18 +14,15 @@ Bir yazıcı okuyucudan daha yavaş çalıştığında aradaki kuyruk sınırsı
 
 ## Uygulama notları
 
-Kuyruk sınırını ve iptal davranışını birlikte düşünün. Hedef kapanırsa üretici beklemede kalmamalı; hata ve `close` olayları aynı temizleme yoluna ulaşmalıdır. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Kuyruk sınırını ve iptal davranışını birlikte düşünün. Hedef kapanırsa üretici beklemede kalmamalı; hata ve `close` olayları aynı temizleme yoluna ulaşmalıdır.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 if (!stream.write(chunk)) await once(stream, "drain")
 ```
 
-## İnceleme ölçütü
 
-- Node akışlarında geri basınç: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Örneğin üretici her parçada dönüş değerini okur ve `false` gördüğünde `drain` gelmeden yeni parça göndermez. Hedef hata verirse bekleyen işlem reddedilir ve kaynak kapatılır. Yavaş bir sahte yazıcıyla çok sayıda parça göndererek belleğin sınırsız büyümediği gözlenebilir. `highWaterMark` bir geri basınç eşiğidir; her koşulda kesin bellek üst sınırı olarak yorumlanmamalıdır. Hedefin kapanması beklenen `drain` olayını engelleyebilir; bekleme işlemi kapanışta da sonlanmalıdır.

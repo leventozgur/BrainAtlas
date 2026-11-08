@@ -13,18 +13,15 @@ SwiftUI görünümünün hangi veriyi sahiplenip hangisini dışarıdan aldığ�
 
 ## Uygulama notları
 
-Önizleme verisi ağ servisine bağlanmadan üretilebilir olursa arayüz varyantları hızlı incelenir. Boş, yükleniyor ve hata durumları ayrı görünüm durumları olarak ele alınmalıdır. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Önizleme verisi ağ servisine bağlanmadan üretilebilir olursa arayüz varyantları hızlı incelenir. Boş, yükleniyor ve hata durumları ayrı görünüm durumları olarak ele alınmalıdır.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 @State private var selectedTab = 0
 ```
 
-## İnceleme ölçütü
 
-- SwiftUI görünümünde durum sahipliği: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Sekme seçimi yalnız bir görünümün içindeyse başlangıç değeriyle birlikte orada tutulabilir. Üst görünüm de aynı seçimi okumalıysa değerin sahibi yukarı taşınır ve alt görünüm bağlama üzerinden değiştirir. Örneğin ilk sekmeden ikinciye geçildiğinde yalnız tek kaynak değişmelidir. Görünüm kimliği değişirse yerel durumun sıfırlanabileceği de hesaba katılmalı; kalıcı seçim gerekiyorsa ayrı bir saklama kararı verilmelidir. Sekme kimlikleri yeniden sıralama sonrasında da aynı seçimi göstermelidir; yalnız dizi konumuna güvenmeyin.

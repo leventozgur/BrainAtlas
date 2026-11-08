@@ -7,24 +7,21 @@ stale_after: "2025-01-01"
 
 # Document freshness review interval
 
-## Neden ele alınıyor
+## Context
 
 A note about a changing interface can become misleading even when every sentence was accurate when written. Set `stale_after` according to the pace of change and make review ownership a role, not a personal name. Expiry is a prompt to verify, not proof that the evidence is false.
 
-## Uygulama notları
+## Design considerations
 
-A freshness pass checks links, version references, and whether a newer confirmed decision exists. If the original claim still holds, record the review date rather than rewriting its history. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+A freshness pass checks links, version references, and whether a newer confirmed decision exists. If the original claim still holds, record the review date rather than rewriting its history.
 
-## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
+## Example
 
 ```text
 stale_after: "2031-06-01"
 ```
 
-## İnceleme ölçütü
 
-- Document freshness review interval: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Practical details
+
+An expired review date should lower confidence and prompt a fresh check; it does not by itself establish that the claim is wrong. Inspect the cited interface version and look for a newer decision before relying on the note. If the behavior still holds, record the review and select a new date based on how quickly the interface changes. If it changed, preserve the earlier claim and link the newer evidence.

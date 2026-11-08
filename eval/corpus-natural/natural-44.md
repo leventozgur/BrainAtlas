@@ -7,25 +7,22 @@ stale_after: "2025-01-01"
 
 # Disputed evidence handling
 
-## Neden ele alınıyor
+## Context
 
 When two sources disagree, a memory system should preserve both claims and describe the unresolved question. Marking one page as disputed prevents a search result from appearing more certain than the evidence warrants.
 
-## Uygulama notları
+## Design considerations
 
-Resolution requires a specific observation, not a vote based on which wording sounds familiar. Once settled, retain the prior account with a superseding link so the change remains auditable. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Resolution requires a specific observation, not a vote based on which wording sounds familiar. Once settled, retain the prior account with a superseding link so the change remains auditable.
 
-## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
+## Example
 
 ```text
 status: disputed
 question: "Which format is emitted?"
 ```
 
-## İnceleme ölçütü
 
-- Disputed evidence handling: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Practical details
+
+Suppose one report observes a retry and another observes no retry under a similar error. Keep both observations, including their versions and conditions, and mark the unresolved claim as disputed. A targeted experiment can distinguish a timeout from a permanent failure. Search results should expose the disagreement instead of presenting either report as settled fact. After resolution, link the newer explanation while retaining the earlier observations.

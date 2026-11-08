@@ -14,18 +14,15 @@ Derleme önbelleği doğru anahtara bağlı değilse eski çıktı yeni girdiye 
 
 ## Uygulama notları
 
-Önce isabet oranı ve temiz derleme süresi ölçülür. Önbellek silinebilir bir hızlandırıcı olarak kalmalı; doğru sonuç üretmesi hiçbir zaman mevcut içeriğe bağımlı olmamalıdır. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Önce isabet oranı ve temiz derleme süresi ölçülür. Önbellek silinebilir bir hızlandırıcı olarak kalmalı; doğru sonuç üretmesi hiçbir zaman mevcut içeriğe bağımlı olmamalıdır.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 cacheKey = hash(lockfile, runtime, buildFlags)
 ```
 
-## İnceleme ölçütü
 
-- CI önbelleğinde anahtar tasarımı: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Kilit dosyası, derleyici sürümü, hedef platform ve derlemeyi değiştiren bayraklar aynı anahtarın girdileri olabilir. Kaynak dosyaları önbelleklenen çıktıyı etkiliyorsa onların özeti de kapsama alınır. Örneğin sürüm etiketi aynı kalsa bile bağımlılık kilidi değiştiğinde önceki çıktı yeniden kullanılmamalıdır. Periyodik temiz derlemenin sonucu önbellekli sonuçla karşılaştırılır; fark bulunursa anahtar eksik bir girdiyi kaçırıyor olabilir.

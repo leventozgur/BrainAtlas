@@ -13,18 +13,15 @@ Uzun süre saklanan şifreli yedeklerde anahtar yenileme süreci geri yükleme p
 
 ## Uygulama notları
 
-Anahtar materyali günlük veya test raporuna yazılmaz. Sorumluluk devri ve erişim kurtarma adımları belgeye işlevsel roller üzerinden eklenir; kişisel hesap adı örneği kullanılmaz. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Anahtar materyali günlük veya test raporuna yazılmaz. Sorumluluk devri ve erişim kurtarma adımları belgeye işlevsel roller üzerinden eklenir; kişisel hesap adı örneği kullanılmaz.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 keyVersion = "k3"
 ```
 
-## İnceleme ölçütü
 
-- Şifreli arşiv anahtarını yenileme: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Arşiv envanterinde yalnız anahtar sürümü ve dönüşüm durumu tutulur. Önce yeni sürümle şifrelenen küçük örnek geri açılır, ardından eski arşivler kontrollü gruplar halinde dönüştürülür. İş yarıda kesilirse tamamlanmış ve bekleyen gruplar ayrılabilmelidir. Eski sürüm, onunla açılması gereken son arşiv de doğrulanana kadar erişilebilir kalır. Erişim sınaması rol üzerinden yapılır; anahtar içeriği rapora girmez. Yeni anahtarla açma başarısız olursa eski arşiv silinmez ve geçiş durdurulur.

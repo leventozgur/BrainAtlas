@@ -7,24 +7,21 @@ stale_after: "2025-01-01"
 
 # Database cursor pagination
 
-## Neden ele alınıyor
+## Context
 
 Offset pagination becomes expensive when a client walks deep into a changing table. A cursor based on a stable ordering key can continue from the last observed row, but ties need a second deterministic field.
 
-## Uygulama notları
+## Design considerations
 
-Cursors should be opaque to clients and validated on receipt. If the underlying sort definition changes, version the cursor format or reject it with a recoverable response. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Cursors should be opaque to clients and validated on receipt. If the underlying sort definition changes, version the cursor format or reject it with a recoverable response.
 
-## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
+## Example
 
 ```text
 ORDER BY created_at, record_id
 ```
 
-## İnceleme ölçütü
 
-- Database cursor pagination: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Practical details
+
+When several records share a creation time, sort by that time and a unique record identifier. The next page starts strictly after the pair from the previous page, not after the timestamp alone. A sample with three equal timestamps across a page boundary should return each row once. Concurrent inserts may still affect what a walk sees, so snapshot isolation or an explicit consistency policy may be needed.

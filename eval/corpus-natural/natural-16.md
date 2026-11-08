@@ -13,18 +13,15 @@ Her günlük satırına olay türü, bileşen ve korelasyon kimliği eklemek, bi
 
 ## Uygulama notları
 
-Yüksek hacimli başarı olayları örneklenebilir; hata ve güvenlik sinyalleri için ayrı koruma gerekir. Alan sayısını sınırlamak, yanlışlıkla hassas veri eklenmesini de zorlaştırır. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Yüksek hacimli başarı olayları örneklenebilir; hata ve güvenlik sinyalleri için ayrı koruma gerekir. Alan sayısını sınırlamak, yanlışlıkla hassas veri eklenmesini de zorlaştırır.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 { level: "warn", event: "retry_scheduled", attempt: 2 }
 ```
 
-## İnceleme ölçütü
 
-- Yapılandırılmış günlüğe bağlam ekleme: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+İstek girişinde üretilen kimlik, alt bileşenlere açık bağlam olarak aktarılır ve her olayda aynı alan adıyla yazılır. Örneğin okuma, doğrulama ve yanıt kayıtları aynı kimliği taşırken olay türleri farklıdır. Yeni kimlik gerektiren bağımsız işlerde ilişki ayrı bir üst kimlikle kurulabilir. Kimlik değeri kullanıcı içeriğinden türetilmez; yüksek kardinaliteli bu alan metrik etiketi olarak da kullanılmamalıdır. İzleme kimliği yoksa giriş katmanı yeni bir değer oluşturur; gizli bilgileri kimliğe katmaz.

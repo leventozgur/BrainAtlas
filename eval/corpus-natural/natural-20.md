@@ -13,18 +13,15 @@ Kullanıcıdan gelen göreli yol, beklenen kökün dışına çıkmaya çalışa
 
 ## Uygulama notları
 
-Sembolik bağlar da gerçek hedefi değiştirebildiği için okuma stratejisi açıkça tanımlanmalıdır. Hata mesajı reddedilen içeriği kopyalamadan genel bir sınır ihlali bildirir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Sembolik bağlar da gerçek hedefi değiştirebildiği için okuma stratejisi açıkça tanımlanmalıdır. Hata mesajı reddedilen içeriği kopyalamadan genel bir sınır ihlali bildirir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 const target = resolve(root, requestPath)
 ```
 
-## İnceleme ölçütü
 
-- Girdi yolu sınırlandırması: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Örneğin `../` içeren bir girdi reddedilir; `docs-old` klasörünün `docs` ile aynı öneki taşıması yetki vermez. Çözümlenmiş göreli yolun üst dizine çıkıp çıkmadığı yol bileşenleri üzerinden kontrol edilir. Sembolik bağlara izin verilecekse gerçek hedef de aynı sınır içinde olmalıdır. Yazma işlemlerinde kontrol ile açma arasındaki yarış ayrıca değerlendirilir; yalnız dizge temizleme her platformda yeterli değildir. Mutlak yol girişlerini reddetmek, göreli yol doğrulamasından önce uygulanabilecek ek bir sınırdır. Bağların hedefi de izinli kökte kalmalıdır.

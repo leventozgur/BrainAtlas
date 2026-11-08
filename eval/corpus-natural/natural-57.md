@@ -13,18 +13,15 @@ Yedek arşivine dosya boyutu ve kriptografik checksum içeren manifest eklemek, 
 
 ## Uygulama notları
 
-Bütünlük kontrolü erişilebilirlik kontrolü değildir; şifre çözme ve uygulama düzeyinde okuma ayrıca prova edilir. Küçük bir sentetik fixture üzerinde beklenen checksum sabitlenebilir. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Bütünlük kontrolü erişilebilirlik kontrolü değildir; şifre çözme ve uygulama düzeyinde okuma ayrıca prova edilir. Küçük bir sentetik fixture üzerinde beklenen checksum sabitlenebilir.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 sha256: 8f3a... (illustrative only)
 ```
 
-## İnceleme ölçütü
 
-- Backup arşivinde bütünlük manifesti: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Manifest, her dosyanın boyutunu ve checksum değerini listeler; doğrulamada yeniden hesaplanan değer beklenen değerle karşılaştırılır. Eşleşme, güvenilir manifestle karşılaştırılan baytların değişmediğine dair kanıttır; arşivin eksiksiz ya da içeriğin uygulama açısından doğru olduğunu tek başına kanıtlamaz. İmzalı manifestin doğrulanması ve ayrı bir restore provası gerekir. Eksik dosya ile yanlış checksum ayrı sonuçlar olarak raporlanır. Manifest başka bir kanaldan doğrulanmazsa saldırgan hem dosyayı hem beklenen checksum değerini değiştirebilir. Restore denemesi checksum kontrolünden ayrı tutulur.

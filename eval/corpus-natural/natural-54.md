@@ -13,18 +13,15 @@ ESM paketinde `exports` alanı tüketicinin erişebileceği yolları açıkça t
 
 ## Uygulama notları
 
-Göreli import uzantıları Node çalıştırma ortamında açık yazılır. `packages/core/src/x.mjs` gibi bir yol dokümantasyon örneğidir; export sözleşmesi bu yolu otomatik olarak herkese açmaz. Bir değişiklikten sonra beklenen davranışı küçük bir örnekle doğrulayın; yalnız başarılı komut çıkışına güvenmeyin. Kayıt, sonucu ve sınır koşulunu birlikte anlattığında sonraki bakım daha az varsayıma dayanır.
+Göreli import uzantıları Node çalıştırma ortamında açık yazılır. `packages/core/src/x.mjs` gibi bir yol dokümantasyon örneğidir; export sözleşmesi bu yolu otomatik olarak herkese açmaz.
 
 ## Örnek
-
-Bu kısa örnek kavramın kullanım biçimini gösterir; gerçek bir sisteme veya kullanıcı verisine bağlı değildir. Önce girdiyi doğrulayın, ardından sonucu gözlenen bir koşulla karşılaştırın.
 
 ```text
 "exports": { ".": "./src/index.mjs" }
 ```
 
-## İnceleme ölçütü
 
-- Node paketinde ESM sınırı: kapsam ve varsayımlar açıkça yazılmış olmalı.
-- Sonuç, sentetik bir örnek üzerinde yeniden üretilebilmeli.
-- Belirsizlik varsa kayıt kesin hüküm vermek yerine doğrulama adımını belirtmeli.
+## Konuya özgü ayrıntılar
+
+Paket kökündeki `exports` yalnız ilan edilen entrypoint yolunu sunabilir; dahili `src` dosyası fiziksel olarak bulunsa bile tüketici sözleşmesine dahil değildir. Bir consumer fixture ile public import başarılı, tanımlanmamış deep import başarısız olmalıdır. İleride yeni bir alt yol açılacaksa sürüm sözleşmesiyle birlikte belgelenir. Paket içi göreli import ile dışarıdan package import yapılmasını aynı erişim kuralı sanmayın. Yeni public yol açmak, consumer kodunun gelecekte o yola bağımlı olabileceği anlamına gelir.
