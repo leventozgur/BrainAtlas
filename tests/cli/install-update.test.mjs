@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readlink, realpath, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
@@ -73,7 +74,12 @@ test('offline install, update, doctor rollback, rollback and interrupted journal
   await rm(current); await symlink('releases/0.1.0-test.3', current);
   const journalFile = join(home, 'state', 'brainatlas', 'update-journal.json');
   await mkdir(join(home, 'state', 'brainatlas'), { recursive: true });
-  await writeFile(journalFile, `${JSON.stringify({ schemaVersion: 1, kind: 'update', phase: 'switching', version: '0.1.0-test.3', target: 'releases/0.1.0-test.3', previous: 'releases/0.1.0-test.1', staging: null })}\n`);
+  const journalSecret = ['ba', 'cli', randomBytes(24).toString('hex')].join('-');
+  await writeFile(journalFile, `${JSON.stringify({ schemaVersion: 1, kind: 'update', phase: 'switching', version: '0.1.0-test.3', target: 'releases/0.1.0-test.3', previous: 'releases/0.1.0-test.1', staging: null, path: join(home, 'private', 'page.md'), token: journalSecret })}\n`);
+  const recoveryPlan = run('recover', '--plan', '--json');
+  assert.equal(recoveryPlan.status, 0, recoveryPlan.stderr); assert.ok(!recoveryPlan.stdout.includes(journalSecret));
+  const recoveryReport = JSON.parse(recoveryPlan.stdout); assert.equal(recoveryReport.journal.token, '[REDACTED]');
+  assert.ok(recoveryPlan.stdout.includes('~/private/page.md')); assert.ok(!recoveryPlan.stdout.includes(home));
   const recovered = run('recover', '--json'); assert.equal(recovered.status, 0, recovered.stderr);
   assert.equal(JSON.parse(recovered.stdout).action, 'restored-previous-release');
   assert.equal(await readlink(current), 'releases/0.1.0-test.1');

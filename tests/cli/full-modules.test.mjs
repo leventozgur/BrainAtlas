@@ -84,6 +84,12 @@ test('installed full release wires transports, strict OKF, review commands and s
     assertSuccess(run(process.execPath, [cli, 'config', 'set', 'sync.transport', 'git', '--json'], env), 'select Git transport');
     assertSuccess(run(process.execPath, [cli, 'config', 'set', 'sync.options.remote', remote, '--json'], env), 'configure local remote');
   }
+  const diagnosed = run(process.execPath, [cliA, 'doctor', '--json'], envA);
+  assertSuccess(diagnosed, 'doctor with enabled modules');
+  const doctor = JSON.parse(diagnosed.stdout);
+  assert.equal(doctor.ok, true); assert.ok(doctor.moduleHealth.some(item => item.name === 'sync' && item.transport === 'git' && item.lastSync === null));
+  assert.ok(doctor.moduleHealth.some(item => item.name === 'semantic' && item.freshness === null));
+  assert.ok(doctor.warnings.some(item => /semantic index/i.test(item)));
 
   await mkdir(join(hostAVault, 'wiki', 'entities'), { recursive: true });
   await mkdir(join(hostBVault, 'wiki', 'entities'), { recursive: true });

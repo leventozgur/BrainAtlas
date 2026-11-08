@@ -53,7 +53,8 @@ test('migrate copies selected bytes, skips internal files and links, and preserv
   await mkdir(join(source, 'raw'), { recursive: true }); const raw = Buffer.from([0, 255, 1, 128, 10]); await writeFile(join(source, 'raw', 'sample.bin'), raw);
   await mkdir(join(source, '.obsidian')); await writeFile(join(source, '.obsidian', 'workspace.json'), '{"pane":1}');
   await mkdir(join(source, '.trash')); await writeFile(join(source, '.trash', 'deleted.md'), 'private deleted note');
-  await mkdir(join(source, '.git')); await writeFile(join(source, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  await mkdir(join(source, '.git', 'objects', 'pack'), { recursive: true }); await writeFile(join(source, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  await writeFile(join(source, '.git', 'objects', 'pack', 'index'), 'git metadata');
   await writeFile(outside, 'external target'); await symlink(outside, join(source, 'wiki', 'external-link.md'));
   await writeFile(join(source, 'AGENTS.md'), '# Old policy\n\n## User instructions\nKeep my custom note.\n');
   await writeFile(join(source, 'CLAUDE.md'), '# Old Claude setup\n\nUser-only Claude note.\n');
@@ -63,7 +64,7 @@ test('migrate copies selected bytes, skips internal files and links, and preserv
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
   assert.equal(report.bodyHashMatch, true); assert.equal(report.logPrefixPreserved, true); assert.equal(report.logAppendedEntries, 1);
-  assert.ok(report.lintErrors >= 1); assert.ok(report.okfWarnings >= 1); assert.ok(report.skipped.git > 0); assert.equal(report.skipped.gitHistory, 'use git bundle, not copied'); assert.ok(report.skipped.obsidian > 0); assert.ok(report.skipped.trash > 0); assert.ok(report.skipped.symlinks > 0);
+  assert.ok(report.lintErrors >= 1); assert.ok(report.okfWarnings >= 1); assert.equal(report.skipped.git, 1); assert.equal(report.skipped.gitHistory, 'use git bundle, not copied'); assert.ok(report.skipped.obsidian > 0); assert.ok(report.skipped.trash > 0); assert.ok(report.skipped.symlinks > 0);
   assert.deepEqual(await readFile(join(target, 'raw', 'sample.bin')), raw);
   await assert.rejects(lstat(join(target, '.git')), { code: 'ENOENT' });
   await assert.rejects(lstat(join(target, '.obsidian')), { code: 'ENOENT' });

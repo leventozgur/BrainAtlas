@@ -81,3 +81,37 @@ test('restore a pre-existing BrainAtlas MCP entry byte-for-byte', async t => {
   await adapter.remove(x.ctx);
   assert.equal(await readFile(f.mcp,'utf8'),original);
 });
+
+test('registers BeforeAgent while preserving other hook and setting bytes', async t => {
+  const x=await setup(), f=files(x.root); t.after(()=>cleanup(x.base));
+  await mkdir(join(x.root,'.gemini'),{recursive:true});
+  const foreign=' {\n  "theme" : { "color" : "blue" },\n  "hooks" : { "SessionStart" : [{"matcher":"startup","hooks":[{"name":"user-hook","type":"command","command":"example-command"}]}] }\n}\n';
+  await writeFile(f.mcp,foreign);
+  const plan=adapter.plan(x.ctx); assert.equal(plan.changes.length,2);
+  await adapter.apply(plan,x.ctx);
+  const after=await readFile(f.mcp,'utf8'), obj=JSON.parse(after);
+  assert.ok(after.includes('"theme" : { "color" : "blue" }'));
+  assert.ok(after.includes('"name":"user-hook","type":"command","command":"example-command"'));
+  const registration=obj.hooks.BeforeAgent.find(group=>group.matcher==='*');
+  assert.ok(registration);
+  const command=registration.hooks[0];
+  assert.equal(command.name,'brainatlas-context'); assert.equal(command.type,'command');
+  assert.ok(command.timeout<=5000); assert.match(command.command,/gemini prompt$/);
+  const doctor=await adapter.doctor(x.ctx);
+  assert.equal(doctor.checks.find(check=>check.id==='hook-present').ok,true);
+  assert.match(doctor.checks.find(check=>check.id==='hook-present').message,/hooks panel/);
+  await adapter.remove(x.ctx);
+  assert.equal(await readFile(f.mcp,'utf8'),foreign);
+});
+
+test('a foreign plan target is rejected and malformed settings remain untouched', async t => {
+  const x=await setup(), f=files(x.root); t.after(()=>cleanup(x.base));
+  await mkdir(join(x.root,'.gemini'),{recursive:true});
+  const malformed='\uFEFF{broken'; await writeFile(f.mcp,malformed);
+  assert.throws(()=>adapter.plan(x.ctx),error=>error.code==='E_BOM');
+  assert.equal(await readFile(f.mcp,'utf8'),malformed);
+  await writeFile(f.mcp,'{}');
+  const plan=adapter.plan(x.ctx); plan.changes.push({file:join(x.base,'outside'),before:null,after:'{}',kind:'create'});
+  await assert.rejects(adapter.apply(plan,x.ctx),error=>error.code==='E_PLAN_TARGET');
+  assert.equal(await readFile(f.mcp,'utf8'),'{}');
+});

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { mkdir, readFile, readdir, writeFile, appendFile, realpath } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
@@ -94,7 +94,10 @@ export async function appendLog(vaultDir, entry, options = {}) {
   const safeEntry = {};
   if (typeof entry?.action === 'string' && /^[a-z][a-z0-9_-]{0,31}$/i.test(entry.action)) safeEntry.action = entry.action;
   if (typeof entry?.path === 'string' && entry.path.startsWith('wiki/') && validRel(entry.path) && entry.path.length <= 240) safeEntry.path = entry.path;
-  await appendFile(file, `\n- ${timestamp} ${JSON.stringify(safeEntry)}\n`, { encoding: 'utf8' });
+  let content = '';
+  try { content = await readFile(file, 'utf8'); }
+  catch (cause) { if (cause?.code !== 'ENOENT') throw cause; }
+  await (options.atomicWriter ?? atomicWriteFile)(file, `${content}\n- ${timestamp} ${JSON.stringify(safeEntry)}\n`);
 }
 
 /** Upsert a path/title row under the index Entries heading. */
