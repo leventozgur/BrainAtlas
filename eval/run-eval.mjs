@@ -131,6 +131,7 @@ function parseArgs(args) {
       if (!/^\d+$/u.test(value)) throw new Error('Invalid repeat');
       options.repeat = Number(value);
     } else if (flag === '--abstain-threshold') {
+      if (!value.trim()) throw new Error('Invalid abstain threshold');
       options.abstainThreshold = Number(value);
       if (!Number.isFinite(options.abstainThreshold) || options.abstainThreshold < 0 || options.abstainThreshold > 1) throw new Error('Invalid abstain threshold');
     } else options[flag.slice(2)] = value;

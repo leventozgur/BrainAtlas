@@ -96,6 +96,15 @@ test('abstain threshold is passed to retrieval and reported; invalid values fail
   assert.notEqual(invalidCli.status, 0);
   assert.equal(invalidCli.stdout, '');
   assert.equal(invalidCli.stderr.trim(), 'Eval failed');
+
+  for (const blankThreshold of ['', '   ']) {
+    const blankCli = spawnSync(process.execPath, [
+      path.join(root, 'eval/run-eval.mjs'), '--json', '--abstain-threshold', blankThreshold,
+    ], {cwd: root, encoding: 'utf8'});
+    assert.notEqual(blankCli.status, 0, `threshold ${JSON.stringify(blankThreshold)} must fail`);
+    assert.equal(blankCli.stdout, '');
+    assert.equal(blankCli.stderr.trim(), 'Eval failed');
+  }
 });
 
 test('CLI --json emits one valid JSON document and accepts repeat count', () => {
