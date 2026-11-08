@@ -1,6 +1,6 @@
 {
   "name": "brainatlas",
-  "version": "0.1.0-dev",
+  "version": "0.1.0-rc.1",
   "private": true,
   "type": "module",
   "license": "MIT",

@@ -60,7 +60,7 @@ for (const [file, expected] of signatures) test(`stub imzaları: ${file}`,async(
  for(const [name,count] of Object.entries(expected)) { assert.equal(typeof mod[name],'function',name); const match=mod[name].toString().match(/^(?:async\s+)?(?:function\s*[^ (]*\s*)?\(([^)]*)\)/); assert.ok(match,name); assert.equal(match[1].trim()?match[1].split(',').length:0,count,name); }
 });
 test('CLI sürüm ve bilinmeyen komut',()=>{
- const version=run(['packages/cli/bin/brainatlas.mjs','--version']); assert.equal(version.status,0,version.stderr); assert.match(version.stdout,/^0\.1\.0-dev\s*$/);
+ const version=run(['packages/cli/bin/brainatlas.mjs','--version']); assert.equal(version.status,0,version.stderr); assert.match(version.stdout,/^0\.1\.0-rc\.1\s*$/);
  const bad=run(['packages/cli/bin/brainatlas.mjs','unknown']); assert.equal(bad.status,2);
 });
 test('test runner filtre, hariç dizinler, hata ve boş sonuç',async()=>temporary(async dir=>{
