@@ -74,7 +74,7 @@ test('vault scope writes project configuration and doctor/trust review identify 
     await adapter.apply(plan,ctx);
     const review=await adapter.trustReview(ctx); assert.equal(review.client,'Kiro'); assert.equal(review.required,true);
     const health=await adapter.doctor(ctx); assert.equal(health.checks.find(c=>c.id==='registered').ok,true); assert.equal(health.checks.find(c=>c.id==='command').ok,true); assert.equal(health.checks.find(c=>c.id==='hook').ok,true);
-    assert.equal(health.checks.find(c=>c.id==='trigger-verified').ok,false);
+    assert.equal(health.checks.find(c=>c.id==='trigger-verified').warning,true); // PM hotfix: warning, not a failing check
     await adapter.remove(ctx);
   } finally { await rm(home,{recursive:true,force:true}); }
 });
