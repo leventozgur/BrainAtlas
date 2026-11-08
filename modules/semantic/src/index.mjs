@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { createOllamaProvider } from './provider.mjs';
+import { createOllamaProvider, validateConfiguredProvider } from './provider.mjs';
 import { markdownChunks } from './chunking.mjs';
 import { buildSemanticIndex, updateSemanticIndex, measureIndexFreshness, readSemanticIndex } from './index-store.mjs';
 import { cosineSimilarity, reciprocalRankFusion, searchHybrid } from './hybrid.mjs';
@@ -26,6 +26,7 @@ export async function activate(ctx) {
 
 function commandOptions(ctx) {
   const settings = { ...SEMANTIC_DEFAULTS, ...ctx.config.semantic };
+  validateConfiguredProvider(settings);
   const vault = resolve(ctx.env.HOME ?? '.', ctx.config.vault.path);
   return { settings, corpusDir: join(vault, 'wiki'), stateDir: ctx.paths.stateDir,
     provider: createOllamaProvider({ ...settings, fetchImpl: ctx.fetchImpl ?? globalThis.fetch }), chunkMarkdown: markdownChunks };
@@ -52,6 +53,7 @@ export {
   updateSemanticIndex,
   cosineSimilarity,
   createOllamaProvider,
+  validateConfiguredProvider,
   markdownChunks,
   measureIndexFreshness,
   readSemanticIndex,

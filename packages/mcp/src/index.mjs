@@ -95,7 +95,10 @@ export function createServer(options) {
     if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error();
     return import(pathToFileURL(entry).href);
   })();
-  const providerFor = (module) => module.createOllamaProvider({ ...settings, fetchImpl: options.fetchImpl ?? globalThis.fetch });
+  const providerFor = (module) => {
+    module.validateConfiguredProvider(settings);
+    return module.createOllamaProvider({ ...settings, fetchImpl: options.fetchImpl ?? globalThis.fetch });
+  };
   const scheduleUpdate = () => {
     if (!semanticEnabled) return;
     if (background) { backgroundDirty = true; return; }
@@ -179,7 +182,7 @@ export function createServer(options) {
           ...(heading ? { heading, anchor: heading.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-'), headingPath: item.headingPath } : {}) };
       });
       return { results: normalized, abstained: false, semantic: { used: true }, mode: settings.mode };
-    } catch { return fallback('provider-error'); }
+    } catch (error) { return fallback(error?.fallbackReason === 'remote-not-allowed' ? 'remote-not-allowed' : 'provider-error'); }
   });
   readTool('wiki_read_page', z.object({ path: z.string() }), async ({ path }) => {
     const { target } = await safeFile(path);

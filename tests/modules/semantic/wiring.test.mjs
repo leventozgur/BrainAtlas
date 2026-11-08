@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createOllamaProvider, markdownChunks, readSemanticIndex, updateSemanticIndex } from '../../../modules/semantic/src/index.mjs';
+import { createOllamaProvider, validateConfiguredProvider, markdownChunks, readSemanticIndex, updateSemanticIndex } from '../../../modules/semantic/src/index.mjs';
 import { defaultConfig, setConfigValue, validateConfig } from '../../../packages/core/src/config/index.mjs';
 
-test('provider refuses remote endpoints without opt-in and never echoes input', () => {
-  assert.throws(() => createOllamaProvider({ model: 'fake', baseUrl: 'https://example.com/private' }), e => e.code === 'E_SEMANTIC_PROVIDER' && !e.message.includes('example.com'));
-  assert.doesNotThrow(() => createOllamaProvider({ model: 'fake', baseUrl: 'https://example.com', allowRemote: true }));
+test('configured provider refuses remote endpoints without opt-in and never echoes input', () => {
+  assert.doesNotThrow(() => createOllamaProvider({ model: 'fake', baseUrl: 'https://example.com/private' }));
+  assert.throws(() => validateConfiguredProvider({ baseUrl: 'https://example.com/private' }), e => e.code === 'E_SEMANTIC_PROVIDER' && !e.message.includes('example.com'));
+  assert.doesNotThrow(() => validateConfiguredProvider({ baseUrl: 'https://example.com', allowRemote: true }));
 });
 
 test('semantic config defaults, legacy config and validation', () => {

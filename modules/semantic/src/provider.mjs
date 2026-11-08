@@ -10,14 +10,22 @@ function safeError(message) {
   return error;
 }
 
-function validateBaseUrl(baseUrl, allowRemote) {
+function validateBaseUrl(baseUrl) {
   let url;
   try { url = new URL(baseUrl); } catch { throw safeError('Embedding provider URL is invalid.'); }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
     throw safeError('Embedding provider URL is invalid.');
   }
-  if (!allowRemote && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) throw safeError('Embedding provider configuration is invalid.');
   return `${url.origin}${url.pathname.replace(/\/$/u, '')}`;
+}
+
+export function validateConfiguredProvider(settings) {
+  const url = new URL(validateBaseUrl(settings.baseUrl ?? DEFAULT_BASE_URL));
+  if (settings.allowRemote !== true && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
+    const error = safeError('Embedding provider configuration is invalid.');
+    error.fallbackReason = 'remote-not-allowed';
+    throw error;
+  }
 }
 
 function validateVector(value, dims) {
@@ -33,14 +41,14 @@ export function createOllamaProvider({
   model,
   dims = 768,
   fetchImpl = globalThis.fetch,
-  queryPrefix = '', documentPrefix = '', batchSize = 32, timeoutMs = 60000, allowRemote = false,
+  queryPrefix = '', documentPrefix = '', batchSize = 32, timeoutMs = 60000,
 } = {}) {
   if (typeof model !== 'string' || !model.trim() || !Number.isInteger(dims) || dims < 1) {
     throw safeError('Embedding provider configuration is invalid.');
   }
   if (typeof queryPrefix !== 'string' || typeof documentPrefix !== 'string' || !Number.isInteger(batchSize) || batchSize < 1 || !Number.isInteger(timeoutMs) || timeoutMs < 1) throw safeError('Embedding provider configuration is invalid.');
   if (typeof fetchImpl !== 'function') throw safeError('Embedding provider fetch is unavailable.');
-  const endpoint = `${validateBaseUrl(baseUrl, allowRemote)}/api/embed`;
+  const endpoint = `${validateBaseUrl(baseUrl)}/api/embed`;
   let isHealthy = true;
 
   return Object.freeze({
