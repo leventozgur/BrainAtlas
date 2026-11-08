@@ -51,7 +51,7 @@ function stale(fm, asOf) {
 /** Combine the core BM25F results with page-level cosine-ranked chunks. */
 export async function searchHybrid({ query, pages, entries, provider, limit = 5, k = 60, asOf = new Date(), indexMeta, weights = [1, 1], mode = 'rrf', minSemanticScore, minMargin, abstainThreshold }) {
   if (typeof query !== 'string' || !Array.isArray(pages) || !Array.isArray(entries)) throw new TypeError('Invalid hybrid search input.');
-  if (!Array.isArray(weights) || weights.length !== 2 || weights.some((w) => !Number.isFinite(w) || w < 0) || !['rrf', 'semantic-primary'].includes(mode) || (minSemanticScore !== undefined && (!Number.isFinite(minSemanticScore) || minSemanticScore < -1 || minSemanticScore > 1)) || (minMargin !== undefined && (!Number.isFinite(minMargin) || minMargin < 0 || minMargin > 2))) throw new TypeError('Invalid hybrid search options.');
+  if (!Array.isArray(weights) || weights.length !== 2 || weights.some((w) => !Number.isFinite(w) || w <= 0) || !['rrf', 'semantic-primary'].includes(mode) || (minSemanticScore !== undefined && (!Number.isFinite(minSemanticScore) || minSemanticScore < -1 || minSemanticScore > 1)) || (minMargin !== undefined && (!Number.isFinite(minMargin) || minMargin < 0 || minMargin > 2))) throw new TypeError('Invalid hybrid search options.');
   const lexicalIndex = buildIndex(pages);
   const lexical = search(lexicalIndex, query, { limit: Math.max(limit * 4, 20), abstainThreshold }).results;
   const eligiblePages = new Map(lexicalIndex.docs.map(({ page }) => [page.path, page]));

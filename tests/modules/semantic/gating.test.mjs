@@ -20,6 +20,16 @@ test('overlap can push the semantic winner below five in RRF; semantic-primary p
   assert.equal((await searchHybrid({ ...args, mode: 'semantic-primary' }))[0].path, 'target.md');
   assert.equal((await searchHybrid({ ...args, weights: [1, 3] }))[0].path, 'noise0.md');
 });
+test('hybrid search rejects non-positive or non-finite weights with a safe TypeError', async () => {
+  const args = { query: 'needle', pages: [page('a.md', 'needle')], entries: [], provider };
+  for (const weights of [[0, 1], [1, 0], [-1, 1], [1, -1], [Number.NaN, 1], [1, Number.NaN], [Number.POSITIVE_INFINITY, 1], [1, Number.POSITIVE_INFINITY], ['1', 1], [1, null]]) {
+    await assert.rejects(searchHybrid({ ...args, weights }), (error) => {
+      assert.ok(error instanceof TypeError);
+      assert.equal(error.message, 'Invalid hybrid search options.');
+      return true;
+    });
+  }
+});
 test('semantic thresholds accept equality and reject low scores, ties and empty candidates', async () => {
   const pages = [page('a.md', 'needle'), page('b.md', 'needle')];
   const args = { query: 'needle', pages, entries: [{ path: 'a.md', vector: [1, 0] }, { path: 'b.md', vector: [0, 1] }], provider };
