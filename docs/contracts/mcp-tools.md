@@ -37,3 +37,5 @@ Validate relative paths, scan all proposed write content, and avoid returning fu
 ## Version
 
 Tool names and schemas above are version 1. Server and stdio signatures are fixed in `packages/mcp/src/index.mjs`.
+
+When semantic retrieval is enabled and installed, `wiki_query` adds `semantic:{used:boolean,fallbackReason?:string}` and `mode:lexical|semantic-primary|rrf`. Provider errors, absent indexes and fingerprint mismatches fall back to lexical results. With semantic disabled or unavailable the original response shape is preserved. Semantic index updates run in the background after writes or an index miss.

@@ -10,12 +10,13 @@ function safeError(message) {
   return error;
 }
 
-function validateBaseUrl(baseUrl) {
+function validateBaseUrl(baseUrl, allowRemote) {
   let url;
   try { url = new URL(baseUrl); } catch { throw safeError('Embedding provider URL is invalid.'); }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
     throw safeError('Embedding provider URL is invalid.');
   }
+  if (!allowRemote && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) throw safeError('Embedding provider configuration is invalid.');
   return `${url.origin}${url.pathname.replace(/\/$/u, '')}`;
 }
 
@@ -32,14 +33,14 @@ export function createOllamaProvider({
   model,
   dims = 768,
   fetchImpl = globalThis.fetch,
-  queryPrefix = '', documentPrefix = '', batchSize = 32, timeoutMs = 60000,
+  queryPrefix = '', documentPrefix = '', batchSize = 32, timeoutMs = 60000, allowRemote = false,
 } = {}) {
   if (typeof model !== 'string' || !model.trim() || !Number.isInteger(dims) || dims < 1) {
     throw safeError('Embedding provider configuration is invalid.');
   }
   if (typeof queryPrefix !== 'string' || typeof documentPrefix !== 'string' || !Number.isInteger(batchSize) || batchSize < 1 || !Number.isInteger(timeoutMs) || timeoutMs < 1) throw safeError('Embedding provider configuration is invalid.');
   if (typeof fetchImpl !== 'function') throw safeError('Embedding provider fetch is unavailable.');
-  const endpoint = `${validateBaseUrl(baseUrl)}/api/embed`;
+  const endpoint = `${validateBaseUrl(baseUrl, allowRemote)}/api/embed`;
   let isHealthy = true;
 
   return Object.freeze({

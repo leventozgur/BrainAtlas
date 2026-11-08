@@ -24,7 +24,7 @@ function conceptProvider({ broken = false } = {}) {
 
 test('Ollama provider posts an input batch through injected fetch and validates vectors', async () => {
   let request;
-  const provider = createOllamaProvider({ baseUrl: 'http://example.com:11434/', model: 'embedding-model', dims: 2,
+  const provider = createOllamaProvider({ baseUrl: 'http://example.com:11434/', allowRemote: true, model: 'embedding-model', dims: 2,
     fetchImpl: async (url, options) => {
       request = { url, options };
       const input = JSON.parse(options.body).input;
