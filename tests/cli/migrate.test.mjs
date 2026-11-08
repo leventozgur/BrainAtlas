@@ -62,7 +62,8 @@ test('migrate copies selected bytes, skips internal files and links, and preserv
   const result = cliRun(env, 'migrate', '--from', source, '--to', target, '--json');
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
-  assert.equal(report.bodyHashMatch, true); assert.ok(report.lintErrors >= 1); assert.ok(report.okfWarnings >= 1); assert.ok(report.skipped.git > 0); assert.equal(report.skipped.gitHistory, 'use git bundle, not copied'); assert.ok(report.skipped.obsidian > 0); assert.ok(report.skipped.trash > 0); assert.ok(report.skipped.symlinks > 0);
+  assert.equal(report.bodyHashMatch, true); assert.equal(report.logPrefixPreserved, true); assert.equal(report.logAppendedEntries, 1);
+  assert.ok(report.lintErrors >= 1); assert.ok(report.okfWarnings >= 1); assert.ok(report.skipped.git > 0); assert.equal(report.skipped.gitHistory, 'use git bundle, not copied'); assert.ok(report.skipped.obsidian > 0); assert.ok(report.skipped.trash > 0); assert.ok(report.skipped.symlinks > 0);
   assert.deepEqual(await readFile(join(target, 'raw', 'sample.bin')), raw);
   await assert.rejects(lstat(join(target, '.git')), { code: 'ENOENT' });
   await assert.rejects(lstat(join(target, '.obsidian')), { code: 'ENOENT' });
@@ -71,7 +72,10 @@ test('migrate copies selected bytes, skips internal files and links, and preserv
   const agents = await readFile(join(target, 'AGENTS.md'), 'utf8'); const claude = await readFile(join(target, 'CLAUDE.md'), 'utf8');
   assert.match(agents, /migrated:user-section/); assert.match(agents, /Keep my custom note\./);
   assert.match(claude, /migrated:user-section/); assert.match(claude, /User-only Claude note\./);
-  assert.match(await readFile(join(target, 'wiki/log.md'), 'utf8'), /"action":"migrated"/);
+  const sourceLog = await readFile(join(source, 'wiki/log.md')); const targetLog = await readFile(join(target, 'wiki/log.md'));
+  assert.ok(targetLog.subarray(0, sourceLog.length).equals(sourceLog)); assert.match(targetLog.toString('utf8'), /"action":"migrated"/);
+  const help = cliRun(env, 'help', 'migrate'); assert.equal(help.status, 0, help.stderr);
+  for (const field of ['bodyHashMatch', 'logPrefixPreserved', 'logAppendedEntries']) assert.match(help.stdout, new RegExp(field));
   assert.deepEqual(await snapshotTree(source), before);
 });
 

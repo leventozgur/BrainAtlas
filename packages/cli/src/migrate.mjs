@@ -176,17 +176,22 @@ export async function migrateVault(from, to, { plan = false } = {}) {
   }
   for (const item of record.instructions) await writeFile(join(roots.target, item.path), instructionBytes(item), { flag: 'wx' });
 
+  await core.appendLog(roots.target, { action: 'migrated', path: 'wiki/index.md' });
   let bodyHashMatch = true;
-  for (const item of record.files.filter(entry => entry.category === 'wiki' && entry.path.endsWith('.md'))) {
+  for (const item of record.files.filter(entry => entry.category === 'wiki' && entry.path.endsWith('.md') && entry.path !== 'wiki/log.md')) {
     const sourceBytes = await readFile(join(roots.source, item.path)); const targetBytes = await readFile(join(roots.target, item.path));
     if (hash(Buffer.from(bodyOf(sourceBytes))) !== hash(Buffer.from(bodyOf(targetBytes)))) bodyHashMatch = false;
   }
-  await core.appendLog(roots.target, { action: 'migrated', path: 'wiki/index.md' });
+  const sourceLog = record.files.some(item => item.path === 'wiki/log.md')
+    ? await readFile(join(roots.source, 'wiki/log.md'))
+    : Buffer.alloc(0);
+  const targetLog = await readFile(join(roots.target, 'wiki/log.md'));
+  const logPrefixPreserved = targetLog.subarray(0, sourceLog.length).equals(sourceLog);
   const findings = await core.checkVault(roots.target);
   const integrity = await checkIndexLog(roots.target);
   const lintErrors = findings.filter(item => item.severity === 'error').length + (integrity ? 0 : 1);
   const okfWarnings = findings.filter(item => item.severity === 'warn').length;
-  return { pages: summary.pages, files: summary.files, bytes: summary.bytes, bodyHashMatch, skipped: summary.skipped, okfWarnings, lintErrors };
+  return { pages: summary.pages, files: summary.files, bytes: summary.bytes, bodyHashMatch, logPrefixPreserved, logAppendedEntries: 1, skipped: summary.skipped, okfWarnings, lintErrors };
 }
 
 const scanConfigFiles = [

@@ -455,7 +455,7 @@ const helpDescriptions = Object.freeze({
   doctor: 'Check installation health.', config: 'Read or change BrainAtlas configuration.', module: 'List, add, or remove installed modules.',
   uninstall: 'Remove BrainAtlas while preserving the vault.', update: 'Install or inspect a release update.', rollback: 'Switch to a previous release.',
   recover: 'Inspect or recover an interrupted update.', eval: 'Run the local retrieval evaluation.', hook: 'Run an agent hook.', mcp: 'Start the BrainAtlas MCP server.',
-  migrate: 'Copy vault content into a new vault.', adopt: 'Inspect existing agent setup and propose adoption.', help: 'Show built-in and active module commands.'
+  migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', help: 'Show built-in and active module commands.'
 });
 const helpUsages = Object.freeze({
   init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
