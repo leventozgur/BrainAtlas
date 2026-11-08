@@ -30,6 +30,15 @@ async function put(host, path, content) {
   await writeFile(target, content);
 }
 
+async function initSeedTemplates() {
+  return new Map([
+    ['AGENTS.md', await readFile(new URL('../../templates/policy/AGENTS.md', import.meta.url))],
+    ['wiki/index.md', await readFile(new URL('../../templates/vault/index.md', import.meta.url))],
+    ['wiki/log.md', await readFile(new URL('../../templates/vault/log.md', import.meta.url))],
+    ['planning/backlog.md', await readFile(new URL('../../templates/vault/backlog.md', import.meta.url))],
+  ]);
+}
+
 test('memory transport enforces relative paths, defensive bytes and compare-and-swap revisions', async () => {
   const transport = createMemoryTransport();
   const first = await transport.put('wiki/page.md', Buffer.from('one'), { ifAbsent: true });
@@ -63,6 +72,53 @@ test('two fake hosts create, pull, modify and compare manifest v3 without conten
   assert.equal((await b.engine.run()).pulled, 1);
   assert.equal(await readFile(join(b.vaultPath, 'wiki/entities/alpha.md'), 'utf8'), '# Alpha\nsecond version\n');
   assert.deepEqual(await a.engine.checkPeer(b.stateDir), { status: 'PASS', differences: [] });
+});
+
+test('an untouched init scaffold pulls unbased remote bytes without conflict, merge, or push', async (t) => {
+  const fx = await fixture(t);
+  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const templates = await initSeedTemplates();
+  for (const [path, bytes] of templates) await put(b, path, bytes);
+  const remoteContent = new Map([
+    ['AGENTS.md', Buffer.from('# Shared policy\n\nRemote policy content.\n')],
+    ['wiki/index.md', Buffer.from('# Shared index\n\n- [Remote](wiki/entities/remote.md)\n')],
+    ['wiki/log.md', Buffer.from('# Shared log\n\n- Remote history entry.\n')],
+    ['planning/backlog.md', Buffer.from('# Shared backlog\n\n- Remote task.\n')],
+    ['wiki/entities/remote.md', Buffer.from('# Remote page\n\nShared content.\n')],
+  ]);
+  for (const [path, bytes] of remoteContent) await put(a, path, bytes);
+
+  await a.engine.run();
+  const remoteBefore = await fx.transport.list('');
+  const result = await b.engine.run();
+
+  assert.equal(result.status, 'SYNCED');
+  assert.equal(result.pulled, remoteContent.size);
+  assert.equal(result.merged, 0);
+  assert.equal(result.pushed, 0);
+  assert.deepEqual(result.conflicts, []);
+  for (const [path, expected] of remoteContent) assert.deepEqual(await readFile(join(b.vaultPath, path)), expected, path);
+  assert.deepEqual(await fx.transport.list(''), remoteBefore);
+  for (const row of remoteBefore) assert.deepEqual(Buffer.from((await fx.transport.get(row.path)).bytes), remoteContent.get(row.path), row.path);
+  assert.deepEqual(await a.engine.checkPeer(b.stateDir), { status: 'PASS', differences: [] });
+});
+
+test('a changed init template keeps unbased divergence conflict behavior', async (t) => {
+  const fx = await fixture(t);
+  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const templates = await initSeedTemplates();
+  const remote = Buffer.from('# Shared policy\n\nRemote policy content.\n');
+  await put(a, 'AGENTS.md', remote);
+  await put(b, 'AGENTS.md', Buffer.concat([templates.get('AGENTS.md'), Buffer.from('\nLocal customization.\n')]));
+  await a.engine.run();
+
+  const result = await b.engine.run();
+  assert.equal(result.status, 'CONFLICT');
+  assert.equal(result.conflicts.length, 1);
+  assert.equal(result.conflicts[0].path, 'AGENTS.md');
+  assert.equal(result.conflicts[0].kind, 'unbased-divergence');
+  assert.deepEqual(await readFile(join(b.vaultPath, result.conflicts[0].conflictCopy)), remote);
+  assert.ok((await readdir(b.vaultPath)).some((name) => name.includes('.conflict-host-b-')));
 });
 
 test('concurrent edits retain local canonical data and write a host tagged conflict copy', async (t) => {

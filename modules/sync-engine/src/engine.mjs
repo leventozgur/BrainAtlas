@@ -13,9 +13,26 @@ const SPECIAL = new Set(['wiki/index.md', 'wiki/log.md']);
 const MANIFEST_VERSION = 3;
 const TOMBSTONE_PREFIX = '.brainatlas-sync/meta/tombstones/';
 const PENDING_DELETE_PREFIX = '.brainatlas-sync/meta/pending-deletions/';
+const INIT_SEED_TEMPLATE_URLS = new Map([
+  ['AGENTS.md', new URL('../../../templates/policy/AGENTS.md', import.meta.url)],
+  ['wiki/index.md', new URL('../../../templates/vault/index.md', import.meta.url)],
+  ['wiki/log.md', new URL('../../../templates/vault/log.md', import.meta.url)],
+  ['planning/backlog.md', new URL('../../../templates/vault/backlog.md', import.meta.url)],
+]);
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const asBytes = (value) => value instanceof Uint8Array ? Buffer.from(value) : Buffer.from(String(value));
 const isMissing = (error) => error?.code === 'ENOENT';
+let initSeedTemplatesPromise;
+
+async function readInitSeedTemplates() {
+  if (!initSeedTemplatesPromise) {
+    initSeedTemplatesPromise = Promise.all([...INIT_SEED_TEMPLATE_URLS].map(async ([path, url]) => {
+      try { return [path, await readFile(url)]; }
+      catch (error) { if (isMissing(error)) return null; throw error; }
+    })).then((rows) => new Map(rows.filter(Boolean)));
+  }
+  return initSeedTemplatesPromise;
+}
 
 export const SYNC_ERROR_CODES = Object.freeze(['E_AUTH', 'E_NETWORK', 'E_CONFLICT', 'E_QUOTA', 'E_NOT_FOUND', 'E_DEGRADED', 'E_INTERRUPTED', 'E_SECRET_DETECTED', 'E_INVALID_PATH', 'E_STATE_INVALID', 'E_TRANSPORT_UNAVAILABLE']);
 
@@ -417,6 +434,7 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
       let pendingDeletes = await readJson(pendingDeletesPath, []);
       if (!Array.isArray(pendingDeletes)) throw new SyncTransportError('E_STATE_INVALID');
       const paths = [...new Set([...localFiles.keys(), ...remoteFiles.keys(), ...baseFiles.keys(), ...tombstones.keys(), ...deleteRequests.keys()])].sort();
+      const initSeedTemplates = await readInitSeedTemplates();
       journal.phase = 'running';
       await saveJson(journalPath, journal);
 
@@ -527,9 +545,13 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
 
       for (const path of paths) {
         if (excluded.has(path)) continue;
-        const local = localFiles.get(path) ?? null;
+        const currentLocal = localFiles.get(path) ?? null;
         const remote = remoteFiles.get(path) ?? null;
         const base = baseFiles.get(path) ?? null;
+        // An untouched init file on a host with no sync base is scaffolding, not
+        // a competing edit. Pull the established remote bytes without merging it.
+        const local = !base && remote && currentLocal && initSeedTemplates.get(path)?.equals(currentLocal.bytes)
+          ? null : currentLocal;
         let requests = deleteRequests.get(path) ?? [];
 
         const tombstone = tombstones.get(path);
