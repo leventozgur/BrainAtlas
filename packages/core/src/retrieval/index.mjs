@@ -107,7 +107,9 @@ export function search(index, query, options = {}) {
       scores.set(id, (scores.get(id) || 0) + idf * 2.5 * tf / (1.5 + tf));
     }
   }
-  const ranked = [...scores].map(([id, score]) => ({id, score: score / (maxScore || 1)})).sort((a,b) => b.score - a.score || (index.docs[a.id].page.path < index.docs[b.id].page.path ? -1 : index.docs[a.id].page.path > index.docs[b.id].page.path ? 1 : 0));
+  // Compress low scores while retaining the penalty for every unmatched query term.
+  // The transform is monotonic, so it leaves ranking and tie-breaking intact.
+  const ranked = [...scores].map(([id, score]) => ({id, score: Math.sqrt(score / (maxScore || 1))})).sort((a,b) => b.score - a.score || (index.docs[a.id].page.path < index.docs[b.id].page.path ? -1 : index.docs[a.id].page.path > index.docs[b.id].page.path ? 1 : 0));
   if (!ranked.length || ranked[0].score < threshold) return { results: [], abstained: true, reason: ranked.length ? 'below_threshold' : 'no_match', truncated: false };
   let remaining = Math.floor(budget), truncated = false;
   const results = ranked.slice(0,limit).map(({id,score}) => {

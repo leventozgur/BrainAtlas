@@ -34,6 +34,18 @@ test('ranking, freshness, supersession, budget, threshold and empty queries', ()
   assert.equal(search(index,'unmatched').abstained,true); assert.equal(search(index,'backup unmatched',{abstainThreshold:0.99}).abstained,true);
   assert.equal(search(index,'the ve').reason,'empty-query');
 });
+test('calibrated confidence retains unmatched-term penalties and threshold boundaries', () => {
+  const index = buildIndex([page('a.md', 'backup archive'), page('b.md', 'archive')], {now});
+  const strong = search(index, 'backup archive');
+  const weak = search(index, 'backup archive unknown unrelated');
+  assert.deepEqual(weak.results.map(r => r.path), strong.results.map(r => r.path));
+  assert.ok(weak.results[0].score < strong.results[0].score);
+  assert.ok(weak.results.every(r => r.score >= 0 && r.score <= 1));
+  const threshold = weak.results[0].score;
+  assert.equal(search(index, 'backup archive unknown unrelated', {abstainThreshold: threshold}).abstained, false);
+  assert.equal(search(index, 'backup archive unknown unrelated', {abstainThreshold: threshold + 1e-9}).abstained, true);
+  assert.equal(search(index, 'unknown unrelated', {abstainThreshold: 0.35}).abstained, true);
+});
 test('loader, cache invalidation and corrupt cache recovery', async t => {
   const dir=temp(t), vault=path.join(dir,'vault'), state=path.join(dir,'state'); fs.mkdirSync(vault);
   const file=path.join(vault,'x.md'); fs.writeFileSync(file,'---\ntitle: Alpha\ngenerated: 2020-01-01\nstale_after: P1W\n---\n# Alpha\nalpha body');
