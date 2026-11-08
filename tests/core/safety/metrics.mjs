@@ -10,7 +10,9 @@ import { scanText } from '../../../packages/core/src/safety/index.mjs';
  * @param {string} text
  */
 export function expandFixture(text) {
-  return text.replace(/\{\{(SK|RK)_(LIVE|TEST)\}\}/g, (_, kind, mode) => `${kind.toLowerCase()}_${mode.toLowerCase()}_`);
+  return text
+    .replace(/\{\{(SK|RK)_(LIVE|TEST)\}\}/g, (_, kind, mode) => `${kind.toLowerCase()}_${mode.toLowerCase()}_`)
+    .replace(/\{\{SK_DASH\}\}/g, 's' + 'k-');
 }
 
 /** Count per-file detections; never emit corpus contents or file names. */
