@@ -1,6 +1,6 @@
 {
   "name": "sync-git",
-  "version": "0.1.0-rc.9",
+  "version": "0.1.0-rc.10",
   "description": "Git based transport for local and remote vault synchronization.",
   "requires": ["sync-engine"],
   "provides": ["sync-transport:git"],
