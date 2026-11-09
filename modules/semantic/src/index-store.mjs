@@ -162,7 +162,11 @@ async function updateIndex({ corpusDir, stateDir, provider, chunkMarkdown, force
       await rejectSymlink(partialPath); await unlink(partialPath).catch(error => { if (error.code !== 'ENOENT') throw error; });
       dirty = false;
       return index;
-    } finally { if (dirty && !signal?.aborted) await atomicWrite(partialPath, partial); }
+    } finally {
+      // Completed groups are kept on failure and on cancellation. The single final write runs before the lock is released and
+      // must never replace the original error (provider failure or E_SEMANTIC_ABORTED), so a failed write is dropped here.
+      if (dirty) await atomicWrite(partialPath, partial).catch(() => {});
+    }
   } finally { await unlink(lock).catch(() => {}); }
 }
 

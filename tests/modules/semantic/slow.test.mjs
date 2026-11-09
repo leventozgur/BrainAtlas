@@ -59,3 +59,38 @@ test('fast build matches the legacy index golden bytes except creation time', as
     entries: [{ path: '0.md', text: 'text 0', vector: [0] }, { path: '1.md', text: 'text 1', vector: [1] }, { path: '2.md', text: 'text 2', vector: [2] }] };
   assert.equal(JSON.stringify(result), JSON.stringify(expected));
 });
+
+test('cancellation keeps completed groups in the partial file, starts no new group and releases the lock', async t => {
+  const f = await fixture(t, 8); const original = f.provider.embedDocuments; const controller = new AbortController(); let calls = 0;
+  f.provider.embedDocuments = async texts => { if (++calls === 3) controller.abort(); return original(texts); };
+  await assert.rejects(updateSemanticIndex({ ...f, indexBatchSize: 2, signal: controller.signal }), { code: 'E_SEMANTIC_ABORTED' });
+  assert.equal(calls, 3, 'no group starts after the cancellation');
+  const partial = JSON.parse(await readFile(partialPath(f), 'utf8'));
+  assert.equal(Object.keys(partial.vectors).length, 4, 'groups completed before the cancelled one are kept; the cancelled group is not');
+  assert.equal((await stat(partialPath(f))).mode & 0o777, 0o600);
+  await assert.rejects(readFile(join(f.stateDir, 'semantic', 'index.lock')), { code: 'ENOENT' });
+  assert.equal(await readSemanticIndex(f.stateDir), null);
+  let resumed = 0; f.provider.embedDocuments = async texts => { resumed += texts.length; return original(texts); };
+  const result = await updateSemanticIndex({ ...f, indexBatchSize: 2 });
+  assert.equal(resumed, 4, 'the resumed run embeds only the missing chunks'); assert.equal(result.entries.length, 8);
+});
+test('cancellation before indexing starts creates no files and takes no lock', async t => {
+  const f = await fixture(t, 2); const controller = new AbortController(); controller.abort();
+  await assert.rejects(updateSemanticIndex({ ...f, signal: controller.signal }), { code: 'E_SEMANTIC_ABORTED' });
+  await assert.rejects(stat(join(f.stateDir, 'semantic')), { code: 'ENOENT' });
+});
+test('a failed final partial write does not mask the provider error or the cancellation', async t => {
+  for (const mode of ['provider', 'abort']) {
+    const f = await fixture(t, 6); const original = f.provider.embedDocuments; const controller = new AbortController(); let calls = 0;
+    const failure = Object.assign(new Error('provider failure'), { code: 'E_PROVIDER_FAILURE' });
+    f.provider.embedDocuments = async texts => { if (++calls === 2) { if (mode === 'provider') throw failure; controller.abort(); } return original(texts); };
+    // A directory in place of the partial file makes the final write fail with a state error.
+    await mkdir(partialPath(f), { recursive: true });
+    await assert.rejects(updateSemanticIndex({ ...f, indexBatchSize: 2, signal: controller.signal }), error => {
+      assert.equal(error.code, mode === 'provider' ? 'E_PROVIDER_FAILURE' : 'E_SEMANTIC_ABORTED', mode);
+      if (mode === 'provider') assert.equal(error, failure);
+      return true;
+    });
+    await assert.rejects(readFile(join(f.stateDir, 'semantic', 'index.lock')), { code: 'ENOENT' }, `${mode}: lock released even when the write fails`);
+  }
+});

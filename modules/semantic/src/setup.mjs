@@ -115,19 +115,23 @@ export async function semanticSetup(args, ctx) {
   const provider = createOllamaProvider({ ...settings, timeoutMs: settings.indexTimeoutMs, batchSize: settings.indexBatchSize, fetchImpl });
   const queryProvider = createOllamaProvider({ ...settings, fetchImpl });
   let lastTime = -Infinity, lastPercent = -10, warned = false, warnedHour = false;
-  const emit = message => (ctx.progress ?? (text => process.stderr.write(`${text}\n`)))(message);
+  // A `\r` progress line stays open until something else is written; close it with a newline first.
+  let lineOpen = false;
+  const endLine = () => { if (lineOpen) { lineOpen = false; process.stderr.write('\n'); } };
+  const emit = message => { endLine(); (ctx.progress ?? (text => process.stderr.write(`${text}\n`)))(message); };
+  const confirm = question => { endLine(); return (ctx.prompt ?? ask)(question); };
   const onProgress = async info => {
     if (info.phase !== 'embed') return;
     const time = (ctx.now ?? Date.now)(); const percent = info.total ? Math.floor(info.done * 100 / info.total) : 100;
     if (time - lastTime >= (isTTY ? 1000 : 30000) || (!isTTY && percent >= lastPercent + 10)) {
       const message = `Index: ${info.done}/${info.total} chunks${info.etaMs === null ? '' : `, ETA ${Math.ceil(info.etaMs / 1000)}s`}`;
-      if (isTTY && !ctx.progress) process.stderr.write(`\r${message}   `); else emit(message);
+      if (isTTY && !ctx.progress) { process.stderr.write(`\r${message}   `); lineOpen = true; } else emit(message);
       lastTime = time; lastPercent = percent;
     }
     if (!warned && info.etaMs > 300000) {
       warned = true; emit(`Estimated remaining time: ${Math.ceil(info.etaMs / 60000)} minutes. Indexing uses CPU heavily; progress is saved and you can interrupt and resume with the same command.`);
       if (info.etaMs > 3600000) { warnedHour = true; emit('Warning: indexing may take more than an hour.'); }
-      if (!options.yes && isTTY && !(await (ctx.prompt ?? ask)('Continue indexing? [y/N] '))) throw Object.assign(new Error('Indexing declined.'), { code: 'E_SEMANTIC_DECLINED' });
+      if (!options.yes && isTTY && !(await confirm('Continue indexing? [y/N] '))) throw Object.assign(new Error('Indexing declined.'), { code: 'E_SEMANTIC_DECLINED' });
     }
     if (!warnedHour && info.etaMs > 3600000) { warnedHour = true; emit('Warning: indexing may take more than an hour.'); }
   };
@@ -140,7 +144,13 @@ export async function semanticSetup(args, ctx) {
       index = await updateSemanticIndex({ corpusDir, stateDir: ctx.paths.stateDir, provider, chunkMarkdown: markdownChunks, skipUnchangedWrite: true, indexBatchSize: settings.indexBatchSize, now: ctx.now, onProgress });
       set('index', index.createdAt === previous.createdAt ? 'skipped' : 'ok', 'Index is up to date.');
     } else { index = await updateSemanticIndex({ corpusDir, stateDir: ctx.paths.stateDir, provider, chunkMarkdown: markdownChunks, skipUnchangedWrite: true, indexBatchSize: settings.indexBatchSize, now: ctx.now, onProgress }); set('index', 'ok', 'Index built or updated.'); }
-  } catch (error) { if (error?.code === 'E_SEMANTIC_DECLINED') return stop('index', 'Indexing was not approved; progress was saved.', retry); return stop('index', 'Indexing failed.', 'Check the vault, model and state directory, then run ' + retry); }
+  } catch (error) {
+    endLine();
+    if (error?.code === 'E_SEMANTIC_DECLINED') return stop('index', 'Indexing was not approved; progress was saved.', retry);
+    if (error?.code === 'E_SEMANTIC_BUSY') return stop('index', 'Another indexing operation is running.', retry);
+    return stop('index', 'Indexing failed.', 'Check the vault, model and state directory, then run ' + retry);
+  }
+  endLine();
   try {
     if (!index.entries.length || index.providerFingerprint !== provider.fingerprint) throw new Error();
     const start = performance.now(); await queryProvider.embedQuery(index.entries[0].text.slice(0, 120));

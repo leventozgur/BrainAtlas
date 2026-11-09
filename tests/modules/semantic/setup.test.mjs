@@ -86,3 +86,83 @@ test('dry run reports pending chunks without writes', async t => {
   assert.match(result.report.steps.index.reason, /1 chunks; duration depends on hardware/);
   await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json')));
 });
+
+// Records every stderr chunk and every prompt in order; restores stderr when finished.
+async function withStderr(events, work) {
+  const original = process.stderr.write;
+  process.stderr.write = (chunk, ...rest) => { events.push({ type: 'stderr', text: String(chunk) }); rest.find(item => typeof item === 'function')?.(); return true; };
+  try { return await work(); } finally { process.stderr.write = original; }
+}
+// An unterminated carriage-return progress line may only be followed by another update of itself or by a newline;
+// anything else (ETA notice, prompt, step output) would continue on the same terminal line, and the last chunk must close it.
+function assertProgressLineTerminated(events) {
+  const isOpen = event => event.type === 'stderr' && event.text.startsWith('\r') && !event.text.includes('\n');
+  events.forEach((event, i) => {
+    if (!isOpen(event)) return;
+    const next = events[i + 1];
+    assert.ok(next && next.type === 'stderr' && (next.text === '\n' || isOpen(next)), `chunk ${i} (${JSON.stringify(event.text)}) is followed by ${JSON.stringify(next)}`);
+  });
+}
+async function slowTtyFixture(t, prompt) {
+  const f = await fixture(t, { isTTY: true });
+  for (let i = 0; i < 4; i++) await writeFile(join(f.config.vault.path, 'wiki', `${i}.md`), `# Page ${i}\nContent ${i}`);
+  f.config.semantic.indexBatchSize = 1;
+  let clock = 1_700_000_000_000; const fetch = f.ctx.fetchImpl; delete f.ctx.progress;
+  f.ctx.now = () => clock; f.ctx.prompt = prompt;
+  f.ctx.fetchImpl = async (url, options) => { const result = await fetch(url, options); if (url.endsWith('/api/embed')) clock += 400000; return result; };
+  return f;
+}
+test('TTY progress line is terminated before the ETA notice and the continue prompt', async t => {
+  const events = [];
+  const f = await slowTtyFixture(t, async question => { events.push({ type: 'prompt', text: question }); return true; });
+  const result = await withStderr(events, () => run(f.ctx, []));
+  assert.equal(result.exitCode, 0);
+  assert.ok(events.some(event => event.type === 'stderr' && event.text.startsWith('\rIndex:')), 'progress was drawn with carriage returns');
+  const notice = events.findIndex(event => event.type === 'stderr' && /Estimated remaining time/u.test(event.text));
+  const prompt = events.findIndex(event => event.type === 'prompt' && /Continue indexing/u.test(event.text));
+  assert.ok(notice > 0 && prompt > notice);
+  assert.equal(events[notice - 1].text, '\n', 'newline closes the progress line before the ETA notice');
+  assert.equal(events[notice].text.includes('\r'), false);
+  assertProgressLineTerminated(events);
+});
+test('TTY progress line is terminated when indexing is declined or fails', async t => {
+  const declined = [];
+  const f = await slowTtyFixture(t, async question => { declined.push({ type: 'prompt', text: question }); return !/Continue indexing/u.test(question); });
+  const result = await withStderr(declined, () => run(f.ctx, []));
+  assert.equal(result.report.steps.index.status, 'action-needed');
+  assertProgressLineTerminated(declined);
+  const failed = [];
+  const g = await slowTtyFixture(t, async () => true); const fetch = g.ctx.fetchImpl; let embeds = 0;
+  g.ctx.fetchImpl = async (url, options) => { if (url.endsWith('/api/embed') && ++embeds === 3) throw new Error(); return fetch(url, options); };
+  const failure = await withStderr(failed, () => run(g.ctx, ['--yes']));
+  assert.equal(failure.report.steps.index.status, 'action-needed');
+  assert.ok(failed.some(event => event.text.startsWith('\rIndex:')));
+  assert.equal(failed.at(-1).text, '\n', 'the last stderr chunk ends the open progress line');
+  assertProgressLineTerminated(failed);
+});
+test('TTY progress line is terminated after a successful index and output stays unchanged without TTY', async t => {
+  const events = [];
+  const f = await slowTtyFixture(t, async () => true);
+  assert.equal((await withStderr(events, () => run(f.ctx, ['--yes']))).exitCode, 0);
+  assert.equal(events.at(-1).text, '\n'); assertProgressLineTerminated(events);
+  const plain = [];
+  const g = await fixture(t); delete g.ctx.progress;
+  assert.equal((await withStderr(plain, () => run(g.ctx, ['--yes']))).exitCode, 0);
+  assert.ok(plain.every(event => !event.text.includes('\r') && event.text !== '\n'), 'non-TTY output has no carriage returns or bare newlines');
+});
+test('another running indexing operation is reported as action-needed without leaking details', async t => {
+  for (const args of [['--yes'], ['--yes', '--mode', 'rrf']]) {
+    const f = await fixture(t); const dir = join(f.paths.stateDir, 'semantic'); await mkdir(dir, { recursive: true });
+    const lock = join(dir, 'index.lock'); const content = JSON.stringify({ pid: process.pid, startedAt: Date.now() }); await writeFile(lock, content);
+    const result = await run(f.ctx, args);
+    assert.equal(result.exitCode, 2); assert.equal(result.report.steps.index.status, 'action-needed');
+    assert.equal(result.report.steps.index.reason, 'Another indexing operation is running.');
+    assert.equal(result.report.next, `brainatlas semanticSetup --yes${args.includes('--mode') ? ' --mode rrf' : ''}`);
+    assert.doesNotMatch(result.output, new RegExp(`${process.pid}|index\\.lock|${f.root.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}`, 'u'), 'no pid or path in the output');
+    assert.equal(result.report.steps.probe.status, 'skipped'); assert.equal(result.report.steps.config.status, 'skipped');
+    assert.ok(f.calls.every(([path]) => path !== '/api/embed'), 'nothing was embedded');
+    assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before, 'config unchanged');
+    assert.equal(await readFile(lock, 'utf8'), content, 'foreign lock preserved');
+    const text = await commands.semanticSetup(args, f.ctx); assert.match(text.output, /^index: action-needed — Another indexing operation is running\.$/mu);
+  }
+});
