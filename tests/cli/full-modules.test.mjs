@@ -89,7 +89,12 @@ test('installed full release wires transports, strict OKF, review commands and s
   const doctor = JSON.parse(diagnosed.stdout);
   assert.equal(doctor.ok, true); assert.ok(doctor.moduleHealth.some(item => item.name === 'sync' && item.transport === 'git' && item.lastSync === null));
   assert.ok(doctor.moduleHealth.some(item => item.name === 'semantic' && item.freshness === null));
-  assert.ok(doctor.warnings.some(item => /semantic index/i.test(item)));
+  assert.ok(doctor.moduleHealth.some(item => item.name === 'semantic' && item.enabled === false));
+  assert.ok(!doctor.warnings.includes('Semantic index is not available.'));
+  assertSuccess(run(process.execPath, [cliA, 'config', 'set', 'semantic.enabled', 'true', '--json'], envA), 'enable semantic');
+  const enabledDoctor = JSON.parse(run(process.execPath, [cliA, 'doctor', '--json'], envA).stdout);
+  assert.ok(enabledDoctor.warnings.includes('Semantic index is not available.'));
+  assertSuccess(run(process.execPath, [cliA, 'config', 'set', 'semantic.enabled', 'false', '--json'], envA), 'disable semantic');
 
   await mkdir(join(hostAVault, 'wiki', 'entities'), { recursive: true });
   await mkdir(join(hostBVault, 'wiki', 'entities'), { recursive: true });

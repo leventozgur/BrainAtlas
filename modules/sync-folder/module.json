@@ -1,6 +1,6 @@
 {
   "name": "sync-folder",
-  "version": "0.1.0-rc.8",
+  "version": "0.1.0-rc.9",
   "description": "Experimental object transport over a locally synchronized folder.",
   "requires": ["sync-engine"],
   "provides": ["sync-transport:folder"],

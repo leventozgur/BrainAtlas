@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.0-rc.9 — 2026-11-09
+
+- New guided command `brainatlas semanticSetup` for the optional semantic retrieval. It checks that Ollama is installed and running, offers the ~240 MB embedding model download, builds the local index, verifies it with a probe query, and enables `semantic.enabled` only after everything succeeded. It never installs Ollama (it prints the official install command instead), never uses `sudo` or `curl | sh`, and only talks to the configured loopback address. `--dry-run` changes nothing; without a terminal and without `--yes` it behaves like `--dry-run`; `--mode semantic-primary|rrf` selects the retrieval mode. Exit code 0 when ready, 2 when an action is still needed.
+- `brainatlas doctor` no longer warns "Semantic index is not available." while semantic retrieval is off; the `semantic` health entry now includes `enabled`.
+- Install guide: GitHub Release assets cannot carry the `release/` subdirectory, so the guide now points to the `brainatlas-<version>-distribution.tar.gz` asset; troubleshooting covers missing Ollama, a stopped server, a missing model and a stale index.
+
 ## 0.1.0-rc.8 — 2026-11-09
 
 - MCP now reads `BRAINATLAS_PLATFORM` like the CLI, fixing Linux CI platform detection.

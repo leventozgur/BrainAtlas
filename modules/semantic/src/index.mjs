@@ -6,6 +6,7 @@ import { cosineSimilarity, reciprocalRankFusion, searchHybrid } from './hybrid.m
 import { semanticGate } from './eval.mjs';
 import { SEMANTIC_DEFAULTS } from '../../../packages/core/src/config/index.mjs';
 import { join, resolve } from 'node:path';
+import { semanticSetup } from './setup.mjs';
 
 let enabled = false;
 let gatePassed = false;
@@ -32,6 +33,7 @@ function commandOptions(ctx) {
     provider: createOllamaProvider({ ...settings, fetchImpl: ctx.fetchImpl ?? globalThis.fetch }), chunkMarkdown: markdownChunks };
 }
 export const commands = Object.freeze({
+  async semanticSetup(args, ctx) { return semanticSetup(args, ctx); },
   async semanticIndex(args, ctx) {
     const options = commandOptions(ctx);
     const index = await updateSemanticIndex(options);
