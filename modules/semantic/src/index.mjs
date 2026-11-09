@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { createOllamaProvider, validateConfiguredProvider } from './provider.mjs';
 import { markdownChunks } from './chunking.mjs';
-import { buildSemanticIndex, updateSemanticIndex, measureIndexFreshness, readSemanticIndex } from './index-store.mjs';
+import { buildSemanticIndex, updateSemanticIndex, measureIndexFreshness, readSemanticIndex, readPartialIndex } from './index-store.mjs';
 import { cosineSimilarity, reciprocalRankFusion, searchHybrid } from './hybrid.mjs';
 import { semanticGate } from './eval.mjs';
 import { SEMANTIC_DEFAULTS } from '../../../packages/core/src/config/index.mjs';
@@ -30,7 +30,7 @@ function commandOptions(ctx) {
   validateConfiguredProvider(settings);
   const vault = resolve(ctx.env.HOME ?? '.', ctx.config.vault.path);
   return { settings, corpusDir: join(vault, 'wiki'), stateDir: ctx.paths.stateDir,
-    provider: createOllamaProvider({ ...settings, fetchImpl: ctx.fetchImpl ?? globalThis.fetch }), chunkMarkdown: markdownChunks };
+    provider: createOllamaProvider({ ...settings, timeoutMs: settings.indexTimeoutMs, batchSize: settings.indexBatchSize, fetchImpl: ctx.fetchImpl ?? globalThis.fetch }), indexBatchSize: settings.indexBatchSize, chunkMarkdown: markdownChunks };
 }
 export const commands = Object.freeze({
   async semanticSetup(args, ctx) { return semanticSetup(args, ctx); },
@@ -45,7 +45,8 @@ export const commands = Object.freeze({
       const options = commandOptions(ctx);
       const index = await readSemanticIndex(options.stateDir);
       const freshness = await measureIndexFreshness({ corpusDir: options.corpusDir, index });
-      return { enabled: options.settings.enabled, model: options.settings.model, ...freshness, fingerprintMatches: Boolean(index && index.providerFingerprint === options.provider.fingerprint) };
+      const partial = await readPartialIndex(options.stateDir, options.provider);
+      return { enabled: options.settings.enabled, model: options.settings.model, ...freshness, fingerprintMatches: Boolean(index && index.providerFingerprint === options.provider.fingerprint), partialChunks: Object.keys(partial?.vectors ?? {}).length };
     })();
   },
 });

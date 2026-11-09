@@ -25,3 +25,10 @@ brainatlas status
 | Ollama server is stopped | Start it with `ollama serve`, then run `brainatlas semanticSetup`. |
 | Semantic model is missing | Run `brainatlas semanticSetup` and approve the download. |
 | Semantic index is stale | Run `brainatlas semanticIndex` and check `brainatlas semanticStatus`. |
+
+
+## Slow or interrupted semantic indexing
+
+- **Indexing takes a long time:** Run `brainatlas semanticSetup --dry-run` to see the pending chunk count. Run setup while the machine is idle; duration depends on the hardware. Increase `semantic.indexTimeoutMs` if individual requests time out.
+- **Indexing stopped partway through:** Run `brainatlas semanticSetup --yes` again to resume saved chunks. Check `partialChunks` with `brainatlas semanticStatus`.
+- **Another indexing operation is running:** Wait for it to finish before running `brainatlas semanticIndex` again. An abandoned lock is recovered automatically.

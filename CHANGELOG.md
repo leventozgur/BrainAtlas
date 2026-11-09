@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.0-rc.10 — 2026-11-09
+
+Reliability of semantic indexing on slow machines. Indexing is not faster: on a 2012 CPU it stays about 1.2 seconds per chunk (about 16 minutes for 819 chunks). What changes is that it completes with default settings, keeps its progress, and tells you how long it will take. Fast machines behave as before (the index written is byte-identical for the same provider).
+
+- Indexing has its own settings: `semantic.indexTimeoutMs` (per request, default 120000) and `semantic.indexBatchSize` (texts per request, 1–64, default 32). The query timeout `semantic.timeoutMs` (default 5000) is unchanged. Before this, a slow host failed `semanticSetup` at the first batch because the query timeout also applied to indexing.
+- Adaptive batches: a batch slower than 20 seconds halves the next batch, a batch faster than 5 seconds doubles it (up to `indexBatchSize`).
+- Resumable indexing: progress is saved to `index.partial.json` in the state directory at least every 30 seconds and on error or cancel; running the command again embeds only the missing chunks, and the final index is identical to a single clean run. `brainatlas semanticStatus` reports `partialChunks`. A process killed with SIGKILL can lose up to 30 seconds of progress. Queries never read the partial file.
+- Progress and estimate: `semanticSetup` shows one updating progress line with an estimated remaining time instead of one line per file. If the estimate exceeds 5 minutes it says so and, in an interactive terminal without `--yes`, asks once before continuing (declining keeps the saved progress). `--dry-run` reports how many chunks are still to embed.
+- A lock file prevents two indexing runs at the same time (`E_SEMANTIC_BUSY`); `semanticSetup` reports "Another indexing operation is running."
+- The MCP server's background index refresh now uses the indexing settings (it previously used the query timeout) and is cancelled when the server closes (it waits at most 2 seconds).
+- Not re-measured on the 8 GB reference host after these changes; verified with a real Ollama behind a delayed proxy (default settings, kill and resume).
+
 ## 0.1.0-rc.9 — 2026-11-09
 
 - New guided command `brainatlas semanticSetup` for the optional semantic retrieval. It checks that Ollama is installed and running, offers the ~240 MB embedding model download, builds the local index, verifies it with a probe query, and enables `semantic.enabled` only after everything succeeded. It never installs Ollama (it prints the official install command instead), never uses `sudo` or `curl | sh`, and only talks to the configured loopback address. `--dry-run` changes nothing; without a terminal and without `--yes` it behaves like `--dry-run`; `--mode semantic-primary|rrf` selects the retrieval mode. Exit code 0 when ready, 2 when an action is still needed.
