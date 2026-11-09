@@ -1,6 +1,6 @@
 {
   "name": "semantic",
-  "version": "0.1.0-rc.8",
+  "version": "0.1.0-rc.9",
   "description": "Optional semantic retrieval for Full profile",
   "requires": [],
   "provides": ["retrieval-semantic"],

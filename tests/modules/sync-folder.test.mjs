@@ -133,7 +133,7 @@ test('activation wires selected folder transport and the manifest declares its d
   assert.equal(manifest.experimental, true);
   assert.deepEqual(resolveModuleOrder([
     manifest,
-    { name: 'sync-engine', version: '0.1.0-rc.8', description: 'engine', requires: [], provides: ['sync'], profiles: ['full'], entry: 'src/index.mjs' },
+    { name: 'sync-engine', version: '0.1.0-rc.9', description: 'engine', requires: [], provides: ['sync'], profiles: ['full'], entry: 'src/index.mjs' },
   ]).map((item) => item.name), ['sync-engine', 'sync-folder']);
   const ctx = { config: { vault: { path: fx.vault }, sync: { transport: 'folder', options: { path: fx.share } } }, paths: { stateDir: join(fx.root, 'state') }, env: {} };
   await activate(ctx);
