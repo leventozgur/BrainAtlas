@@ -13,6 +13,8 @@ import { createSearcher } from '../../../packages/core/src/retrieval/index.mjs';
 import { drive, exists, sectionPage, workspace } from './helpers.mjs';
 
 const EPOCH = 1_700_000_000_000;
+// Exceeds drive's maximum virtual time, including the 5000 ms stress step.
+const CLIENT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const enable = t => t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: EPOCH });
 
 function slowFetch(ms, log = []) {
@@ -100,9 +102,9 @@ test('wiki_query against a slow provider still times out at timeoutMs 5000 and f
   const server = createServer({ config, paths, env: { HOME: w.root }, fetchImpl: slowFetch(8000, calls) });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'q-slow', version: '1' });
-  await drive(t, Promise.all([server.connect(serverTransport), client.connect(clientTransport)]));
+  await drive(t, Promise.all([server.connect(serverTransport), client.connect(clientTransport, { timeout: CLIENT_TIMEOUT_MS })]));
   t.after(async () => { await client.close(); await server.close(); });
-  const response = await drive(t, client.callTool({ name: 'wiki_query', arguments: { query: 'violetneedle' } }), 250);
+  const response = await drive(t, client.callTool({ name: 'wiki_query', arguments: { query: 'violetneedle' } }, undefined, { timeout: CLIENT_TIMEOUT_MS }), 250);
   const payload = JSON.parse(response.content[0].text);
   assert.deepEqual(payload.results, lexical.results);
   assert.equal(payload.semantic.used, false);
