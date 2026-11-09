@@ -80,6 +80,7 @@ export function createServer(options) {
   let background = null;
   let backgroundDirty = false;
   let backgroundFailed = false;
+  const backgroundController = new AbortController();
   const settings = { ...core.SEMANTIC_DEFAULTS, ...config.semantic };
   const loadSemantic = () => semanticModulePromise ??= (async () => {
     let release, releases;
@@ -102,25 +103,36 @@ export function createServer(options) {
     if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error();
     return import(pathToFileURL(entry).href);
   })();
-  const providerFor = (module) => {
+  const providerFor = (module, indexing = false) => {
     module.validateConfiguredProvider(settings);
-    return module.createOllamaProvider({ ...settings, fetchImpl: options.fetchImpl ?? globalThis.fetch });
+    return module.createOllamaProvider({ ...settings, ...(indexing ? { timeoutMs: settings.indexTimeoutMs, batchSize: settings.indexBatchSize } : {}), fetchImpl: options.fetchImpl ?? globalThis.fetch });
   };
   const scheduleUpdate = (markDirty = true) => {
-    if (!semanticEnabled) return;
+    if (!semanticEnabled || backgroundController.signal.aborted) return;
     if (background) { if (markDirty) backgroundDirty = true; return; }
     background = (async () => {
       do {
         backgroundDirty = false;
         try {
           const module = await loadSemantic();
-          await module.updateSemanticIndex({ corpusDir: wikiDir, stateDir, provider: providerFor(module), chunkMarkdown: module.markdownChunks });
+          await module.updateSemanticIndex({ corpusDir: wikiDir, stateDir, provider: providerFor(module, true), indexBatchSize: settings.indexBatchSize, signal: backgroundController.signal, chunkMarkdown: module.markdownChunks });
           backgroundFailed = false;
         } catch { backgroundFailed = true; }
-      } while (backgroundDirty);
+      } while (backgroundDirty && !backgroundController.signal.aborted);
     })().finally(() => { background = null; });
   };
   const server = new McpServer({ name: 'brainatlas-mcp', version: '0.1.0' });
+  server.server.onclose = () => backgroundController.abort();
+  const close = server.close.bind(server);
+  server.close = async () => {
+    backgroundController.abort();
+    await close();
+    if (background) {
+      let timer;
+      try { await Promise.race([background, new Promise(resolve => { timer = setTimeout(resolve, 2000); })]); }
+      finally { clearTimeout(timer); }
+    }
+  };
 
   const safeFile = async (rel, { allowIndex = true } = {}) => {
     if (typeof rel !== 'string' || !rel || rel.includes('\\') || rel.includes('\0')) throw mcpError('E_PATH_ESCAPE', 'Path is invalid.');

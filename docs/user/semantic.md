@@ -15,3 +15,10 @@ The guided setup sends vault text only to a loopback provider. The default provi
 To disable retrieval, run `brainatlas config set semantic.enabled false`. If Ollama was started as a Homebrew service and is no longer needed, run `brew services stop ollama`.
 
 Measured on the evaluation corpus: approximately 239 MB model storage, 385 MB RAM, 5 seconds to index 60 pages, and 16 ms per query. Results vary by machine. Related but incorrect answers can score above the threshold; the threshold alone does not distinguish difficult negatives. The default `minScore` of 0.45 is calibrated for EmbeddingGemma and must be recalibrated when changing models.
+
+
+## Slow machines
+
+On a 2012 CPU with 8 GB RAM and a hard disk, an initial index of 819 chunks took approximately 16 minutes; a query took about 0.5 seconds. Times depend on the hardware and corpus. Run the first setup while the machine is idle. If interrupted, run `brainatlas semanticSetup --yes` again to resume saved progress. `brainatlas semanticStatus` reports the number of saved chunks as `partialChunks`.
+
+`semantic.indexTimeoutMs` defaults to 120000 milliseconds per indexing request. Increase it if an indexing request times out on a slow machine. `semantic.indexBatchSize` defaults to 32, with a range of 1–64; increase it only when the provider can handle larger requests efficiently. Indexing adjusts batch size as requests complete. Query timeout remains controlled by `semantic.timeoutMs`.
