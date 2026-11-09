@@ -12,6 +12,14 @@ const files = ['README.md', 'README.tr.md', 'SECURITY.md', 'CONTRIBUTING.md', 'C
 const docs = await Promise.all(files.map(async file => ({ file, text: await readFile(resolve(root, file), 'utf8') })));
 const cli = await readFile(resolve(root, 'packages/cli/src/index.mjs'), 'utf8');
 const commands = new Set([...cli.matchAll(/command\s*===\s*['"]([\w-]+)['"]/g)].map(m => m[1]));
+const moduleCommands = new Set();
+// PM update (Q-SEMWIRE): optional modules expose CLI commands dynamically (dispatchModuleCommand); count their `commands` export keys as dispatchable.
+for (const moduleName of await readdir(resolve(root, 'modules'))) {
+  let source = '';
+  try { source = await readFile(resolve(root, 'modules', moduleName, 'src/index.mjs'), 'utf8'); } catch { continue; }
+  const block = source.match(/export const commands\s*=\s*(?:Object\.freeze\()?\{([\s\S]*?)\n\}\)?;/);
+  if (block) for (const m of block[1].matchAll(/^\s{2}(?:async\s+)?([A-Za-z][\w-]*)\s*[(:]/gm)) moduleCommands.add(m[1]);
+}
 function referencedCommands(text) { return [...text.matchAll(/\bbrainatlas\s+([a-z][\w-]*)/g)].map(m => m[1]); }
 function markdownLinks(text) { return [...text.matchAll(/(?<!!)\[[^\]]+\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g)].map(m => m[1]); }
 async function badLinks(base, text) {
@@ -47,7 +55,7 @@ test('published built-in command names agree with CLI --help', () => {
   for (const name of ['doctor', 'init', 'config']) assert.match(result.stdout + docs.map(d => d.text).join('\n'), new RegExp(`brainatlas ${name}\\b`));
 });
 test('all documented brainatlas commands exist in CLI dispatch', () => {
-  const unknown = docs.flatMap(d => referencedCommands(d.text).filter(c => !commands.has(c)).map(c => `${d.file}: ${c}`));
+  const unknown = docs.flatMap(d => referencedCommands(d.text).filter(c => !commands.has(c) && !moduleCommands.has(c)).map(c => `${d.file}: ${c}`));
   assert.deepEqual(unknown, []);
 });
 test('relative link checker detects missing, malformed and dangling symlink targets', async () => {

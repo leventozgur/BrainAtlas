@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, lstat, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { PREPROCESS_VERSION } from './provider.mjs';
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -28,25 +29,39 @@ async function rejectSymlink(target) {
   }
 }
 
-/** Build and atomically persist a local embedding index and source hash manifest. */
-export async function buildSemanticIndex({ corpusDir, stateDir, provider, chunkMarkdown }) {
-  if (!provider || typeof provider.embed !== 'function' || !Number.isInteger(provider.dims)) throw new TypeError('Invalid embedding provider.');
+const updates = new Map();
+/** Update once per state directory; concurrent callers share the same work. */
+export function updateSemanticIndex(options) {
+  const key = path.resolve(options.stateDir);
+  if (updates.has(key)) return updates.get(key);
+  const work = updateIndex(options).finally(() => updates.delete(key));
+  updates.set(key, work);
+  return work;
+}
+export async function buildSemanticIndex(options) { return updateIndex({ ...options, force: true }); }
+
+async function updateIndex({ corpusDir, stateDir, provider, chunkMarkdown, force = false }) {
+  if (!provider || (typeof provider.embed !== 'function' && typeof provider.embedDocuments !== 'function') || !Number.isInteger(provider.dims)) throw new TypeError('Invalid embedding provider.');
   const root = await realpath(corpusDir);
   const files = (await markdownFiles(root)).sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  const previous = force ? null : await readSemanticIndex(stateDir);
+  const reusable = previous && previous.providerFingerprint === provider.fingerprint && previous.dims === provider.dims ? previous : null;
   const chunks = [];
+  const retained = [];
   const hashes = {};
   for (const file of files) {
     const source = await readFile(file.fullPath, 'utf8');
     hashes[file.relativePath] = sha256(source);
-    chunks.push(...chunkMarkdown(source, file.relativePath));
+    if (reusable && reusable.fileHashes[file.relativePath] === hashes[file.relativePath]) retained.push(...reusable.entries.filter(entry => entry.path === file.relativePath));
+    else chunks.push(...chunkMarkdown(source, file.relativePath));
   }
-  const vectors = chunks.length ? await provider.embed(chunks.map((chunk) => chunk.text)) : [];
+  const vectors = chunks.length ? await (provider.embedDocuments ?? provider.embed).call(provider, chunks.map((chunk) => chunk.text)) : [];
   if (vectors.length !== chunks.length || vectors.some((vector) => vector.length !== provider.dims)) {
     throw new Error('Embedding provider returned invalid vectors.');
   }
   const createdAt = new Date().toISOString();
-  const index = { version: 1, providerId: provider.id, dims: provider.dims, createdAt, fileHashes: hashes,
-    entries: chunks.map((chunk, i) => ({ ...chunk, vector: Array.from(vectors[i]) })) };
+  const index = { version: 1, providerId: provider.id, providerFingerprint: provider.fingerprint ?? null, preprocessVersion: provider.preprocessVersion ?? PREPROCESS_VERSION, dims: provider.dims, createdAt, fileHashes: hashes,
+    entries: [...retained, ...chunks.map((chunk, i) => ({ ...chunk, vector: Array.from(vectors[i]) }))] };
   // stateDir itself may be a user-directed symlink; descendants are owned paths.
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   const semanticDir = path.join(stateDir, 'semantic');
@@ -77,7 +92,7 @@ export async function readSemanticIndex(stateDir) {
     const indexInfo = await rejectSymlink(indexPath);
     if (indexInfo && !indexInfo.isFile()) return null;
     const parsed = JSON.parse(await readFile(indexPath, 'utf8'));
-    if (parsed?.version !== 1 || !Array.isArray(parsed.entries) || !parsed.fileHashes || typeof parsed.fileHashes !== 'object') return null;
+    if (parsed?.version !== 1 || !Number.isInteger(parsed.dims) || parsed.dims < 1 || !Array.isArray(parsed.entries) || !parsed.fileHashes || typeof parsed.fileHashes !== 'object' || Array.isArray(parsed.fileHashes) || parsed.entries.some(e => !e || typeof e.path !== 'string' || typeof e.text !== 'string' || !Array.isArray(e.vector) || e.vector.length !== parsed.dims || !e.vector.every(Number.isFinite))) return null;
     return parsed;
   } catch (error) {
     if (error?.code === 'ENOENT') return null;

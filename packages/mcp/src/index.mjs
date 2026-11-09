@@ -2,7 +2,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { isAbsolute, join, relative, resolve, sep, posix } from 'node:path';
+import { chmodSync, mkdirSync } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import * as core from '@brainatlas/core';
 
@@ -57,8 +61,65 @@ export function createServer(options) {
   if (typeof requestedVault !== 'string' || !requestedVault) throw mcpError('E_VAULT_PATH', 'A Wiki vault path is required.');
   const vaultDir = resolve(isAbsolute(requestedVault) ? requestedVault : resolve(home ?? process.cwd(), requestedVault));
   const wikiDir = join(vaultDir, 'wiki');
-  const stateDir = paths.stateDir || join(vaultDir, '.brainatlas-state');
+  let stateDir = paths.stateDir;
+  if (typeof stateDir !== 'string' || !stateDir) {
+    if (home) {
+      const platform = env.BRAINATLAS_PLATFORM || process.platform;
+      stateDir = core.resolvePaths({ env, platform }).stateDir;
+    }
+    else {
+      const vaultKey = createHash('sha256').update(vaultDir).digest('hex').slice(0, 16);
+      stateDir = join(tmpdir(), 'brainatlas-state', vaultKey);
+      mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+      chmodSync(stateDir, 0o700);
+    }
+  }
   let searcher = core.createSearcher({ vaultDir: wikiDir, stateDir });
+  const semanticEnabled = config.semantic?.enabled === true && config.profile !== 'lite' && (config.modules?.includes('*') || config.modules?.includes('semantic'));
+  let semanticModulePromise;
+  let background = null;
+  let backgroundDirty = false;
+  let backgroundFailed = false;
+  const settings = { ...core.SEMANTIC_DEFAULTS, ...config.semantic };
+  const loadSemantic = () => semanticModulePromise ??= (async () => {
+    let release, releases;
+    try {
+      release = await realpath(paths.currentDir);
+      releases = await realpath(paths.releasesDir);
+      await stat(join(release, 'modules', 'semantic', 'module.json'));
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') throw Object.assign(new Error(), { fallbackReason: 'module-missing' });
+      throw error;
+    }
+    const releaseRel = relative(releases, release);
+    if (!releaseRel || releaseRel.startsWith(`..${sep}`) || isAbsolute(releaseRel) || releaseRel.includes(sep)) throw new Error();
+    const manifest = (await core.discoverModules(release)).find(item => item.name === 'semantic');
+    if (!manifest) throw Object.assign(new Error(), { fallbackReason: 'module-missing' });
+    const dir = await realpath(join(release, 'modules', 'semantic'));
+    if (relative(release, dir) !== join('modules', 'semantic')) throw new Error();
+    const entry = await realpath(resolve(dir, manifest.entry));
+    const rel = relative(dir, entry);
+    if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error();
+    return import(pathToFileURL(entry).href);
+  })();
+  const providerFor = (module) => {
+    module.validateConfiguredProvider(settings);
+    return module.createOllamaProvider({ ...settings, fetchImpl: options.fetchImpl ?? globalThis.fetch });
+  };
+  const scheduleUpdate = (markDirty = true) => {
+    if (!semanticEnabled) return;
+    if (background) { if (markDirty) backgroundDirty = true; return; }
+    background = (async () => {
+      do {
+        backgroundDirty = false;
+        try {
+          const module = await loadSemantic();
+          await module.updateSemanticIndex({ corpusDir: wikiDir, stateDir, provider: providerFor(module), chunkMarkdown: module.markdownChunks });
+          backgroundFailed = false;
+        } catch { backgroundFailed = true; }
+      } while (backgroundDirty);
+    })().finally(() => { background = null; });
+  };
   const server = new McpServer({ name: 'brainatlas-mcp', version: '0.1.0' });
 
   const safeFile = async (rel, { allowIndex = true } = {}) => {
@@ -85,6 +146,7 @@ export function createServer(options) {
     checkWrite('wiki/log.md', record);
     await core.appendLog(vaultDir, { action, path: rel });
     await searcher.refresh();
+    scheduleUpdate();
   };
   const tool = (name, schema, handler) => server.registerTool(name, { description: descriptions[name], inputSchema: schema.shape }, async (args) => {
     try { return textResult(await handler(args)); }
@@ -103,9 +165,35 @@ export function createServer(options) {
     return handler(args);
   });
 
-  readTool('wiki_query', z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional() }), ({ query, limit }) => {
-    const answer = searcher.search(query, { limit: limit ?? 5, budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT), abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
-    return { results: answer.results, abstained: answer.abstained };
+  readTool('wiki_query', z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional() }), async ({ query, limit }) => {
+    const count = limit ?? 5;
+    const answer = searcher.search(query, { limit: count, budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT), abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
+    const lexical = { results: answer.results, abstained: answer.abstained };
+    if (!semanticEnabled) return lexical;
+    const fallback = reason => ({ ...lexical, semantic: { used: false, fallbackReason: reason }, mode: 'lexical' });
+    try {
+      let module;
+      try { module = await loadSemantic(); }
+      catch (error) { return fallback(error?.fallbackReason === 'module-missing' ? 'module-missing' : 'module-load-error'); }
+      const provider = providerFor(module);
+      const index = await module.readSemanticIndex(stateDir);
+      const emptyIndexWithPages = index && index.entries.length === 0 && Object.keys(index.fileHashes).length === 0 &&
+        (await core.listPages(vaultDir)).some(path => !['wiki/index.md', 'wiki/log.md'].includes(path));
+      if (!index || emptyIndexWithPages) { scheduleUpdate(false); return fallback(emptyIndexWithPages || !backgroundFailed ? 'index-missing' : 'provider-error'); }
+      if (index.providerFingerprint !== provider.fingerprint || index.dims !== provider.dims) { scheduleUpdate(false); return fallback('fingerprint-mismatch'); }
+      const results = await module.searchHybrid({ query, pages: core.loadPages(wikiDir), entries: index.entries, provider, limit: count, indexMeta: index, mode: settings.mode, minSemanticScore: settings.minScore, abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
+      if (results.fallbackReason) return fallback(results.fallbackReason);
+      if (results.abstained) return { ...lexical, semantic: { used: true }, mode: settings.mode };
+      let budget = Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT);
+      const normalized = results.map(item => {
+        const original = answer.results.find(row => row.path === item.path);
+        const heading = item.headingPath?.split(' > ').at(-1) || null;
+        const snippet = String(item.snippet ?? '').slice(0, Math.max(0, budget)); budget -= snippet.length;
+        return { ...original, path: item.path, title: item.title, score: item.semanticScore ?? item.score ?? item.rrfScore, snippet, stale: item.stale, status: item.status,
+          ...(heading ? { heading, anchor: heading.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-'), headingPath: item.headingPath } : {}) };
+      });
+      return { results: normalized, abstained: false, semantic: { used: true }, mode: settings.mode };
+    } catch (error) { return fallback(error?.fallbackReason === 'remote-not-allowed' ? 'remote-not-allowed' : 'provider-error'); }
   });
   readTool('wiki_read_page', z.object({ path: z.string() }), async ({ path }) => {
     const { target } = await safeFile(path);
@@ -224,7 +312,7 @@ export function createServer(options) {
 /** @returns {Promise<void>} */
 export async function main() {
   const env = process.env;
-  const paths = core.resolvePaths({ env, platform: process.platform });
+  const paths = core.resolvePaths({ env, platform: env.BRAINATLAS_PLATFORM || process.platform });
   if (env.BRAINATLAS_CONFIG) paths.configFile = resolve(env.BRAINATLAS_CONFIG);
   const config = await core.loadConfig({ paths, env });
   const server = createServer({ config, paths, env });

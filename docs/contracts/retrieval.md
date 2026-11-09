@@ -24,6 +24,8 @@ export function stem(token);
 
 `Page` is `{path:string,title:string,aliases:string[],keywords:string[],headings:string[],body:string,frontmatter:object}`. `SearchResult` is `{results:Array<{path:string,title:string,score:number,snippet:string,stale:boolean,status:string|null}>,abstained:boolean,reason:string|null,truncated:boolean}`.
 
+Each result may additionally contain `heading`, `anchor`, and `headingPath`, each a string or null. These optional fields are backwards-compatible additions to version 1. When a section matches, `snippet` starts with its original Markdown heading line followed by its text; `heading` is its title, `headingPath` joins its ancestor headings and title with ` > `, and `anchor` is a GitHub-style kebab-case identifier. Anchors fold case and diacritics (including Turkish dotted and dotless I), retain letters, digits, underscores and hyphens, and use `-1`, `-2`, etc. to resolve collisions within the page. Headings at levels 1–3 delimit sections; headings inside backtick code fences are ignored. The section with the largest sum of IDF weights for distinct matching query stems wins, with the first section breaking ties. If no section matches, the snippet is the trimmed start of the body and the three fields are null; a headingless body therefore contains only its text. The existing character budget and truncation rules apply to the whole selected snippet, including its heading line.
+
 ## Input
 
 Search options default to `limit=5` and support character budget, as-of date, and abstention threshold. `normalizeText` folds Turkish and English case/diacritics; `stem` normalizes an individual token.

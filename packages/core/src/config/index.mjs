@@ -25,6 +25,7 @@ export const CONFIG_SCHEMA = {
     }, additionalProperties: false },
     okf: { type: 'object', required: ['level'], properties: { level: { type: 'string', enum: ['warn','strict'] } }, additionalProperties: false },
     sync: { type: 'object', required: ['transport','options'], properties: { transport: { type: ['string','null'] }, options: { type: 'object' } }, additionalProperties: false },
+    semantic: { type: 'object', properties: { enabled: { type: 'boolean' }, baseUrl: { type: 'string', minLength: 1 }, model: { type: 'string', minLength: 1 }, dims: { type: 'integer', minimum: 1 }, queryPrefix: { type: 'string' }, documentPrefix: { type: 'string' }, minScore: { type: 'number', minimum: -1, maximum: 1 }, mode: { type: 'string', enum: ['semantic-primary','rrf'] }, timeoutMs: { type: 'integer', minimum: 1 }, allowRemote: { type: 'boolean' } }, additionalProperties: false },
     telemetry: { const: false }, readOnly: { type: 'boolean' }, node: { type: 'object', required: ['path'], properties: { path: { type: 'string' } }, additionalProperties: false }
   }
 };
@@ -34,6 +35,8 @@ export const PROFILES = Object.freeze({
   full: Object.freeze({ modules: Object.freeze(['*']), lockedKeys: Object.freeze(['safety.secretFilter']) }),
   custom: Object.freeze({ modules: Object.freeze([]), lockedKeys: Object.freeze([]) })
 });
+
+export const SEMANTIC_DEFAULTS = Object.freeze({ enabled: false, baseUrl: 'http://127.0.0.1:11434', model: 'embeddinggemma:300m-qat-q4_0', dims: 768, queryPrefix: 'task: search result | query: ', documentPrefix: 'title: none | text: ', minScore: 0.45, mode: 'semantic-primary', timeoutMs: 5000, allowRemote: false });
 
 const clone = (value) => structuredClone(value);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -73,7 +76,7 @@ function validateSchema(value, schema, path, errors) {
 /** @param {'lite'|'full'|'custom'} profile @returns {Config} */
 export function defaultConfig(profile) {
   if (!has(PROFILES, profile)) throw new BrainAtlasError('E_PROFILE', 'Unknown configuration profile.');
-  return { schemaVersion: 1, profile, vault: { path: '.' }, modules: [...PROFILES[profile].modules], agents: [], scope: 'global', retrieval: { budgetChars: 4000, abstainThreshold: 0.35 }, hooks: { mode: 'normal', deadlineMs: 1000 }, safety: { secretFilter: true, extraDenyGlobs: [], allow: [] }, okf: { level: 'warn' }, sync: { transport: null, options: {} }, telemetry: false, readOnly: false, node: { path: 'node' } };
+  return { schemaVersion: 1, profile, vault: { path: '.' }, modules: [...PROFILES[profile].modules], agents: [], scope: 'global', retrieval: { budgetChars: 4000, abstainThreshold: 0.35 }, hooks: { mode: 'normal', deadlineMs: 1000 }, safety: { secretFilter: true, extraDenyGlobs: [], allow: [] }, okf: { level: 'warn' }, sync: { transport: null, options: {} }, semantic: { ...SEMANTIC_DEFAULTS }, telemetry: false, readOnly: false, node: { path: 'node' } };
 }
 
 /** @param {unknown} obj @returns {{ok:boolean, errors:Array<{path:string,code:string,message:string}>}} */
@@ -81,6 +84,10 @@ export function validateConfig(obj) {
   const errors = [];
   validateSchema(obj, CONFIG_SCHEMA, '', errors);
   if (obj && typeof obj === 'object' && !Array.isArray(obj) && obj.safety && typeof obj.safety === 'object' && obj.safety.secretFilter === false) errors.push(error('safety.secretFilter', 'E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.'));
+  if (obj?.semantic?.baseUrl !== undefined) {
+    try { const url = new URL(obj.semantic.baseUrl); if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || (!obj.semantic.allowRemote && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))) throw new Error(); }
+    catch { errors.push(error('semantic.baseUrl', 'E_SEMANTIC_PROVIDER', 'Semantic provider configuration is invalid.')); }
+  }
   const allow = obj?.safety?.allow;
   if (Array.isArray(allow)) {
     const seen = new Set();
@@ -121,7 +128,7 @@ export async function loadConfig(options) {
   }
   const result = validateConfig(value);
   if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
-  return value;
+  return { ...value, semantic: { ...SEMANTIC_DEFAULTS, ...value.semantic } };
 }
 
 /** @param {Config} cfg @param {{paths:object}} options @returns {Promise<void>} */
@@ -146,7 +153,7 @@ export function setConfigValue(cfg, dottedKey, value) {
   if (dottedKey === 'safety.secretFilter' && value === false) throw new BrainAtlasError('E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.');
   const keys = dottedKey.split('.');
   if (keys.some((key) => !key) || keys.length > 2) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
-  const out = clone(cfg); let target = out;
+  const out = clone(cfg); if (keys[0] === 'semantic' && keys.length === 2) out.semantic = { ...SEMANTIC_DEFAULTS, ...out.semantic }; let target = out;
   for (const key of keys.slice(0, -1)) { if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`); target = target[key]; }
   if (!has(target, keys.at(-1))) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
   target[keys.at(-1)] = clone(value);

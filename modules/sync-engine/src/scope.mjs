@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT
 import { lstat, readdir, readFile } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { join, relative } from 'node:path';
 import { scanPath, scanText, isSafetyFindingAllowed } from '../../../packages/core/src/safety/index.mjs';
 import { SyncTransportError } from './transport.mjs';
 
 const DEFAULT_INCLUDE = Object.freeze(['**/*.md']);
 const normalize = (path) => path.replace(/\\/g, '/').replace(/^\.\//, '');
 const conflictArtifact = (path) => /\.conflict-[a-z0-9_-]+-\d{8}T\d{6}Z(?:-\d+)?\.md$/i.test(path);
+const cachePath = (path) => {
+  const parts = normalize(path).split('/');
+  return parts.includes('.brainatlas-state') || parts.includes('semantic') || parts.at(-1) === 'retrieval-index.json';
+};
 
 function segmentMatch(pattern, value) {
   let p = 0, v = 0, star = -1, retry = 0;
@@ -61,7 +65,7 @@ function safeRelative(path) {
     && path.split('/').every((part) => part && part !== '.' && part !== '..');
 }
 
-async function walk(root, ignoredDir, output, allowedPaths, current = root) {
+async function walk(root, ignoredDir, output, allowedPaths, excluded, current = root) {
   let entries;
   try { entries = await readdir(current, { withFileTypes: true }); }
   catch (error) { if (error?.code === 'ENOENT') return; throw error; }
@@ -69,13 +73,15 @@ async function walk(root, ignoredDir, output, allowedPaths, current = root) {
     const absolute = join(current, entry.name);
     if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) {
-      const rel = relative(root, absolute).split(sep).join('/');
+      const rel = normalize(relative(root, absolute));
       if (ignoredDir && (rel === ignoredDir || rel.startsWith(`${ignoredDir}/`))) continue;
       if (scanPath(`${rel}/sentinel.md`).length && !allowedPaths.some((path) => path.startsWith(`${rel}/`))) continue;
-      await walk(root, ignoredDir, output, allowedPaths, absolute);
+      await walk(root, ignoredDir, output, allowedPaths, excluded, absolute);
     } else if (entry.isFile()) {
-      const path = relative(root, absolute).split(sep).join('/');
-      if (safeRelative(path) && !conflictArtifact(path)) output.push({ path, absolute });
+      const path = normalize(relative(root, absolute));
+      if (!safeRelative(path)) continue;
+      if (cachePath(path)) { excluded.add(path); continue; }
+      if (!conflictArtifact(path)) output.push({ path, absolute });
     }
   }
 }
@@ -87,16 +93,16 @@ export async function inventoryVault({ vaultPath, stateDir, config = {} }) {
   if (!rootInfo?.isDirectory() || rootInfo.isSymbolicLink()) throw new SyncTransportError('E_NOT_FOUND');
   let ignoredDir = null;
   if (stateDir) {
-    const relativeState = relative(vaultPath, stateDir).split(sep).join('/');
+    const relativeState = normalize(relative(vaultPath, stateDir));
     if (relativeState && !relativeState.startsWith('../') && relativeState !== '..') ignoredDir = relativeState;
   }
   const candidates = [];
+  const excluded = new Set();
   const allowed = Array.isArray(config?.safety?.allow) ? config.safety.allow : [];
   const allowedPaths = allowed.map((entry) => entry?.path).filter((path) => typeof path === 'string');
-  await walk(vaultPath, ignoredDir, candidates, allowedPaths);
+  await walk(vaultPath, ignoredDir, candidates, allowedPaths, excluded);
   const included = new Map();
   const refused = [];
-  const excluded = new Set();
   const seen = new Map();
   const extraDenyGlobs = Array.isArray(config?.safety?.extraDenyGlobs) ? config.safety.extraDenyGlobs : [];
   for (const { path, absolute } of candidates.sort((a, b) => a.path.localeCompare(b.path))) {

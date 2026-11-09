@@ -245,6 +245,28 @@ test('sync inventory suppresses only exact fingerprinted findings and keeps cont
   assert.ok(revokedInventory.refused.some(row => row.path === path && row.ruleId === 'secret-assignment'));
 });
 
+test('sync inventory always excludes legacy and retrieval cache paths, even with a catch-all include', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'sync-cache-scope-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const vaultPath = join(root, 'vault');
+  await mkdir(vaultPath, { recursive: true });
+  for (const [path, content] of [
+    ['.brainatlas-state/retrieval-index.json', '{"cache":true}'],
+    ['.brainatlas-state/nested/legacy.md', '# Legacy cache'],
+    ['retrieval-index.json', '{"cache":true}'],
+    ['semantic/index.json', '{"cache":true}'],
+    ['wiki/semantic/page.md', '# Cached semantic artifact'],
+    ['wiki/entities/kept.md', '# Kept evidence']
+  ]) await put({ vaultPath }, path, content);
+
+  const inventory = await inventoryVault({ vaultPath, config: { sync: { options: { include: ['**/*'] } } } });
+  assert.deepEqual([...inventory.files.keys()], ['wiki/entities/kept.md']);
+  for (const path of [
+    '.brainatlas-state/retrieval-index.json', '.brainatlas-state/nested/legacy.md',
+    'retrieval-index.json', 'semantic/index.json', 'wiki/semantic/page.md'
+  ]) assert.ok(inventory.excluded.has(path), `${path} should be excluded`);
+});
+
 test('index entries and append-only log entries merge independently from a shared base', async (t) => {
   const fx = await fixture(t);
   const a = await fx.host('host-a'), b = await fx.host('host-b');
