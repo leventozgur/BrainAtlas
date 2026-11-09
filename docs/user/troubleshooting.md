@@ -20,3 +20,8 @@ brainatlas status
 | Update health check fails | Installer/update should retain or restore the prior release; run `brainatlas doctor`, then `brainatlas rollback` if needed. |
 | Sync reports conflicts or pending deletes | Inspect conflict copies and pending-delete status; explicitly review and approve deletions before they propagate. |
 | A write is refused by the safety filter | Review the page for secret-like content and sensitive paths. The filter cannot be disabled. Error output does not reveal matched values. |
+
+| Ollama is missing | Install it using the official download, then run `brainatlas semanticSetup`. |
+| Ollama server is stopped | Start it with `ollama serve`, then run `brainatlas semanticSetup`. |
+| Semantic model is missing | Run `brainatlas semanticSetup` and approve the download. |
+| Semantic index is stale | Run `brainatlas semanticIndex` and check `brainatlas semanticStatus`. |

@@ -40,7 +40,7 @@ export function updateSemanticIndex(options) {
 }
 export async function buildSemanticIndex(options) { return updateIndex({ ...options, force: true }); }
 
-async function updateIndex({ corpusDir, stateDir, provider, chunkMarkdown, force = false }) {
+async function updateIndex({ corpusDir, stateDir, provider, chunkMarkdown, force = false, skipUnchangedWrite = false, onProgress }) {
   if (!provider || (typeof provider.embed !== 'function' && typeof provider.embedDocuments !== 'function') || !Number.isInteger(provider.dims)) throw new TypeError('Invalid embedding provider.');
   const root = await realpath(corpusDir);
   const files = (await markdownFiles(root)).sort((a, b) => a.relativePath.localeCompare(b.relativePath));
@@ -49,12 +49,14 @@ async function updateIndex({ corpusDir, stateDir, provider, chunkMarkdown, force
   const chunks = [];
   const retained = [];
   const hashes = {};
-  for (const file of files) {
+  for (const [fileNumber, file] of files.entries()) {
     const source = await readFile(file.fullPath, 'utf8');
     hashes[file.relativePath] = sha256(source);
     if (reusable && reusable.fileHashes[file.relativePath] === hashes[file.relativePath]) retained.push(...reusable.entries.filter(entry => entry.path === file.relativePath));
     else chunks.push(...chunkMarkdown(source, file.relativePath));
+    onProgress?.(fileNumber + 1, files.length);
   }
+  if (skipUnchangedWrite && reusable && Object.keys(hashes).length === Object.keys(reusable.fileHashes).length && Object.entries(hashes).every(([key, hash]) => reusable.fileHashes[key] === hash)) return reusable;
   const vectors = chunks.length ? await (provider.embedDocuments ?? provider.embed).call(provider, chunks.map((chunk) => chunk.text)) : [];
   if (vectors.length !== chunks.length || vectors.some((vector) => vector.length !== provider.dims)) {
     throw new Error('Embedding provider returned invalid vectors.');

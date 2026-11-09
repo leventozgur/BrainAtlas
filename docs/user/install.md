@@ -20,7 +20,7 @@ This creates `SHA256SUMS.sig`. Distribute the complete folder, including `releas
 
 ## Online acquisition
 
-Releases are published on GitHub Releases: https://github.com/leventozgur/BrainAtlas/releases. Download all files of one release into an empty folder; together they form the distribution folder used below. Verify the maintainer key fingerprint `SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40` against `release/allowed_signers` before the first install.
+Releases are published on GitHub Releases: https://github.com/leventozgur/BrainAtlas/releases. GitHub Release assets cannot preserve subdirectories. Download `brainatlas-<v>-distribution.tar.gz`, extract it into an empty directory, and run the installer there. The individual release files contain the same content, but must be arranged with the original directory structure. Verify the maintainer key fingerprint `SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40` against `release/allowed_signers` before the first install.
 
 ## Install from the distribution folder
 
