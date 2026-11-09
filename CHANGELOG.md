@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+## 0.1.0-rc.8 — 2026-11-09
+
 - MCP now reads `BRAINATLAS_PLATFORM` like the CLI, fixing Linux CI platform detection.
 - `wiki_query` scores are compressed with a square root. At the default abstain threshold of 0.35, natural-language development-set recall@5 rose from 0.337 to 0.747. For custom `retrieval.abstainThreshold` values, use the square root of the old value for equivalent strictness (for example, 0.5 → ≈0.71; 0.25 → 0.5).
 - Retrieval results now include `heading`, `anchor`, and `headingPath`; snippets show the matching section, including its heading line.
 - Search caches are never written to the vault, and sync excludes cache paths.
-- Semantic retrieval is opt-in through `semantic.enabled`, uses local Ollama, is off by default, and falls back to BM25.
+- Semantic retrieval is opt-in through `semantic.enabled`, uses local Ollama, is off by default, and falls back to BM25. `semantic.mode` is `semantic-primary` (default, tuned for cross-language retrieval) or `rrf` (hybrid; measured better on a mixed-language vault).
 - Added repository evaluation tools: `npm run eval`, `eval/semantic-eval.mjs`, and `eval/semantic-calibrate.mjs`, with a natural corpus and development sets. Evaluation data is not included in releases.
 
 ## 0.1.0-rc.7 — 2026-11-08 (first public pre-release)

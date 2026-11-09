@@ -1,6 +1,6 @@
 {
   "name": "sync-dropbox",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0-rc.8",
   "description": "Dropbox object transport with revision based compare-and-swap.",
   "requires": ["sync-engine"],
   "provides": ["sync-transport:dropbox"],
