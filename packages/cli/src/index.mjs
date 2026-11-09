@@ -192,12 +192,12 @@ async function doctorResult(paths, env) {
         }
         if (ordered.some(item => item.name === 'semantic')) {
           let freshness = null;
-          try {
+          if (cfg.semantic?.enabled === true) try {
             const semantic = entries.get('semantic'); const index = await semantic?.readSemanticIndex?.(paths.stateDir);
             freshness = index ? await semantic.measureIndexFreshness({ corpusDir: cfg.vault.path, index }) : null;
             if (!index) warnings.push('Semantic index is not available.');
           } catch { warnings.push('Semantic index freshness is unavailable.'); }
-          moduleHealth.push({ name: 'semantic', freshness });
+          moduleHealth.push({ name: 'semantic', enabled: cfg.semantic?.enabled === true, freshness });
         }
       }
     } catch { warnings.push('Module health summary is unavailable.'); }
@@ -493,7 +493,7 @@ function moduleContext(config, paths, env, entries, ordered, dependencies = {}) 
     warn: (...values) => console.error(...values),
     error: (...values) => console.error(...values)
   });
-  return { config, paths, env, core, logger, registry, vaultDir: config.vault?.path, runCommand: dependencies.runCommand };
+  return { config, paths, env, core, logger, registry, vaultDir: config.vault?.path, runCommand: dependencies.runCommand, fetchImpl: dependencies.fetch };
 }
 
 async function enabledModuleEntries(releaseDir, cfg) {
@@ -539,7 +539,7 @@ async function dispatchModuleCommand(command, args, { paths, env, output, depend
   const current = await readCurrent(paths);
   const releaseDir = currentReleaseDir(paths, current);
   if (!releaseDir) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
-  const cfg = await loadConfig({ paths, env });
+  const cfg = await loadConfig({ paths, env, readOnly: ['semanticSetup'].includes(command) });
   const { ordered, entries } = await enabledModuleEntries(releaseDir, cfg);
   let owner; let ownerCommand = command; let ownerArgs = args;
   if (command === 'sync' && args.length) {
