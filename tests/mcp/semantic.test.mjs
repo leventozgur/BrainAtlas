@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, cp, symlink, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, cp, symlink, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -11,8 +11,68 @@ import { defaultConfig, SEMANTIC_DEFAULTS } from '../../packages/core/src/config
 import { createSearcher } from '../../packages/core/src/index.mjs';
 import { createOllamaProvider, updateSemanticIndex, markdownChunks } from '../../modules/semantic/src/index.mjs';
 
+async function backgroundFixture(t, fetchImpl, semantic = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-background-'));
+  const cleanups = [() => rm(root, { recursive: true, force: true })];
+  t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
+  const wiki = join(root, 'vault/wiki'), stateDir = join(root, 'state'), releasesDir = join(root, 'releases'), release = join(releasesDir, 'v1'), currentDir = join(root, 'current');
+  await mkdir(wiki, { recursive: true }); await mkdir(join(release, 'modules'), { recursive: true });
+  await cp(resolve('modules/semantic'), join(release, 'modules/semantic'), { recursive: true }); await symlink(resolve('packages'), join(release, 'packages')); await symlink(release, currentDir);
+  await writeFile(join(wiki, 'car.md'), '# Engine\ncar motor');
+  const config = defaultConfig('custom'); config.modules = ['semantic']; config.vault.path = join(root, 'vault'); config.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2, ...semantic };
+  const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
+  const [ct, st] = InMemoryTransport.createLinkedPair(), client = new Client({ name: 'test', version: '1' });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  cleanups.push(async () => { await client.close(); await server.close(); });
+  const query = async () => JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query: 'car' } })).content[0].text);
+  return { stateDir, server, client, query, cleanups };
+}
+
+test('closing MCP aborts an in-flight background index and removes its lock', async t => {
+  let started, release;
+  const inFlight = new Promise(resolve => { started = resolve; }), gate = new Promise(resolve => { release = resolve; });
+  const fetchImpl = async (_url, options) => { started(); await gate; return { ok: true, json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }) }; };
+  const { stateDir, server, query, cleanups } = await backgroundFixture(t, fetchImpl);
+  cleanups.push(() => release());
+  await query(); await inFlight;
+  assert.deepEqual(await readdir(join(stateDir, 'semantic')), ['index.lock']);
+  const closing = server.close(); release(); await closing;
+  assert.deepEqual(await readdir(join(stateDir, 'semantic')), []);
+});
+
+test('closing MCP stops waiting after two seconds for a stuck provider', async t => {
+  let started, release;
+  const inFlight = new Promise(resolve => { started = resolve; }), gate = new Promise(resolve => { release = resolve; });
+  const fetchImpl = async (_url, options) => { started(); await gate; return { ok: true, json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }) }; };
+  const { server, query, cleanups } = await backgroundFixture(t, fetchImpl);
+  cleanups.push(() => release());
+  await query(); await inFlight;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const closing = server.close();
+  await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(2000);
+  await closing;
+  t.mock.timers.reset();
+  release();
+});
+
+test('background indexing uses its own timeout while query timeout falls back', async t => {
+  const fetchImpl = async (_url, options) => { await new Promise(resolve => setTimeout(resolve, 50)); return { ok: true, json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }) }; };
+  const { stateDir, query } = await backgroundFixture(t, fetchImpl, { timeoutMs: 10, indexTimeoutMs: 1000, indexBatchSize: 1 });
+  assert.equal((await query()).semantic.fallbackReason, 'index-missing');
+  let index;
+  for (let i = 0; i < 200 && !index; i++) {
+    try { index = JSON.parse(await readFile(join(stateDir, 'semantic/index.json'), 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; await new Promise(resolve => setTimeout(resolve, 5)); }
+  }
+  assert.ok(index?.entries.length);
+  const result = await query();
+  assert.equal(result.semantic.fallbackReason, 'provider-error'); assert.equal(result.mode, 'lexical'); assert.equal(result.results[0].path, 'car.md');
+});
+
 test('MCP opt-in semantic search keeps lexical fallback and thresholds', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-'));
+  const cleanups = [() => rm(root, { recursive: true, force: true })];
+  t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
   const wiki = join(root, 'vault/wiki'), stateDir = join(root, 'state'), releasesDir = join(root, 'releases'), release = join(releasesDir, 'v1');
   await mkdir(wiki, { recursive: true }); await mkdir(join(release, 'modules'), { recursive: true });
   await cp(resolve('modules/semantic'), join(release, 'modules/semantic'), { recursive: true }); await symlink(resolve('packages'), join(release, 'packages'));
@@ -25,7 +85,7 @@ test('MCP opt-in semantic search keeps lexical fallback and thresholds', async t
   await updateSemanticIndex({ corpusDir: wiki, stateDir, provider, chunkMarkdown: markdownChunks });
   const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
   const [ct, st] = InMemoryTransport.createLinkedPair(); const client = new Client({ name: 'test', version: '1' });
-  await Promise.all([server.connect(st), client.connect(ct)]); t.after(async () => { await client.close(); await server.close(); });
+  await Promise.all([server.connect(st), client.connect(ct)]); cleanups.push(async () => { await client.close(); await server.close(); });
   const query = async text => JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query: text } })).content[0].text);
   const cross = await query('araba'); assert.equal(cross.results[0].path, 'car.md'); assert.equal(cross.semantic.used, true); assert.equal(cross.results[0].heading, 'Engine');
   const absent = await query('irrelevant'); assert.equal(absent.abstained, true);
@@ -63,7 +123,9 @@ test('missing semantic module and manifest differ from an import failure', async
 });
 
 test('empty index rebuilds once when pages exist and remains valid for an empty vault', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-empty-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-empty-'));
+  const cleanups = [() => rm(root, { recursive: true, force: true })];
+  t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
   const wiki = join(root, 'vault/wiki'), stateDir = join(root, 'state'), releasesDir = join(root, 'releases'), release = join(releasesDir, 'v1'), currentDir = join(root, 'current');
   await mkdir(wiki, { recursive: true }); await mkdir(join(release, 'modules'), { recursive: true });
   await cp(resolve('modules/semantic'), join(release, 'modules/semantic'), { recursive: true }); await symlink(resolve('packages'), join(release, 'packages')); await symlink(release, currentDir);
@@ -75,7 +137,7 @@ test('empty index rebuilds once when pages exist and remains valid for an empty 
   await updateSemanticIndex({ corpusDir: wiki, stateDir, provider, chunkMarkdown: markdownChunks });
   const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
   const [ct, st] = InMemoryTransport.createLinkedPair(), client = new Client({ name: 'test', version: '1' });
-  await Promise.all([server.connect(st), client.connect(ct)]); t.after(async () => { releaseBuild(); await client.close(); await server.close(); });
+  await Promise.all([server.connect(st), client.connect(ct)]); cleanups.push(async () => { releaseBuild(); await client.close(); await server.close(); });
   const query = async () => JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query: 'car' } })).content[0].text);
   // Empty indexes remain usable when the vault contains no pages.
   releaseBuild();
@@ -88,7 +150,7 @@ test('empty index rebuilds once when pages exist and remains valid for an empty 
   const blockedFetch = async (_url, options) => { builds++; signal(); await blocked; return { ok: true, json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }) }; };
   const server2 = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl: blockedFetch });
   const [ct2, st2] = InMemoryTransport.createLinkedPair(), client2 = new Client({ name: 'test', version: '1' });
-  await Promise.all([server2.connect(st2), client2.connect(ct2)]); t.after(async () => { unblock(); await client2.close(); await server2.close(); });
+  await Promise.all([server2.connect(st2), client2.connect(ct2)]); cleanups.push(async () => { unblock(); await client2.close(); await server2.close(); });
   const golden = createSearcher({ vaultDir: wiki, stateDir }).search('car', { limit: 5, budgetChars: 4000, abstainThreshold: 0.35 });
   const query2 = async () => JSON.parse((await client2.callTool({ name: 'wiki_query', arguments: { query: 'car' } })).content[0].text);
   const first = await query2(); await building; const second = await query2();
@@ -107,7 +169,9 @@ test('empty index rebuilds once when pages exist and remains valid for an empty 
 });
 
 test('MCP fallback, opt-out and remote policy preserve lexical answers without leaking inputs', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-fallback-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-fallback-'));
+  const cleanups = [() => rm(root, { recursive: true, force: true })];
+  t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
   const wiki = join(root, 'vault/wiki'), stateDir = join(root, 'state'), releasesDir = join(root, 'releases'), release = join(releasesDir, 'v1');
   await mkdir(wiki, { recursive: true }); await mkdir(join(release, 'modules'), { recursive: true });
   await cp(resolve('modules/semantic'), join(release, 'modules/semantic'), { recursive: true }); await symlink(resolve('packages'), join(release, 'packages'));
@@ -127,7 +191,7 @@ test('MCP fallback, opt-out and remote policy preserve lexical answers without l
     const server = createServer({ config: cfg, paths: { stateDir: queryStateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
     const [ct, st] = InMemoryTransport.createLinkedPair(), client = new Client({ name: 'test', version: '1' });
     await Promise.all([server.connect(st), client.connect(ct)]);
-    t.after(async () => { await client.close(); await server.close(); });
+    cleanups.push(async () => { await client.close(); await server.close(); });
     return async query => JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query } })).content[0].text);
   };
   const disabled = structuredClone(config); disabled.semantic.enabled = false;

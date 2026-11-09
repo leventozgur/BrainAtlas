@@ -52,8 +52,10 @@ async function invoke(client, name, args) {
 }
 
 test('stdio MCP exposes and exercises every tool with scoped writes', async (t) => {
-  const env = await setup(); t.after(async () => rm(env.home, { recursive: true, force: true }));
-  const { client, transport } = await connect(env); t.after(async () => { await client.close(); await transport.close(); });
+  const env = await setup();
+  const cleanups = [() => rm(env.home, { recursive: true, force: true })];
+  t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
+  const { client, transport } = await connect(env); cleanups.push(async () => { await client.close(); await transport.close(); });
   const listed = await client.listTools();
   assert.deepEqual(listed.tools.map((item) => item.name).sort(), ['wiki_add_crosslinks', 'wiki_create_concept', 'wiki_create_entity', 'wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_index', 'wiki_read_page', 'wiki_status', 'wiki_update_index', 'wiki_update_page', 'wiki_write_page'].sort());
 
@@ -96,8 +98,10 @@ test('stdio MCP exposes and exercises every tool with scoped writes', async (t) 
 });
 
 test('readOnly stdio server omits every write tool', async (t) => {
-  const env = await setup(true); t.after(async () => rm(env.home, { recursive: true, force: true }));
-  const { client, transport } = await connect(env); t.after(async () => { await client.close(); await transport.close(); });
+  const env = await setup(true);
+  const cleanups = [() => rm(env.home, { recursive: true, force: true })];
+  t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
+  const { client, transport } = await connect(env); cleanups.push(async () => { await client.close(); await transport.close(); });
   const names = (await client.listTools()).tools.map((item) => item.name);
   assert.deepEqual(names.sort(), ['wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_index', 'wiki_read_page', 'wiki_status'].sort());
   assert.equal(names.some((name) => writeTools.includes(name)), false);
@@ -131,7 +135,8 @@ test('createServer without HOME uses a private temporary cache and leaves the va
 for (const override of [true, false]) {
   test(`stdio MCP loads the ${override ? 'overridden' : 'native'} platform configuration`, async (t) => {
     const fixture = await setup(true);
-    t.after(async () => rm(fixture.home, { recursive: true, force: true }));
+    const cleanups = [() => rm(fixture.home, { recursive: true, force: true })];
+    t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
     const platform = override ? (process.platform === 'darwin' ? 'linux' : 'darwin') : process.platform;
     const env = { HOME: fixture.home, XDG_CONFIG_HOME: resolve(fixture.home, 'xdg-config'), XDG_DATA_HOME: resolve(fixture.home, 'xdg-data'), XDG_STATE_HOME: resolve(fixture.home, 'xdg-state'), PATH: process.env.PATH ?? '' };
     if (override) env.BRAINATLAS_PLATFORM = platform;
@@ -140,7 +145,7 @@ for (const override of [true, false]) {
     await cp(fixture.configFile, paths.configFile);
     const transport = new StdioClientTransport({ command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root, env, stderr: 'pipe' });
     const client = new Client({ name: 'platform-test', version: '1.0.0' });
-    t.after(async () => { await client.close(); await transport.close(); });
+    cleanups.push(async () => { await client.close(); await transport.close(); });
     await client.connect(transport);
     assert.equal((await invoke(client, 'wiki_status', {})).readOnly, true);
     assert.equal((await invoke(client, 'wiki_query', { query: 'synthetic evidence', limit: 2 })).abstained, false);
@@ -148,8 +153,10 @@ for (const override of [true, false]) {
 }
 
 test('Wiki read tools return E_VAULT_MISSING when the wiki directory is absent', async (t) => {
-  const env = await setup(true); t.after(async () => rm(env.home, { recursive: true, force: true }));
-  const { client, transport } = await connect(env); t.after(async () => { await client.close(); await transport.close(); });
+  const env = await setup(true);
+  const cleanups = [() => rm(env.home, { recursive: true, force: true })];
+  t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
+  const { client, transport } = await connect(env); cleanups.push(async () => { await client.close(); await transport.close(); });
   await rm(resolve(env.vault, 'wiki'), { recursive: true });
 
   for (const [name, args] of [

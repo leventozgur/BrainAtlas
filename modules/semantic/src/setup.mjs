@@ -9,7 +9,7 @@ import { delimiter, join, resolve } from 'node:path';
 import { SEMANTIC_DEFAULTS, saveConfig, setConfigValue } from '../../../packages/core/src/config/index.mjs';
 import { createOllamaProvider, validateConfiguredProvider } from './provider.mjs';
 import { markdownChunks } from './chunking.mjs';
-import { updateSemanticIndex, readSemanticIndex, measureIndexFreshness } from './index-store.mjs';
+import { updateSemanticIndex, readSemanticIndex, measureIndexFreshness, countPendingChunks } from './index-store.mjs';
 
 const execFile = promisify(execFileCallback);
 const names = ['preflight', 'ollama', 'server', 'model', 'index', 'probe', 'config'];
@@ -59,9 +59,9 @@ async function consumePull(response, progress) {
   if (buffer.trim()) { const item = JSON.parse(buffer); if (item.error) throw new Error('pull failed'); if (item.status === 'success') success = true; }
   if (!success) throw new Error('incomplete pull');
 }
-async function ask() {
+async function ask(question = 'Proceed with semantic setup (model download, if needed, is ~240 MB)? [y/N] ') {
   const rl = createInterface({ input: process.stdin, output: process.stderr });
-  try { return /^y(?:es)?$/iu.test((await rl.question('Proceed with semantic setup (model download, if needed, is ~240 MB)? [y/N] ')).trim()); }
+  try { return /^y(?:es)?$/iu.test((await rl.question(question)).trim()); }
   finally { rl.close(); }
 }
 export async function semanticSetup(args, ctx) {
@@ -109,23 +109,41 @@ export async function semanticSetup(args, ctx) {
     catch { return stop('model', 'Model download failed or timed out.', 'Check the Ollama server and disk space, then run ' + retry); }
     set('model', 'ok', 'Configured model downloaded.');
   }
-  if (dry) { set('index', 'skipped', 'Index would be built or updated.'); set('probe', 'skipped', 'Probe would run after indexing.'); set('config', 'skipped', 'Configuration would be enabled after verification.'); report.next = retry; return finish(); }
+  if (dry) { const provider = createOllamaProvider({ ...settings, fetchImpl }); const count = await countPendingChunks({ corpusDir, stateDir: ctx.paths.stateDir, provider, chunkMarkdown: markdownChunks }); set('index', 'skipped', `Index would embed ${count} chunks; duration depends on hardware.`); set('probe', 'skipped', 'Probe would run after indexing.'); set('config', 'skipped', 'Configuration would be enabled after verification.'); report.next = retry; return finish(); }
   // For an already installed model, interactive consent still covers index and config changes.
   if (installed && !options.yes && !(await (ctx.prompt ?? ask)())) return stop('index', 'Setup was not approved.', retry);
-  const provider = createOllamaProvider({ ...settings, fetchImpl });
+  const provider = createOllamaProvider({ ...settings, timeoutMs: settings.indexTimeoutMs, batchSize: settings.indexBatchSize, fetchImpl });
+  const queryProvider = createOllamaProvider({ ...settings, fetchImpl });
+  let lastTime = -Infinity, lastPercent = -10, warned = false, warnedHour = false;
+  const emit = message => (ctx.progress ?? (text => process.stderr.write(`${text}\n`)))(message);
+  const onProgress = async info => {
+    if (info.phase !== 'embed') return;
+    const time = (ctx.now ?? Date.now)(); const percent = info.total ? Math.floor(info.done * 100 / info.total) : 100;
+    if (time - lastTime >= (isTTY ? 1000 : 30000) || (!isTTY && percent >= lastPercent + 10)) {
+      const message = `Index: ${info.done}/${info.total} chunks${info.etaMs === null ? '' : `, ETA ${Math.ceil(info.etaMs / 1000)}s`}`;
+      if (isTTY && !ctx.progress) process.stderr.write(`\r${message}   `); else emit(message);
+      lastTime = time; lastPercent = percent;
+    }
+    if (!warned && info.etaMs > 300000) {
+      warned = true; emit(`Estimated remaining time: ${Math.ceil(info.etaMs / 60000)} minutes. Indexing uses CPU heavily; progress is saved and you can interrupt and resume with the same command.`);
+      if (info.etaMs > 3600000) { warnedHour = true; emit('Warning: indexing may take more than an hour.'); }
+      if (!options.yes && isTTY && !(await (ctx.prompt ?? ask)('Continue indexing? [y/N] '))) throw Object.assign(new Error('Indexing declined.'), { code: 'E_SEMANTIC_DECLINED' });
+    }
+    if (!warnedHour && info.etaMs > 3600000) { warnedHour = true; emit('Warning: indexing may take more than an hour.'); }
+  };
   let index;
   try {
     const previous = await readSemanticIndex(ctx.paths.stateDir);
     const freshness = previous && await measureIndexFreshness({ corpusDir, index: previous });
     if (previous && previous.providerFingerprint === provider.fingerprint && freshness.stale === 0 && freshness.missing === 0 && freshness.indexed === Object.keys(previous.fileHashes).length) {
       // Deletions require comparing the current file count as well.
-      index = await updateSemanticIndex({ corpusDir, stateDir: ctx.paths.stateDir, provider, chunkMarkdown: markdownChunks, skipUnchangedWrite: true, onProgress: (done, total) => progress(`Index: ${done}/${total} files`) });
+      index = await updateSemanticIndex({ corpusDir, stateDir: ctx.paths.stateDir, provider, chunkMarkdown: markdownChunks, skipUnchangedWrite: true, indexBatchSize: settings.indexBatchSize, now: ctx.now, onProgress });
       set('index', index.createdAt === previous.createdAt ? 'skipped' : 'ok', 'Index is up to date.');
-    } else { index = await updateSemanticIndex({ corpusDir, stateDir: ctx.paths.stateDir, provider, chunkMarkdown: markdownChunks, skipUnchangedWrite: true, onProgress: (done, total) => progress(`Index: ${done}/${total} files`) }); set('index', 'ok', 'Index built or updated.'); }
-  } catch { return stop('index', 'Indexing failed.', 'Check the vault, model and state directory, then run ' + retry); }
+    } else { index = await updateSemanticIndex({ corpusDir, stateDir: ctx.paths.stateDir, provider, chunkMarkdown: markdownChunks, skipUnchangedWrite: true, indexBatchSize: settings.indexBatchSize, now: ctx.now, onProgress }); set('index', 'ok', 'Index built or updated.'); }
+  } catch (error) { if (error?.code === 'E_SEMANTIC_DECLINED') return stop('index', 'Indexing was not approved; progress was saved.', retry); return stop('index', 'Indexing failed.', 'Check the vault, model and state directory, then run ' + retry); }
   try {
     if (!index.entries.length || index.providerFingerprint !== provider.fingerprint) throw new Error();
-    const start = performance.now(); await provider.embedQuery(index.entries[0].text.slice(0, 120));
+    const start = performance.now(); await queryProvider.embedQuery(index.entries[0].text.slice(0, 120));
     set('probe', 'ok', 'Embedding probe succeeded.', { queryMs: Math.round(performance.now() - start), pages: Object.keys(index.fileHashes).length });
   } catch { return stop('probe', 'Embedding verification failed or the index has no searchable pages.', 'Check the vault and model, then run ' + retry); }
   if (settings.enabled && (!options.mode || settings.mode === options.mode)) set('config', 'skipped', 'Semantic retrieval is already enabled.');

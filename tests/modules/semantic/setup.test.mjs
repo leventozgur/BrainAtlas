@@ -69,3 +69,20 @@ test('preflight failures and low-resource warnings are safe', async t => {
   const g = await fixture(t); await rm(join(g.config.vault.path, 'wiki'), { recursive: true }); const missing = await run(g.ctx);
   assert.equal(missing.report.steps.preflight.status, 'action-needed'); assert.equal(await readFile(g.paths.configFile, 'utf8'), g.before); assert.equal(g.calls.length, 0);
 });
+test('slow indexing asks once after ETA and retains progress when declined', async t => {
+  const f = await fixture(t, { isTTY: true });
+  for (let i = 0; i < 4; i++) await writeFile(join(f.config.vault.path, 'wiki', `${i}.md`), `# Page ${i}\nContent ${i}`);
+  f.config.semantic.indexBatchSize = 1;
+  let clock = 0, prompts = 0; const messages = []; const fetch = f.ctx.fetchImpl;
+  f.ctx.now = () => clock; f.ctx.prompt = async () => ++prompts === 1; f.ctx.progress = message => messages.push(message);
+  f.ctx.fetchImpl = async (url, options) => { const result = await fetch(url, options); if (url.endsWith('/api/embed')) clock += 2000000; return result; };
+  const result = await run(f.ctx, []);
+  assert.equal(result.report.steps.index.status, 'action-needed'); assert.equal(prompts, 2);
+  assert.match(messages.join(' '), /more than an hour/); assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
+  const partial = JSON.parse(await readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json'), 'utf8')); assert.equal(Object.keys(partial.vectors).length, 1);
+});
+test('dry run reports pending chunks without writes', async t => {
+  const f = await fixture(t); const result = await run(f.ctx, ['--dry-run']);
+  assert.match(result.report.steps.index.reason, /1 chunks; duration depends on hardware/);
+  await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json')));
+});

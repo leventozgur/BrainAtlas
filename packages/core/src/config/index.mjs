@@ -25,7 +25,7 @@ export const CONFIG_SCHEMA = {
     }, additionalProperties: false },
     okf: { type: 'object', required: ['level'], properties: { level: { type: 'string', enum: ['warn','strict'] } }, additionalProperties: false },
     sync: { type: 'object', required: ['transport','options'], properties: { transport: { type: ['string','null'] }, options: { type: 'object' } }, additionalProperties: false },
-    semantic: { type: 'object', properties: { enabled: { type: 'boolean' }, baseUrl: { type: 'string', minLength: 1 }, model: { type: 'string', minLength: 1 }, dims: { type: 'integer', minimum: 1 }, queryPrefix: { type: 'string' }, documentPrefix: { type: 'string' }, minScore: { type: 'number', minimum: -1, maximum: 1 }, mode: { type: 'string', enum: ['semantic-primary','rrf'] }, timeoutMs: { type: 'integer', minimum: 1 }, allowRemote: { type: 'boolean' } }, additionalProperties: false },
+    semantic: { type: 'object', properties: { enabled: { type: 'boolean' }, baseUrl: { type: 'string', minLength: 1 }, model: { type: 'string', minLength: 1 }, dims: { type: 'integer', minimum: 1 }, queryPrefix: { type: 'string' }, documentPrefix: { type: 'string' }, minScore: { type: 'number', minimum: -1, maximum: 1 }, mode: { type: 'string', enum: ['semantic-primary','rrf'] }, timeoutMs: { type: 'integer', minimum: 1 }, indexTimeoutMs: { type: 'integer', minimum: 1 }, indexBatchSize: { type: 'integer', minimum: 1, maximum: 64 }, allowRemote: { type: 'boolean' } }, additionalProperties: false },
     telemetry: { const: false }, readOnly: { type: 'boolean' }, node: { type: 'object', required: ['path'], properties: { path: { type: 'string' } }, additionalProperties: false }
   }
 };
@@ -36,7 +36,7 @@ export const PROFILES = Object.freeze({
   custom: Object.freeze({ modules: Object.freeze([]), lockedKeys: Object.freeze([]) })
 });
 
-export const SEMANTIC_DEFAULTS = Object.freeze({ enabled: false, baseUrl: 'http://127.0.0.1:11434', model: 'embeddinggemma:300m-qat-q4_0', dims: 768, queryPrefix: 'task: search result | query: ', documentPrefix: 'title: none | text: ', minScore: 0.45, mode: 'semantic-primary', timeoutMs: 5000, allowRemote: false });
+export const SEMANTIC_DEFAULTS = Object.freeze({ enabled: false, baseUrl: 'http://127.0.0.1:11434', model: 'embeddinggemma:300m-qat-q4_0', dims: 768, queryPrefix: 'task: search result | query: ', documentPrefix: 'title: none | text: ', minScore: 0.45, mode: 'semantic-primary', timeoutMs: 5000, indexTimeoutMs: 120000, indexBatchSize: 32, allowRemote: false });
 
 const clone = (value) => structuredClone(value);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
