@@ -177,8 +177,11 @@ const FINDINGS = [
   ['term "constructor" posting attached to alpha.md', 'low', { mutate: (d) => { d.index.postings.constructor = [docIndex(d, 'alpha.md'), 1, 0, 0, 0]; return d; } }],
   ['page paths swapped between alpha.md and delta.md', 'low', { mutate: (d) => { const a = docOf(d, 'alpha.md').page, b = docOf(d, 'delta.md').page; [a.path, b.path] = [b.path, a.path]; return d; } }],
 ];
+// PM update (2026-11-11): the missing-page finding is fixed (indexed ∪ skipped paths must equal the walked set), so it now
+// runs as a normal test. The remaining low findings are the accepted cache-trust risk documented in docs/contracts/retrieval.md.
 for (const [name, severity, spec] of FINDINGS) {
-  test(`FINDING (${severity}) content forgery accepted: ${name}`, { todo: `finding: ${severity}; cache content is not validated against page files` }, (t) => {
+  const fixed = name.startsWith('missing real page');
+  test(`${fixed ? 'FIXED' : 'FINDING'} (${severity}) content forgery ${fixed ? 'rejected' : 'accepted'}: ${name}`, fixed ? {} : { todo: `accepted risk (${severity}); cache content is not validated against page files` }, (t) => {
     const f = fixture(t);
     forge(f, spec);
     assert.deepEqual(diffFromFresh(f, name), [], `results differ from a fresh install for: ${name}`);
