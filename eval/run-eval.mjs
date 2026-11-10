@@ -14,7 +14,7 @@ import { reciprocalRank, ndcg, percentile } from './lib/metrics.mjs';
  * Evaluate retrieval metrics. Existing metric semantics and keys are preserved.
  * @param {{corpusDir:string,casesFile:string,now?:Date,verbose?:boolean,repeat?:number,abstainThreshold?:number}} options
  */
-export function runEval({corpusDir, casesFile, now = new Date(), verbose = false, repeat = 3, abstainThreshold = 0, rejectInvalidQueries = false}) {
+export function runEval({corpusDir, casesFile, now = new Date(), verbose = false, repeat = 3, abstainThreshold = 0, rejectInvalidQueries = false, extended = false}) {
   if (!Number.isInteger(repeat) || repeat < 1 || repeat > 1000) throw new Error('Invalid repeat');
   if (typeof abstainThreshold !== 'number' || !Number.isFinite(abstainThreshold) || abstainThreshold < 0 || abstainThreshold > 1) throw new Error('Invalid abstain threshold');
   const cases = JSON.parse(readFileSync(casesFile, 'utf8'));
@@ -24,6 +24,7 @@ export function runEval({corpusDir, casesFile, now = new Date(), verbose = false
   const indexBuildMs = performance.now() - buildStart;
   let recall = 0, precision = 0, answerable = 0, abstainRight = 0, abstainCount = 0, trRecall = 0, trCount = 0;
   let reciprocal = 0, ndcgTotal = 0, rankedCount = 0;
+  let sectionCases = 0, sectionHits = 0, requireAllCases = 0, requireAllHits = 0;
   const categories = new Map();
   const timings = [];
   const falsePositives = [];
@@ -74,6 +75,16 @@ export function runEval({corpusDir, casesFile, now = new Date(), verbose = false
       categoryMetrics.recall += caseRecall;
       categoryMetrics.reciprocal += rr;
       if (item?.trToEn) { trCount++; trRecall += caseRecall; }
+      if (typeof item?.expectedHeading === 'string') {
+        // Section hit: the top-ranked relevant result must expose the expected heading.
+        sectionCases++;
+        const top = results.find((entry) => relevant.includes(entry.path));
+        if (top && top.heading === item.expectedHeading) sectionHits++;
+      }
+      if (item?.requireAll === true) {
+        requireAllCases++;
+        if (relevant.every((path) => results.slice(0, 5).some((entry) => entry.path === path))) requireAllHits++;
+      }
     }
     if (verbose && (!result || excludedHits.length || (abstain ? !result.abstained : hits < relevant.length))) {
       console.error(`case ${caseId}`);
@@ -98,15 +109,22 @@ export function runEval({corpusDir, casesFile, now = new Date(), verbose = false
     indexBuildMs,
     byCategory,
     falsePositives,
+    // Opt-in: the default key set is pinned by acceptance tests and stays unchanged.
+    ...(extended ? {
+      sectionHitRate: sectionCases ? sectionHits / sectionCases : 0,
+      sectionCases,
+      requireAllRate: requireAllCases ? requireAllHits / requireAllCases : 0,
+      requireAllCases,
+    } : {}),
   };
 }
 
 function parseArgs(args) {
-  const options = {verbose: args.includes('--verbose'), json: args.includes('--json'), repeat: 3, abstainThreshold: 0};
+  const options = {verbose: args.includes('--verbose'), json: args.includes('--json'), extended: args.includes('--extended'), repeat: 3, abstainThreshold: 0};
   const valueFlags = new Set(['--corpus', '--cases', '--now', '--repeat', '--abstain-threshold']);
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
-    if (flag === '--verbose' || flag === '--json') continue;
+    if (flag === '--verbose' || flag === '--json' || flag === '--extended') continue;
     if (!valueFlags.has(flag) || i + 1 >= args.length || args[i + 1].startsWith('--')) throw new Error('Invalid arguments');
     const value = args[++i];
     if (flag === '--repeat') {
@@ -132,6 +150,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       verbose: args.verbose,
       repeat: args.repeat,
       abstainThreshold: args.abstainThreshold,
+      extended: args.extended,
       rejectInvalidQueries: true,
     });
     console.log(JSON.stringify(result, null, args.json ? 0 : 2));
