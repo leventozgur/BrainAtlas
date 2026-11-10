@@ -65,7 +65,8 @@ function blocksOf(context) {
 
 // Each section redacts to a short marker, so the hook has room left after the search has spent its
 // raw snippet budget on the first results; later results then reach the hook with empty snippets.
-const privateKey = '-----BEGIN PRIVATE KEY-----\n' + 'MIIB'.repeat(110) + '\n-----END PRIVATE KEY-----';
+// Assembled at run time so the source never contains a key-shaped literal.
+const privateKey = [['-----BEGIN', 'PRIVATE KEY-----'].join(' '), 'MIIB'.repeat(110), ['-----END', 'PRIVATE KEY-----'].join(' ')].join('\n');
 
 test('BA-16-F2: every injected result keeps an excerpt when its page has text', async t => {
   const pages = {};
