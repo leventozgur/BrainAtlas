@@ -147,7 +147,12 @@ test('pre-transform v1 cache remains readable and search applies the new score t
   const result = searcher.search('alpha beta', { abstainThreshold: 0 });
   assert.equal(result.results[0].path, 'evidence.md');
   assert.equal(result.results[0].score, Math.sqrt(oldRanking(index, 'alpha beta')[0].score));
-  assert.equal(fs.readFileSync(cacheFile, 'utf8'), oldFormatCache, 'matching old cache is loaded without rewrite');
+  // PM update (BA-02, 2026-11-11): the cache key moved from content hashes to a stat fingerprint (schema tag
+  // retrieval-stat-v3), so a pre-BA-02 cache is rebuilt once. What Q-CALIB protects is unchanged: the score
+  // transform is applied at search time, so results and scores match the old index exactly.
+  const rebuilt = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+  assert.deepEqual(rebuilt.index.docs.map((d) => d.page.path), index.docs.map((d) => d.page.path));
+  assert.equal(JSON.stringify(rebuilt.index.postings), JSON.stringify(index.postings));
 });
 
 test('natural dev cases meet the calibrated threshold and excluded pages stay excluded', (t) => {
