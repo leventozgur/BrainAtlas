@@ -260,14 +260,18 @@ test('300 seeded random structural mutations: no throw, fresh-install results ev
 });
 
 // ---- E. Snapshot contract: pages and index must describe the same state ----
-test('FINDING (low) snapshot after an outside add (no refresh) pairs new pages with the old index', { todo: 'finding: low; snapshot() loads pages from disk lazily on a cache hit, so pages and index can disagree' }, (t) => {
+// PM correction (2026-11-11): superseded pages are in snapshot().pages by contract (cache-integrity.test.mjs) but never in the
+// lexical index, so the comparison excludes them. The finding itself (a page added after a cache hit missing from the index) is fixed.
+test('snapshot after an outside add (no refresh) pairs pages with an index of the same state', (t) => {
   const f = fixture(t);
   createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF }); // writes the cache
   const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF }); // cache hit: pages not loaded
   fs.writeFileSync(path.join(f.wiki, 'added-late.md'), '# Late\nlatemarker only on disk\n');
   const snap = s.snapshot();
-  const pagePaths = snap.pages.map((p) => p.path).sort();
+  const indexable = (p) => String(p.frontmatter?.status || '').toLowerCase() !== 'superseded' && !Object.hasOwn(p.frontmatter || {}, 'superseded_by');
+  const pagePaths = snap.pages.filter(indexable).map((p) => p.path).sort();
   const indexPaths = snap.index.docs.map((d) => d.page.path).sort();
+  assert.ok(pagePaths.includes('added-late.md'), 'the page added after the cache hit is in the snapshot');
   assert.deepEqual(pagePaths, indexPaths, 'snapshot pages and lexical index describe different states');
 });
 
