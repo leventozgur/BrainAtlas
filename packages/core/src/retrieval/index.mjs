@@ -192,21 +192,28 @@ function flattenPostings(index) {
   }
   return {...index, postings};
 }
-const isCount = (x) => Number.isSafeInteger(x) && x >= 0;
-const isStringArray = (x) => Array.isArray(x) && x.every(v => typeof v === 'string');
-const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
 // Structural checks on a cache whose key already matches the current stat fingerprint. Any violation returns null,
 // and the caller rebuilds from the vault. Checks: pages exist on disk (paths is the walked file set) and are unique;
 // page fields have the types search() reads; posting doc ids are strictly increasing and in range; counts are
 // non-negative safe integers no larger than the field length they count; averages equal the value buildIndex computes.
+const isCount = (x) => Number.isSafeInteger(x) && x >= 0;
+const isStringArray = (x) => Array.isArray(x) && x.every(v => typeof v === 'string');
+const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
+// Structural checks on a cache whose key already matches the current stat fingerprint. Any violation returns null,
+// and the caller rebuilds from the vault. The cache records every walked page as either indexed (docs) or skipped
+// (superseded or otherwise not indexed); the two lists must partition the walked file set exactly. Page fields
+// must have the types search() reads, posting doc ids are strictly increasing and in range, counts are
+// non-negative safe integers no larger than the field length they count, and averages equal buildIndex's value.
+// Page contents are not re-read: this is structural validation, not content verification (see the threat model in
+// docs/contracts/retrieval.md).
 function decodeCachedIndex(data, key, paths) {
-  if (!data || data.key !== key) return null;
-  const index = data.index;
-  if (!index || index.version !== 1 || !Array.isArray(index.docs) || !index.postings || typeof index.postings !== 'object' || !Array.isArray(index.averages)) return null;
+  if (!isPlainObject(data) || data.key !== key) return null;
+  const index = data.index, skipped = data.skipped;
+  if (!isPlainObject(index) || index.version !== 1 || !Array.isArray(index.docs) || !isPlainObject(index.postings) || !Array.isArray(index.averages) || !isStringArray(skipped)) return null;
   const docs = index.docs, docCount = docs.length, seen = new Set();
   for (const doc of docs) {
     const page = doc?.page;
-    if (!page || typeof page !== 'object' || typeof page.path !== 'string' || !safePath(page.path) || !paths.has(page.path) || seen.has(page.path)) return null;
+    if (!isPlainObject(doc) || !isPlainObject(page) || typeof page.path !== 'string' || !safePath(page.path) || !paths.has(page.path) || seen.has(page.path)) return null;
     seen.add(page.path);
     if (typeof page.title !== 'string' || typeof page.body !== 'string') return null;
     if (!isStringArray(page.headings) || !isStringArray(page.aliases) || !isStringArray(page.keywords)) return null;
@@ -215,6 +222,11 @@ function decodeCachedIndex(data, key, paths) {
     if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) return null;
     if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;
   }
+  for (const p of skipped) {
+    if (!safePath(p) || !paths.has(p) || seen.has(p)) return null;
+    seen.add(p);
+  }
+  if (seen.size !== paths.size) return null;
   const totals = [0, 0, 0, 0];
   for (const doc of docs) for (let i = 0; i < 4; i++) totals[i] += doc.lengths[i];
   if (index.averages.length !== 4 || !index.averages.every((avg, i) => avg === totals[i] / (docCount || 1))) return null;
@@ -238,7 +250,7 @@ function decodeCachedIndex(data, key, paths) {
 }
 /**
  * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
- * `snapshot()` returns the pages and lexical index of the last refresh, for callers that need both.
+ * `snapshot()` returns pages and lexical index that describe the same vault state.
  */
 export function createSearcher(options) {
   const {vaultDir, stateDir, now, atomicWriter = atomicWriteFileSync} = options || {};
@@ -255,10 +267,22 @@ export function createSearcher(options) {
     const pages = loadPages(vaultDir);
     const index = buildIndex(pages, {now});
     state = {key, index, pages};
+    const indexed = new Set(index.docs.map(d => d.page.path));
+    const skipped = pages.map(p => p.path).filter(p => !indexed.has(p));
     try {
       fs.mkdirSync(stateDir, {recursive:true});
-      atomicWriter(cache, JSON.stringify({key, index: flattenPostings(index)}));
+      atomicWriter(cache, JSON.stringify({key, index: flattenPostings(index), skipped}));
     } catch { /* Search still works without a writable cache. */ }
+  }
+  // Loads pages for a cache-hit state. They must describe the same vault state as the index: if the vault changed
+  // while they were read, pages and index are rebuilt together from that one read, under the pre-read key.
+  function loadPagesForSnapshot() {
+    const before = statFingerprint(vaultDir);
+    if (before.key !== state.key) rebuild(before);
+    if (state.pages) return;
+    const key = state.key, pages = loadPages(vaultDir);
+    if (statFingerprint(vaultDir).key === key) { state.pages = pages; return; }
+    state = {key: before.key, index: buildIndex(pages, {now}), pages};
   }
   rebuild(statFingerprint(vaultDir));
   return {
@@ -271,7 +295,7 @@ export function createSearcher(options) {
       return true;
     },
     snapshot() {
-      state.pages ??= loadPages(vaultDir);
+      if (state.pages === null) loadPagesForSnapshot();
       return {pages: state.pages, index: state.index};
     },
   };

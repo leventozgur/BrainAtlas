@@ -157,7 +157,8 @@ export function createServer(options) {
     const record = JSON.stringify({ action, path: rel });
     checkWrite('wiki/log.md', record);
     await core.appendLog(vaultDir, { action, path: rel });
-    await searcher.refresh();
+    // The write has succeeded; a failed refresh must not turn it into an error. The next wiki_query retries via refreshIfChanged.
+    try { await searcher.refresh(); } catch { /* Keep the last good index. */ }
     scheduleUpdate();
   };
   const tool = (name, schema, handler) => server.registerTool(name, { description: descriptions[name], inputSchema: schema.shape }, async (args) => {

@@ -223,3 +223,40 @@ test('structurally invalid but key-matching caches are rebuilt (fix1 regression 
     assert.deepEqual(plain(searcher.search('alpha bravo', { abstainThreshold: 0 })), plain(search(fresh, 'alpha bravo', { abstainThreshold: 0 })), `${name}: results`);
   }
 });
+
+test('fix2: non-object roots and postings, and a page missing from both docs and skipped, are rebuilt', (t) => {
+  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  fs.mkdirSync(vault);
+  fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha bravo');
+  fs.writeFileSync(path.join(vault, 'b.md'), '---\nstatus: superseded\n---\n# Old\nalpha old');
+  const cache = path.join(state, 'retrieval-index.json');
+  createSearcher({ vaultDir: vault, stateDir: state, now });
+  const good = JSON.parse(fs.readFileSync(cache, 'utf8'));
+  const fresh = plain(buildIndex(loadPages(vault), { now }));
+  const variants = {
+    'root is an array': () => [],
+    'index is an array': (d) => { d.index = []; return d; },
+    'postings is an array': (d) => { d.index.postings = []; return d; },
+    'missing indexed page (not in skipped)': (d) => { d.index.docs.splice(0, 1); d.index.averages = [0, 0, 0, 0]; return d; },
+    'skipped list drops the superseded page': (d) => { d.skipped = []; return d; },
+    'skipped entry duplicates an indexed page': (d) => { d.skipped = ['a.md']; return d; },
+  };
+  for (const [name, mutate] of Object.entries(variants)) {
+    const data = mutate(structuredClone(good));
+    fs.writeFileSync(cache, JSON.stringify(data));
+    const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
+    assert.deepEqual(plain(searcher.snapshot().index), fresh, name);
+  }
+});
+
+test('fix2: snapshot after an outside add on a cache hit describes one vault state (pages and index agree)', (t) => {
+  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  fs.mkdirSync(vault);
+  fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha bravo');
+  createSearcher({ vaultDir: vault, stateDir: state, now });
+  const s = createSearcher({ vaultDir: vault, stateDir: state, now });
+  fs.writeFileSync(path.join(vault, 'late.md'), '# Late\nlatemarker');
+  const snap = s.snapshot();
+  assert.deepEqual(snap.pages.map((p) => p.path).sort(), snap.index.docs.map((d) => d.page.path).sort());
+  assert.equal(s.search('latemarker').results[0].path, 'late.md');
+});

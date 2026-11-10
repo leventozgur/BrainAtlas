@@ -85,3 +85,20 @@ test('a freshness check that fails mid-scan does not fail wiki_query; the next q
   // The next query retries the rebuild and sees the new page.
   assert.deepEqual(await query(mcp.client, 'late'), ['late.md']);
 });
+
+test('fix2: a successful write is not reported as an error when the follow-up refresh fails', async (t) => {
+  const f = fixture(t);
+  const mcp = await connect(f);
+  t.after(() => mcp.close());
+  const realRead = fs.readFileSync;
+  let armed = true;
+  fs.readFileSync = function (file, ...rest) {
+    if (armed && String(file).endsWith('written.md')) { armed = false; const e = new Error('gone'); e.code = 'ENOENT'; throw e; }
+    return realRead.call(this, file, ...rest);
+  };
+  t.after(() => { fs.readFileSync = realRead; });
+  const result = await mcp.client.callTool({ name: 'wiki_write_page', arguments: { path: 'wiki/written.md', content: '# Written\nwrittenmarker' } });
+  fs.readFileSync = realRead;
+  assert.notEqual(result.isError, true, 'the write succeeded, so the tool must not report an error');
+  assert.deepEqual(await query(mcp.client, 'writtenmarker'), ['written.md']);
+});
