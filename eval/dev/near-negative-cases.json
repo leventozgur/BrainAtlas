@@ -23,7 +23,7 @@
   {
     "id": "nn-04",
     "category": "near-negative",
-    "query": "How many concurrent connections can an anonymous client hold open to the Orchard API?",
+    "query": "How many concurrent connections can a client hold open to the Orchard API?",
     "relevant": [],
     "abstain": true
   },
