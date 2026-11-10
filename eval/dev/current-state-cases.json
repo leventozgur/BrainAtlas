@@ -1,0 +1,15 @@
+[
+  {"id": "cs-01", "category": "current-state", "query": "Tidewater cache TTL şu an kaç saniye?", "relevant": ["architecture/tidewater-cache.md"], "abstain": false, "expectedHeading": "Current state (2026-09)"},
+  {"id": "cs-02", "category": "current-state", "query": "How many times does a Larkspur consumer retry a failed message now?", "relevant": ["architecture/larkspur-queue.md"], "abstain": false, "expectedHeading": "Update 2026-03-04 — retry limit raised"},
+  {"id": "cs-03", "category": "current-state", "query": "What is the current default drain timeout for a Basil shutdown?", "relevant": ["cli/basil-flags.md"], "abstain": false, "expectedHeading": "Current state (2026-06) — drain timeout default 45 seconds"},
+  {"id": "cs-04", "category": "current-state", "query": "How long are audit log entries kept today?", "relevant": ["data/retention.md"], "abstain": false, "expectedHeading": "Current state (2026-10) — audit logs kept 400 days"},
+  {"id": "cs-05", "category": "current-state", "query": "How many requests per minute can an authenticated client make now?", "relevant": ["faq/rate-limits.md"], "abstain": false, "expectedHeading": "Current state (2026-08) — 120 requests per minute for authenticated clients"},
+  {"id": "cs-06", "category": "current-state", "query": "Access reviews happen how often at the moment?", "relevant": ["security/access-review.md"], "abstain": false, "expectedHeading": "Current state (2026-04) — quarterly review"},
+  {"id": "cs-07", "category": "current-state", "query": "Mevcut nöbet rotasyonu nasıl işliyor?", "relevant": ["ops/oncall.md"], "abstain": false, "expectedHeading": "Current state (2026-05)"},
+  {"id": "cs-08", "category": "current-state", "query": "Do writes clear cached entries in Tidewater, or does only the TTL expire them?", "relevant": ["decisions/adr-005-cache-invalidation.md"], "abstain": false, "expectedHeading": "Decision (2025-09)"},
+  {"id": "cs-09", "category": "current-state", "query": "Which queue ordering rule is in force today, global FIFO or per key?", "relevant": ["decisions/adr-009-queue-ordering.md"], "abstain": false, "expectedHeading": "Decision (2026)"},
+  {"id": "cs-10", "category": "current-state", "query": "Hangi arama altyapısı kararı şu an geçerli?", "relevant": ["decisions/adr-011-search-backend.md"], "abstain": false, "expectedHeading": "Decision (2026)"},
+  {"id": "cs-11", "category": "current-state", "query": "How is mailroom bounce handling done at the moment?", "relevant": ["vendors/mailroom-provider.md"], "abstain": false, "expectedHeading": "Current state (2026-04)"},
+  {"id": "cs-12", "category": "current-state", "query": "Mevcut deploy penceresi hangi saatler arasında?", "relevant": ["ops/deploy-window.md"], "abstain": false},
+  {"id": "cs-13", "category": "current-state", "query": "Is Basil installation supported on Windows now?", "relevant": ["cli/basil-install.md"], "abstain": false}
+]
