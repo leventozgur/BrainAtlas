@@ -170,13 +170,16 @@ const FINGERPRINT_SCHEMA = 'retrieval-stat-v4';
 function statFingerprint(vaultDir) {
   const { root, files } = markdownFiles(vaultDir);
   const fingerprint = createHash('sha256').update(FINGERPRINT_SCHEMA);
+  const paths = new Set();
   for (const full of files) {
+    const rel = path.relative(root, full).split(path.sep).join('/');
+    paths.add(rel);
     let token;
     try { const st = fs.lstatSync(full); token = [st.size, st.mtimeMs, st.ctimeMs, st.ino].join('\0'); }
     catch { token = 'unstable'; } // Removed between walk and stat: never equal to a stored key, so the next check rebuilds.
-    fingerprint.update(`${path.relative(root, full).split(path.sep).join('/')}\0${token}\n`);
+    fingerprint.update(`${rel}\0${token}\n`);
   }
-  return fingerprint.digest('hex');
+  return { key: fingerprint.digest('hex'), paths };
 }
 // On-disk postings are flat per term: [id, c0, c1, c2, c3, id, ...]. Decoding restores the in-memory nested shape
 // that buildIndex produces, so search results and scores are unchanged. Every field is checked before use.
@@ -189,25 +192,49 @@ function flattenPostings(index) {
   }
   return {...index, postings};
 }
-function decodeCachedIndex(data, key) {
+const isCount = (x) => Number.isSafeInteger(x) && x >= 0;
+const isStringArray = (x) => Array.isArray(x) && x.every(v => typeof v === 'string');
+const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
+// Structural checks on a cache whose key already matches the current stat fingerprint. Any violation returns null,
+// and the caller rebuilds from the vault. Checks: pages exist on disk (paths is the walked file set) and are unique;
+// page fields have the types search() reads; posting doc ids are strictly increasing and in range; counts are
+// non-negative safe integers no larger than the field length they count; averages equal the value buildIndex computes.
+function decodeCachedIndex(data, key, paths) {
   if (!data || data.key !== key) return null;
   const index = data.index;
   if (!index || index.version !== 1 || !Array.isArray(index.docs) || !index.postings || typeof index.postings !== 'object' || !Array.isArray(index.averages)) return null;
-  if (!index.docs.every(d => d && d.page && safePath(d.page.path) && typeof d.page.title === 'string' && Array.isArray(d.lengths) && d.lengths.length === 4 && d.lengths.every(Number.isFinite))) return null;
-  if (index.averages.length !== 4 || !index.averages.every(Number.isFinite)) return null;
-  const docCount = index.docs.length, postings = Object.create(null);
+  const docs = index.docs, docCount = docs.length, seen = new Set();
+  for (const doc of docs) {
+    const page = doc?.page;
+    if (!page || typeof page !== 'object' || typeof page.path !== 'string' || !safePath(page.path) || !paths.has(page.path) || seen.has(page.path)) return null;
+    seen.add(page.path);
+    if (typeof page.title !== 'string' || typeof page.body !== 'string') return null;
+    if (!isStringArray(page.headings) || !isStringArray(page.aliases) || !isStringArray(page.keywords)) return null;
+    if (!isPlainObject(page.frontmatter)) return null;
+    const fm = page.frontmatter;
+    if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) return null;
+    if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;
+  }
+  const totals = [0, 0, 0, 0];
+  for (const doc of docs) for (let i = 0; i < 4; i++) totals[i] += doc.lengths[i];
+  if (index.averages.length !== 4 || !index.averages.every((avg, i) => avg === totals[i] / (docCount || 1))) return null;
+  const postings = Object.create(null);
   for (const term of Object.keys(index.postings)) {
     const flat = index.postings[term];
-    if (!Array.isArray(flat) || flat.length % 5 !== 0) return null;
+    if (!Array.isArray(flat) || flat.length === 0 || flat.length % 5 !== 0) return null;
     const list = new Array(flat.length / 5);
+    let previous = -1;
     for (let i = 0, j = 0; i < flat.length; i += 5, j++) {
       const id = flat[i];
-      if (!Number.isInteger(id) || id < 0 || id >= docCount || !Number.isFinite(flat[i + 1]) || !Number.isFinite(flat[i + 2]) || !Number.isFinite(flat[i + 3]) || !Number.isFinite(flat[i + 4])) return null;
-      list[j] = [id, [flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4]]];
+      if (!Number.isInteger(id) || id <= previous || id >= docCount) return null;
+      previous = id;
+      const lengths = docs[id].lengths, counts = [flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4]];
+      for (let k = 0; k < 4; k++) if (!isCount(counts[k]) || counts[k] > lengths[k]) return null;
+      list[j] = [id, counts];
     }
     postings[term] = list;
   }
-  return {version: 1, docs: index.docs, postings, averages: index.averages, now: index.now};
+  return {version: 1, docs, postings, averages: index.averages, now: index.now};
 }
 /**
  * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
@@ -219,9 +246,9 @@ export function createSearcher(options) {
   const cache = path.join(stateDir, 'retrieval-index.json');
   // pages is null when the index came from the cache; snapshot() then loads them on demand.
   let state = null;
-  function rebuild(key) {
+  function rebuild({key, paths}) {
     try {
-      const index = decodeCachedIndex(JSON.parse(fs.readFileSync(cache, 'utf8')), key);
+      const index = decodeCachedIndex(JSON.parse(fs.readFileSync(cache, 'utf8')), key, paths);
       if (index) { index.now = (now || new Date()).toISOString(); state = {key, index, pages: null}; return; }
     }
     catch { /* Rebuild malformed or missing cache. */ }
@@ -238,9 +265,9 @@ export function createSearcher(options) {
     search: (q,opts) => search(state.index,q,opts),
     refresh: async () => { rebuild(statFingerprint(vaultDir)); },
     refreshIfChanged() {
-      const key = statFingerprint(vaultDir);
-      if (key === state.key) return false;
-      rebuild(key);
+      const current = statFingerprint(vaultDir);
+      if (current.key === state.key) return false;
+      rebuild(current);
       return true;
     },
     snapshot() {

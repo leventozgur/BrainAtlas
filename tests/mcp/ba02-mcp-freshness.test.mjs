@@ -64,3 +64,24 @@ test('a page written through a second MCP server on the same vault is visible wi
   assert.notEqual(result.isError, true);
   assert.deepEqual(await query(reader.client, 'vermilion'), ['other-agent.md']);
 });
+
+test('a freshness check that fails mid-scan does not fail wiki_query; the next query recovers', async (t) => {
+  const f = fixture(t);
+  const mcp = await connect(f);
+  t.after(() => mcp.close());
+  assert.deepEqual(await query(mcp.client, 'baseline'), ['base.md']);
+  fs.writeFileSync(path.join(f.wiki, 'late.md'), '# Late\nlate evidence');
+  const realRead = fs.readFileSync;
+  let failures = 0;
+  fs.readFileSync = function (file, ...rest) {
+    if (String(file).endsWith('late.md') && failures === 0) { failures++; const e = new Error('gone'); e.code = 'ENOENT'; throw e; }
+    return realRead.call(this, file, ...rest);
+  };
+  t.after(() => { fs.readFileSync = realRead; });
+  // The first query hits the injected failure during the rebuild: it must still answer from the last good index.
+  assert.deepEqual(await query(mcp.client, 'baseline'), ['base.md']);
+  fs.readFileSync = realRead;
+  assert.equal(failures, 1);
+  // The next query retries the rebuild and sees the new page.
+  assert.deepEqual(await query(mcp.client, 'late'), ['late.md']);
+});

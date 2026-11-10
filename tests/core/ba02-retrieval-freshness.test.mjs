@@ -188,3 +188,38 @@ test('flat on-disk postings with out-of-range ids, bad widths or non-numeric cou
     assert.deepEqual(plain(searcher.snapshot().index), fresh);
   }
 });
+
+test('structurally invalid but key-matching caches are rebuilt (fix1 regression table)', (t) => {
+  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  fs.mkdirSync(vault);
+  fs.writeFileSync(path.join(vault, 'a.md'), '---\ntitle: Alpha\n---\n# Alpha\nalpha bravo alpha');
+  fs.writeFileSync(path.join(vault, 'b.md'), '# Bravo\nbravo charlie');
+  const cache = path.join(state, 'retrieval-index.json');
+  createSearcher({ vaultDir: vault, stateDir: state, now });
+  const good = JSON.parse(fs.readFileSync(cache, 'utf8'));
+  const fresh = plain(buildIndex(loadPages(vault), { now }));
+  const termOf = (word) => Object.keys(good.index.postings).find((k) => k === word) ?? Object.keys(good.index.postings)[0];
+  const cases = {
+    'ghost page not on disk': (d) => { d.index.docs.push({ page: { path: 'ghost.md', title: 'Ghost', aliases: [], keywords: [], headings: [], body: 'ghost', frontmatter: {} }, lengths: [0, 0, 0, 1] }); },
+    'duplicate page path': (d) => { d.index.docs.push(structuredClone(d.index.docs[0])); },
+    'non-increasing posting ids': (d) => { const k = termOf(); const a = d.index.postings[k]; if (a.length >= 10) { const x = a.slice(0, 5); d.index.postings[k] = [...a.slice(5, 10), ...x]; } else d.index.postings[k] = [...a, ...a]; },
+    'repeated posting id': (d) => { const k = termOf(); d.index.postings[k] = [...d.index.postings[k], ...d.index.postings[k].slice(0, 5)]; },
+    'count larger than field length': (d) => { const k = termOf(); d.index.postings[k][1] = d.index.docs[d.index.postings[k][0]].lengths[0] + 1; },
+    'count 1e308': (d) => { d.index.postings[termOf()][1] = 1e308; },
+    'negative count': (d) => { d.index.postings[termOf()][2] = -1; },
+    'negative field length': (d) => { d.index.docs[0].lengths[1] = -3; },
+    'average inconsistent with lengths': (d) => { d.index.averages[0] = d.index.averages[0] + 1; },
+    'body not a string': (d) => { d.index.docs[0].page.body = 42; },
+    'headings not a string array': (d) => { d.index.docs[0].page.headings = [1]; },
+    'frontmatter is an array': (d) => { d.index.docs[0].page.frontmatter = []; },
+    'superseded page inside the cache': (d) => { d.index.docs[0].page.frontmatter = { status: 'superseded' }; },
+  };
+  for (const [name, mutate] of Object.entries(cases)) {
+    const data = structuredClone(good);
+    mutate(data);
+    fs.writeFileSync(cache, JSON.stringify(data));
+    const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
+    assert.deepEqual(plain(searcher.snapshot().index), fresh, name);
+    assert.deepEqual(plain(searcher.search('alpha bravo', { abstainThreshold: 0 })), plain(search(fresh, 'alpha bravo', { abstainThreshold: 0 })), `${name}: results`);
+  }
+});

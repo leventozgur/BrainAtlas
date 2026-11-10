@@ -180,7 +180,8 @@ export function createServer(options) {
   readTool('wiki_query', z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional() }), async ({ query, limit }) => {
     const count = limit ?? 5;
     // Edits made outside this server (Obsidian, sync, another agent's MCP process) are picked up here.
-    if (searcher.refreshIfChanged() && semanticEnabled) scheduleUpdate();
+    // A failed freshness check (e.g. a file removed between the scan and the read) keeps the current index; the next query retries.
+    try { if (searcher.refreshIfChanged() && semanticEnabled) scheduleUpdate(); } catch { /* Keep serving the last good index. */ }
     const answer = searcher.search(query, { limit: count, budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT), abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
     const lexical = { results: answer.results, abstained: answer.abstained };
     if (!semanticEnabled) return lexical;
