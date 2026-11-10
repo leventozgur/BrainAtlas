@@ -30,7 +30,9 @@ async function readLogTail(file) {
     const buf = Buffer.alloc(st.size - start);
     const { bytesRead } = await h.read(buf, 0, buf.length, start);
     let text = buf.subarray(0, bytesRead).toString('utf8');
-    if (start > 0) { const nl = text.indexOf('\n'); text = nl < 0 ? '' : text.slice(nl + 1); }
+    // A UTF-8 BOM at the true file start is not data; a mid-file read drops its partial first line instead.
+    if (start === 0) text = text.replace(/^﻿/, '');
+    else { const nl = text.indexOf('\n'); text = nl < 0 ? '' : text.slice(nl + 1); }
     return text;
   } catch { return ''; }
   finally { await h?.close().catch(() => {}); }

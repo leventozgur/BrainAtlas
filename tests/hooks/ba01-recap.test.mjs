@@ -177,3 +177,13 @@ test('cold session-start stays under 300 ms p95 with a 5 MB log', async t => {
   for (let round = 1; round < 3 && p95 >= 300; round++) p95 = Math.min(p95, measure());
   assert.ok(p95 < 300, `p95 ${p95} ms`);
 });
+
+test('a UTF-8 BOM at the start of wiki/log.md does not hide the first machine entry', async t => {
+  const f = await vaultFixture(t, {
+    pages: { 'wiki/entities/first.md': '# First Page\n' },
+  });
+  const body = `${logLine('2026-11-09T12:27:00.478Z', { action: 'update-page', path: 'wiki/entities/first.md' })}\n`;
+  await writeFile(join(f.vault, 'wiki', 'log.md'), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(body, 'utf8')]));
+  const card = await buildRecap({ vaultPath: f.vault, stateDir: f.state, now: NOW });
+  assert.match(card, /- 2026-11-09 First Page \(wiki\/entities\/first\.md\)/);
+});
