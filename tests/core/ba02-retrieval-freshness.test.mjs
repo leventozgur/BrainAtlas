@@ -166,3 +166,25 @@ test('the persisted cache lives only under the state directory', (t) => {
   assert.ok(fs.existsSync(path.join(state, 'retrieval-index.json')));
   assert.deepEqual(fs.readdirSync(vault).sort(), ['a.md', 'b.md']);
 });
+
+test('flat on-disk postings with out-of-range ids, bad widths or non-numeric counts are rebuilt', (t) => {
+  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  fs.mkdirSync(vault);
+  fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha body');
+  const cache = path.join(state, 'retrieval-index.json');
+  createSearcher({ vaultDir: vault, stateDir: state, now });
+  const good = JSON.parse(fs.readFileSync(cache, 'utf8'));
+  const fresh = plain(buildIndex(loadPages(vault), { now }));
+  const term = Object.keys(good.index.postings)[0];
+  const variants = [
+    { ...good.index, postings: { ...good.index.postings, [term]: [99, 1, 1, 1, 1] } },
+    { ...good.index, postings: { ...good.index.postings, [term]: [0, 1, 1, 1] } },
+    { ...good.index, postings: { ...good.index.postings, [term]: [0, 'x', 1, 1, 1] } },
+    { ...good.index, postings: { ...good.index.postings, [term]: [0.5, 1, 1, 1, 1] } },
+  ];
+  for (const index of variants) {
+    fs.writeFileSync(cache, JSON.stringify({ key: good.key, index }));
+    const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
+    assert.deepEqual(plain(searcher.snapshot().index), fresh);
+  }
+});

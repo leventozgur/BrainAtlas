@@ -166,7 +166,7 @@ export function search(index, query, options = {}) {
   return {results, abstained:false, reason:null, truncated};
 }
 // Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
-const FINGERPRINT_SCHEMA = 'retrieval-stat-v3';
+const FINGERPRINT_SCHEMA = 'retrieval-stat-v4';
 function statFingerprint(vaultDir) {
   const { root, files } = markdownFiles(vaultDir);
   const fingerprint = createHash('sha256').update(FINGERPRINT_SCHEMA);
@@ -178,8 +178,36 @@ function statFingerprint(vaultDir) {
   }
   return fingerprint.digest('hex');
 }
-function validCachedIndex(index) {
-  return index.version === 1 && Array.isArray(index.docs) && index.postings && Array.isArray(index.averages) && index.docs.every(d => d && d.page && safePath(d.page.path) && typeof d.page.title === 'string' && Array.isArray(d.lengths) && d.lengths.length === 4 && d.lengths.every(Number.isFinite)) && index.averages.length === 4 && index.averages.every(Number.isFinite) && Object.values(index.postings).every(list => Array.isArray(list) && list.every(item => Array.isArray(item) && Number.isInteger(item[0]) && item[0] >= 0 && item[0] < index.docs.length && Array.isArray(item[1]) && item[1].length === 4 && item[1].every(Number.isFinite)));
+// On-disk postings are flat per term: [id, c0, c1, c2, c3, id, ...]. Decoding restores the in-memory nested shape
+// that buildIndex produces, so search results and scores are unchanged. Every field is checked before use.
+function flattenPostings(index) {
+  const postings = Object.create(null);
+  for (const term of Object.keys(index.postings)) {
+    const flat = [];
+    for (const [id, counts] of index.postings[term]) flat.push(id, counts[0], counts[1], counts[2], counts[3]);
+    postings[term] = flat;
+  }
+  return {...index, postings};
+}
+function decodeCachedIndex(data, key) {
+  if (!data || data.key !== key) return null;
+  const index = data.index;
+  if (!index || index.version !== 1 || !Array.isArray(index.docs) || !index.postings || typeof index.postings !== 'object' || !Array.isArray(index.averages)) return null;
+  if (!index.docs.every(d => d && d.page && safePath(d.page.path) && typeof d.page.title === 'string' && Array.isArray(d.lengths) && d.lengths.length === 4 && d.lengths.every(Number.isFinite))) return null;
+  if (index.averages.length !== 4 || !index.averages.every(Number.isFinite)) return null;
+  const docCount = index.docs.length, postings = Object.create(null);
+  for (const term of Object.keys(index.postings)) {
+    const flat = index.postings[term];
+    if (!Array.isArray(flat) || flat.length % 5 !== 0) return null;
+    const list = new Array(flat.length / 5);
+    for (let i = 0, j = 0; i < flat.length; i += 5, j++) {
+      const id = flat[i];
+      if (!Number.isInteger(id) || id < 0 || id >= docCount || !Number.isFinite(flat[i + 1]) || !Number.isFinite(flat[i + 2]) || !Number.isFinite(flat[i + 3]) || !Number.isFinite(flat[i + 4])) return null;
+      list[j] = [id, [flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4]]];
+    }
+    postings[term] = list;
+  }
+  return {version: 1, docs: index.docs, postings, averages: index.averages, now: index.now};
 }
 /**
  * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
@@ -192,14 +220,17 @@ export function createSearcher(options) {
   // pages is null when the index came from the cache; snapshot() then loads them on demand.
   let state = null;
   function rebuild(key) {
-    try { const data = JSON.parse(fs.readFileSync(cache, 'utf8')); if (data.key === key && validCachedIndex(data.index)) { data.index.now = (now || new Date()).toISOString(); state = {key, index: data.index, pages: null}; return; } }
+    try {
+      const index = decodeCachedIndex(JSON.parse(fs.readFileSync(cache, 'utf8')), key);
+      if (index) { index.now = (now || new Date()).toISOString(); state = {key, index, pages: null}; return; }
+    }
     catch { /* Rebuild malformed or missing cache. */ }
     const pages = loadPages(vaultDir);
     const index = buildIndex(pages, {now});
     state = {key, index, pages};
     try {
       fs.mkdirSync(stateDir, {recursive:true});
-      atomicWriter(cache, JSON.stringify({key,index}));
+      atomicWriter(cache, JSON.stringify({key, index: flattenPostings(index)}));
     } catch { /* Search still works without a writable cache. */ }
   }
   rebuild(statFingerprint(vaultDir));
