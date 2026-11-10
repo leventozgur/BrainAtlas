@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Prompt hook (security and correctness fix): snippets are now redacted before they are shortened, closing a case where a truncated fragment of a secret-like value could reach the agent context; each injected block keeps its complete `Title (path)` line (no partial titles at small budgets) and is never title-only; only pages that were actually injected are remembered as already shown in the session; the retrieval call no longer applies a cumulative snippet budget. Output limits per client and mode are unchanged.
 - Session start (Claude Code, Copilot, Gemini): when no `handoff.md` exists, the hook now injects a short, deterministic recap card built from the last 14 days of machine entries in `wiki/log.md` (up to 5 recently changed pages with dates and titles) and, when the receipts module has a queue, the number of pending review candidates. At most 800 characters, redacted, no new configuration, not produced in `manual` mode. The recap code loads only on session start; the per-prompt hook path is unchanged (measured +0.3 ms p50). In a small synthetic "where did we leave off" evaluation with a blind scorer, agents with the card named the active topics correctly in 10/10 scenarios versus 0.55 average without it.
 - Repository evaluation tools (not shipped in releases): `eval/hook-eval.mjs`, `eval/scale-bench.mjs`, `eval/gate.mjs`, `eval/ba-suite.mjs` and new development sets for identifiers, current-state questions, multi-hop questions and near-topic negatives (see `eval/README-ba.md`).
 
