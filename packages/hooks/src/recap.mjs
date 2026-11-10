@@ -13,6 +13,10 @@ const TITLE_CHARS = 100;
 const PATH_CHARS = 240;
 const NOFOLLOW = constants.O_NOFOLLOW || 0;
 const LOG_LINE = /^- (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\{.*\})$/;
+// C0, DEL, C1 and the Unicode line/paragraph separators can forge card lines.
+const LINE_SEPARATORS = String.fromCharCode(0x2028, 0x2029);
+const CONTROL = new RegExp(`[\u0000-\u001f\u007f-\u009f${LINE_SEPARATORS}]`);
+const CONTROL_ALL = new RegExp(CONTROL.source, 'g');
 
 const ownedByUser = st => typeof process.getuid !== 'function' || st.uid === process.getuid();
 async function ownedDirectory(dir) {
@@ -27,18 +31,22 @@ async function readLogTail(file) {
     const st = await h.stat();
     if (!st.isFile()) return '';
     const start = Math.max(0, st.size - LOG_TAIL_BYTES);
-    const buf = Buffer.alloc(st.size - start);
-    const { bytesRead } = await h.read(buf, 0, buf.length, start);
-    let text = buf.subarray(0, bytesRead).toString('utf8');
-    // A UTF-8 BOM at the true file start is not data; a mid-file read drops its partial first line instead.
-    if (start === 0) text = text.replace(/^﻿/, '');
-    else { const nl = text.indexOf('\n'); text = nl < 0 ? '' : text.slice(nl + 1); }
-    return text;
+    // One byte before the window tells whether the window starts exactly on a line boundary.
+    const from = start > 0 ? start - 1 : 0;
+    const buf = Buffer.alloc(st.size - from);
+    const { bytesRead } = await h.read(buf, 0, buf.length, from);
+    const bytes = buf.subarray(0, bytesRead);
+    if (start === 0) return bytes.toString('utf8').replace(/^﻿/, '');
+    if (bytes[0] === 0x0a) return bytes.subarray(1).toString('utf8');
+    // Mid-line start: the first (partial) line is dropped.
+    const body = bytes.subarray(1);
+    const nl = body.indexOf(0x0a);
+    return nl < 0 ? '' : body.subarray(nl + 1).toString('utf8');
   } catch { return ''; }
   finally { await h?.close().catch(() => {}); }
 }
 function wikiPagePath(rel) {
-  if (rel.length > PATH_CHARS || !rel.startsWith('wiki/') || !rel.endsWith('.md') || rel.includes('\\') || rel.includes('\0')) return false;
+  if (rel.length > PATH_CHARS || !rel.startsWith('wiki/') || !rel.endsWith('.md') || rel.includes('\\') || CONTROL.test(rel)) return false;
   if (rel === 'wiki/index.md' || rel === 'wiki/log.md') return false;
   return rel.split('/').every(part => part && part !== '.' && part !== '..');
 }
@@ -78,7 +86,7 @@ function titleOf(head, rel) {
   const { data = {}, body = head } = parseFrontmatter(head);
   let title = typeof data.title === 'string' ? data.title : '';
   if (!title.trim()) { const heading = /^#[ \t]+(.+)$/m.exec(body); title = heading ? heading[1] : ''; }
-  title = title.replace(/\s+/g, ' ').trim();
+  title = title.replace(CONTROL_ALL, ' ').replace(/\s+/g, ' ').trim();
   if (!title) title = basename(rel).replace(/\.md$/i, '');
   return title.slice(0, TITLE_CHARS);
 }
