@@ -41,8 +41,8 @@ function canonical(x) {
   if (x && typeof x === 'object') return Object.fromEntries(Object.entries(x).map(([k,v]) => [k, canonical(v)]));
   return x;
 }
-/** Load only regular Markdown files; symlinks are never followed. */
-export function loadPages(vaultDir) {
+/** Regular Markdown files under the vault, in loadPages order; symlinks are never followed. Reads no file contents. */
+function markdownFiles(vaultDir) {
   const files = [];
   function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name, 'en'))) {
@@ -54,6 +54,11 @@ export function loadPages(vaultDir) {
   let root;
   try { root = fs.realpathSync(vaultDir); if (!fs.statSync(root).isDirectory()) throw new Error(); walk(root); }
   catch { fail('E_VAULT_MISSING', 'Vault unavailable'); }
+  return { root, files };
+}
+/** Load only regular Markdown files; symlinks are never followed. */
+export function loadPages(vaultDir) {
+  const { root, files } = markdownFiles(vaultDir);
   return files.map(full => {
     const raw = fs.readFileSync(full, 'utf8');
     const match = raw.match(/^\uFEFF?---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/);
@@ -160,22 +165,56 @@ export function search(index, query, options = {}) {
   });
   return {results, abstained:false, reason:null, truncated};
 }
+// Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
+const FINGERPRINT_SCHEMA = 'retrieval-stat-v3';
+function statFingerprint(vaultDir) {
+  const { root, files } = markdownFiles(vaultDir);
+  const fingerprint = createHash('sha256').update(FINGERPRINT_SCHEMA);
+  for (const full of files) {
+    let token;
+    try { const st = fs.lstatSync(full); token = [st.size, st.mtimeMs, st.ctimeMs, st.ino].join('\0'); }
+    catch { token = 'unstable'; } // Removed between walk and stat: never equal to a stored key, so the next check rebuilds.
+    fingerprint.update(`${path.relative(root, full).split(path.sep).join('/')}\0${token}\n`);
+  }
+  return fingerprint.digest('hex');
+}
+function validCachedIndex(index) {
+  return index.version === 1 && Array.isArray(index.docs) && index.postings && Array.isArray(index.averages) && index.docs.every(d => d && d.page && safePath(d.page.path) && typeof d.page.title === 'string' && Array.isArray(d.lengths) && d.lengths.length === 4 && d.lengths.every(Number.isFinite)) && index.averages.length === 4 && index.averages.every(Number.isFinite) && Object.values(index.postings).every(list => Array.isArray(list) && list.every(item => Array.isArray(item) && Number.isInteger(item[0]) && item[0] >= 0 && item[0] < index.docs.length && Array.isArray(item[1]) && item[1].length === 4 && item[1].every(Number.isFinite)));
+}
+/**
+ * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
+ * `snapshot()` returns the pages and lexical index of the last refresh, for callers that need both.
+ */
 export function createSearcher(options) {
   const {vaultDir, stateDir, now, atomicWriter = atomicWriteFileSync} = options || {};
   if (typeof vaultDir !== 'string' || typeof stateDir !== 'string') fail('E_INVALID_INPUT', 'Expected vault and state directories');
-  let index;
-  function refreshSync() {
+  const cache = path.join(stateDir, 'retrieval-index.json');
+  // pages is null when the index came from the cache; snapshot() then loads them on demand.
+  let state = null;
+  function rebuild(key) {
+    try { const data = JSON.parse(fs.readFileSync(cache, 'utf8')); if (data.key === key && validCachedIndex(data.index)) { data.index.now = (now || new Date()).toISOString(); state = {key, index: data.index, pages: null}; return; } }
+    catch { /* Rebuild malformed or missing cache. */ }
     const pages = loadPages(vaultDir);
-    const fingerprint = createHash('sha256').update('retrieval-stemmer-v2');
-    for (const page of pages) { const full = path.join(vaultDir, page.path); const st = fs.statSync(full); fingerprint.update(page.path).update(String(st.mtimeMs)).update(String(st.size)).update(createHash('sha256').update(fs.readFileSync(full)).digest('hex')); }
-    const key = fingerprint.digest('hex'), cache = path.join(stateDir, 'retrieval-index.json');
-    try { const data = JSON.parse(fs.readFileSync(cache, 'utf8')); if (data.key === key && data.index.version === 1 && Array.isArray(data.index.docs) && data.index.postings && Array.isArray(data.index.averages) && data.index.docs.every(d => d && d.page && safePath(d.page.path) && typeof d.page.title === 'string' && Array.isArray(d.lengths) && d.lengths.length === 4 && d.lengths.every(Number.isFinite)) && data.index.averages.length === 4 && data.index.averages.every(Number.isFinite) && Object.values(data.index.postings).every(list => Array.isArray(list) && list.every(item => Array.isArray(item) && Number.isInteger(item[0]) && item[0] >= 0 && item[0] < data.index.docs.length && Array.isArray(item[1]) && item[1].length === 4 && item[1].every(Number.isFinite)))) { index = data.index; index.now = (now || new Date()).toISOString(); return; } } catch { /* Rebuild malformed or missing cache. */ }
-    index = buildIndex(pages, {now});
+    const index = buildIndex(pages, {now});
+    state = {key, index, pages};
     try {
       fs.mkdirSync(stateDir, {recursive:true});
       atomicWriter(cache, JSON.stringify({key,index}));
     } catch { /* Search still works without a writable cache. */ }
   }
-  refreshSync();
-  return {search: (q,opts) => search(index,q,opts), refresh: async () => { refreshSync(); }};
+  rebuild(statFingerprint(vaultDir));
+  return {
+    search: (q,opts) => search(state.index,q,opts),
+    refresh: async () => { rebuild(statFingerprint(vaultDir)); },
+    refreshIfChanged() {
+      const key = statFingerprint(vaultDir);
+      if (key === state.key) return false;
+      rebuild(key);
+      return true;
+    },
+    snapshot() {
+      state.pages ??= loadPages(vaultDir);
+      return {pages: state.pages, index: state.index};
+    },
+  };
 }

@@ -14,7 +14,7 @@ Index Markdown evidence and return ranked, freshness-aware snippets or abstain w
 export function buildIndex(pages, options);
 /** @param {Index} index @param {string} query @param {{limit?:number,budgetChars?:number,asOf?:Date,abstainThreshold?:number}} options @returns {SearchResult} */
 export function search(index, query, options);
-/** @param {{vaultDir:string,stateDir:string,now?:Date}} options @returns {{search:(q:string,opts?:object)=>SearchResult,refresh:()=>Promise<void>}} */
+/** @param {{vaultDir:string,stateDir:string,now?:Date}} options @returns {{search:(q:string,opts?:object)=>SearchResult,refresh:()=>Promise<void>,refreshIfChanged:()=>boolean,snapshot:()=>{pages:Page[],index:Index}}} */
 export function createSearcher(options);
 /** @param {string} s @returns {string} */
 export function normalizeText(s);
@@ -45,6 +45,10 @@ Results contain evidence paths, bounded snippets, scores, freshness, and status.
 ```js
 const answer = search(index, 'vault backup', {limit:3,budgetChars:1200});
 ```
+
+## Freshness (searcher, contract version 1 additions)
+
+`createSearcher` additionally returns `refreshIfChanged()` and `snapshot()`; `search` and `refresh` keep their signatures. The change check computes a fingerprint from `lstat` values (`size`, `mtimeMs`, `ctimeMs`, `ino`) of the same regular Markdown files `loadPages` reads, plus their vault-relative paths and the schema tag `retrieval-stat-v3`. It reads no page contents. `refreshIfChanged()` returns `false` without any file read when the fingerprint is unchanged, and otherwise rebuilds (reusing the persisted cache only when its key matches) and returns `true`. `snapshot()` returns the pages and lexical index of the last refresh; pages are loaded on demand when the index came from the cache. Limitation: a rewrite that leaves size, mtime, ctime and inode unchanged is not detected, which is accepted because ctime changes on each write on supported filesystems. Symbolic links are not followed or tracked, and the cache stays under `stateDir`. `searchHybrid` in `modules/semantic` accepts an optional `lexicalIndex`, which must be `buildIndex(pages)` for the same pages; without it the index is built from `pages` as before.
 
 ## Security
 
