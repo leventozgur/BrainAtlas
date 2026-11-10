@@ -23,7 +23,7 @@ function mainCheckout() {
 
 // PM fix (2026-11-11): the comparison with the main checkout only makes sense on the BA-00 track branch; on main,
 // in CI (single detached checkout) and on later tracks that intentionally change ranking, it is skipped.
-const ON_TRACK = git(['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim() === 'track/BA-00';
+const ON_TRACK = git(['rev-parse', '--abbrev-ref', 'HEAD']).stdout?.trim() === 'track/BA-00';
 const ONLY_ON_TRACK = { skip: !ON_TRACK };
 const MAIN = ON_TRACK ? mainCheckout() : null;
 const DATASETS = [

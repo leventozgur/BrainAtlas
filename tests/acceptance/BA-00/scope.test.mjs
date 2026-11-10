@@ -7,7 +7,7 @@ import { ROOT, git } from './helpers.mjs';
 const changed = () => git(['diff', '--name-only', 'main...HEAD'], ROOT).stdout.split('\n').filter(Boolean);
 
 // PM fix (2026-11-11): these checks describe the BA-00 track branch only; on main, other tracks and CI they are skipped.
-const ONLY_ON_TRACK = { skip: git(['rev-parse', '--abbrev-ref', 'HEAD'], ROOT).stdout.trim() !== 'track/BA-00' };
+const ONLY_ON_TRACK = { skip: git(['rev-parse', '--abbrev-ref', 'HEAD'], ROOT).stdout?.trim() !== 'track/BA-00' };
 
 test('git: main ref exists and HEAD is a descendant of it', ONLY_ON_TRACK, () => {
   assert.equal(git(['rev-parse', '--verify', 'main'], ROOT).status, 0);
