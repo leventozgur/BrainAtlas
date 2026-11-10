@@ -3,7 +3,6 @@ import { constants, realpathSync } from 'node:fs';
 import { lstat, open, readdir } from 'node:fs/promises';
 import { basename, join, sep } from 'node:path';
 import { redact } from '../../core/src/safety/index.mjs';
-import { parseFrontmatter } from '../../core/src/vault/index.mjs';
 
 const LOG_TAIL_BYTES = 64 * 1024;
 const WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -82,9 +81,41 @@ async function readPageHead(vaultReal, rel) {
   } catch { return null; }
   finally { await h?.close().catch(() => {}); }
 }
+// Minimal frontmatter split for the title only; no YAML parser is loaded on the hook path.
+function frontmatterSplit(head) {
+  const lines = head.replace(/^﻿/, '').split(/\r?\n/);
+  if (lines[0] !== '---') return { fields: null, body: lines.join('\n') };
+  const end = lines.findIndex((line, i) => i > 0 && line === '---');
+  if (end < 0) return { fields: null, body: '' };
+  return { fields: lines.slice(1, end), body: lines.slice(end + 1).join('\n') };
+}
+const DOUBLE_ESCAPES = { n: '\n', t: '\t', r: '\r', '"': '"', '\\': '\\', '/': '/' };
+function unescapeDouble(text) {
+  return text.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, code) => (code.length === 5
+    ? String.fromCharCode(parseInt(code.slice(1), 16))
+    : (DOUBLE_ESCAPES[code] ?? code)));
+}
+// Top-level, single-line `title:` only. Returns null when absent, duplicated, empty, non-string or unsupported.
+function frontmatterTitle(lines) {
+  const keys = lines.filter(line => /^title[ \t]*:/.test(line));
+  if (keys.length !== 1) return null;
+  const raw = keys[0].replace(/^title[ \t]*:[ \t]*/, '');
+  if (raw.startsWith('"')) {
+    const match = /^"((?:[^"\\]|\\.)*)"[ \t]*(?:#.*)?$/.exec(raw);
+    return match ? unescapeDouble(match[1]) : null;
+  }
+  if (raw.startsWith("'")) {
+    const match = /^'((?:[^']|'')*)'[ \t]*(?:#.*)?$/.exec(raw);
+    return match ? match[1].replace(/''/g, "'") : null;
+  }
+  if (/^[|>[{&*!%@`]/.test(raw)) return null;
+  const value = raw.replace(/[ \t]+#.*$/, '').trim();
+  if (!value || /^(?:[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?|true|false|null|~)$/i.test(value)) return null;
+  return value;
+}
 function titleOf(head, rel) {
-  const { data = {}, body = head } = parseFrontmatter(head);
-  let title = typeof data.title === 'string' ? data.title : '';
+  const { fields, body } = frontmatterSplit(head);
+  let title = (fields && frontmatterTitle(fields)) || '';
   if (!title.trim()) { const heading = /^#[ \t]+(.+)$/m.exec(body); title = heading ? heading[1] : ''; }
   title = title.replace(CONTROL_ALL, ' ').replace(/\s+/g, ' ').trim();
   if (!title) title = basename(rel).replace(/\.md$/i, '');

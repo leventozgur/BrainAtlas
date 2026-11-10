@@ -7,7 +7,6 @@ import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { redact } from '../../core/src/safety/index.mjs';
 import { resolvePaths, vaultId } from '../../core/src/paths/index.mjs';
-import { buildRecap } from './recap.mjs';
 
 const clients = new Set(['claude', 'codex', 'kiro', 'copilot', 'gemini']);
 const events = new Set(['prompt', 'session-start', 'session-end']);
@@ -90,8 +89,12 @@ export async function runHook(input = {}) {
         let handoff = '';
         try { handoff = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch {}
         // An explicit handoff card wins; otherwise build the bounded recap (never in manual mode).
+        // The recap module loads lazily so prompt hooks never pay for it; a load failure means an empty card.
         if (handoff.trim()) context = handoff;
-        else if (mode !== 'manual' && config.vault?.path) context = await buildRecap({vaultPath:config.vault.path,stateDir,now});
+        else if (mode !== 'manual' && config.vault?.path) {
+          try { const { buildRecap } = await import('./recap.mjs'); context = await buildRecap({vaultPath:config.vault.path,stateDir,now}); }
+          catch { context = ''; }
+        }
       }
     } else if (typeof prompt === 'string' && prompt.trim() && stateDir && config.vault?.path) {
       const trigger = /(^|\s)(?:\/sb|@sb)(?=\s|$)/i.test(prompt);

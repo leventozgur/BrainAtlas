@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { runHook } from '../../packages/hooks/src/index.mjs';
 import { buildRecap } from '../../packages/hooks/src/recap.mjs';
@@ -234,4 +234,61 @@ test('log tail window: a window starting exactly on a line boundary keeps that l
   const midLine = await vaultFixture(t, { pages: { 'wiki/entities/boundary.md': '# Boundary Page\n' } });
   await writeFile(join(midLine.vault, 'wiki', 'log.md'), `q${body}`);
   assert.equal(await buildRecap({ vaultPath: midLine.vault, stateDir: midLine.state, now: NOW }), '');
+});
+
+test('frontmatter title reader covers quoted, single-quoted, plain, escaped and non-string values without YAML', async t => {
+  const cases = [
+    ['title: Plain Title # trailing comment', 'Plain Title'],
+    ["title: 'It''s single'", "It's single"],
+    ['title: "Esc \\"q\\" \\\\ \\u0041"', 'Esc "q" \\ A'],
+    ['title: 2026', 'Heading Wins'],
+    ['title: true', 'Heading Wins'],
+    ['title: |', 'Heading Wins'],
+    ['title: ""', 'Heading Wins'],
+    ['title: One\ntitle: Two', 'Heading Wins'],
+  ];
+  for (const [line, expected] of cases) {
+    const f = await vaultFixture(t, {
+      pages: { 'wiki/entities/p.md': `---\n${line}\n---\n# Heading Wins\nbody\n` },
+      log: [logLine('2026-11-09T12:27:00.478Z', { action: 'update-page', path: 'wiki/entities/p.md' })],
+    });
+    const card = await buildRecap({ vaultPath: f.vault, stateDir: f.state, now: NOW });
+    assert.ok(card.includes(`- 2026-11-09 ${expected} (wiki/entities/p.md)`), `${line} -> ${card}`);
+  }
+});
+
+test('the prompt path never loads recap.mjs or the YAML parser in the main thread; session-start does load recap.mjs', async t => {
+  const f = await vaultFixture(t);
+  const probeDir = await mkdtemp(join(tmpdir(), 'ba01-probe-')); t.after(() => rm(probeDir, { recursive: true, force: true }));
+  const loaderFile = join(probeDir, 'loader.mjs');
+  await writeFile(loaderFile, [
+    "import { appendFileSync } from 'node:fs';",
+    'export async function resolve(specifier, context, next) {',
+    '  const result = await next(specifier, context);',
+    `  appendFileSync(process.env.BA01_PROBE_LOG, result.url + '\\n');`,
+    '  return result;',
+    '}',
+  ].join('\n'));
+  const registerFile = join(probeDir, 'register.mjs');
+  await writeFile(registerFile, `import { register } from 'node:module';\nregister(${JSON.stringify(pathToFileURL(loaderFile).href)});\n`);
+  const env = { PATH: process.env.PATH, HOME: f.root, XDG_CONFIG_HOME: join(f.root, 'config'), XDG_STATE_HOME: join(f.root, 'xdg-state'), XDG_DATA_HOME: join(f.root, 'data') };
+  const paths = resolvePaths({ env });
+  await mkdir(dirname(paths.configFile), { recursive: true });
+  const config = defaultConfig('lite'); config.vault.path = f.vault; config.retrieval.abstainThreshold = 0;
+  await writeFile(paths.configFile, JSON.stringify(config));
+  const run = (client, event, input, name) => {
+    const log = join(probeDir, `${name}.txt`);
+    const r = spawnSync(process.execPath, ['--import', pathToFileURL(registerFile).href, BIN, client, event], {
+      input, env: { ...env, BA01_PROBE_LOG: log }, encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, r.stderr);
+    return readFile(log, 'utf8').catch(() => '');
+  };
+  const prompt = await run('claude', 'prompt', '{}', 'prompt');
+  assert.match(prompt, /packages\/hooks\/src\/index\.mjs/, 'probe must observe the hook entry module');
+  assert.doesNotMatch(prompt, /\/recap\.mjs/);
+  assert.doesNotMatch(prompt, /node_modules\/yaml\//);
+  assert.doesNotMatch(prompt, /core\/src\/vault\/index\.mjs/);
+  const start = await run('claude', 'session-start', '{}', 'start');
+  assert.match(start, /\/recap\.mjs/, 'positive control: session-start loads the recap module');
 });
