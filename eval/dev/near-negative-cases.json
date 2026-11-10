@@ -1,14 +1,86 @@
 [
-  {"id": "nn-01", "category": "near-negative", "query": "Larkspur dead-letter kayıtları EU bölgesinde kaç gün saklanır?", "relevant": [], "abstain": true},
-  {"id": "nn-02", "category": "near-negative", "query": "What is the Tidewater cache warmup schedule on Sundays?", "relevant": [], "abstain": true},
-  {"id": "nn-03", "category": "near-negative", "query": "Basil Windows kurulumu için kod imzalama sertifikası hangi kurumdan alınır?", "relevant": [], "abstain": true},
-  {"id": "nn-04", "category": "near-negative", "query": "What is the rate limit for anonymous clients calling the Orchard API?", "relevant": [], "abstain": true},
-  {"id": "nn-05", "category": "near-negative", "query": "Mailroom faturalarının para birimi ve ödeme vadesi nedir?", "relevant": [], "abstain": true},
-  {"id": "nn-06", "category": "near-negative", "query": "How often is the restore drill run for the archive region?", "relevant": [], "abstain": true},
-  {"id": "nn-07", "category": "near-negative", "query": "Nöbetçi mühendislere ödenen ek ücret politikası nedir?", "relevant": [], "abstain": true},
-  {"id": "nn-08", "category": "near-negative", "query": "How many times are failed webhook deliveries retried before the subscription is dropped?", "relevant": [], "abstain": true},
-  {"id": "nn-09", "category": "near-negative", "query": "What sampling rate does Quillstone use for debug output in production?", "relevant": [], "abstain": true},
-  {"id": "nn-10", "category": "near-negative", "query": "Yarı zamanlı çalışanlar için resmi tatil takvimi nasıl uygulanır?", "relevant": [], "abstain": true},
-  {"id": "nn-11", "category": "near-negative", "query": "What were the GPU results in the search performance experiments?", "relevant": [], "abstain": true},
-  {"id": "nn-12", "category": "near-negative", "query": "Does an external auditor sign off on the quarterly access review?", "relevant": [], "abstain": true}
+  {
+    "id": "nn-01",
+    "category": "near-negative",
+    "query": "Larkspur dead-letter kayıtları EU bölgesinde kaç gün saklanır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-02",
+    "category": "near-negative",
+    "query": "What is the Tidewater cache warmup schedule on Sundays?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-03",
+    "category": "near-negative",
+    "query": "Basil Windows kurulumu için kod imzalama sertifikası hangi kurumdan alınır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-04",
+    "category": "near-negative",
+    "query": "How many concurrent connections can an anonymous client hold open to the Orchard API?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-05",
+    "category": "near-negative",
+    "query": "Mailroom faturalarının para birimi ve ödeme vadesi nedir?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-06",
+    "category": "near-negative",
+    "query": "How often is the restore drill run for the archive region?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-07",
+    "category": "near-negative",
+    "query": "Nöbetçi mühendislere ödenen ek ücret politikası nedir?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-08",
+    "category": "near-negative",
+    "query": "How many times are failed webhook deliveries retried before the subscription is dropped?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-09",
+    "category": "near-negative",
+    "query": "What sampling rate does Quillstone use for debug output in production?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-10",
+    "category": "near-negative",
+    "query": "Yarı zamanlı çalışanlar için resmi tatil takvimi nasıl uygulanır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-11",
+    "category": "near-negative",
+    "query": "What were the GPU results in the search performance experiments?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "nn-12",
+    "category": "near-negative",
+    "query": "Does an external auditor sign off on the quarterly access review?",
+    "relevant": [],
+    "abstain": true
+  }
 ]

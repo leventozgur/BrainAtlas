@@ -1,4 +1,15 @@
 // SPDX-License-Identifier: MIT
+/**
+ * Scale benchmark on deterministic synthetic vaults (no real content, no network).
+ *
+ * Output keys per size N: buildIndexMs, createSearcherColdMs (no cache), createSearcherWarmMs (cached
+ * second setup), searchMs {p50,p95,count} (core search per query), hookMs {p50,p95,count} (runHook with
+ * the real retrieval worker), hybridOverheadMs {p50,p95,count}.
+ *
+ * hybridOverheadMs is NOT the fusion cost alone. It is the total per-query time of the MCP hybrid path:
+ * loadPages + searchHybrid (which includes buildIndex and the lexical search) with a fake provider
+ * returning fixed vectors. It does not measure a real embedding provider.
+ */
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -26,6 +37,8 @@ async function timed(fn) {
 
 /**
  * Measure retrieval and hook latency on deterministic synthetic vaults.
+ * hybridOverheadMs is the full per-query MCP hybrid-path time (loadPages + searchHybrid, buildIndex included),
+ * measured with a fake provider; see the file header.
  * Timing values vary between runs; the synthetic content and queries do not.
  * @param {{sizes?:number[],seed?:number,queryCount?:number,hookCount?:number,now?:Date}} options
  */
