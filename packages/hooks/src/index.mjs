@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { redact } from '../../core/src/safety/index.mjs';
 import { resolvePaths, vaultId } from '../../core/src/paths/index.mjs';
+import { buildRecap } from './recap.mjs';
 
 const clients = new Set(['claude', 'codex', 'kiro', 'copilot', 'gemini']);
 const events = new Set(['prompt', 'session-start', 'session-end']);
@@ -85,7 +86,13 @@ export async function runHook(input = {}) {
     if (event === 'session-end' || (client === 'copilot' && event === 'prompt') || (event === 'session-start' && !['claude','copilot','gemini'].includes(client))) { /* unsupported */ }
     else if (event === 'session-start') {
       const geminiStartup = client !== 'gemini' || ['startup','resume','clear'].includes(data.source);
-      if (stateDir && geminiStartup) { try { context = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch {} }
+      if (stateDir && geminiStartup) {
+        let handoff = '';
+        try { handoff = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch {}
+        // An explicit handoff card wins; otherwise build the bounded recap (never in manual mode).
+        if (handoff.trim()) context = handoff;
+        else if (mode !== 'manual' && config.vault?.path) context = await buildRecap({vaultPath:config.vault.path,stateDir,now});
+      }
     } else if (typeof prompt === 'string' && prompt.trim() && stateDir && config.vault?.path) {
       const trigger = /(^|\s)(?:\/sb|@sb)(?=\s|$)/i.test(prompt);
       const query = prompt.replace(/(^|\s)(?:\/sb|@sb)(?=\s|$)/gi, '$1').trim();
