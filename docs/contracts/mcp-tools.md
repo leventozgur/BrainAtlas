@@ -22,7 +22,7 @@ Tool schemas are: `wiki_query{query:string,limit?:number}`, `wiki_read_page{path
 
 ## Output and errors
 
-Read tools return bounded page/index/status/lint data. Write tools are omitted from the advertised tool list when `config.readOnly` is true. Before every write, content is passed to `scanText`; findings fail with `E_SECRET_DETECTED` and matched secret values are never returned. Invalid paths return `E_PATH_ESCAPE`.
+Read tools return bounded page/index/status/lint data. `wiki_query` first calls the searcher's `refreshIfChanged()`, so pages added, edited, deleted or renamed outside this server process (Obsidian, sync, another agent's MCP server) are returned by the next call; when semantic retrieval is enabled, such a change also schedules a background semantic index update. Write tools are omitted from the advertised tool list when `config.readOnly` is true. Before every write, content is passed to `scanText`; findings fail with `E_SECRET_DETECTED` and matched secret values are never returned. Invalid paths return `E_PATH_ESCAPE`.
 
 ## Example
 

@@ -41,8 +41,8 @@ function canonical(x) {
   if (x && typeof x === 'object') return Object.fromEntries(Object.entries(x).map(([k,v]) => [k, canonical(v)]));
   return x;
 }
-/** Load only regular Markdown files; symlinks are never followed. */
-export function loadPages(vaultDir) {
+/** Regular Markdown files under the vault, in loadPages order; symlinks are never followed. Reads no file contents. */
+function markdownFiles(vaultDir) {
   const files = [];
   function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name, 'en'))) {
@@ -54,6 +54,11 @@ export function loadPages(vaultDir) {
   let root;
   try { root = fs.realpathSync(vaultDir); if (!fs.statSync(root).isDirectory()) throw new Error(); walk(root); }
   catch { fail('E_VAULT_MISSING', 'Vault unavailable'); }
+  return { root, files };
+}
+/** Load only regular Markdown files; symlinks are never followed. */
+export function loadPages(vaultDir) {
+  const { root, files } = markdownFiles(vaultDir);
   return files.map(full => {
     const raw = fs.readFileSync(full, 'utf8');
     const match = raw.match(/^\uFEFF?---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/);
@@ -160,22 +165,138 @@ export function search(index, query, options = {}) {
   });
   return {results, abstained:false, reason:null, truncated};
 }
+// Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
+const FINGERPRINT_SCHEMA = 'retrieval-stat-v4';
+function statFingerprint(vaultDir) {
+  const { root, files } = markdownFiles(vaultDir);
+  const fingerprint = createHash('sha256').update(FINGERPRINT_SCHEMA);
+  const paths = new Set();
+  for (const full of files) {
+    const rel = path.relative(root, full).split(path.sep).join('/');
+    paths.add(rel);
+    let token;
+    try { const st = fs.lstatSync(full); token = [st.size, st.mtimeMs, st.ctimeMs, st.ino].join('\0'); }
+    catch { token = 'unstable'; } // Removed between walk and stat: never equal to a stored key, so the next check rebuilds.
+    fingerprint.update(`${rel}\0${token}\n`);
+  }
+  return { key: fingerprint.digest('hex'), paths };
+}
+// On-disk postings are flat per term: [id, c0, c1, c2, c3, id, ...]. Decoding restores the in-memory nested shape
+// that buildIndex produces, so search results and scores are unchanged. Every field is checked before use.
+function flattenPostings(index) {
+  const postings = Object.create(null);
+  for (const term of Object.keys(index.postings)) {
+    const flat = [];
+    for (const [id, counts] of index.postings[term]) flat.push(id, counts[0], counts[1], counts[2], counts[3]);
+    postings[term] = flat;
+  }
+  return {...index, postings};
+}
+// Structural checks on a cache whose key already matches the current stat fingerprint. Any violation returns null,
+// and the caller rebuilds from the vault. Checks: pages exist on disk (paths is the walked file set) and are unique;
+// page fields have the types search() reads; posting doc ids are strictly increasing and in range; counts are
+// non-negative safe integers no larger than the field length they count; averages equal the value buildIndex computes.
+const isCount = (x) => Number.isSafeInteger(x) && x >= 0;
+const isStringArray = (x) => Array.isArray(x) && x.every(v => typeof v === 'string');
+const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
+// Structural checks on a cache whose key already matches the current stat fingerprint. Any violation returns null,
+// and the caller rebuilds from the vault. The cache records every walked page as either indexed (docs) or skipped
+// (superseded or otherwise not indexed); the two lists must partition the walked file set exactly. Page fields
+// must have the types search() reads, posting doc ids are strictly increasing and in range, counts are
+// non-negative safe integers no larger than the field length they count, and averages equal buildIndex's value.
+// Page contents are not re-read: this is structural validation, not content verification (see the threat model in
+// docs/contracts/retrieval.md).
+function decodeCachedIndex(data, key, paths) {
+  if (!isPlainObject(data) || data.key !== key) return null;
+  const index = data.index, skipped = data.skipped;
+  if (!isPlainObject(index) || index.version !== 1 || !Array.isArray(index.docs) || !isPlainObject(index.postings) || !Array.isArray(index.averages) || !isStringArray(skipped)) return null;
+  const docs = index.docs, docCount = docs.length, seen = new Set();
+  for (const doc of docs) {
+    const page = doc?.page;
+    if (!isPlainObject(doc) || !isPlainObject(page) || typeof page.path !== 'string' || !safePath(page.path) || !paths.has(page.path) || seen.has(page.path)) return null;
+    seen.add(page.path);
+    if (typeof page.title !== 'string' || typeof page.body !== 'string') return null;
+    if (!isStringArray(page.headings) || !isStringArray(page.aliases) || !isStringArray(page.keywords)) return null;
+    if (!isPlainObject(page.frontmatter)) return null;
+    const fm = page.frontmatter;
+    if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) return null;
+    if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;
+  }
+  for (const p of skipped) {
+    if (!safePath(p) || !paths.has(p) || seen.has(p)) return null;
+    seen.add(p);
+  }
+  if (seen.size !== paths.size) return null;
+  const totals = [0, 0, 0, 0];
+  for (const doc of docs) for (let i = 0; i < 4; i++) totals[i] += doc.lengths[i];
+  if (index.averages.length !== 4 || !index.averages.every((avg, i) => avg === totals[i] / (docCount || 1))) return null;
+  const postings = Object.create(null);
+  for (const term of Object.keys(index.postings)) {
+    const flat = index.postings[term];
+    if (!Array.isArray(flat) || flat.length === 0 || flat.length % 5 !== 0) return null;
+    const list = new Array(flat.length / 5);
+    let previous = -1;
+    for (let i = 0, j = 0; i < flat.length; i += 5, j++) {
+      const id = flat[i];
+      if (!Number.isInteger(id) || id <= previous || id >= docCount) return null;
+      previous = id;
+      const lengths = docs[id].lengths, counts = [flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4]];
+      for (let k = 0; k < 4; k++) if (!isCount(counts[k]) || counts[k] > lengths[k]) return null;
+      list[j] = [id, counts];
+    }
+    postings[term] = list;
+  }
+  return {version: 1, docs, postings, averages: index.averages, now: index.now};
+}
+/**
+ * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
+ * `snapshot()` returns pages and lexical index that describe the same vault state.
+ */
 export function createSearcher(options) {
   const {vaultDir, stateDir, now, atomicWriter = atomicWriteFileSync} = options || {};
   if (typeof vaultDir !== 'string' || typeof stateDir !== 'string') fail('E_INVALID_INPUT', 'Expected vault and state directories');
-  let index;
-  function refreshSync() {
+  const cache = path.join(stateDir, 'retrieval-index.json');
+  // pages is null when the index came from the cache; snapshot() then loads them on demand.
+  let state = null;
+  function rebuild({key, paths}) {
+    try {
+      const index = decodeCachedIndex(JSON.parse(fs.readFileSync(cache, 'utf8')), key, paths);
+      if (index) { index.now = (now || new Date()).toISOString(); state = {key, index, pages: null}; return; }
+    }
+    catch { /* Rebuild malformed or missing cache. */ }
     const pages = loadPages(vaultDir);
-    const fingerprint = createHash('sha256').update('retrieval-stemmer-v2');
-    for (const page of pages) { const full = path.join(vaultDir, page.path); const st = fs.statSync(full); fingerprint.update(page.path).update(String(st.mtimeMs)).update(String(st.size)).update(createHash('sha256').update(fs.readFileSync(full)).digest('hex')); }
-    const key = fingerprint.digest('hex'), cache = path.join(stateDir, 'retrieval-index.json');
-    try { const data = JSON.parse(fs.readFileSync(cache, 'utf8')); if (data.key === key && data.index.version === 1 && Array.isArray(data.index.docs) && data.index.postings && Array.isArray(data.index.averages) && data.index.docs.every(d => d && d.page && safePath(d.page.path) && typeof d.page.title === 'string' && Array.isArray(d.lengths) && d.lengths.length === 4 && d.lengths.every(Number.isFinite)) && data.index.averages.length === 4 && data.index.averages.every(Number.isFinite) && Object.values(data.index.postings).every(list => Array.isArray(list) && list.every(item => Array.isArray(item) && Number.isInteger(item[0]) && item[0] >= 0 && item[0] < data.index.docs.length && Array.isArray(item[1]) && item[1].length === 4 && item[1].every(Number.isFinite)))) { index = data.index; index.now = (now || new Date()).toISOString(); return; } } catch { /* Rebuild malformed or missing cache. */ }
-    index = buildIndex(pages, {now});
+    const index = buildIndex(pages, {now});
+    state = {key, index, pages};
+    const indexed = new Set(index.docs.map(d => d.page.path));
+    const skipped = pages.map(p => p.path).filter(p => !indexed.has(p));
     try {
       fs.mkdirSync(stateDir, {recursive:true});
-      atomicWriter(cache, JSON.stringify({key,index}));
+      atomicWriter(cache, JSON.stringify({key, index: flattenPostings(index), skipped}));
     } catch { /* Search still works without a writable cache. */ }
   }
-  refreshSync();
-  return {search: (q,opts) => search(index,q,opts), refresh: async () => { refreshSync(); }};
+  // Loads pages for a cache-hit state. They must describe the same vault state as the index: if the vault changed
+  // while they were read, pages and index are rebuilt together from that one read, under the pre-read key.
+  function loadPagesForSnapshot() {
+    const before = statFingerprint(vaultDir);
+    if (before.key !== state.key) rebuild(before);
+    if (state.pages) return;
+    const key = state.key, pages = loadPages(vaultDir);
+    if (statFingerprint(vaultDir).key === key) { state.pages = pages; return; }
+    state = {key: before.key, index: buildIndex(pages, {now}), pages};
+  }
+  rebuild(statFingerprint(vaultDir));
+  return {
+    search: (q,opts) => search(state.index,q,opts),
+    refresh: async () => { rebuild(statFingerprint(vaultDir)); },
+    refreshIfChanged() {
+      const current = statFingerprint(vaultDir);
+      if (current.key === state.key) return false;
+      rebuild(current);
+      return true;
+    },
+    snapshot() {
+      if (state.pages === null) loadPagesForSnapshot();
+      return {pages: state.pages, index: state.index};
+    },
+  };
 }

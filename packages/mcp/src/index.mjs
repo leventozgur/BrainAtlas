@@ -157,7 +157,8 @@ export function createServer(options) {
     const record = JSON.stringify({ action, path: rel });
     checkWrite('wiki/log.md', record);
     await core.appendLog(vaultDir, { action, path: rel });
-    await searcher.refresh();
+    // The write has succeeded; a failed refresh must not turn it into an error. The next wiki_query retries via refreshIfChanged.
+    try { await searcher.refresh(); } catch { /* Keep the last good index. */ }
     scheduleUpdate();
   };
   const tool = (name, schema, handler) => server.registerTool(name, { description: descriptions[name], inputSchema: schema.shape }, async (args) => {
@@ -179,6 +180,9 @@ export function createServer(options) {
 
   readTool('wiki_query', z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional() }), async ({ query, limit }) => {
     const count = limit ?? 5;
+    // Edits made outside this server (Obsidian, sync, another agent's MCP process) are picked up here.
+    // A failed freshness check (e.g. a file removed between the scan and the read) keeps the current index; the next query retries.
+    try { if (searcher.refreshIfChanged() && semanticEnabled) scheduleUpdate(); } catch { /* Keep serving the last good index. */ }
     const answer = searcher.search(query, { limit: count, budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT), abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
     const lexical = { results: answer.results, abstained: answer.abstained };
     if (!semanticEnabled) return lexical;
@@ -193,7 +197,8 @@ export function createServer(options) {
         (await core.listPages(vaultDir)).some(path => !['wiki/index.md', 'wiki/log.md'].includes(path));
       if (!index || emptyIndexWithPages) { scheduleUpdate(false); return fallback(emptyIndexWithPages || !backgroundFailed ? 'index-missing' : 'provider-error'); }
       if (index.providerFingerprint !== provider.fingerprint || index.dims !== provider.dims) { scheduleUpdate(false); return fallback('fingerprint-mismatch'); }
-      const results = await module.searchHybrid({ query, pages: core.loadPages(wikiDir), entries: index.entries, provider, limit: count, indexMeta: index, mode: settings.mode, minSemanticScore: settings.minScore, abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
+      const snapshot = searcher.snapshot();
+      const results = await module.searchHybrid({ query, pages: snapshot.pages, lexicalIndex: snapshot.index, entries: index.entries, provider, limit: count, indexMeta: index, mode: settings.mode, minSemanticScore: settings.minScore, abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
       if (results.fallbackReason) return fallback(results.fallbackReason);
       if (results.abstained) return { ...lexical, semantic: { used: true }, mode: settings.mode };
       let budget = Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT);
