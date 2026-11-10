@@ -19,6 +19,27 @@ function envelope(client, event, context) {
   if (client === 'gemini') return JSON.stringify({hookSpecificOutput:{additionalContext:context}});
   return JSON.stringify({hookSpecificOutput:{hookEventName:event === 'session-start' ? 'SessionStart' : 'UserPromptSubmit',additionalContext:context}});
 }
+// Packs one retrieved result after the current context. The "Title (path)" line must fit whole or the block is
+// refused (null, and the caller stops). The excerpt is cut to the room left and ends with an ellipsis.
+function packBlock(client, event, context, item, cap) {
+  const fits = text => envelope(client,event,text).length <= cap;
+  const base = context + (context ? '\n\n' : '') + redact(`${item.title} (${item.path})`);
+  if (!fits(base)) return null;
+  const snippet = redact(item.snippet);
+  if (!snippet) return base;
+  const text = n => {
+    if (n >= snippet.length) return `${base}\n${snippet}`;
+    let k = n;
+    // Never split a surrogate pair.
+    if (/[\uD800-\uDBFF]/u.test(snippet[k - 1])) k--;
+    return `${base}\n${snippet.slice(0, k)}…`;
+  };
+  if (!fits(text(1))) return null;
+  // The envelope length never shrinks as the excerpt grows, so the largest fitting length is a binary search.
+  let lo = 1, hi = snippet.length;
+  while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (fits(text(mid))) lo = mid; else hi = mid - 1; }
+  return text(lo);
+}
 // Open the inode itself without following links; check its identity and permissions before use.
 async function secureFile(file, flags) {
   const handle = await open(file, flags | (constants.O_NOFOLLOW || 0), 0o600);
@@ -85,7 +106,17 @@ export async function runHook(input = {}) {
     if (event === 'session-end' || (client === 'copilot' && event === 'prompt') || (event === 'session-start' && !['claude','copilot','gemini'].includes(client))) { /* unsupported */ }
     else if (event === 'session-start') {
       const geminiStartup = client !== 'gemini' || ['startup','resume','clear'].includes(data.source);
-      if (stateDir && geminiStartup) { try { context = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch {} }
+      if (stateDir && geminiStartup) {
+        let handoff = '';
+        try { handoff = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch {}
+        // An explicit handoff card wins; otherwise build the bounded recap (never in manual mode).
+        // The recap module loads lazily so prompt hooks never pay for it; a load failure means an empty card.
+        if (handoff.trim()) context = handoff;
+        else if (mode !== 'manual' && config.vault?.path) {
+          try { const { buildRecap } = await import('./recap.mjs'); context = await buildRecap({vaultPath:config.vault.path,stateDir,now}); }
+          catch { context = ''; }
+        }
+      }
     } else if (typeof prompt === 'string' && prompt.trim() && stateDir && config.vault?.path) {
       const trigger = /(^|\s)(?:\/sb|@sb)(?=\s|$)/i.test(prompt);
       const query = prompt.replace(/(^|\s)(?:\/sb|@sb)(?=\s|$)/gi, '$1').trim();
@@ -94,17 +125,15 @@ export async function runHook(input = {}) {
         const dir = await stateSubdirectory(stateDir, 'hooks');
         const file = join(dir, `${client}-${hash(session)}.json`);
         const seen = session ? await readState(file) : [];
-        const found = await retrieve({vaultDir:config.vault.path,stateDir,now}, query, {limit:20,budgetChars:4002,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start));
+        // No cumulative snippet budget here: the hook packs every result itself under its own cap.
+        const found = await retrieve({vaultDir:config.vault.path,stateDir,now}, query, {limit:20,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start));
         if (Date.now()-start >= deadline) throw new Error('deadline');
         const fresh = found.filter(item => !seen.includes(item.path));
         const cap = Math.min(client === 'codex' ? 1400 : mode === 'economic' ? 1500 : 4002, config.retrieval?.budgetChars ?? 4002);
-        // Leave room for JSON escaping and the envelope itself.
         for (const item of fresh) {
-          const piece = `${context ? '\n\n' : ''}${item.title} (${item.path})\n${item.snippet}`;
-          let candidate = redact(context + piece);
-          while (candidate.length > context.length && envelope(client,event,candidate).length > cap) candidate = candidate.slice(0, Math.max(context.length, candidate.length - (envelope(client,event,candidate).length - cap)));
-          if (candidate.length <= context.length) break;
-          context = candidate; results++; seen.push(item.path);
+          const next = packBlock(client, event, context, item, cap);
+          if (next === null) break;
+          context = next; results++; seen.push(item.path);
         }
         if (session && results) await writeState(file, seen);
       }
