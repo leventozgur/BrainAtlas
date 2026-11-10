@@ -21,7 +21,11 @@ function mainCheckout() {
   return first.slice('worktree '.length);
 }
 
-const MAIN = mainCheckout();
+// PM fix (2026-11-11): the comparison with the main checkout only makes sense on the BA-00 track branch; on main,
+// in CI (single detached checkout) and on later tracks that intentionally change ranking, it is skipped.
+const ON_TRACK = git(['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim() === 'track/BA-00';
+const ONLY_ON_TRACK = { skip: !ON_TRACK };
+const MAIN = ON_TRACK ? mainCheckout() : null;
 const DATASETS = [
   { name: 'dev/cases.json', corpus: 'eval/corpus', cases: 'eval/dev/cases.json' },
   { name: 'natural', corpus: 'eval/corpus-natural', cases: 'eval/dev/natural-cases.json' },
@@ -37,7 +41,7 @@ function runAt(root, dataset, extra = []) {
   return JSON.parse(res.stdout);
 }
 
-test('main checkout is the branch main (read-only comparison source)', () => {
+test('main checkout is the branch main (read-only comparison source)', ONLY_ON_TRACK, () => {
   const branch = git(['symbolic-ref', '--short', 'HEAD'], MAIN).stdout.trim();
   assert.equal(branch, 'main');
 });
@@ -49,7 +53,7 @@ test('default output has exactly the historical key set (no extended keys leak i
   }
 });
 
-test('default output values equal main on identical corpus and cases (timing fields excluded)', () => {
+test('default output values equal main on identical corpus and cases (timing fields excluded)', ONLY_ON_TRACK, () => {
   for (const ds of DATASETS) {
     const ours = stripTiming(runAt(ROOT, ds));
     const theirs = stripTiming(runAt(MAIN, ds));
