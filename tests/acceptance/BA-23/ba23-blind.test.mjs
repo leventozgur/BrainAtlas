@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
@@ -14,7 +14,13 @@ import { resolvePaths } from '../../../packages/core/src/paths/index.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = resolve(HERE, '../../..');
-const MAIN = resolve(DEV, '../../BrainAtlas'); // main checkout, sibling of BrainAtlas-wt
+// Main checkout root: BA23_MAIN_ROOT if set, else the parent of the git common dir (the main checkout, from a worktree or from main itself).
+function mainRoot() {
+  if (process.env.BA23_MAIN_ROOT) return resolve(process.env.BA23_MAIN_ROOT);
+  const common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: DEV, encoding: 'utf8' }).trim();
+  return dirname(resolve(DEV, common));
+}
+const MAIN = mainRoot();
 const SCRATCH = join(HERE, '.tmp');
 const NOW = new Date('2026-11-12T00:00:00.000Z');
 
@@ -90,6 +96,8 @@ test('BA-23 c1: skipped set is exactly the pages main loadPages rejects, and the
 });
 
 test('BA-23 c1: main loadPages throws on the bad vault (defect reproduction on main)', async (t) => {
+  // Reproduces the pre-fix defect only: once main carries BA-23 (loadPagesDetailed exists), main no longer throws here.
+  if ('loadPagesDetailed' in main) return t.skip('main already includes BA-23; defect reproduction applies to def482f only');
   const vault = await writeTree(await workdir(t), { 'a.md': '# A\nAAA', 'b.md': '---\ntitle: [x\n---\nBBB' });
   assert.throws(() => main.loadPages(vault), (e) => e.code === 'E_INVALID_INPUT');
   const stateDir = join(await workdir(t), 'state');
