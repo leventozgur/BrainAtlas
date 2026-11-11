@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { constants, realpathSync } from 'node:fs';
 import { lstat, mkdir, open, readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { redact } from '../../core/src/safety/index.mjs';
@@ -11,6 +11,8 @@ import { SEMANTIC_DEFAULTS } from '../../core/src/config/index.mjs';
 import { SEMANTIC_BUDGET_MS, semanticEntryUrl, semanticRequested } from './semantic.mjs';
 
 const clients = new Set(['claude', 'codex', 'kiro', 'copilot', 'gemini']);
+// BA-26: hook output also redacts e-mail addresses and TR phone numbers (contact data is kept in pages, not in injected context).
+const REDACT_OUTPUT = {personal: true};
 const events = new Set(['prompt', 'session-start', 'session-end']);
 const hash = s => createHash('sha256').update(s).digest('hex');
 const empty = client => client === 'kiro' ? '' : '{}';
@@ -21,15 +23,49 @@ function envelope(client, event, context) {
   if (client === 'gemini') return JSON.stringify({hookSpecificOutput:{additionalContext:context}});
   return JSON.stringify({hookSpecificOutput:{hookEventName:event === 'session-start' ? 'SessionStart' : 'UserPromptSubmit',additionalContext:context}});
 }
+// BA-26: a restricted page (sensitivity personal or inject never) is never injected. The sentinel is read from the first 4 KB of
+// the file, so it also works for results that come from the semantic step (which carries no index field).
+// Returns true (restricted), false (readable and unrestricted) or null (unreadable or outside the vault).
+const RESTRICTED_HEAD = /^[ \t]*(?:sensitivity[ \t]*:[^\n]*\bpersonal\b|inject[ \t]*:[^\n]*\bnever\b)/im;
+async function pageRestriction(vault, rel) {
+  let h;
+  try {
+    const vaultReal = realpathSync.native(vault);
+    const file = join(vaultReal, rel);
+    if (!realpathSync.native(file).startsWith(vaultReal + sep)) return null;
+    h = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
+    if (!(await h.stat()).isFile()) return null;
+    const buf = Buffer.alloc(4096);
+    const { bytesRead } = await h.read(buf, 0, 4096, 0);
+    return RESTRICTED_HEAD.test(buf.subarray(0, bytesRead).toString('utf8'));
+  } catch { return null; }
+  finally { await h?.close().catch(() => {}); }
+}
+// Drops recap page lines whose page is restricted. A candidate path is the text inside any parenthesis pair at the end of a line;
+// a candidate that is not a readable page is not a page and is kept as it is.
+async function withoutRestrictedRecap(text, vault) {
+  if (!text) return text;
+  const kept = [];
+  for (const line of text.split('\n')) {
+    if (!line.startsWith('- ') || !line.endsWith(')')) { kept.push(line); continue; }
+    let restricted = false;
+    for (let i = line.indexOf('('); i >= 0 && !restricted; i = line.indexOf('(', i + 1)) restricted = (await pageRestriction(vault, line.slice(i + 1, -1))) === true;
+    if (!restricted) kept.push(line);
+  }
+  // A recap card whose page lines were all removed must not keep an empty list heading.
+  const heading = kept.indexOf('Recently changed pages:');
+  if (heading >= 0 && !(kept[heading + 1] ?? '').startsWith('- ')) kept.splice(heading, 1);
+  return kept.join('\n');
+}
 // Packs one retrieved result after the current context. The "Title (path)" line must fit whole or the block is
 // refused (null, and the caller stops). The excerpt is cut to the room left and ends with an ellipsis.
 function packBlock(client, event, context, item, cap) {
   const fits = text => envelope(client,event,text).length <= cap;
   // Weak (proposed or disputed) pages get a short marker before the path; the line still ends with the path.
   const marked = item.trust === 'weak' ? `${item.title} [unverified]` : item.title;
-  const base = context + (context ? '\n\n' : '') + redact(`${marked} (${item.path})`);
+  const base = context + (context ? '\n\n' : '') + redact(`${marked} (${item.path})`, REDACT_OUTPUT);
   if (!fits(base)) return null;
-  const snippet = redact(item.snippet);
+  const snippet = redact(item.snippet, REDACT_OUTPUT);
   if (!snippet) return base;
   const text = n => {
     if (n >= snippet.length) return `${base}\n${snippet}`;
@@ -124,7 +160,7 @@ export async function runHook(input = {}) {
         // The recap module loads lazily so prompt hooks never pay for it; a load failure means an empty card.
         if (handoff.trim()) context = handoff;
         else if (mode !== 'manual' && config.vault?.path) {
-          try { const { buildRecap } = await import('./recap.mjs'); context = await buildRecap({vaultPath:config.vault.path,stateDir,now}); }
+          try { const { buildRecap } = await import('./recap.mjs'); context = await withoutRestrictedRecap(await buildRecap({vaultPath:config.vault.path,stateDir,now}), config.vault.path); }
           catch { context = ''; }
         }
       }
@@ -140,7 +176,15 @@ export async function runHook(input = {}) {
         const hit = await retrieve({vaultDir:config.vault.path,stateDir,now}, query, {limit:20,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start), semanticStep(config, env));
         const found = hit.results; semanticState = hit.semantic;
         if (Date.now()-start >= deadline) throw new Error('deadline');
-        const fresh = found.filter(item => !seen.includes(item.path));
+        const unseen = found.filter(item => !seen.includes(item.path));
+        // BA-26: restricted results are removed before packing, so they are never injected and never marked as shown.
+        // The index field covers lexical results; once the semantic step has run, every result is also checked on disk.
+        const fresh = [];
+        for (const item of unseen) {
+          if (item.inject === 'never') continue;
+          if (hit.semantic !== undefined && (await pageRestriction(config.vault.path, item.path)) !== false) continue;
+          fresh.push(item);
+        }
         const cap = Math.min(client === 'codex' ? 1400 : mode === 'economic' ? 1500 : 4002, config.retrieval?.budgetChars ?? 4002);
         for (const item of fresh) {
           const next = packBlock(client, event, context, item, cap);
@@ -150,7 +194,7 @@ export async function runHook(input = {}) {
         if (session && results) await writeState(file, seen);
       }
     }
-    context = redact(context);
+    context = redact(context, REDACT_OUTPUT);
     const limit = client === 'codex' ? 1400 : mode === 'economic' ? 1500 : 4002;
     while (context && envelope(client,event,context).length > limit) context = context.slice(0, Math.max(0, context.length - (envelope(client,event,context).length - limit)));
     if (Date.now()-start >= deadline) { context = ''; results = 0; outcome = 'deadline'; }
