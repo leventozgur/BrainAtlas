@@ -7,10 +7,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { mainRoot } from './support.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const MAIN = mainRoot();
 const ROOT = path.resolve(HERE, '../../..');
-const MAIN = process.env.BA26_MAIN || path.resolve(ROOT, '../../BrainAtlas');
 const WORK = path.join(HERE, '.work');
 const safety = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/safety/index.mjs')).href);
 const mainSafety = await import(pathToFileURL(path.join(MAIN, 'packages/core/src/safety/index.mjs')).href);

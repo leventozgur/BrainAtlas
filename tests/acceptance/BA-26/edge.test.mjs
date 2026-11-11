@@ -7,14 +7,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { mainRoot } from './support.mjs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { fixtures } from './gen.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const MAIN = mainRoot();
 const ROOT = path.resolve(HERE, '../../..');
-// Main checkout, read only: a sibling of the worktree's project folder (BA26_MAIN overrides).
-const MAIN = process.env.BA26_MAIN || path.resolve(ROOT, '../../BrainAtlas');
 const WORK = path.join(HERE, '.work');
 const safety = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/safety/index.mjs')).href);
 const wtRules = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/safety/rules.mjs')).href);
@@ -141,8 +141,11 @@ test('rule ids: existing content-rule ids are unchanged and in the same order as
   const wtIds = wtRules.CONTENT_RULES.map((r) => r.id);
   const kept = wtIds.filter((id) => mainIds.includes(id));
   assert.deepEqual(kept, mainIds, 'old ids in the same order');
-  assert.deepEqual((mainRules.PERSONAL_RULES ?? []).map((r) => r.id), [], 'main has no personal rules');
   assert.deepEqual(wtRules.PERSONAL_RULES.map((r) => r.id), ['tckn', 'tr-iban']);
+});
+
+test('pre-fix baseline: main had no personal rules before the BA-26 merge', { skip: 'main now contains the BA-26 merge (b77a663); this pre-fix comparison no longer holds' }, () => {
+  assert.deepEqual((mainRules.PERSONAL_RULES ?? []).map((r) => r.id), []);
 });
 
 test('write path: wiki_write_page refuses TCKN, IBAN and secrets; accepts e-mail, phone and placeholders; no value in error', async (t) => {

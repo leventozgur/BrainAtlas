@@ -7,12 +7,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { mainRoot } from './support.mjs';
 import { fixtures } from './gen.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const MAIN = mainRoot();
 const WT = path.resolve(HERE, '../../..');
-// Main checkout, read only: a sibling of the worktree's project folder (BA26_MAIN overrides).
-const MAIN = process.env.BA26_MAIN || path.resolve(WT, '../../BrainAtlas');
 const WORK = path.join(HERE, '.work');
 const load = async (root) => ({
   safety: await import(pathToFileURL(path.join(root, 'packages/core/src/safety/index.mjs')).href),
