@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { isAbsolute, join, relative, resolve, sep, posix } from 'node:path';
 import { chmodSync, mkdirSync } from 'node:fs';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -27,6 +27,8 @@ function textResult(value) { return { content: [{ type: 'text', text: JSON.strin
 function asText(error) {
   if (error?.code === 'E_SECRET_DETECTED') return 'E_SECRET_DETECTED: write refused because secret-like content was detected.';
   if (error?.code === 'E_PATH_ESCAPE') return 'E_PATH_ESCAPE: path is outside the Wiki.';
+  // Messages on E_INVALID_INPUT are fixed strings in this file and never contain caller content.
+  if (error?.code === 'E_INVALID_INPUT') return `E_INVALID_INPUT: ${error.message}`;
   if (typeof error?.code === 'string' && /^E_[A-Z_]+$/.test(error.code)) return `${error.code}: operation refused.`;
   return 'E_MCP_OPERATION: operation failed.';
 }
@@ -50,6 +52,93 @@ function serializeIndex(entries) {
     }
   }
   return output;
+}
+const INDEX_ENTRY_LINE = /^-\s+\[((?:[^\]\\]|\\.)+)\]\(((?:[^)\\]|\\.)+)\)/;
+const INDEX_CATEGORY_LINE = /^##\s+(.+)$/;
+const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
+/** Classify one index line the way the vendored readIndex does: trimmed, `## Category` or `- [Title](path)`. */
+function indexLineInfo(line) {
+  const trimmed = line.trim();
+  const heading = trimmed.match(INDEX_CATEGORY_LINE);
+  if (heading) return { heading: heading[1].trim() };
+  const entry = trimmed.match(INDEX_ENTRY_LINE);
+  return entry ? { entryPath: posix.normalize(entry[2]) } : {};
+}
+/** A link target that names a local Markdown file. External URLs and anchors are never treated as stale pages. */
+function isLocalMarkdownTarget(path) {
+  return path.endsWith('.md') && !path.startsWith('/') && !path.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(path);
+}
+/** Index line for one page; the same shape as the vendored writer, with the frontmatter summary and valid tags. */
+function indexEntryLine(entry) {
+  const fm = entry.frontmatter ?? {};
+  const summarySource = [fm.summary, fm.description].find((value) => typeof value === 'string' && value.trim());
+  const summary = summarySource ? summarySource.replace(/\s+/g, ' ').trim() : '';
+  const tags = entry.tags.filter((tag) => typeof tag === 'string' && /^[\w-]+$/.test(tag));
+  const title = wiki.escapeMarkdownLinkText(String(entry.title).replace(/\s+/g, ' ').trim());
+  const parts = [summary, ...(tags.length ? [tags.map((tag) => `#${tag}`).join(' ')] : [])].filter(Boolean);
+  return `- [${title}](${entry.path})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
+}
+/**
+ * Minimal edit of an existing index. Lines are kept as they are (bytes, EOL, order); only entry lines whose local
+ * target no longer exists are removed, and pages without any entry get one line in their folder's category.
+ * @returns {{output:string, added:number, removed:number}}
+ */
+function mergeIndex(content, entries) {
+  // Existing lines keep their own trailing '\r' (split on '\n' only); inserted lines get the file's style.
+  const cr = content.includes('\r\n') ? '\r' : '';
+  const fresh = (text) => `${text}${cr}`;
+  const isBlank = (text) => text.trim() === '';
+  const pagePaths = new Set(entries.map((entry) => entry.path));
+  const linked = new Set();
+  const lines = [];
+  let removed = 0;
+  let inCategory = false;
+  for (const line of content.split('\n')) {
+    const info = indexLineInfo(line);
+    if (info.heading !== undefined) inCategory = true;
+    else if (inCategory && info.entryPath !== undefined) {
+      if (!pagePaths.has(info.entryPath) && isLocalMarkdownTarget(info.entryPath)) { removed++; continue; }
+      linked.add(info.entryPath);
+    }
+    lines.push(line);
+  }
+  const missing = entries.filter((entry) => !linked.has(entry.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  for (const entry of missing) {
+    const line = fresh(indexEntryLine(entry));
+    const category = entry.path.split('/')[0];
+    const headingAt = lines.findIndex((item) => indexLineInfo(item).heading === category);
+    if (headingAt === -1) {
+      const block = [fresh(''), fresh(`## ${category}`), fresh(''), line];
+      // A trailing empty element means the file ends with a newline; keep that newline last.
+      if (lines.at(-1) === '') lines.splice(lines.length - 1, 0, ...block);
+      else lines.push(...block);
+      continue;
+    }
+    // Insert after the category's last entry line, or right under its heading when it has none.
+    let insertAt = headingAt + 1;
+    let hasEntries = false;
+    for (let i = headingAt + 1; i < lines.length && indexLineInfo(lines[i]).heading === undefined; i++) {
+      if (indexLineInfo(lines[i]).entryPath !== undefined) { insertAt = i + 1; hasEntries = true; }
+    }
+    if (!hasEntries && insertAt < lines.length && isBlank(lines[insertAt])) insertAt++;
+    lines.splice(insertAt, 0, line);
+  }
+  return { output: lines.join('\n'), added: missing.length, removed };
+}
+function validatePatch(patch) {
+  if (Object.keys(patch).some((key) => !PATCH_KEYS.has(key))) throw mcpError('E_INVALID_INPUT', 'Unknown patch field.');
+  if ('frontmatter' in patch && (patch.frontmatter === null || typeof patch.frontmatter !== 'object' || Array.isArray(patch.frontmatter))) throw mcpError('E_INVALID_INPUT', 'patch.frontmatter must be an object.');
+  if ('body' in patch && typeof patch.body !== 'string') throw mcpError('E_INVALID_INPUT', 'patch.body must be a string.');
+  if ('append' in patch && typeof patch.append !== 'string') throw mcpError('E_INVALID_INPUT', 'patch.append must be a string.');
+}
+async function readOptionalIndex(target) {
+  try {
+    const text = await readFile(target, 'utf8');
+    return text.length ? text : null;
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return null;
+    throw error;
+  }
 }
 
 /** @param {{config:object,paths:object,env:object}} options @returns {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} */
@@ -254,6 +343,7 @@ export function createServer(options) {
       const { normalized, target } = await safeFile(path, { allowIndex: false });
       const old = await wiki.readPage(target);
       let next;
+      if (patch !== undefined) validatePatch(patch);
       if (content !== undefined) {
         const parsed = core.parseFrontmatter(content);
         if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
@@ -314,13 +404,22 @@ export function createServer(options) {
       for (const file of pages) {
         const page = await wiki.readPage(file);
         const path = relative(wikiDir, file).split(sep).join('/');
-        entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, summary: '', category: path.split('/')[0], tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [] });
+        entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, summary: '', category: path.split('/')[0], tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
       }
-      checkWrite('wiki/index.md', serializeIndex(entries));
       const { target } = await safeFile('index.md');
-      await wiki.writeIndex(target, entries);
+      const existing = await readOptionalIndex(target);
+      if (existing === null) {
+        // No index yet (or an empty file): build it from the pages.
+        checkWrite('wiki/index.md', serializeIndex(entries));
+        await wiki.writeIndex(target, entries);
+        await logAndRefresh('update-index', 'wiki/index.md');
+        return { indexed: entries.length, added: entries.length, removed: 0 };
+      }
+      const { output, added, removed } = mergeIndex(existing, entries);
+      checkWrite('wiki/index.md', output);
+      await writeFile(target, output, 'utf8');
       await logAndRefresh('update-index', 'wiki/index.md');
-      return { indexed: entries.length };
+      return { indexed: entries.length, added, removed };
     });
   }
   return server;
