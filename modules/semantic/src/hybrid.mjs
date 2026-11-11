@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { buildIndex, search } from '../../../packages/core/src/retrieval/index.mjs';
+import { buildIndex, search, stale } from '../../../packages/core/src/retrieval/index.mjs';
 
 export function cosineSimilarity(left, right) {
   if ((!Array.isArray(left) && !(left instanceof Float32Array))
@@ -32,20 +32,6 @@ export function reciprocalRankFusion(resultLists, { k = 60, weights = resultList
     });
   }
   return [...fused.values()].sort((a, b) => b.rrfScore - a.rrfScore || a.path.localeCompare(b.path));
-}
-
-function stale(fm, asOf) {
-  let expiry = fm.stale_after instanceof Date ? fm.stale_after.toISOString().slice(0, 10) : fm.stale_after;
-  if (!expiry) return false;
-  if (typeof expiry === 'string' && /^P\d+[DW]$/.test(expiry)) {
-    const generated = fm.generated instanceof Date ? fm.generated.toISOString().slice(0, 10) : fm.generated;
-    const base = new Date(generated);
-    if (!Number.isFinite(base.getTime())) return false;
-    const days = Number(expiry.slice(1, -1)) * (expiry.endsWith('W') ? 7 : 1);
-    expiry = new Date(base.getTime() + days * 86400000);
-  }
-  const time = new Date(expiry).getTime();
-  return Number.isFinite(time) && time < asOf.getTime();
 }
 
 /**
