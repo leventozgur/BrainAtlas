@@ -53,17 +53,64 @@ function serializeIndex(entries) {
   }
   return output;
 }
-const INDEX_ENTRY_LINE = /^-\s+\[((?:[^\]\\]|\\.)+)\]\(((?:[^)\\]|\\.)+)\)/;
 const INDEX_CATEGORY_LINE = /^##\s+(.+)$/;
+const FENCE_OPEN = /^(`{3,}|~{3,})/;
 const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
-/** Classify one index line the way the vendored readIndex does: trimmed, `## Category` or `- [Title](path)`. */
+/** Undo CommonMark backslash escapes of ASCII punctuation in a link destination. */
+function unescapeDestination(raw) { return raw.replace(/\\([!-\/:-@\[-`{-~])/g, '$1'); }
+/**
+ * Destination of a `- [Title](destination)` line, read the way CommonMark reads a link: escaped parentheses and
+ * balanced unescaped parentheses belong to the destination; the first unbalanced `)` ends it.
+ * @returns {string|undefined} unescaped destination, or undefined when the line is not a link entry
+ */
+function entryDestination(trimmed) {
+  const head = /^-\s+\[/.exec(trimmed);
+  if (!head) return undefined;
+  let i = head[0].length;
+  while (i < trimmed.length && trimmed[i] !== ']') i += trimmed[i] === '\\' ? 2 : 1;
+  if (trimmed[i] !== ']' || trimmed[i + 1] !== '(') return undefined;
+  const start = i + 2;
+  let depth = 0;
+  for (i = start; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === '\\') { i++; continue; }
+    if (ch === '(') depth++;
+    else if (ch === ')') { if (depth === 0) break; depth--; }
+  }
+  if (i >= trimmed.length || i === start) return undefined;
+  return unescapeDestination(trimmed.slice(start, i));
+}
+/** Classify one index line: `## Category` heading or `- [Title](path)` entry (trimmed, as the vendored readIndex does). */
 function indexLineInfo(line) {
   const trimmed = line.trim();
   const heading = trimmed.match(INDEX_CATEGORY_LINE);
   if (heading) return { heading: heading[1].trim() };
-  const entry = trimmed.match(INDEX_ENTRY_LINE);
-  return entry ? { entryPath: posix.normalize(entry[2]) } : {};
+  const destination = entryDestination(trimmed);
+  return destination === undefined ? {} : { entryPath: posix.normalize(destination) };
 }
+/**
+ * Classify every line. Lines inside a fenced code block (``` or ~~~) are opaque: no heading and no entry.
+ * @returns {{infos:object[], openFence:{char:string,length:number}|null}}
+ */
+function classifyLines(lines) {
+  let fence = null;
+  const infos = lines.map((line) => {
+    const trimmed = line.trim();
+    const marker = trimmed.match(FENCE_OPEN);
+    if (fence) {
+      if (marker && marker[1][0] === fence.char && marker[1].length >= fence.length && trimmed === marker[1]) fence = null;
+      return { fenced: true };
+    }
+    if (marker && !(marker[1][0] === '`' && trimmed.slice(marker[1].length).includes('`'))) {
+      fence = { char: marker[1][0], length: marker[1].length };
+      return { fenced: true };
+    }
+    return { fenced: false, ...indexLineInfo(line) };
+  });
+  return { infos, openFence: fence };
+}
+/** Category of a page: its first folder, or `Pages` for a page at the Wiki root. */
+function categoryOf(path) { return path.includes('/') ? path.split('/')[0] : 'Pages'; }
 /** A link target that names a local Markdown file. External URLs and anchors are never treated as stale pages. */
 function isLocalMarkdownTarget(path) {
   return path.endsWith('.md') && !path.startsWith('/') && !path.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(path);
@@ -76,7 +123,9 @@ function indexEntryLine(entry) {
   const tags = entry.tags.filter((tag) => typeof tag === 'string' && /^[\w-]+$/.test(tag));
   const title = wiki.escapeMarkdownLinkText(String(entry.title).replace(/\s+/g, ' ').trim());
   const parts = [summary, ...(tags.length ? [tags.map((tag) => `#${tag}`).join(' ')] : [])].filter(Boolean);
-  return `- [${title}](${entry.path})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
+  // Parentheses and backslashes in the path are escaped so the destination ends where the path ends.
+  const destination = entry.path.replace(/([\\()])/g, '\\$1');
+  return `- [${title}](${destination})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
 }
 /**
  * Minimal edit of an existing index. Lines are kept as they are (bytes, EOL, order); only entry lines whose local
@@ -91,26 +140,27 @@ function mergeIndex(content, entries) {
   const pagePaths = new Set(entries.map((entry) => entry.path));
   // Links are collected from the whole file, so an entry above the first heading also counts as linked.
   const linked = new Set();
+  const source = content.split('\n');
+  const sourceInfos = classifyLines(source).infos;
   const lines = [];
   let removed = 0;
-  for (const line of content.split('\n')) {
-    const info = indexLineInfo(line);
+  for (let i = 0; i < source.length; i++) {
+    const info = sourceInfos[i];
     if (info.entryPath !== undefined) {
       if (!pagePaths.has(info.entryPath) && isLocalMarkdownTarget(info.entryPath)) { removed++; continue; }
       linked.add(info.entryPath);
     }
-    lines.push(line);
+    lines.push(source[i]);
   }
   const missing = entries.filter((entry) => !linked.has(entry.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   for (const entry of missing) {
     const line = fresh(indexEntryLine(entry));
-    const category = entry.path.split('/')[0];
-    const headingAt = lines.findIndex((item) => {
-      const heading = indexLineInfo(item).heading;
-      return heading !== undefined && heading.toLowerCase() === category.toLowerCase();
-    });
+    const category = categoryOf(entry.path);
+    const { infos, openFence } = classifyLines(lines);
+    const headingAt = infos.findIndex((info) => info.heading !== undefined && info.heading.toLowerCase() === category.toLowerCase());
     if (headingAt === -1) {
-      const block = [fresh(''), fresh(`## ${category}`), fresh(''), line];
+      // A file that ends inside an open fence would swallow the new block; close the fence first.
+      const block = [...(openFence ? [fresh(openFence.char.repeat(openFence.length))] : []), fresh(''), fresh(`## ${category}`), fresh(''), line];
       // A trailing empty element means the file ends with a newline; keep that newline last.
       if (lines.at(-1) === '') lines.splice(lines.length - 1, 0, ...block);
       else lines.push(...block);
@@ -119,8 +169,8 @@ function mergeIndex(content, entries) {
     // Insert after the category's last entry line, or right under its heading when it has none.
     let insertAt = headingAt + 1;
     let hasEntries = false;
-    for (let i = headingAt + 1; i < lines.length && indexLineInfo(lines[i]).heading === undefined; i++) {
-      if (indexLineInfo(lines[i]).entryPath !== undefined) { insertAt = i + 1; hasEntries = true; }
+    for (let i = headingAt + 1; i < lines.length && infos[i].heading === undefined; i++) {
+      if (infos[i].entryPath !== undefined) { insertAt = i + 1; hasEntries = true; }
     }
     if (!hasEntries && insertAt < lines.length && isBlank(lines[insertAt])) insertAt++;
     lines.splice(insertAt, 0, line);
@@ -130,9 +180,16 @@ function mergeIndex(content, entries) {
   if (cr && output.endsWith('\r')) output += '\n';
   return { output, added: missing.length, removed };
 }
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+/** A plain object whose own keys are the only keys: a JSON `__proto__` key sets the prototype instead, so it is detected here. */
+function isPlainObject(value) {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
 function validatePatch(patch) {
-  if (Object.keys(patch).some((key) => !PATCH_KEYS.has(key))) throw mcpError('E_INVALID_INPUT', 'Unknown patch field.');
-  if ('frontmatter' in patch && (patch.frontmatter === null || typeof patch.frontmatter !== 'object' || Array.isArray(patch.frontmatter))) throw mcpError('E_INVALID_INPUT', 'patch.frontmatter must be an object.');
+  if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) throw mcpError('E_INVALID_INPUT', 'patch must be an object.');
+  if (!isPlainObject(patch) || Object.getOwnPropertyNames(patch).some((key) => !PATCH_KEYS.has(key))) throw mcpError('E_INVALID_INPUT', 'Unknown patch field.');
+  if (hasOwn(patch, 'frontmatter') && (patch.frontmatter === null || typeof patch.frontmatter !== 'object' || Array.isArray(patch.frontmatter) || !isPlainObject(patch.frontmatter) || hasOwn(patch.frontmatter, '__proto__'))) throw mcpError('E_INVALID_INPUT', 'patch.frontmatter must be an object.');
   if ('body' in patch && typeof patch.body !== 'string') throw mcpError('E_INVALID_INPUT', 'patch.body must be a string.');
   if ('append' in patch && typeof patch.append !== 'string') throw mcpError('E_INVALID_INPUT', 'patch.append must be a string.');
 }
@@ -262,23 +319,42 @@ export function createServer(options) {
   // Page list for index maintenance. core.listPages skips symlinked files and directories (Dirent.isSymbolicLink), so
   // nothing outside the Wiki is read. The Wiki directory itself must resolve inside the vault.
   const listManagedPages = async () => {
-    const canonicalVault = await realpath(vaultDir);
-    const canonicalWiki = await realpath(wikiDir);
-    if (relative(canonicalVault, canonicalWiki) !== 'wiki') throw mcpError('E_PATH_ESCAPE', 'Wiki directory is outside the vault.');
+    const canonicalWiki = await assertWikiInsideVault();
     return (await core.listPages(vaultDir))
       .map((rel) => ({ path: rel.slice('wiki/'.length), file: join(canonicalWiki, rel.slice('wiki/'.length)) }))
       .filter(({ path }) => !['index.md', 'log.md'].includes(path.split('/').at(-1)));
   };
+  // The Wiki directory must resolve inside the vault's real path. The vault root itself may be a symlink (its real
+  // path is the reference), but a wiki/ symlink that leaves the vault is refused for every Wiki tool.
+  const assertWikiInsideVault = async () => {
+    const canonicalVault = await realpath(vaultDir);
+    const canonicalWiki = await realpath(wikiDir);
+    if (relative(canonicalVault, canonicalWiki) !== 'wiki') throw mcpError('E_PATH_ESCAPE', 'Wiki directory is outside the vault.');
+    return canonicalWiki;
+  };
   const ensureWikiDirectory = async () => {
+    let isDirectory = false;
     try {
-      if ((await stat(wikiDir)).isDirectory()) return;
+      isDirectory = (await stat(wikiDir)).isDirectory();
     } catch (error) {
       if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
     }
-    throw mcpError('E_VAULT_MISSING', 'The Wiki directory is missing.');
+    if (!isDirectory) throw mcpError('E_VAULT_MISSING', 'The Wiki directory is missing.');
+    await assertWikiInsideVault();
+  };
+  // When wiki/ resolves outside the vault, these listings answer as an empty Wiki: no outside content, no error.
+  // Every other read tool, and wiki_update_index, refuses with E_PATH_ESCAPE.
+  const escapedWikiViews = {
+    wiki_list_pages: () => ({ pages: [] }),
+    wiki_status: () => ({ pageCount: 0, okfWarningCount: 0, okfErrorCount: 0, indexAgeMs: null, readOnly: config.readOnly === true, indexCoveragePct: null }),
+    wiki_query: () => ({ results: [], abstained: true })
   };
   const readTool = (name, schema, handler) => tool(name, schema, async (args) => {
-    await ensureWikiDirectory();
+    try { await ensureWikiDirectory(); }
+    catch (error) {
+      if (error?.code === 'E_PATH_ESCAPE' && escapedWikiViews[name]) return escapedWikiViews[name]();
+      throw error;
+    }
     return handler(args);
   });
 
@@ -354,7 +430,9 @@ export function createServer(options) {
       await logAndRefresh('write-page', `wiki/${normalized}`);
       return { path: `wiki/${normalized}`, written: true };
     });
-    tool('wiki_update_page', z.object({ path: z.string(), content: z.string().optional(), patch: z.record(z.string(), z.unknown()).optional() }), async ({ path, content, patch }) => {
+    // patch is z.unknown() on purpose: a record schema silently drops a JSON "__proto__" key before the handler runs,
+    // so validatePatch checks the object itself (own keys, plain prototype).
+    tool('wiki_update_page', z.object({ path: z.string(), content: z.string().optional(), patch: z.unknown().optional() }), async ({ path, content, patch }) => {
       const { normalized, target } = await safeFile(path, { allowIndex: false });
       const old = await wiki.readPage(target);
       let next;
@@ -419,7 +497,7 @@ export function createServer(options) {
       const entries = [];
       for (const { path, file } of await listManagedPages()) {
         const page = await wiki.readPage(file);
-        entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, summary: '', category: path.split('/')[0], tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
+        entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, summary: '', category: categoryOf(path), tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
       }
       const { target } = await safeFile('index.md');
       const existing = await readOptionalIndex(target);
