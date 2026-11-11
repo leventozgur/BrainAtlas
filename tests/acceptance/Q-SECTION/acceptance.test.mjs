@@ -270,13 +270,20 @@ test('heading matches alone do not select an empty section and long sections sta
   assert.ok(long.snippet.endsWith('…'));
 });
 
-test('old and new ranking, score, freshness, status, recall, MRR, and abstention agree at T=0.35', (t) => {
+// PM update (BA-03, 2026-11-11): identifier-aware retrieval intentionally re-ranks queries that contain code-like
+// identifiers (file paths, versions, snake_case, CamelCase). Parity with the legacy ranking is now required for every
+// query without such a token; overall recall and abstention must stay equal and MRR must not fall.
+const IDENTIFIER_LIKE = /[\p{L}\p{N}][_./][\p{L}\p{N}]|--\p{L}|\p{Ll}\p{Lu}|\p{L}\p{N}|\p{N}\p{L}/u;
+test('old and new ranking agree for non-identifier queries; recall and abstention agree and MRR does not fall at T=0.35', (t) => {
   const cases = JSON.parse(fs.readFileSync(path.join(root, 'eval/dev/natural-cases.json'), 'utf8'));
   const index = buildIndex(loadPages(path.join(root, 'eval/corpus-natural')), { now });
   const options = { limit: 10, asOf: now, abstainThreshold: 0.35 };
   const currentFor = (item) => search(index, item.query, options);
   const oldFor = (item) => legacySearch(index, item.query, options);
+  let compared = 0;
   for (const item of cases) {
+    if (IDENTIFIER_LIKE.test(item.query)) continue;
+    compared++;
     const current = currentFor(item), old = oldFor(item);
     assert.deepEqual(current.results.map(({ path: file, score, stale: isStale, status }) => ({ path: file, score, stale: isStale, status })),
       old.results.map(({ path: file, score, stale: isStale, status }) => ({ path: file, score, stale: isStale, status })), item.id);
@@ -285,8 +292,12 @@ test('old and new ranking, score, freshness, status, recall, MRR, and abstention
   }
   const currentMetrics = metricSnapshot(cases, currentFor);
   const oldMetrics = metricSnapshot(cases, oldFor);
-  t.diagnostic(`natural-case legacy metrics: ${JSON.stringify(oldMetrics)}`);
-  assert.deepEqual(currentMetrics, oldMetrics);
+  t.diagnostic(`natural-case legacy metrics: ${JSON.stringify(oldMetrics)}; current: ${JSON.stringify(currentMetrics)}; parity cases: ${compared}`);
+  assert.ok(compared >= 80, `expected most natural cases to be identifier-free, got ${compared}`);
+  for (const key of Object.keys(oldMetrics)) {
+    if (/mrr/i.test(key)) assert.ok(currentMetrics[key] >= oldMetrics[key] - 1e-12, key);
+    else assert.equal(currentMetrics[key], oldMetrics[key], key);
+  }
 });
 
 test('natural-case top-1 snippet stem coverage does not regress and reaches 0.9 at T=0.35', (t) => {

@@ -4,6 +4,12 @@ BrainAtlas retrieves evidence from Markdown pages with BM25F, a field-aware rank
 
 Each result includes its page path, title, score, snippet, freshness (`stale`), and status. When a section matches, it also includes `heading`, `anchor`, and `headingPath`; the snippet starts with the matching heading line and includes that section's text. If no section matches, these heading fields are null and the snippet starts at the page body. Anchors use GitHub-style kebab case, with numeric suffixes for duplicates.
 
+## Identifiers
+
+Identifiers such as `E_WIDGET_TIMEOUT`, `a1b2c3d`, `rc.12`, `src/lib/retry.mjs`, `--drain-timeout`, or `RouteSnapshotCache` are matched whole, so a page that contains one exactly ranks first for a query that names it. If a question is mostly about an identifier that no page contains, retrieval abstains with `reason: "identifier-not-found"` instead of returning pages that only share its fragments (for example `widget`). Common words such as `2026`, `v2`, or `follow-up` are not treated as identifiers, and neither are dates (`11.11.2025`, `2026.11.11`, `11/11/2025`, `2025-11-11`) or abbreviations such as `i.e` and `e.g`. The rules are in [the retrieval contract](../contracts/retrieval.md#identifiers-ba-03-additions-contract-version-1).
+
+Limits: an identifier glued to a Turkish suffix without an apostrophe (for example `src/lib/retry.mjsin`) is not split from its suffix, so it is not matched. A path given with skipped segments (for example `d3/d5/deep_retry.mjs` for `d3/d4/d5/deep_retry.mjs`) is not matched either; the basename (`deep_retry.mjs`) and the consecutive suffixes are.
+
 ## Abstention threshold
 
 The default `retrieval.abstainThreshold` is 0.35. Scores are compressed with a square root, making this default meaningful for natural-language queries. If you set a custom threshold, use the square root of its previous value to preserve equivalent strictness: for example, an old value of 0.5 maps to ≈0.71; an old value of 0.25 maps to 0.5.
