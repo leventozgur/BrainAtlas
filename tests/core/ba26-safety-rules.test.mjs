@@ -153,3 +153,33 @@ test('BA-26 patterns stay bounded on long adversarial runs (secret and output pa
     assert.ok(performance.now() - start < 1000, `slow input starting ${text.slice(0, 20)}`);
   }
 });
+
+// fix1: query-string and matrix parameters after a URL scheme, and upper-case Turkish keys with dotted capital İ.
+test('fix1: a Turkish secret in a URL query string is a finding; the scheme does not hide it', () => {
+  const value = ['Xq7r', 'T2mP', '9kL4', 'zB8w'].join('');
+  const host = ['https://ornek', '.example/giris'].join('');
+  assert.ok(hasRule(`${host}?sifre=${value}`, 'secret-assignment'), 'query sifre');
+  assert.ok(hasRule(`${host}?user=ali&parola=${value}`, 'secret-assignment'), 'second query parameter');
+  assert.ok(hasRule(`${host}#password=${value}`, 'secret-assignment'), 'fragment password');
+  assert.ok(hasRule(`${host};sifre=${value}`, 'secret-assignment'), 'matrix parameter');
+  assert.ok(hasRule(`${host}?password=${value}`, 'secret-assignment'), 'query password');
+  assert.ok(hasRule(`${host}?token=${value}`, 'high-entropy-assignment') || hasRule(`${host}?token=${value}`, 'secret-assignment'), 'query token');
+  // The URL user:password form keeps its own rule.
+  assert.ok(hasRule(`https://ali:${value}@ornek.example/`, 'connection-credentials'));
+});
+
+test('fix1: query parameters that only look secret-like are not findings', () => {
+  const host = ['https://ornek', '.example/liste'].join('');
+  for (const tail of ['?token_count=5', '?page=2', '?password_policy=strict', '?max_tokens=700', '?sifreleme_yontemi=AES256',
+    '?sifre=<sifre>', '?password=${DB_PASSWORD}', '?token=', '?sort=name&order=asc']) {
+    assert.equal(hasRule(host + tail, 'secret-assignment') || hasRule(host + tail, 'high-entropy-assignment'), false, tail);
+  }
+});
+
+test('fix1: upper-case Turkish keys match with the dotted capital İ and the dotless ı', () => {
+  const value = ['Abc1', '2345'].join('');
+  assert.ok(hasRule(`ŞİFRE: ${value}`, 'secret-assignment'), 'ŞİFRE');
+  assert.ok(hasRule(`DB_ŞİFRE="${value}"`, 'secret-assignment'), 'DB_ŞİFRE');
+  assert.ok(hasRule(`PAROLA=${value}`, 'secret-assignment'), 'PAROLA');
+  assert.equal(hasRule(`ŞİFRELEME_YÖNTEMİ: AES256`, 'secret-assignment'), false, 'ŞİFRELEME_YÖNTEMİ');
+});

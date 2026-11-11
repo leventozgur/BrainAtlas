@@ -7,6 +7,14 @@ const placeholder = /^(?:<[^>]*>|x{3,}|changeme|example|none|null|undefined|reda
 const assignment = /(?<![A-Za-z0-9_])([A-Za-z_\u00c7\u00e7\u011e\u011f\u0130\u0131\u00d6\u00f6\u015e\u015f\u00dc\u00fc][A-Za-z0-9_.\u00c7\u00e7\u011e\u011f\u0130\u0131\u00d6\u00f6\u015e\u015f\u00dc\u00fc-]{0,127})["']?[ \t]*[:=][ \t]*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|(\$\{[A-Za-z_][A-Za-z0-9_]*\}|[^\s,;"'\]}]+))/g;
 const secretKey = /(?:password|passwd|passphrase|(?:^|[_ .-])pwd|secret|token|api[_ .-]?key|access[_ .-]?key|credential|private[_ .-]?key)|(?:^|[_ .-])(?:\u015fifre|sifre|parola)$/i;
 const explicitKey = /(?:password|passwd|passphrase|(?:^|[_ .-])pwd|secret)|(?:^|[_ .-])(?:\u015fifre|sifre|parola)$/i;
+// BA-26 fix1: keys are folded before matching: dotted capital İ and dotless ı both count as i, so ŞİFRE matches şifre.
+const foldKey = key => key.replace(/[\u0130\u0131I]/g, 'i');
+// BA-26 fix1: query-string and matrix parameters (?k=v&k2=v2, ;k=v, #k=v). After a URL scheme the general assignment pass consumes
+// the rest of the URL as the value of the scheme, so these pairs get their own pass with anchored key rules: the last key segment
+// must be a secret word, which keeps keys such as password_policy or token_count out of the findings.
+const queryPair = /(?<=[?&;#])([A-Za-z_\u00c7\u00e7\u011e\u011f\u0130\u0131\u00d6\u00f6\u015e\u015f\u00dc\u00fc][A-Za-z0-9_.\u00c7\u00e7\u011e\u011f\u0130\u0131\u00d6\u00f6\u015e\u015f\u00dc\u00fc-]{0,127})=(\$\{[A-Za-z_][A-Za-z0-9_]*\}|[^\s&;#"'<>,\]}]+)/g;
+const queryExplicit = /(?:^|[_.-])(?:password|passwd|passphrase|pwd|secret|\u015fifre|sifre|parola)$/i;
+const queryGeneric = /(?:^|[_.-])(?:token|api[_.-]?key|access[_.-]?key|credential|private[_.-]?key)$/i;
 const safeKey = /(?:^|[_ .-])(?:max|min|input|output|total|prompt|completion)[_ .-]?tokens?$|tokens?[_ .-]?(?:limit|count|budget|usage|max)$/i;
 function highEntropy(value) {
   if (value.length < 16 || !/[a-z]/i.test(value) || !/[0-9]/.test(value)) return false;
@@ -41,11 +49,25 @@ export function scanText(text, options = {}) {
     }
   }
   for (const match of text.matchAll(assignment)) {
-    const key = match[1], value = match[2] ?? match[3] ?? match[4];
+    // Query-form keys (after ? & ; #) are handled by the query pass below, with its anchored key rules.
+    const before = match.index > 0 ? text[match.index - 1] : '';
+    if (before && '?&;#'.includes(before)) continue;
+    const key = foldKey(match[1]), value = match[2] ?? match[3] ?? match[4];
     if (!secretKey.test(key) || safeKey.test(key) || !value || placeholder.test(value)) continue;
     if (!explicitKey.test(key) && !highEntropy(value)) continue;
     const start = match.index + match[0].lastIndexOf(value);
     add(/aws.*secret/i.test(key) ? 'aws-secret-key' : explicitKey.test(key) ? 'secret-assignment' : 'high-entropy-assignment', start, start + value.length);
+  }
+  for (const match of text.matchAll(queryPair)) {
+    const key = foldKey(match[1]), value = match[2];
+    if (safeKey.test(key) || placeholder.test(value)) continue;
+    let ruleId;
+    if (queryExplicit.test(key)) ruleId = 'secret-assignment';
+    else if (queryGeneric.test(key) && highEntropy(value)) ruleId = 'high-entropy-assignment';
+    else continue;
+    const start = match.index + match[0].length - value.length;
+    if (findings.some(f => f.ruleId === ruleId && f.start === start && f.end === start + value.length)) continue;
+    add(ruleId, start, start + value.length);
   }
   const header = /-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----/g;
   for (const match of text.matchAll(header)) {
