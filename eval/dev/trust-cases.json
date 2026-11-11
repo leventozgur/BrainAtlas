@@ -1,0 +1,22 @@
+[
+  {"id": "trust-weak-01", "category": "trust-weak", "query": "backup encryption key rotation", "relevant": ["a-verified.md"], "rival": "a-weak.md"},
+  {"id": "trust-weak-02", "category": "trust-weak", "query": "index cache fingerprint invalidation", "relevant": ["b-verified.md"], "rival": "b-weak.md"},
+  {"id": "trust-weak-03", "category": "trust-weak", "query": "canary release rollback threshold", "relevant": ["c-verified.md"], "rival": "c-weak.md"},
+  {"id": "trust-weak-04", "category": "trust-weak", "query": "hook injection budget characters", "relevant": ["d-verified.md"], "rival": "d-weak.md"},
+  {"id": "trust-weak-05", "category": "trust-weak", "query": "dropbox sync conflict resolution", "relevant": ["e-verified.md"], "rival": "e-weak.md"},
+  {"id": "trust-weak-06", "category": "trust-weak", "query": "okf provenance stale review", "relevant": ["f-verified.md"], "rival": "f-weak.md"},
+  {"id": "trust-weak-07", "category": "trust-weak", "query": "semantic provider fingerprint mismatch", "relevant": ["g-verified.md"], "rival": "g-weak.md"},
+  {"id": "trust-weak-08", "category": "trust-weak", "query": "superseded page routing chain", "relevant": ["h-verified.md"], "rival": "h-weak.md"},
+  {"id": "trust-neutral-01", "category": "trust-neutral", "query": "link graph expansion neighbours", "relevant": ["i-verified.md"], "rival": "i-neutral.md"},
+  {"id": "trust-neutral-02", "category": "trust-neutral", "query": "wiki lint coverage status", "relevant": ["j-verified.md"], "rival": "j-neutral.md"},
+  {"id": "trust-neutral-03", "category": "trust-neutral", "query": "cache schema version tag", "relevant": ["k-verified.md"], "rival": "k-neutral.md"},
+  {"id": "trust-neutral-04", "category": "trust-neutral", "query": "identifier exact index chains", "relevant": ["l-verified.md"], "rival": "l-neutral.md"},
+  {"id": "neutral-control-01", "category": "neutral-control", "query": "turkish suffix stemming", "relevant": ["m-neutral.md"]},
+  {"id": "neutral-control-02", "category": "neutral-control", "query": "abstain threshold share", "relevant": ["n-neutral.md"]},
+  {"id": "neutral-control-03", "category": "neutral-control", "query": "freshness boundary date", "relevant": ["o-neutral.md"]},
+  {"id": "neutral-control-04", "category": "neutral-control", "query": "snippet heading anchor", "relevant": ["p-neutral.md"]},
+  {"id": "weak-only-01", "category": "weak-only", "query": "dotless i folding identifiers", "relevant": ["q-weak.md"]},
+  {"id": "weak-only-02", "category": "weak-only", "query": "replacement chain loop handling", "relevant": ["r-weak.md"]},
+  {"id": "abstain-01", "category": "abstain", "query": "quantum telemetry gardening", "relevant": [], "abstain": true},
+  {"id": "abstain-02", "category": "abstain", "query": "bicycle warranty invoice", "relevant": [], "abstain": true}
+]

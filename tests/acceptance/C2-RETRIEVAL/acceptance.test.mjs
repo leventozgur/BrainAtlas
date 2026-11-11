@@ -140,7 +140,7 @@ test('BM25F favors title evidence over body-only evidence and returns the contra
   // PM update (Q-SECTION; BA-04 adds optional `supersedes`): contract v1 allows additive optional fields; the original six keys stay required.
   const resultKeys = Object.keys(result.results[0]).sort();
   for (const required of ['path', 'score', 'snippet', 'stale', 'status', 'title']) assert.ok(resultKeys.includes(required), `missing ${required}`);
-  for (const key of resultKeys) assert.ok(['path', 'score', 'snippet', 'stale', 'status', 'title', 'heading', 'anchor', 'headingPath', 'supersedes', 'related', 'via'].includes(key), `unexpected key ${key}`);
+  for (const key of resultKeys) assert.ok(['path', 'score', 'snippet', 'stale', 'status', 'title', 'heading', 'anchor', 'headingPath', 'supersedes', 'related', 'via', 'trust'].includes(key), `unexpected key ${key}`);
   assert.equal(result.results[0].title, 'Needle');
   assert.equal(typeof result.results[0].score, 'number');
   assert.equal(result.results[0].stale, false);

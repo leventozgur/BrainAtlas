@@ -10,9 +10,10 @@ import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, va
 import { inspectReleaseArchive, extractVerifiedRelease } from './archive.mjs';
 import { managePath, recordManagedWrite, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
 import { adoptPlan, migrateVault } from './migrate.mjs';
+import { formatMaintenance, receiptCandidates, runMaintenance } from './maintain.mjs';
 
 const error = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details });
-const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'safety', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'help']);
+const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'safety', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'maintain', 'help']);
 const validVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
 function compareVersions(left, right) {
   const parse = value => /^(?:v)?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
@@ -535,6 +536,26 @@ async function queueSessionEndReceipt({ client, hookInput, config, paths, env })
   } finally { clearTimeout(timer); }
 }
 
+/** Queue one review candidate per finding kind through the installed receipts module (Full). Lite: nothing is written. */
+async function queueMaintenanceReceipt({ config, paths, env, candidates }) {
+  const current = await readCurrent(paths).catch(() => null);
+  const releaseDir = currentReleaseDir(paths, current);
+  if (!releaseDir) return { queued: false, reason: 'receipts-module-missing' };
+  const { ordered, entries } = await enabledModuleEntries(releaseDir, config);
+  const handler = ordered.map(manifest => entries.get(manifest.name)).find(entry => typeof entry?.onSessionEnd === 'function');
+  if (!handler) return { queued: false, reason: 'receipts-module-missing' };
+  const cfg = structuredClone(config);
+  cfg.stateDir = join(paths.stateDir, vaultId(config.vault.path));
+  const roots = managedRoots(paths, env);
+  const created = await missingDirectories(cfg.stateDir, env.HOME, roots);
+  await mkdir(cfg.stateDir, { recursive: true });
+  if (created.length) await recordCreatedDirectories(paths, created, env.HOME, roots);
+  const ctx = moduleContext(cfg, paths, env, entries, ordered);
+  await activateEnabledModules(ordered, entries, ctx);
+  const result = await handler.onSessionEnd(ctx, { client: 'claude', session_id: 'brainatlas-maintain', brainatlas_receipt: candidates });
+  return { queued: Boolean(result?.queued), id: result?.id, candidates: result?.candidates ?? 0 };
+}
+
 async function dispatchModuleCommand(command, args, { paths, env, output, dependencies = {} }) {
   const current = await readCurrent(paths);
   const releaseDir = currentReleaseDir(paths, current);
@@ -607,14 +628,14 @@ const helpDescriptions = Object.freeze({
   doctor: 'Check installation health.', config: 'Read or change BrainAtlas configuration.', safety: 'Review and manage fingerprinted safety allowances.', module: 'List, add, or remove installed modules.',
   uninstall: 'Remove BrainAtlas while preserving the vault.', update: 'Install or inspect a release update.', rollback: 'Switch to a previous release.',
   recover: 'Inspect or recover an interrupted update.', eval: 'Run the local retrieval evaluation.', hook: 'Run an agent hook.', mcp: 'Start the BrainAtlas MCP server.',
-  migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', help: 'Show built-in and active module commands.'
+  migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', maintain: 'Read-only Wiki maintenance report (stale, broken, orphan and oversized pages); writes nothing unless --queue.', help: 'Show built-in and active module commands.'
 });
 const helpUsages = Object.freeze({
   init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
   config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', safety: 'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
-  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', help: 'brainatlas --help | brainatlas help [COMMAND]'
+  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue]', help: 'brainatlas --help | brainatlas help [COMMAND]'
 });
 
 async function availableHelpCommands(paths, env) {
@@ -1078,6 +1099,24 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
   if (command === 'recover') {
     if (plan) { const journal = await readJournal(paths); output({ action: 'recover', pending: Boolean(journal), journal }); return; }
     output(await recoverUpdate(paths, env)); return;
+  }
+  if (command === 'maintain') {
+    const requested = value('--vault');
+    const queue = flag('--queue');
+    const cfg = requested === undefined || queue ? await loadConfig({ paths, env }) : null;
+    if (queue && requested !== undefined && resolve(requested) !== resolve(cfg.vault.path)) throw error('E_ARGUMENT', '--queue only works with the configured vault.');
+    const report = await runMaintenance(requested ?? cfg.vault.path);
+    if (queue) {
+      const candidates = receiptCandidates(report.findings);
+      report.queue = candidates.length
+        ? await queueMaintenanceReceipt({ config: cfg, paths, env, candidates })
+        : { queued: false, reason: 'no-findings' };
+    }
+    if (json) { output(report); return; }
+    const text = formatMaintenance(report);
+    if (queue) output(`${text}\n${report.queue.queued ? `Queued ${report.queue.candidates} review candidate(s) for receipts review.` : `Nothing queued (${report.queue.reason}).`}`);
+    else output(text);
+    return;
   }
   if (command === 'eval') {
     let component;

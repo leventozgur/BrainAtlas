@@ -66,8 +66,14 @@ test('identifier-free dev queries return results identical to main (path, score,
     cases.forEach((c, i) => {
       if (mayContainIdentifier(c.query)) return;
       compared++;
-      const current = shape(search(index, c.query, { limit: 10, abstainThreshold: 0, asOf: now }));
-      const expected = shape(golden[set.key][i]);
+      const raw = search(index, c.query, { limit: 10, abstainThreshold: 0, asOf: now });
+      // PM update (BA-09, 2026-11-11): results re-weighted by provenance trust (carrying `trust`) are left out of the comparison.
+      const weighted = new Set(index.docs.filter((d) => d.trust && d.trust !== 'neutral').map((d) => d.page.path));
+      const drop = (sh) => ({ ...sh, results: sh.results.filter((r) => !weighted.has(r.path)) });
+      const current = drop(shape(raw));
+      const expected = drop(shape(golden[set.key][i]));
+      const n = Math.min(current.results.length, expected.results.length);
+      current.results = current.results.slice(0, n); expected.results = expected.results.slice(0, n);
       // PM update (BA-08, 2026-11-11): link-graph expansion intentionally adds or lifts linked neighbours below the first result
       // on linked corpora (eval/corpus-ba); there the first result and abstention must still match main. Unlinked corpora keep
       // full parity.
