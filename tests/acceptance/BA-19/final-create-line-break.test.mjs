@@ -3,7 +3,9 @@
 // break. The page path comes from slugify, so no line break can reach the index. Behaviour is recorded per case.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { call, okJson, textOf, startServer, readIndex, singleInsertion } from './harness.mjs';
+import fs from 'node:fs';
+import { join } from 'node:path';
+import { call, okJson, textOf, startServer, readIndex, readOrNull, singleInsertion } from './harness.mjs';
 import { linkedPages } from './retest-reader.mjs';
 
 const BREAKS = ['\r', '\n', '\u0085', ' ', ' '];
@@ -42,12 +44,17 @@ test('create concept named with CR and U+2028 between words: the slug is the wor
 test('create with a name that slugifies to nothing (only a line break): observed behaviour, the index stays valid and break-free', async (t) => {
   const f = await startServer(t, {});
   const res = await call(f.client, 'wiki_create_entity', { name: ' ', content: 'Gövde.\n' });
-  const text = (await readIndex(f)).toString('utf8');
-  assert.ok(!text.includes(' '), 'no line break reaches the index in either outcome');
   if (res.isError) {
     t.diagnostic(`refused: ${textOf(res)}`);
-    assert.equal(text, '', 'a refusal writes no index');
+    // PM update (BA-20, 2026-11-11): an empty slug is now refused with E_INVALID_INPUT and nothing is written, so the index
+    // file may not exist; it must be absent or empty, and no page file may be created.
+    const raw = await readOrNull(join(f.wiki, 'index.md'));
+    assert.ok(raw === null || raw.toString('utf8') === '', 'a refusal writes no index');
+    const entities = join(f.wiki, 'entities');
+    assert.equal(fs.existsSync(entities) ? fs.readdirSync(entities, { withFileTypes: true }).filter((e) => e.isFile()).length : 0, 0, 'a refusal creates no page');
   } else {
+    const text = (await readIndex(f)).toString('utf8');
+    assert.ok(!text.includes(' '), 'no line break reaches the index in either outcome');
     const created = JSON.parse(textOf(res));
     t.diagnostic(`created at path: ${created.path}`);
     assert.ok(linkedPages(text).has(created.path.slice('wiki/'.length)), 'the index links the created page');
