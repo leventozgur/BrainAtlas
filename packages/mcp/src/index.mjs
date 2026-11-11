@@ -122,13 +122,22 @@ function indexablePath(path) { return !UNSAFE_PATH.test(path); }
 function isLocalMarkdownTarget(path) {
   return path.endsWith('.md') && !path.startsWith('/') && !path.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(path);
 }
+/**
+ * Line-safe label text: every run of whitespace, C0/C1 control character or DEL (this includes CR, LF, U+0085, U+2028
+ * and U+2029) becomes one space, and the result is trimmed. An index entry must stay on one line.
+ */
+function cleanLabel(text) { return text.replace(/[\s\x00-\x1f\x7f-\x9f]+/g, ' ').trim(); }
+/** Link text of an entry: the cleaned title, else the cleaned file name without `.md`, else the cleaned path. */
+function entryTitle(entry) {
+  return cleanLabel(String(entry.title)) || cleanLabel(posix.basename(entry.path, '.md')) || cleanLabel(entry.path);
+}
 /** Index line for one page; the same shape as the vendored writer, with the frontmatter summary and valid tags. */
 function indexEntryLine(entry) {
   const fm = entry.frontmatter ?? {};
-  const summarySource = [fm.summary, fm.description].find((value) => typeof value === 'string' && value.trim());
-  const summary = summarySource ? summarySource.replace(/\s+/g, ' ').trim() : '';
+  const summarySource = [fm.summary, fm.description].find((value) => typeof value === 'string' && cleanLabel(value));
+  const summary = summarySource ? cleanLabel(summarySource) : '';
   const tags = entry.tags.filter((tag) => typeof tag === 'string' && /^[\w-]+$/.test(tag));
-  const title = wiki.escapeMarkdownLinkText(String(entry.title).replace(/\s+/g, ' ').trim());
+  const title = wiki.escapeMarkdownLinkText(entryTitle(entry));
   const parts = [summary, ...(tags.length ? [tags.map((tag) => `#${tag}`).join(' ')] : [])].filter(Boolean);
   return `- [${title}](${indexDestination(entry.path)})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
 }
@@ -138,7 +147,7 @@ function indexEntryLine(entry) {
  */
 function indexDestination(path) {
   const escaped = path.replace(/([\\()])/g, '\\$1');
-  if (!/[\s\x00-\x1f\x7f]/.test(path) && !path.startsWith('<')) return escaped;
+  if (!/[\s\x00-\x1f\x7f-\x9f]/.test(path) && !path.startsWith('<')) return escaped;
   return `<${escaped.replace(/[<>]/g, '\\$&')}>`;
 }
 /**
@@ -493,6 +502,8 @@ export function createServer(options) {
     });
     const create = (name, content, kind) => async () => {
       const slug = wiki.slugify(name);
+      // An empty slug (no ASCII letter or digit) would name a hidden `.md` file; refuse before anything is written.
+      if (!slug) throw mcpError('E_INVALID_INPUT', 'The page name needs at least one ASCII letter or digit.');
       const rel = `${kind}/${slug}.md`;
       const title = name;
       const frontmatter = { type: kind === 'entities' ? 'entity' : 'concept', title, tags: [], created: new Date().toISOString() };
