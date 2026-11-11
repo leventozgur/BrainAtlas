@@ -3,7 +3,7 @@
 // page; paths with spaces are written and read as angle-bracket destinations. Real stdio MCP server, temporary vault.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -110,4 +110,55 @@ test('BA19-ANGLE3: wiki_create_entity on an index that already has a spaced entr
   const f = await fixture(t, { files: { 'entities/my note.md': page('My Note') }, index });
   await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' });
   assert.equal(await f.readIndex(), '# Wiki Index\n\n## entities\n\n- [My Note](<entities/my note.md>)\n- [Yeni Varlik](entities/yeni-varlik.md)\n');
+});
+
+// ---------------------------------------------------------------- fix2: unsafe names are never indexed
+
+test('BA19-UNSAFE1: a page whose name has a line feed or U+2028 is not written to the index and is not counted in coverage; a tab name is kept', async (t) => {
+  const f = await fixture(t, { files: { 'entities/nl\nname.md': page('Satır'), 'entities/ls name.md': page('Ayraç'), 'entities/tab\tname.md': page('Sekme'), 'entities/ok.md': page('Tamam') } });
+  assert.deepEqual(await ok(f.client, 'wiki_update_index'), { indexed: 4, added: 2, removed: 0 });
+  const first = await f.readIndex();
+  assert.ok(first.includes('](<entities/tab\tname.md>)'), 'the tab name is written in angle brackets');
+  assert.ok(!first.includes('nl\nname') && !first.includes(' '), 'unsafe names never reach the index');
+  assert.equal(first.split('\n').filter((line) => line.startsWith('- [')).length, 2);
+  assert.deepEqual(await ok(f.client, 'wiki_update_index'), { indexed: 4, added: 0, removed: 0 });
+  assert.equal(await f.readIndex(), first, 'idempotent');
+  // Pages stay listed; coverage counts only the two indexable pages, both linked: 100.
+  assert.equal((await ok(f.client, 'wiki_status')).indexCoveragePct, 100);
+  assert.equal((await ok(f.client, 'wiki_status')).pageCount, 4);
+});
+
+test('BA19-UNSAFE2: a wiki/ directory outside the vault answers indexCoveragePct 100 (empty-Wiki view)', async (t) => {
+  const home = await mkdtemp(resolve(tmpdir(), 'ba19-links-out-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const vault = resolve(home, 'vault');
+  const outside = resolve(home, 'outside');
+  await mkdir(vault, { recursive: true });
+  await mkdir(outside, { recursive: true });
+  await writeFile(resolve(outside, 'x.md'), page('Dış'));
+  await symlink(outside, resolve(vault, 'wiki'));
+  const config = defaultConfig('lite');
+  config.vault.path = vault;
+  config.readOnly = false;
+  const configFile = resolve(home, 'config.json');
+  await writeFile(configFile, JSON.stringify(config));
+  const transport = new StdioClientTransport({
+    command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe'
+  });
+  const client = new Client({ name: 'ba19-links-out', version: '1.0.0' });
+  await client.connect(transport);
+  t.after(async () => { await client.close(); });
+  assert.equal((await ok(client, 'wiki_status')).indexCoveragePct, 100);
+});
+
+test('BA19-UNSAFE3: a control character other than a line break (U+0001) is indexed in angle brackets and reads back; U+0085 is excluded', async (t) => {
+  const f = await fixture(t, { files: { 'entities/ctl\u0001name.md': page('Kontrol'), 'entities/nel\u0085name.md': page('Nel'), 'entities/ok.md': page('Tamam') } });
+  assert.deepEqual(await ok(f.client, 'wiki_update_index'), { indexed: 3, added: 2, removed: 0 });
+  const first = await f.readIndex();
+  assert.ok(first.includes('](<entities/ctl\u0001name.md>)'), 'the control character is written inside angle brackets');
+  assert.ok(!first.includes('\u0085'), 'U+0085 never reaches the index');
+  assert.deepEqual(await ok(f.client, 'wiki_update_index'), { indexed: 3, added: 0, removed: 0 });
+  assert.equal(await f.readIndex(), first, 'idempotent');
+  assert.equal((await ok(f.client, 'wiki_status')).indexCoveragePct, 100);
 });

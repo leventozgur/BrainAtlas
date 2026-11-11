@@ -111,6 +111,13 @@ function classifyLines(lines) {
 }
 /** Category of a page: its first folder, or `Pages` for a page at the Wiki root. */
 function categoryOf(path) { return path.includes('/') ? path.split('/')[0] : 'Pages'; }
+/**
+ * A page whose path holds a carriage return, line feed, U+0085, U+2028 or U+2029 is never written to the index (a line
+ * break would split the entry line) and is not counted in wiki_status coverage. Other control characters and tabs are
+ * written inside angle brackets and read back exactly.
+ */
+const UNSAFE_PATH = /[\r\n\u0085\u2028\u2029]/;
+function indexablePath(path) { return !UNSAFE_PATH.test(path); }
 /** A link target that names a local Markdown file. External URLs and anchors are never treated as stale pages. */
 function isLocalMarkdownTarget(path) {
   return path.endsWith('.md') && !path.startsWith('/') && !path.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(path);
@@ -140,7 +147,7 @@ function indexDestination(path) {
  */
 function freshIndex(entries) {
   const categories = new Map();
-  const sorted = [...entries].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const sorted = entries.filter((entry) => indexablePath(entry.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   for (const entry of sorted) {
     const category = categoryOf(entry.path);
     if (!categories.has(category)) categories.set(category, []);
@@ -179,7 +186,7 @@ function mergeIndex(content, entries, { prune = true } = {}) {
     }
     lines.push(source[i]);
   }
-  const missing = entries.filter((entry) => !linked.has(entry.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const missing = entries.filter((entry) => indexablePath(entry.path) && !linked.has(entry.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   for (const entry of missing) {
     const line = fresh(indexEntryLine(entry));
     const category = categoryOf(entry.path);
@@ -373,7 +380,7 @@ export function createServer(options) {
   // Every other read tool, and wiki_update_index, refuses with E_PATH_ESCAPE.
   const escapedWikiViews = {
     wiki_list_pages: () => ({ pages: [] }),
-    wiki_status: () => ({ pageCount: 0, okfWarningCount: 0, okfErrorCount: 0, indexAgeMs: null, readOnly: config.readOnly === true, indexCoveragePct: null }),
+    wiki_status: () => ({ pageCount: 0, okfWarningCount: 0, okfErrorCount: 0, indexAgeMs: null, readOnly: config.readOnly === true, indexCoveragePct: 100 }),
     wiki_query: () => ({ results: [], abstained: true })
   };
   const readTool = (name, schema, handler) => tool(name, schema, async (args) => {
@@ -443,8 +450,9 @@ export function createServer(options) {
     // Coverage uses the same index reader as wiki_update_index (escaped, angle-bracket and anchored destinations). The
     // vendored getWikiStatus reads the index with its own parser, which misreads escaped parentheses.
     const linked = indexedPaths(await readOptionalIndex(join(wikiDir, 'index.md')));
-    const covered = pages.filter((item) => linked.has(item.slice('wiki/'.length))).length;
-    const indexCoveragePct = pages.length ? Math.round((covered / pages.length) * 100) : 100;
+    const countable = pages.filter((item) => indexablePath(item.slice('wiki/'.length)));
+    const covered = countable.filter((item) => linked.has(item.slice('wiki/'.length))).length;
+    const indexCoveragePct = countable.length ? Math.round((covered / countable.length) * 100) : 100;
     return { pageCount: pages.length, okfWarningCount: findings.filter((item) => item.severity === 'warn').length,
       okfErrorCount: findings.filter((item) => item.severity === 'error').length, indexAgeMs,
       readOnly: config.readOnly === true, indexCoveragePct };
@@ -541,7 +549,7 @@ export function createServer(options) {
         checkWrite('wiki/index.md', output);
         await writeFile(target, output, 'utf8');
         await logAndRefresh('update-index', 'wiki/index.md');
-        return { indexed: entries.length, added: entries.length, removed: 0 };
+        return { indexed: entries.length, added: entries.filter((entry) => indexablePath(entry.path)).length, removed: 0 };
       }
       const { output, added, removed } = mergeIndex(existing, entries);
       checkWrite('wiki/index.md', output);
