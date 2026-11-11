@@ -33,6 +33,61 @@ function safePath(value) {
 function tokens(text, query = false) {
   return (normalizeText(text).match(/[\p{L}\p{N}]+/gu) || []).filter(t => !query || !stops.has(t)).map(stem);
 }
+// Identifier tokens (E_WIDGET_TIMEOUT, a1b2c3d, rc.12, src/lib/retry.mjs, --drain-timeout, RouteSnapshotCache) are kept
+// whole, unsplit and unstemmed, in a separate exact index. Candidates are runs of letters, digits and `_ . / -`, with
+// leading and trailing `_ . / -` removed. Dates, plain numbers, `v2`-style tokens and ordinary hyphenated words are not
+// identifiers, so they never trigger the exact rules.
+const identifierCandidate = /[\p{L}\p{N}_./-]+/gu;
+const identifierEdge = /^[._/-]+|[._/-]+$/gu;
+function isIdentifier(raw) {
+  const t = raw.replace(identifierEdge, '');
+  if (/^\d+(?:\.\d+){2,}$/u.test(t)) return true;                       // 1.2.3
+  if (!/\p{L}/u.test(t)) return false;                                   // 2026, 2026-11-11
+  if (t.includes('_')) return true;                                      // E_WIDGET_TIMEOUT
+  if (/\p{N}/u.test(t) && t.length >= 4) return true;                    // a1b2c3d, ADR-009, ipv6 (v2 is too short)
+  if ((raw.match(/\p{Ll}\p{Lu}|\p{Lu}\p{Lu}\p{Ll}/gu) || []).length >= 2) return true; // RouteSnapshotCache, URLSessionConfiguration (SwiftUI, iOS are not)
+  if (/[\p{L}\p{N}]\.[\p{L}\p{N}]/u.test(t)) return true;                // rc.12, widget.mjs, settings.json
+  if (/^[^/]+(?:\/[^/]+)+$/u.test(t) && (t.includes('.') || t.split('/').length > 2)) return true; // src/lib/retry, and/or excluded
+  if (raw.startsWith('--')) return true;                                 // --drain-timeout
+  if (/^[\p{Lu}\p{N}]+(?:-[\p{Lu}\p{N}]+)+$/u.test(t) && /\p{Lu}/u.test(t)) return true; // ERR-BASIL
+  return false;
+}
+// A document identifier also yields its contiguous sub-chains of segments, so `URLSessionConfiguration` finds
+// `URLSessionConfiguration.timeoutIntervalForRequest`, `rc.12` finds `2.4.0-rc.12`, and `retry.mjs` finds `src/lib/retry.mjs`.
+// Queries use only the whole identifier.
+const maxChainSegments = 12;
+/** Normalized identifier keys of a document text, including the sub-chains described above. */
+function identifierKeys(text, keys = new Set()) {
+  for (const m of text.matchAll(identifierCandidate)) {
+    if (!isIdentifier(m[0])) continue;
+    const key = normalizeText(m[0].replace(identifierEdge, ''));
+    keys.add(key);
+    const pieces = key.match(/[^./-]+|[./-]+/g) || [];
+    const segments = Math.ceil(pieces.length / 2);
+    if (segments < 2 || segments > maxChainSegments) continue;
+    for (let i = 0; i < pieces.length; i += 2) {
+      for (let j = i; j < pieces.length; j += 2) {
+        const chain = pieces.slice(i, j + 1).join('');
+        if (chain.length >= 2) keys.add(chain);
+      }
+    }
+  }
+  return keys;
+}
+/** Identifier keys of a query, and the query text with identifiers blanked out (for counting the remaining words). */
+function queryIdentifiers(text) {
+  const keys = new Set(); let rest = ''; let last = 0;
+  for (const m of text.matchAll(identifierCandidate)) {
+    rest += text.slice(last, m.index);
+    last = m.index + m[0].length;
+    if (isIdentifier(m[0])) { keys.add(normalizeText(m[0].replace(identifierEdge, ''))); rest += ' '; }
+    else rest += m[0];
+  }
+  return {keys, rest: rest + text.slice(last)};
+}
+// An identifier-only query abstains when none of its identifiers occurs in the vault and identifiers make up at least
+// this share of its (identifier + remaining content word) units. Tuned on the dev identifier set only.
+const IDENTIFIER_ABSTAIN_SHARE = 0.2;
 function strings(x) { return Array.isArray(x) ? x.filter(v => typeof v === 'string') : typeof x === 'string' ? [x] : []; }
 function dateValue(x) { return x instanceof Date ? x.toISOString().slice(0, 10) : x; }
 function canonical(x) {
@@ -71,19 +126,20 @@ export function loadPages(vaultDir) {
 }
 export function buildIndex(pages, options = {}) {
   if (!Array.isArray(pages)) fail('E_INVALID_INPUT', 'Expected pages');
-  const docs = []; const postings = Object.create(null); const totals = [0,0,0,0];
+  const docs = []; const postings = Object.create(null); const exact = Object.create(null); const totals = [0,0,0,0];
   for (const p of pages) {
     if (!p || typeof p.path !== 'string' || typeof p.title !== 'string') fail('E_INVALID_INPUT', 'Invalid page');
     if (!safePath(p.path)) continue;
     const fm = p.frontmatter || {};
     if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) continue;
     const fields = [p.title, [...strings(p.aliases), ...strings(p.keywords)].join(' '), strings(p.headings).join(' '), typeof p.body === 'string' ? p.body : ''];
-    const lengths = []; const counts = new Map();
-    fields.forEach((field, i) => { const ts = tokens(field); lengths.push(ts.length); totals[i] += ts.length; for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; } });
+    const lengths = []; const counts = new Map(); const identifiers = new Set();
+    fields.forEach((field, i) => { const ts = tokens(field); lengths.push(ts.length); totals[i] += ts.length; for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; } identifierKeys(field, identifiers); });
     const id = docs.length; docs.push({page: p, lengths});
     for (const [term, countsByField] of counts) (postings[term] ||= []).push([id, countsByField]);
+    for (const key of identifiers) (exact[key] ||= []).push(id);
   }
-  return { version: 1, docs, postings, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString() };
+  return { version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString() };
 }
 function stale(fm, asOf) {
   let expiry = dateValue(fm.stale_after); if (!expiry) return false;
@@ -133,13 +189,19 @@ function bestSection(body, terms, index) {
 }
 /** Non-string queries raise E_QUERY_INVALID; queries without terms abstain. */
 export function search(index, query, options = {}) {
-  if (!index || index.version !== 1 || !Array.isArray(index.docs) || !index.postings || !Array.isArray(index.averages)) fail('E_INDEX_CORRUPT', 'Invalid index');
+  if (!index || index.version !== 1 || !Array.isArray(index.docs) || !index.postings || !index.exact || !Array.isArray(index.averages)) fail('E_INDEX_CORRUPT', 'Invalid index');
   if (typeof query !== 'string') fail('E_QUERY_INVALID', 'Expected query');
   const terms = [...new Set(tokens(query, true))];
   const limit = options.limit ?? 5, budget = options.budgetChars ?? Infinity, threshold = options.abstainThreshold ?? 0;
   const asOf = options.asOf ?? new Date(index.now);
   if (!Number.isInteger(limit) || limit < 0 || !(budget >= 0) || !(threshold >= 0 && threshold <= 1) || !(asOf instanceof Date) || !Number.isFinite(asOf.getTime())) fail('E_INVALID_INPUT', 'Invalid search options');
   if (!terms.length) return {results: [], abstained: true, reason: 'empty-query', truncated: false};
+  const {keys: identifiers, rest} = queryIdentifiers(query);
+  const identifierLists = [...identifiers].map(key => Object.hasOwn(index.exact, key) ? index.exact[key] : []);
+  if (identifierLists.length && identifierLists.every(list => !list.length)) {
+    const share = identifiers.size / (identifiers.size + new Set(tokens(rest, true)).size);
+    if (share >= IDENTIFIER_ABSTAIN_SHARE) return {results: [], abstained: true, reason: 'identifier-not-found', truncated: false};
+  }
   const scores = new Map(); let maxScore = 0;
   for (const term of terms) {
     const list = Object.hasOwn(index.postings, term) ? index.postings[term] : []; const idf = Math.log(1 + (index.docs.length - list.length + 0.5) / (list.length + 0.5));
@@ -149,6 +211,13 @@ export function search(index, query, options = {}) {
       let tf = 0; for (let i=0;i<4;i++) tf += weights[i] * counts[i] / (0.25 + 0.75 * index.docs[id].lengths[i] / (index.averages[i] || 1));
       scores.set(id, (scores.get(id) || 0) + idf * 2.5 * tf / (1.5 + tf));
     }
+  }
+  // Each identifier is one more query term. A document that contains it exactly gets its full weight; a missing one
+  // still lowers the score through maxScore, like any unmatched term.
+  for (const list of identifierLists) {
+    const idf = Math.log(1 + (index.docs.length - list.length + 0.5) / (list.length + 0.5));
+    maxScore += idf * 2.5;
+    for (const id of list) scores.set(id, (scores.get(id) || 0) + idf * 2.5);
   }
   // Compress low scores while retaining the penalty for every unmatched query term.
   // The transform is monotonic, so it leaves ranking and tie-breaking intact.
@@ -166,7 +235,7 @@ export function search(index, query, options = {}) {
   return {results, abstained:false, reason:null, truncated};
 }
 // Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
-const FINGERPRINT_SCHEMA = 'retrieval-stat-v4';
+const FINGERPRINT_SCHEMA = 'retrieval-stat-v5';
 function statFingerprint(vaultDir) {
   const { root, files } = markdownFiles(vaultDir);
   const fingerprint = createHash('sha256').update(FINGERPRINT_SCHEMA);
@@ -246,7 +315,20 @@ function decodeCachedIndex(data, key, paths) {
     }
     postings[term] = list;
   }
-  return {version: 1, docs, postings, averages: index.averages, now: index.now};
+  // Exact identifier postings: non-empty lists of strictly increasing, in-range document ids.
+  if (!isPlainObject(index.exact)) return null;
+  const exact = Object.create(null);
+  for (const key of Object.keys(index.exact)) {
+    const list = index.exact[key];
+    if (!Array.isArray(list) || list.length === 0) return null;
+    let previous = -1;
+    for (const id of list) {
+      if (!Number.isInteger(id) || id <= previous || id >= docCount) return null;
+      previous = id;
+    }
+    exact[key] = list;
+  }
+  return {version: 1, docs, postings, exact, averages: index.averages, now: index.now};
 }
 /**
  * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
