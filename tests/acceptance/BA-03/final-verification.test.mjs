@@ -131,8 +131,8 @@ for (const n of [13, 20, 40]) {
     const gapped = [parts[0], parts[2], leaf].join('/');
     assert.equal(run(index, gapped).reason, 'identifier-not-found', `non-consecutive ${gapped}`);
   });
-  // PM decision (2026-11-11): known limitation tracked as BA-18 (suffix window counts '-' and '.' pieces, not path components).
-  test(`FINDING: a ${n}-component vault path with a hyphenated basename: its 2- and 3-component suffixes are indexed`, { todo: 'BA-18: suffix window should count path components' }, () => {
+  // PM update (BA-17/18, 2026-11-11): fixed — the suffix window counts path components.
+  test(`a ${n}-component vault path with a hyphenated basename: its 2- and 3-component suffixes are indexed`, () => {
     const leaf = `handler-x-${n}.mjs`;
     const { index, parts } = deepCase(n, leaf);
     // The basename itself is always found; the contract says the basename and its suffixes are always indexed.
