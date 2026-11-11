@@ -306,6 +306,14 @@ function trustOf(frontmatter) {
   if (fm.status === 'confirmed') return Array.isArray(fm.verified) && fm.verified.some(validVerifiedRecord) ? 'verified' : 'neutral';
   return fm.status === 'proposed' || fm.status === 'disputed' ? 'weak' : 'neutral';
 }
+// BA-26: a page with `sensitivity: personal` or `inject: never` is searchable as before, but the hook must never inject it.
+// The class is stored per document (only when true, so other documents keep the previous cache shape) and checked on cache load.
+function restrictedOf(frontmatter) {
+  const fm = frontmatter || {};
+  const sensitivity = typeof fm.sensitivity === 'string' ? fm.sensitivity.trim().toLowerCase() : '';
+  const inject = typeof fm.inject === 'string' ? fm.inject.trim().toLowerCase() : '';
+  return sensitivity === 'personal' || inject === 'never';
+}
 export function buildIndex(pages, options = {}) {
   if (!Array.isArray(pages)) fail('E_INVALID_INPUT', 'Expected pages');
   const docs = []; const postings = Object.create(null); const exact = Object.create(null); const totals = [0,0,0,0];
@@ -317,7 +325,7 @@ export function buildIndex(pages, options = {}) {
     const fields = [p.title, [...strings(p.aliases), ...strings(p.keywords)].join(' '), strings(p.headings).join(' '), typeof p.body === 'string' ? p.body : ''];
     const lengths = []; const counts = new Map(); const identifiers = new Set();
     fields.forEach((field, i) => { const ts = tokens(field); lengths.push(ts.length); totals[i] += ts.length; for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; } identifierKeys(field, identifiers); });
-    const id = docs.length; docs.push({page: p, lengths, trust: trustOf(p.frontmatter)});
+    const id = docs.length; docs.push({page: p, lengths, trust: trustOf(p.frontmatter), ...(restrictedOf(p.frontmatter) ? {restricted: true} : {})});
     for (const [term, countsByField] of counts) (postings[term] ||= []).push([id, countsByField]);
     for (const key of identifiers) (exact[key] ||= []).push(id);
   }
@@ -471,6 +479,8 @@ export function search(index, query, options = {}) {
     // Optional (BA-09): `verified` or `weak` for pages with provenance; absent for neutral pages.
     const trust = index.docs[id].trust;
     if (trust === 'verified' || trust === 'weak') result.trust = trust;
+    // Optional (BA-26): `never` for restricted pages (sensitivity personal or inject never); absent otherwise.
+    if (index.docs[id].restricted === true) result.inject = 'never';
     return result;
   });
   return {results, abstained:false, reason:null, truncated};
@@ -567,6 +577,9 @@ function decodeCachedIndex(data, key, paths) {
     if (!isPlainObject(page.frontmatter)) return null;
     // Trust (BA-09) is stored per document and must equal the class its frontmatter gives; a cache without it is rebuilt once.
     if (doc.trust !== trustOf(page.frontmatter)) return null;
+    // BA-26: the restriction flag must agree with the frontmatter; a missing or forged flag forces a rebuild.
+    if (doc.restricted !== undefined && doc.restricted !== true) return null;
+    if ((doc.restricted === true) !== restrictedOf(page.frontmatter)) return null;
     const fm = page.frontmatter;
     if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) return null;
     if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;

@@ -107,6 +107,16 @@ const answer = search(index, 'vault backup', {limit:3,budgetChars:1200});
 
 **Cache.** Each indexed document stores its `trust`. `decodeCachedIndex` recomputes the class from the cached frontmatter and rejects a cache whose stored class is missing or different; such a cache is rebuilt once. The schema tag stays `retrieval-stat-v6`. As with the other cache checks, this is structural validation under the threat model below.
 
+## Restricted pages (BA-26 additions, contract version 1)
+
+**Class.** A page is restricted when its frontmatter has `sensitivity` equal to `personal` or `inject` equal to `never` (both matched case-insensitively after trimming). Restricted pages are indexed and searched like any other page: `search` and the MCP `wiki_query` and `wiki_read_page` paths return them unchanged.
+
+**Result field.** A restricted page's result carries `inject: 'never'`. The field is absent for every other page, so a corpus without the markers returns exactly the previous results. Ranking, scores, abstention and link expansion are unchanged.
+
+**Hook contract.** The prompt and session-start hooks never inject a restricted page and never record it as shown in the session state. When the semantic step has run, the hook also reads the first 4 KB of each candidate page and treats a page as restricted when its head has a `sensitivity: personal` or `inject: never` line; an unreadable or out-of-vault candidate is treated as restricted. The session-start recap omits restricted page lines by the same check.
+
+**Cache.** A restricted document stores `restricted: true`; other documents store no key, so older caches for unrestricted pages stay valid. `decodeCachedIndex` rejects any cache whose stored flag differs from the frontmatter, and such a cache is rebuilt once. The schema tag stays `retrieval-stat-v6`.
+
 ## Threat model / cache trust
 
 The persisted cache lives under `stateDir`, which is user-owned and trusted. A cache is accepted only when its key matches the current stat fingerprint and its structure passes validation: plain-object roots and fields, page paths present on disk and unique, page field types, posting ids strictly increasing and in range, counts within their field lengths, and averages equal to the values `buildIndex` computes, and exact identifier postings are non-empty lists of strictly increasing in-range ids. Content is not validated: a cache whose key matches but whose content was made up (for example an emptied title, inflated lengths or a swapped path) is accepted as the index for that vault state. Detecting that would require re-reading page contents, which the cheap freshness check exists to avoid. Anyone able to write to `stateDir` can therefore change search results for the unchanged vault; this is an accepted risk, not a defect of the cache format.

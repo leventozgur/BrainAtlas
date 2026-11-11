@@ -28,6 +28,10 @@ A page's frontmatter says how well it is established (`status`, and `verified` r
 - A **weak** page (`status: proposed` or `disputed`) ranks slightly lower. Its result carries `trust: "weak"`, and the prompt hook shows it as `Title [unverified] (path)`.
 - Every other page is neutral: its score and position are unchanged, and its result has no `trust` field.
 
+## Restricted pages
+
+A page with `sensitivity: personal` or `inject: never` in its frontmatter is still searchable, and `wiki_query` and `wiki_read_page` return it. Its result carries `inject: "never"`. The prompt and session-start hooks never inject such a page, and the session-start recap leaves it out. Use it for notes that must not appear as context in unrelated sessions.
+
 Trust changes only the order of pages that already match the question. It never decides whether an answer is given: a question with no good match still gets no answer, and a weak page still answers a question when it is the best match. A corpus whose pages have no provenance fields gets exactly the same results as before.
 
 ## Abstention threshold

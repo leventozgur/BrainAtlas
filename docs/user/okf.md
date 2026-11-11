@@ -13,6 +13,8 @@ The local page profile recognizes these frontmatter fields:
 | `verified` | Verification records with UTC `date`, evidence, scope, and a source listed in `sources`. |
 | `stale_after` | UTC date/timestamp or positive `P<n>D` / `P<n>W` duration. |
 | `superseded_by` | Successor `wiki/*.md` path when `status` is superseded. |
+| `sensitivity` | `personal` keeps the page out of hook context (search still returns it). See [Restricted pages](retrieval.md#restricted-pages). |
+| `inject` | `never` has the same effect as `sensitivity: personal`. |
 | `aliases`, `keywords` | Recommended lists for entity and concept pages. |
 
 Example shape (supply real evidence for actual knowledge):
