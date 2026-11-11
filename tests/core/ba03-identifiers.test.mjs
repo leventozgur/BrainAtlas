@@ -157,3 +157,37 @@ test('a cache written under the previous schema tag is not reused', (t) => {
   assert.ok(JSON.parse(fs.readFileSync(cache, 'utf8')).index.exact);
   assert.ok(searcher);
 });
+
+test('fix1: dotted, slashed and ISO dates are never identifiers, while version strings still are', () => {
+  for (const date of ['11.11.2025', '2026.11.11', '11/11/2025', '2025-11-11', '11-11-2025', '01.12.1999']) {
+    const result = top(`${date} tarihinde ne oldu?`);
+    assert.notEqual(result.reason, NOT_FOUND, date);
+  }
+  // 1.2.2025 is a date-shaped token, so it is not an identifier even though 1.2.3 (a version) is.
+  const version = buildIndex([page('v.md', 'Build 1.2.2025 was tagged.'), page('w.md', '1.2.3 is the release.')], { now });
+  assert.notEqual(search(version, '1.2.2025', { abstainThreshold: 0.35 }).reason, NOT_FOUND);
+  assert.equal(search(version, '1.2.3 nedir?', { abstainThreshold: 0.35 }).results[0].path, 'w.md');
+  assert.equal(top('1.2.3 nedir?').reason, NOT_FOUND, 'version absent from this corpus is still an identifier');
+  assert.equal(top('2.4.0-rc.12 nedir?').results[0].path, 'version.md');
+});
+
+test('fix1: a date-shaped query with an unknown identifier is still an identifier, not a date', () => {
+  const result = top('v1.2.3 nedir?');
+  assert.equal(result.reason, NOT_FOUND);
+});
+
+test('fix1: single-letter abbreviations are not identifiers', () => {
+  for (const abbreviation of ['i.e.', 'e.g.', 'a.k.a.', 'vs.']) {
+    const result = top(`${abbreviation} retries`);
+    assert.notEqual(result.reason, NOT_FOUND, abbreviation);
+  }
+});
+
+test('fix1: a basename and its suffix chains are indexed for paths deeper than twelve segments', () => {
+  const deep = `${Array.from({ length: 14 }, (_, i) => `d${i}`).join('/')}/deep_retry.mjs`;
+  const idx = buildIndex([page('deep.md', `Module ${deep} handles backoff.`), page('other.md', 'plain')], { now });
+  assert.equal(search(idx, 'deep_retry.mjs nedir?', { abstainThreshold: 0.35 }).results[0].path, 'deep.md');
+  assert.equal(search(idx, 'd13/deep_retry.mjs nedir?', { abstainThreshold: 0.35 }).results[0].path, 'deep.md');
+  // Non-consecutive paths remain a documented limit.
+  assert.equal(search(idx, 'd3/d5/deep_retry.mjs nedir?', { abstainThreshold: 0.35 }).reason, NOT_FOUND);
+});

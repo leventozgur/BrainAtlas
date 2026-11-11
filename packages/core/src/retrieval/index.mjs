@@ -39,14 +39,26 @@ function tokens(text, query = false) {
 // identifiers, so they never trigger the exact rules.
 const identifierCandidate = /[\p{L}\p{N}_./-]+/gu;
 const identifierEdge = /^[._/-]+|[._/-]+$/gu;
+// A purely numeric three-part token with one 4-digit year at either end is a date (DD.MM.YYYY, MM/DD/YYYY, YYYY.MM.DD),
+// not a version: the two other parts must be a day (1-31) and a month (1-12) in either order.
+function isDateLike(t) {
+  const parts = t.split(/[./-]/u);
+  if (parts.length !== 3 || !parts.every(p => /^\d+$/u.test(p))) return false;
+  const yearAtEnd = parts[2].length === 4, yearAtStart = parts[0].length === 4;
+  if (!(yearAtEnd || yearAtStart) || (yearAtEnd && yearAtStart)) return false;
+  const [a, b] = yearAtEnd ? [parts[0], parts[1]] : [parts[1], parts[2]];
+  const x = Number(a), y = Number(b);
+  return (x >= 1 && x <= 31 && y >= 1 && y <= 12) || (x >= 1 && x <= 12 && y >= 1 && y <= 31);
+}
 function isIdentifier(raw) {
   const t = raw.replace(identifierEdge, '');
+  if (isDateLike(t)) return false;                                       // 11.11.2025, 2026.11.11, 11/11/2025
   if (/^\d+(?:\.\d+){2,}$/u.test(t)) return true;                       // 1.2.3
   if (!/\p{L}/u.test(t)) return false;                                   // 2026, 2026-11-11
   if (t.includes('_')) return true;                                      // E_WIDGET_TIMEOUT
   if (/\p{N}/u.test(t) && t.length >= 4) return true;                    // a1b2c3d, ADR-009, ipv6 (v2 is too short)
   if ((raw.match(/\p{Ll}\p{Lu}|\p{Lu}\p{Lu}\p{Ll}/gu) || []).length >= 2) return true; // RouteSnapshotCache, URLSessionConfiguration (SwiftUI, iOS are not)
-  if (/[\p{L}\p{N}]\.[\p{L}\p{N}]/u.test(t)) return true;                // rc.12, widget.mjs, settings.json
+  if (/[\p{L}\p{N}]\.[\p{L}\p{N}]/u.test(t) && !t.split('.').every(p => p.length === 1)) return true; // rc.12, widget.mjs; not i.e, e.g, a.k.a
   if (/^[^/]+(?:\/[^/]+)+$/u.test(t) && (t.includes('.') || t.split('/').length > 2)) return true; // src/lib/retry, and/or excluded
   if (raw.startsWith('--')) return true;                                 // --drain-timeout
   if (/^[\p{Lu}\p{N}]+(?:-[\p{Lu}\p{N}]+)+$/u.test(t) && /\p{Lu}/u.test(t)) return true; // ERR-BASIL
@@ -64,10 +76,13 @@ function identifierKeys(text, keys = new Set()) {
     keys.add(key);
     const pieces = key.match(/[^./-]+|[./-]+/g) || [];
     const segments = Math.ceil(pieces.length / 2);
-    if (segments < 2 || segments > maxChainSegments) continue;
-    for (let i = 0; i < pieces.length; i += 2) {
-      for (let j = i; j < pieces.length; j += 2) {
-        const chain = pieces.slice(i, j + 1).join('');
+    if (segments < 2) continue;
+    // Short identifiers get every contiguous chain. Deep paths get chains that start in their last four segments,
+    // so the basename and its suffixes are always indexed whatever the depth.
+    const starts = segments <= maxChainSegments ? Array.from({ length: segments }, (_, k) => k) : [segments - 4, segments - 3, segments - 2, segments - 1];
+    for (const first of starts) {
+      for (let last = first; last < segments; last++) {
+        const chain = pieces.slice(2 * first, 2 * last + 1).join('');
         if (chain.length >= 2) keys.add(chain);
       }
     }

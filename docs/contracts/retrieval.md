@@ -50,14 +50,14 @@ An identifier is a token such as `E_WIDGET_TIMEOUT`, `a1b2c3d`, `rc.12`, `2.4.0-
 
 - contains `_`, or is a dotted version with at least two dots (`1.2.3`);
 - mixes letters and digits and is at least four characters long (`v2` and `mp3` are not identifiers);
-- has a `.` between two alphanumerics (`rc.12`, `settings.json`);
+- has a `.` between two alphanumerics that are not all single letters (`rc.12`, `settings.json`; `i.e`, `e.g`, `a.k.a` are not);
 - has at least two case humps (`RouteSnapshotCache`, `URLSessionConfiguration`; `SwiftUI` and `iOS` are not);
 - is a `/` path that contains a dot or at least two `/` separators (`src/lib/retry.mjs`; `and/or` is not);
 - starts with `--` (a flag), or is an upper-case hyphenated code (`ERR-BASIL`).
 
-Dates, plain numbers, and ordinary hyphenated words (`follow-up`) are not identifiers.
+Dates are never identifiers: a purely numeric three-part token with one 4-digit year at either end, whose other two parts are a day (1-31) and a month (1-12) in either order (`11.11.2025`, `2026.11.11`, `11/11/2025`, `2025-11-11`). Version strings are unaffected (`1.2.3`, `2.4.0-rc.12`). Plain numbers and ordinary hyphenated words (`follow-up`) are not identifiers either.
 
-Identifiers are normalized with `normalizeText` (case and diacritics folded) but not stemmed or split. Each document gets an exact index `exact` (term to strictly increasing document ids) built from its title, aliases, keywords, headings and body; superseded pages are not indexed. A document identifier also indexes its contiguous sub-chains of segments, so `URLSessionConfiguration` finds `URLSessionConfiguration.timeoutIntervalForRequest` and `retry.mjs` finds `src/lib/retry.mjs`. A query uses only whole identifiers.
+Identifiers are normalized with `normalizeText` (case and diacritics folded) but not stemmed or split. Each document gets an exact index `exact` (term to strictly increasing document ids) built from its title, aliases, keywords, headings and body; superseded pages are not indexed. A document identifier also indexes its contiguous sub-chains of segments, so `URLSessionConfiguration` finds `URLSessionConfiguration.timeoutIntervalForRequest` and `retry.mjs` finds `src/lib/retry.mjs`. For paths with more than twelve segments, chains start only in the last four segments, so the basename and its suffixes are always indexed. A query uses only whole identifiers, so a non-consecutive path such as `d3/d5/x.mjs` for `d3/d4/d5/x.mjs` does not match, and a Turkish suffix attached without an apostrophe is not split off.
 
 Ranking: each query identifier is one more BM25F-normalized term. A document that contains it exactly receives its full weight (`idf * 2.5`); a missing identifier lowers the score through the same maximum-score normalization as any unmatched term. The ordinary BM25F terms still come from the identifier's words (`e`, `widget`, `timeout`). A query with no identifier takes exactly the previous path and returns identical results and scores.
 
