@@ -45,8 +45,8 @@ test('PAREN1: four parenthesis-named pages are listed once each; runs two and th
   assert.equal(out.split('\n').filter((line) => line.startsWith('- [')).length, 4);
 });
 
-// PM decision (2026-11-11): fresh-index escaping is tracked as BA-19 (all index writes through one escaping helper).
-test('PAREN4a (fresh index): with no index file, the first run writes the escaped destination of every parenthesis page (contract example)', { todo: 'BA-19: the first write without an index file uses the vendored writer, which does not escape parentheses' }, async (t) => {
+// PM update (BA-19, 2026-11-11): fixed — fresh index writes are escaped.
+test('PAREN4a (fresh index): with no index file, the first run writes the escaped destination of every parenthesis page (contract example)', async (t) => {
   const f = await startServer(t, { files: { ...PAREN_PAGES } });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 4, added: 4, removed: 0 });
   const out = (await indexOf(f)).toString('utf8');
@@ -55,8 +55,8 @@ test('PAREN4a (fresh index): with no index file, the first run writes the escape
   }
 });
 
-// PM decision (2026-11-11): fresh-index escaping is tracked as BA-19 (all index writes through one escaping helper).
-test('PAREN4b (fresh index): with no index file, runs two and three add nothing and keep the bytes', { todo: 'BA-19: the first write without an index file uses the vendored writer, which does not escape parentheses' }, async (t) => {
+// PM update (BA-19, 2026-11-11): fixed — fresh index writes are escaped.
+test('PAREN4b (fresh index): with no index file, runs two and three add nothing and keep the bytes', async (t) => {
   const f = await startServer(t, { files: { ...PAREN_PAGES } });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 4, added: 4, removed: 0 });
   const afterFirst = await indexOf(f);

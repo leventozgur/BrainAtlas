@@ -63,8 +63,8 @@ test('contract: the vendored readIndex note holds (it does not unescape destinat
   assert.match(contract, /does not unescape link destinations and misreads unescaped balanced parentheses/);
 });
 
-// PM decision (2026-11-11): fresh-index escaping is tracked as BA-19 (all index writes through one escaping helper).
-test('contract: a Wiki-root page uses the ## Pages category, and a parenthesis page is written escaped, as the documented example shows', { todo: 'BA-19: the first write without an index file uses the vendored writer, which does not escape parentheses' }, async (t) => {
+// PM update (BA-19, 2026-11-11): fixed — fresh index writes are escaped.
+test('contract: a Wiki-root page uses the ## Pages category, and a parenthesis page is written escaped, as the documented example shows', async (t) => {
   assert.match(contract, /A page at the Wiki root uses the category `## Pages`/);
   assert.match(contract, /`entities\/a\\\(b\\\)\.md`/);
   const f = await startServer(t, { files: { 'root-note.md': '---\ntitle: Kök\n---\nK.\n', 'entities/a(b).md': '---\ntitle: B\n---\nB.\n' } });
