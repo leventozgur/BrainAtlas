@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { parse } from 'yaml';
+import { isMap, isScalar, isSeq, parseDocument } from 'yaml';
 import { atomicWriteFileSync } from '../util/index.mjs';
 
 const weights = [4, 3, 2, 1];
@@ -148,7 +148,22 @@ export function loadPages(vaultDir) {
     const raw = fs.readFileSync(full, 'utf8');
     const match = raw.match(/^\uFEFF?---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/);
     let frontmatter = {};
-    if (match) { try { const obj = parse(match[1], { schema: 'yaml-1.1' }); if (obj && typeof obj === 'object' && !Array.isArray(obj)) frontmatter = canonical(obj); } catch { fail('E_INVALID_INPUT', 'Invalid frontmatter'); } }
+    if (match) {
+      try {
+        const doc = parseDocument(match[1], { schema: 'yaml-1.1' });
+        if (doc.errors.length) throw doc.errors[0];
+        const obj = doc.toJS();
+        // BA-09: an unquoted YAML 1.1 timestamp is parsed to a Date that may have rolled over (2026-02-30 -> 2026-03-02).
+        // The verified record's date is taken from the author's text instead, so trust sees the real calendar value.
+        const verifiedNodes = isMap(doc.contents) ? doc.get('verified', true) : null;
+        if (isSeq(verifiedNodes) && Array.isArray(obj?.verified)) verifiedNodes.items.forEach((item, i) => {
+          const dateNode = isMap(item) ? item.get('date', true) : null;
+          const record = obj.verified[i];
+          if (isScalar(dateNode) && dateNode.type === 'PLAIN' && typeof dateNode.source === 'string' && record && typeof record === 'object' && !Array.isArray(record)) record.date = dateNode.source;
+        });
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) frontmatter = canonical(obj);
+      } catch { fail('E_INVALID_INPUT', 'Invalid frontmatter'); }
+    }
     const body = match ? raw.slice(match[0].length) : raw;
     const headings = [...body.matchAll(/^#{1,3}\s+(.+)$/gm)].map(m => m[1].trim());
     return { path: path.relative(root, full).split(path.sep).join('/'), title: typeof frontmatter.title === 'string' ? frontmatter.title : (headings[0] || path.basename(full, path.extname(full))), aliases: strings(frontmatter.aliases), keywords: strings(frontmatter.keywords), headings, body, frontmatter };
@@ -465,17 +480,21 @@ function rankOrder(docs) {
   return (a, b) => b.score - a.score || (docs[a.id].page.path < docs[b.id].page.path ? -1 : docs[a.id].page.path > docs[b.id].page.path ? 1 : 0);
 }
 /**
- * Graph expansion (BA-08). Each direct neighbour of the top LINK_TOP lexical results gets LINK_ALPHA times its source's
- * score. A neighbour that is already ranked keeps the larger of its own score and that value; a new one is added with
- * `via: 'link'`, as is a neighbour whose link value exceeds its own score. The first result cannot change: every link
- * value is below the best lexical score, so ties and ordering among lexical results stay as they were. No links, no change.
+ * Graph expansion (BA-08). Each direct neighbour of the top LINK_TOP results (trust-adjusted scores, BA-09) gets LINK_ALPHA
+ * times its source's score times its own trust factor (BA-09). A neighbour that is already ranked keeps the larger of its own
+ * score and that value; a new one is added with `via: 'link'`, as is a neighbour whose link value exceeds its own score. The
+ * first result cannot change: a link value is at most LINK_ALPHA * 1.5 = 0.75 of its source score, and the source score is at
+ * most the best adjusted score, so ties and ordering among ranked results stay as they were. No links, no change.
  */
 function expandByLinks(ranked, index) {
   const links = index.links || {};
   const boosted = new Map();
   for (const source of ranked.slice(0, LINK_TOP)) {
-    const value = LINK_ALPHA * source.score;
-    for (const neighbour of links[source.id] || []) if (value > (boosted.get(neighbour) ?? -Infinity)) boosted.set(neighbour, value);
+    for (const neighbour of links[source.id] || []) {
+      // BA-09: the link value carries the neighbour's own trust factor, so a weak neighbour cannot escape its penalty by a link.
+      const value = LINK_ALPHA * source.score * (trustFactor[index.docs[neighbour].trust] ?? 1);
+      if (value > (boosted.get(neighbour) ?? -Infinity)) boosted.set(neighbour, value);
+    }
   }
   if (!boosted.size) return ranked;
   const merged = new Map(ranked.map(entry => [entry.id, {...entry}]));

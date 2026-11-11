@@ -159,3 +159,45 @@ test('trust survives the persisted cache and a cache with a wrong or missing tru
   assert.deepEqual(trusts(createSearcher({ vaultDir: vault, stateDir: state, now })), expected, 'pre-BA-09 cache is rebuilt');
   assert.equal(JSON.parse(fs.readFileSync(cacheFile, 'utf8')).index.docs.every(d => typeof d.trust === 'string'), true);
 });
+
+const pg = (file, body, frontmatter = {}, title = file) => ({ path: file, title, aliases: [], keywords: [], headings: [], body, frontmatter });
+
+// --- Fix1 regressions ----------------------------------------------------------------------------------------------------
+
+test('fix1: unquoted impossible calendar dates in a verified record are neutral, like their quoted forms', async t => {
+  const dir = temp(t);
+  const body = (date) => `---\ntitle: "Backup policy"\nstatus: confirmed\nverified:\n  - date: ${date}\n    evidence: "review"\n    scope: "backup"\n    source: "wiki/sources/a.md"\n---\n# Backup policy\n\n${BODY}\n`;
+  const cases = { 'feb30.md': '2026-02-30', 'feb29.md': '2026-02-29', 'nov31.md': '2026-11-31', 'hour25.md': '2026-11-01T25:00:00Z', 'valid.md': '2026-01-12', 'stamp.md': '2026-01-12T10:30:00Z' };
+  for (const [name, date] of Object.entries(cases)) fs.writeFileSync(path.join(dir, name), body(date));
+  const trust = Object.fromEntries(search(buildIndex(loadPages(dir), { now }), QUERY, { limit: 10 }).results.map(r => [r.path, r.trust ?? 'neutral']));
+  assert.deepEqual(trust, { 'feb30.md': 'neutral', 'feb29.md': 'neutral', 'nov31.md': 'neutral', 'hour25.md': 'neutral', 'valid.md': 'verified', 'stamp.md': 'verified' });
+});
+
+// A link value is LINK_ALPHA (0.5) times the source's trust-adjusted score times the neighbour's own factor.
+test('fix1: a linked weak neighbour gets 0.5 x source x 0.9, a linked verified neighbour 0.5 x source x 1.5', () => {
+  const index = buildIndex([
+    pg('top.md', 'kestrel courier handoff rules, see [[weak-side]] and [[strong-side]].', {}, 'Top'),
+    pg('weak-side.md', 'lamp wick schedule.', { status: 'proposed' }, 'Weak side'),
+    pg('strong-side.md', 'lamp wick schedule.', { status: 'confirmed', verified: [record] }, 'Strong side'),
+  ], { now });
+  const results = search(index, 'kestrel courier handoff', { limit: 10, abstainThreshold: 0 }).results;
+  const byPath = Object.fromEntries(results.map(r => [r.path, r]));
+  const top = byPath['top.md'].score;
+  assert.equal(results[0].path, 'top.md', 'the first result is unchanged by links');
+  assert.equal(byPath['top.md'].via, undefined);
+  assert.ok(Math.abs(byPath['weak-side.md'].score - 0.5 * top * 0.9) < 1e-12, `weak link value ${byPath['weak-side.md'].score}`);
+  assert.ok(Math.abs(byPath['strong-side.md'].score - 0.5 * top * 1.5) < 1e-12, `verified link value ${byPath['strong-side.md'].score}`);
+  assert.equal(byPath['weak-side.md'].via, 'link');
+  assert.equal(byPath['weak-side.md'].trust, 'weak');
+});
+
+test('fix1: a weak page reached by a link scores below its neutral twin reached by the same link', () => {
+  const link = (target) => [
+    pg('top.md', 'kestrel courier handoff rules, see [[side]].', {}, 'Top'),
+    pg('side.md', 'lamp wick schedule.', target, 'Side'),
+  ];
+  const weak = search(buildIndex(link({ status: 'proposed' }), { now }), 'kestrel courier handoff', { limit: 10, abstainThreshold: 0 }).results.find(r => r.path === 'side.md').score;
+  const neutral = search(buildIndex(link({}), { now }), 'kestrel courier handoff', { limit: 10, abstainThreshold: 0 }).results.find(r => r.path === 'side.md').score;
+  assert.ok(weak < neutral, `weak ${weak} should be below neutral ${neutral}`);
+  assert.ok(Math.abs(weak / neutral - 0.9) < 1e-12);
+});
