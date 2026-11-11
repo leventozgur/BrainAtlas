@@ -424,13 +424,39 @@ export function createServer(options) {
       const results = await module.searchHybrid({ query, pages: snapshot.pages, lexicalIndex: snapshot.index, entries: index.entries, provider, limit: count, indexMeta: index, mode: settings.mode, minSemanticScore: settings.minScore, abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
       if (results.fallbackReason) return fallback(results.fallbackReason);
       if (results.abstained) return { ...lexical, semantic: { used: true }, mode: settings.mode };
+      // BA-24: section fields use the core's anchor rule (diacritics, `-N` collisions, astral headings). Order: (1) the
+      // lexical section of this query, when the page is in the lexical answer; (2) the core's section for the query on
+      // the page's own body (bestSection with the query terms, the same choice the core makes for that page); (3) the
+      // section of the chunk's own text, used only when its headingPath equals the chunk's. Otherwise the heading is the
+      // chunk's and the anchor stays null.
+      const sections = new Map(answer.results.map(row => [row.path, row]));
+      const pagesByPath = new Map(snapshot.pages.map(page => [page.path, page]));
+      const asOf = new Date(snapshot.index.now);
+      const queryTerms = [...new Set(core.tokens(query, true))];
+      const pageSection = (item, terms) => {
+        const page = pagesByPath.get(item.path);
+        if (!page || typeof page.body !== 'string' || !terms.length) return null;
+        return core.bestSection(page.body, terms, snapshot.index, asOf);
+      };
+      const chunkSection = (item) => {
+        const found = pageSection(item, [...new Set(core.tokens(String(item.snippet ?? ''), true))]);
+        return found && found.headingPath === (item.headingPath ?? '') ? found : null;
+      };
       let budget = Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT);
+      // Order is the module's order (RRF in rrf mode, cosine then lexical rank in semantic-primary); `score` is the
+      // value of that ordering: rrfScore, or semanticScore in semantic-primary (0 for lexical-only hits, which the module places last).
+      const semanticPrimary = settings.mode === 'semantic-primary';
       const normalized = results.map(item => {
         const original = answer.results.find(row => row.path === item.path);
-        const heading = item.headingPath?.split(' > ').at(-1) || null;
-        const snippet = String(item.snippet ?? '').slice(0, Math.max(0, budget)); budget -= snippet.length;
-        return { ...original, path: item.path, title: item.title, score: item.semanticScore ?? item.score ?? item.rrfScore, snippet, stale: item.stale, status: item.status,
-          ...(heading ? { heading, anchor: heading.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-'), headingPath: item.headingPath } : {}) };
+        const section = sections.get(item.path) ?? pageSection(item, queryTerms) ?? chunkSection(item);
+        const chunkHeading = item.headingPath?.split(' > ').at(-1) || null;
+        const sectionFields = section ? { heading: section.heading, anchor: section.anchor, headingPath: section.headingPath }
+          : chunkHeading ? { heading: chunkHeading, anchor: null, headingPath: item.headingPath } : {};
+        // Code-point safe: a cut never leaves a lone surrogate (core prefixKeepingPairs, as BA-17 in the core).
+        const snippet = core.prefixKeepingPairs(String(item.snippet ?? ''), Math.max(0, budget)); budget -= snippet.length;
+        return { ...original, path: item.path, title: item.title, score: semanticPrimary ? (item.semanticScore ?? 0) : item.rrfScore,
+          ...(item.semanticScore !== undefined ? { semanticScore: item.semanticScore } : {}), rrfScore: item.rrfScore,
+          snippet, stale: item.stale, status: item.status, ...sectionFields };
       });
       return { results: normalized, abstained: false, semantic: { used: true }, mode: settings.mode };
     } catch (error) { return fallback(error?.fallbackReason === 'remote-not-allowed' ? 'remote-not-allowed' : 'provider-error'); }

@@ -30,7 +30,7 @@ export function stem(token) {
 function safePath(value) {
   return typeof value === 'string' && value.length > 0 && !value.includes('\\') && !path.posix.isAbsolute(value) && !path.win32.isAbsolute(value) && !value.split('/').includes('..');
 }
-function tokens(text, query = false) {
+export function tokens(text, query = false) {
   return (normalizeText(text).match(/[\p{L}\p{N}]+/gu) || []).filter(t => !query || !stops.has(t)).map(stem);
 }
 // Identifier tokens (E_WIDGET_TIMEOUT, a1b2c3d, rc.12, src/lib/retry.mjs, --drain-timeout, RouteSnapshotCache) are kept
@@ -353,7 +353,7 @@ export function buildIndex(pages, options = {}) {
   for (const target of [...replaced.keys()].sort()) supersedes[target] = replaced.get(target);
   return { version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString(), supersedes, links: buildLinks(docs) };
 }
-function stale(fm, asOf) {
+export function stale(fm, asOf) {
   let expiry = dateValue(fm.stale_after); if (!expiry) return false;
   if (typeof expiry === 'string' && /^P\d+[DW]$/.test(expiry)) {
     const base = new Date(dateValue(fm.generated)); if (!Number.isFinite(base.getTime())) return false;
@@ -382,7 +382,7 @@ const currentMarker = /\bcurrent\b|\bguncel durum\b/u;
 // section. Dates after asOf are not yet in force and are not preferred. Without such a candidate, the best score wins
 // as before, so pages without dated or current headings are unaffected.
 const DATED_SECTION_SHARE = 0.6;
-function bestSection(body, terms, index, asOf) {
+export function bestSection(body, terms, index, asOf) {
   const lines = body.split('\n'), sections = [], ancestors = [], used = new Set();
   let current = null, fenceLength = 0, fenceChar = null;
   for (const [lineNumber, rawLine] of lines.entries()) {
@@ -431,7 +431,7 @@ function bestSection(body, terms, index, asOf) {
 }
 // The first `length` UTF-16 units of `text`, except that a surrogate pair is never split: when the cut falls between a
 // high and a low surrogate, the high one is dropped too, so the result never ends with a lone surrogate.
-function prefixKeepingPairs(text, length) {
+export function prefixKeepingPairs(text, length) {
   let end = Math.max(0, Math.min(length, text.length));
   if (end > 0 && end < text.length && isHighSurrogate(text.charCodeAt(end - 1)) && isLowSurrogate(text.charCodeAt(end))) end--;
   return text.slice(0, end);
