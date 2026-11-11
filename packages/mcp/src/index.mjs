@@ -122,13 +122,22 @@ function indexablePath(path) { return !UNSAFE_PATH.test(path); }
 function isLocalMarkdownTarget(path) {
   return path.endsWith('.md') && !path.startsWith('/') && !path.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(path);
 }
+/**
+ * Line-safe label text: every run of whitespace, C0/C1 control character or DEL (this includes CR, LF, U+0085, U+2028
+ * and U+2029) becomes one space, and the result is trimmed. An index entry must stay on one line.
+ */
+function cleanLabel(text) { return text.replace(/[\s\x00-\x1f\x7f-\x9f]+/g, ' ').trim(); }
+/** Link text of an entry: the cleaned title, else the cleaned file name without `.md`, else the cleaned path. */
+function entryTitle(entry) {
+  return cleanLabel(String(entry.title)) || cleanLabel(posix.basename(entry.path, '.md')) || cleanLabel(entry.path);
+}
 /** Index line for one page; the same shape as the vendored writer, with the frontmatter summary and valid tags. */
 function indexEntryLine(entry) {
   const fm = entry.frontmatter ?? {};
-  const summarySource = [fm.summary, fm.description].find((value) => typeof value === 'string' && value.trim());
-  const summary = summarySource ? summarySource.replace(/\s+/g, ' ').trim() : '';
+  const summarySource = [fm.summary, fm.description].find((value) => typeof value === 'string' && cleanLabel(value));
+  const summary = summarySource ? cleanLabel(summarySource) : '';
   const tags = entry.tags.filter((tag) => typeof tag === 'string' && /^[\w-]+$/.test(tag));
-  const title = wiki.escapeMarkdownLinkText(String(entry.title).replace(/\s+/g, ' ').trim());
+  const title = wiki.escapeMarkdownLinkText(entryTitle(entry));
   const parts = [summary, ...(tags.length ? [tags.map((tag) => `#${tag}`).join(' ')] : [])].filter(Boolean);
   return `- [${title}](${indexDestination(entry.path)})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
 }
@@ -138,7 +147,7 @@ function indexEntryLine(entry) {
  */
 function indexDestination(path) {
   const escaped = path.replace(/([\\()])/g, '\\$1');
-  if (!/[\s\x00-\x1f\x7f]/.test(path) && !path.startsWith('<')) return escaped;
+  if (!/[\s\x00-\x1f\x7f-\x9f]/.test(path) && !path.startsWith('<')) return escaped;
   return `<${escaped.replace(/[<>]/g, '\\$&')}>`;
 }
 /**
@@ -493,20 +502,31 @@ export function createServer(options) {
     });
     const create = (name, content, kind) => async () => {
       const slug = wiki.slugify(name);
+      // An empty slug (no ASCII letter or digit) would name a hidden `.md` file; refuse before anything is written.
+      if (!slug) throw mcpError('E_INVALID_INPUT', 'The page name needs at least one ASCII letter or digit.');
       const rel = `${kind}/${slug}.md`;
-      const title = name;
-      const frontmatter = { type: kind === 'entities' ? 'entity' : 'concept', title, tags: [], created: new Date().toISOString() };
-      checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body: content }));
+      // Frontmatter in the content (summary, description, tags, ...) is the page's own frontmatter, as in wiki_write_page:
+      // it is written as frontmatter, not as body text, and the index line is built from it as wiki_update_index does.
+      const parsed = core.parseFrontmatter(content);
+      if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
+      // The title is always the create name; other keys (summary, description, tags, ...) come from the content.
+      const frontmatter = { type: kind === 'entities' ? 'entity' : 'concept', tags: [], created: new Date().toISOString(), ...parsed.data, title: name };
+      checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body: parsed.body }));
       const { target } = await safeFile(rel, { allowIndex: false });
       const indexTarget = (await safeFile('index.md')).target;
       try { await stat(target); throw mcpError('E_ALREADY_EXISTS', 'The destination page already exists.'); }
       catch (error) { if (error?.code !== 'ENOENT') throw error; }
       // Same minimal edit as wiki_update_index, limited to this page: the rest of the index is kept byte for byte.
-      const entry = { path: rel, title, frontmatter: {}, tags: [] };
+      const entry = {
+        path: rel,
+        title: typeof frontmatter.title === 'string' ? frontmatter.title : rel,
+        frontmatter,
+        tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : []
+      };
       const existing = await readOptionalIndex(indexTarget);
       const indexOutput = existing === null ? freshIndex([entry]) : mergeIndex(existing, [entry], { prune: false }).output;
       checkWrite('wiki/index.md', indexOutput);
-      await wiki.writePage(target, { frontmatter, body: content });
+      await wiki.writePage(target, { frontmatter, body: parsed.body });
       await writeFile(indexTarget, indexOutput, 'utf8');
       await logAndRefresh(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
       return { path: `wiki/${rel}`, created: true };
@@ -538,7 +558,10 @@ export function createServer(options) {
     tool('wiki_update_index', z.object({}), async () => {
       const entries = [];
       for (const { path, file } of await listManagedPages()) {
-        const page = await wiki.readPage(file);
+        // A page whose frontmatter cannot be read is still listed, with the no-title fallback, so one page never fails the whole update.
+        let page;
+        try { page = await wiki.readPage(file); }
+        catch { page = { frontmatter: {}, body: '' }; }
         entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
       }
       const { target } = await safeFile('index.md');

@@ -16,8 +16,8 @@ const CONTROLS = [
 const hex = (ch) => `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
 
 for (const [label, ch] of CONTROLS) {
-  // PM decision (2026-11-11): C1 controls (U+0080–U+009F) are not yet bracketed; tracked as BA-20 (reads back correctly today).
-  test(`${label} in a page name: written as an angle-bracket destination, reads back exactly, three runs idempotent, coverage 100`, ch === '\u009b' ? { todo: 'BA-20: C1 controls should use angle-bracket destinations' } : {}, async (t) => {
+  // PM update (BA-20, 2026-11-11): C1 controls are bracketed now.
+  test(`${label} in a page name: written as an angle-bracket destination, reads back exactly, three runs idempotent, coverage 100`, async (t) => {
     const path = `entities/c${ch}d.md`;
     const f = await startServer(t, { files: { [path]: page('Kontrol'), 'entities/normal.md': page('Normal') } });
     const first = okJson(await call(f.client, 'wiki_update_index', {}));
