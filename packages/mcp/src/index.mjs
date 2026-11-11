@@ -36,23 +36,6 @@ function serializePage(page) {
   const fm = Object.entries(page.frontmatter ?? {}).map(([key, value]) => `${key}: ${typeof value === 'string' ? JSON.stringify(value) : JSON.stringify(value)}`).join('\n');
   return `---\n${fm}\n---\n${page.body ?? ''}\n`;
 }
-function serializeIndex(entries) {
-  const categories = new Map();
-  for (const entry of entries) {
-    if (!categories.has(entry.category)) categories.set(entry.category, []);
-    categories.get(entry.category).push(entry);
-  }
-  let output = '# Wiki Index\n';
-  for (const [category, rows] of categories) {
-    output += `\n## ${category}\n\n`;
-    for (const row of rows) {
-      const title = wiki.escapeMarkdownLinkText(row.title);
-      const suffix = [row.summary, ...(row.tags.length ? [row.tags.map((tag) => `#${tag}`).join(' ')] : [])].filter(Boolean).join(' ');
-      output += `- [${title}](${row.path})${suffix ? ` — ${suffix}` : ''}\n`;
-    }
-  }
-  return output;
-}
 const INDEX_CATEGORY_LINE = /^##\s+(.+)$/;
 const FENCE_OPEN = /^(`{3,}|~{3,})/;
 const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
@@ -70,6 +53,13 @@ function entryDestination(trimmed) {
   while (i < trimmed.length && trimmed[i] !== ']') i += trimmed[i] === '\\' ? 2 : 1;
   if (trimmed[i] !== ']' || trimmed[i + 1] !== '(') return undefined;
   const start = i + 2;
+  if (trimmed[start] === '<') {
+    // Angle-bracket destination (may contain spaces): ends at the first unescaped '>' that is followed by ')'.
+    let j = start + 1;
+    while (j < trimmed.length && trimmed[j] !== '>') j += trimmed[j] === '\\' ? 2 : 1;
+    if (trimmed[j] !== '>' || trimmed[j + 1] !== ')') return undefined;
+    return unescapeDestination(trimmed.slice(start + 1, j));
+  }
   let depth = 0;
   for (i = start; i < trimmed.length; i++) {
     const ch = trimmed[i];
@@ -86,7 +76,17 @@ function indexLineInfo(line) {
   const heading = trimmed.match(INDEX_CATEGORY_LINE);
   if (heading) return { heading: heading[1].trim() };
   const destination = entryDestination(trimmed);
-  return destination === undefined ? {} : { entryPath: posix.normalize(destination) };
+  if (destination === undefined) return {};
+  // `page.md#anchor` and `page.md?query` name the page `page.md`; a fragment-only target names no page.
+  const path = destination.replace(/[#?].*$/s, '');
+  return path ? { entryPath: posix.normalize(path) } : {};
+}
+/** Local page paths named by the entry lines of an index text (null: no index). */
+function indexedPaths(content) {
+  const paths = new Set();
+  if (content === null) return paths;
+  for (const info of classifyLines(content.split('\n')).infos) if (info.entryPath !== undefined) paths.add(info.entryPath);
+  return paths;
 }
 /**
  * Classify every line. Lines inside a fenced code block (``` or ~~~) are opaque: no heading and no entry.
@@ -111,6 +111,13 @@ function classifyLines(lines) {
 }
 /** Category of a page: its first folder, or `Pages` for a page at the Wiki root. */
 function categoryOf(path) { return path.includes('/') ? path.split('/')[0] : 'Pages'; }
+/**
+ * A page whose path holds a carriage return, line feed, U+0085, U+2028 or U+2029 is never written to the index (a line
+ * break would split the entry line) and is not counted in wiki_status coverage. Other control characters and tabs are
+ * written inside angle brackets and read back exactly.
+ */
+const UNSAFE_PATH = /[\r\n\u0085\u2028\u2029]/;
+function indexablePath(path) { return !UNSAFE_PATH.test(path); }
 /** A link target that names a local Markdown file. External URLs and anchors are never treated as stale pages. */
 function isLocalMarkdownTarget(path) {
   return path.endsWith('.md') && !path.startsWith('/') && !path.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(path);
@@ -123,16 +130,43 @@ function indexEntryLine(entry) {
   const tags = entry.tags.filter((tag) => typeof tag === 'string' && /^[\w-]+$/.test(tag));
   const title = wiki.escapeMarkdownLinkText(String(entry.title).replace(/\s+/g, ' ').trim());
   const parts = [summary, ...(tags.length ? [tags.map((tag) => `#${tag}`).join(' ')] : [])].filter(Boolean);
-  // Parentheses and backslashes in the path are escaped so the destination ends where the path ends.
-  const destination = entry.path.replace(/([\\()])/g, '\\$1');
-  return `- [${title}](${destination})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
+  return `- [${title}](${indexDestination(entry.path)})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
+}
+/**
+ * Link destination for a page path. Parentheses and backslashes are escaped so the destination ends where the path ends;
+ * a space or control character (or a leading `<`) would end a plain destination, so such paths use `<...>`.
+ */
+function indexDestination(path) {
+  const escaped = path.replace(/([\\()])/g, '\\$1');
+  if (!/[\s\x00-\x1f\x7f]/.test(path) && !path.startsWith('<')) return escaped;
+  return `<${escaped.replace(/[<>]/g, '\\$&')}>`;
+}
+/**
+ * Index text for a Wiki without an index (or with an empty one): one `## <first folder>` category per folder, `## Pages`
+ * for root pages, entries sorted by path. Lines use the same format as mergeIndex.
+ */
+function freshIndex(entries) {
+  const categories = new Map();
+  const sorted = entries.filter((entry) => indexablePath(entry.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  for (const entry of sorted) {
+    const category = categoryOf(entry.path);
+    if (!categories.has(category)) categories.set(category, []);
+    categories.get(category).push(entry);
+  }
+  let output = '# Wiki Index\n';
+  for (const [category, rows] of categories) {
+    output += `\n## ${category}\n\n`;
+    for (const row of rows) output += `${indexEntryLine(row)}\n`;
+  }
+  return output;
 }
 /**
  * Minimal edit of an existing index. Lines are kept as they are (bytes, EOL, order); only entry lines whose local
  * target no longer exists are removed, and pages without any entry get one line in their folder's category.
+ * With `prune: false` no line is removed (the create tools add only their own page).
  * @returns {{output:string, added:number, removed:number}}
  */
-function mergeIndex(content, entries) {
+function mergeIndex(content, entries, { prune = true } = {}) {
   // Existing lines keep their own trailing '\r' (split on '\n' only); inserted lines get the file's style.
   const cr = content.includes('\r\n') ? '\r' : '';
   const fresh = (text) => `${text}${cr}`;
@@ -147,12 +181,12 @@ function mergeIndex(content, entries) {
   for (let i = 0; i < source.length; i++) {
     const info = sourceInfos[i];
     if (info.entryPath !== undefined) {
-      if (!pagePaths.has(info.entryPath) && isLocalMarkdownTarget(info.entryPath)) { removed++; continue; }
+      if (prune && !pagePaths.has(info.entryPath) && isLocalMarkdownTarget(info.entryPath)) { removed++; continue; }
       linked.add(info.entryPath);
     }
     lines.push(source[i]);
   }
-  const missing = entries.filter((entry) => !linked.has(entry.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const missing = entries.filter((entry) => indexablePath(entry.path) && !linked.has(entry.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   for (const entry of missing) {
     const line = fresh(indexEntryLine(entry));
     const category = categoryOf(entry.path);
@@ -346,7 +380,7 @@ export function createServer(options) {
   // Every other read tool, and wiki_update_index, refuses with E_PATH_ESCAPE.
   const escapedWikiViews = {
     wiki_list_pages: () => ({ pages: [] }),
-    wiki_status: () => ({ pageCount: 0, okfWarningCount: 0, okfErrorCount: 0, indexAgeMs: null, readOnly: config.readOnly === true, indexCoveragePct: null }),
+    wiki_status: () => ({ pageCount: 0, okfWarningCount: 0, okfErrorCount: 0, indexAgeMs: null, readOnly: config.readOnly === true, indexCoveragePct: 100 }),
     wiki_query: () => ({ results: [], abstained: true })
   };
   const readTool = (name, schema, handler) => tool(name, schema, async (args) => {
@@ -413,10 +447,15 @@ export function createServer(options) {
     const findings = await core.checkVault(vaultDir);
     let indexAgeMs = null;
     try { indexAgeMs = Math.max(0, Date.now() - (await stat(join(wikiDir, 'index.md'))).mtimeMs); } catch { /* index not initialized */ }
-    const entries = await wiki.getWikiStatus(vaultDir);
+    // Coverage uses the same index reader as wiki_update_index (escaped, angle-bracket and anchored destinations). The
+    // vendored getWikiStatus reads the index with its own parser, which misreads escaped parentheses.
+    const linked = indexedPaths(await readOptionalIndex(join(wikiDir, 'index.md')));
+    const countable = pages.filter((item) => indexablePath(item.slice('wiki/'.length)));
+    const covered = countable.filter((item) => linked.has(item.slice('wiki/'.length))).length;
+    const indexCoveragePct = countable.length ? Math.round((covered / countable.length) * 100) : 100;
     return { pageCount: pages.length, okfWarningCount: findings.filter((item) => item.severity === 'warn').length,
       okfErrorCount: findings.filter((item) => item.severity === 'error').length, indexAgeMs,
-      readOnly: config.readOnly === true, indexCoveragePct: entries.index_coverage_pct };
+      readOnly: config.readOnly === true, indexCoveragePct };
   });
   readTool('wiki_lint', z.object({}), () => wiki.lintWiki(wikiDir));
 
@@ -462,12 +501,15 @@ export function createServer(options) {
       const indexTarget = (await safeFile('index.md')).target;
       try { await stat(target); throw mcpError('E_ALREADY_EXISTS', 'The destination page already exists.'); }
       catch (error) { if (error?.code !== 'ENOENT') throw error; }
-      const entries = await wiki.readIndex(indexTarget);
-      entries.push({ path: rel, title, summary: '', category: kind === 'entities' ? 'Entities' : 'Concepts', tags: [] });
-      checkWrite('wiki/index.md', serializeIndex(entries));
-      const result = kind === 'entities' ? await wiki.createEntityPage(wikiDir, name, content) : await wiki.createConceptPage(wikiDir, name, content);
+      // Same minimal edit as wiki_update_index, limited to this page: the rest of the index is kept byte for byte.
+      const entry = { path: rel, title, frontmatter: {}, tags: [] };
+      const existing = await readOptionalIndex(indexTarget);
+      const indexOutput = existing === null ? freshIndex([entry]) : mergeIndex(existing, [entry], { prune: false }).output;
+      checkWrite('wiki/index.md', indexOutput);
+      await wiki.writePage(target, { frontmatter, body: content });
+      await writeFile(indexTarget, indexOutput, 'utf8');
       await logAndRefresh(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
-      return { path: `wiki/${result.path}`, created: true };
+      return { path: `wiki/${rel}`, created: true };
     };
     tool('wiki_create_entity', z.object({ name: z.string().min(1), content: z.string() }), ({ name, content }) => create(name, content, 'entities')());
     tool('wiki_create_concept', z.object({ name: z.string().min(1), content: z.string() }), ({ name, content }) => create(name, content, 'concepts')());
@@ -497,16 +539,17 @@ export function createServer(options) {
       const entries = [];
       for (const { path, file } of await listManagedPages()) {
         const page = await wiki.readPage(file);
-        entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, summary: '', category: categoryOf(path), tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
+        entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
       }
       const { target } = await safeFile('index.md');
       const existing = await readOptionalIndex(target);
       if (existing === null) {
-        // No index yet (or an empty file): build it from the pages.
-        checkWrite('wiki/index.md', serializeIndex(entries));
-        await wiki.writeIndex(target, entries);
+        // No index yet (or an empty file): build it from the pages, with the same line format as the minimal edit.
+        const output = freshIndex(entries);
+        checkWrite('wiki/index.md', output);
+        await writeFile(target, output, 'utf8');
         await logAndRefresh('update-index', 'wiki/index.md');
-        return { indexed: entries.length, added: entries.length, removed: 0 };
+        return { indexed: entries.length, added: entries.filter((entry) => indexablePath(entry.path)).length, removed: 0 };
       }
       const { output, added, removed } = mergeIndex(existing, entries);
       checkWrite('wiki/index.md', output);
