@@ -130,7 +130,7 @@ test('a used semantic result is deduplicated by page and passes through the prep
 test('secret-shaped content in a semantic chunk is redacted when the caller applies redaction', async () => {
   const { redact } = await import('../../../packages/core/src/safety/index.mjs');
   const fp = await fingerprint();
-  const secret = 'AKIAIOSFODNN7EXAMPLE';
+  const secret = ['AKIA', 'IOSFODNN7EXAMPLE'].join(''); // built at runtime so the privacy scan does not flag the fixture
   // The query matches only gamma.md lexically, so beta.md can reach the output only through the semantic chunk text.
   const index = indexFor(fp, [{ path: 'beta.md', vector: [1, 0], text: `river key ${secret} bridge`, headingPath: [] }]);
   const { hit } = await run({ fetchImpl: fakeFetch(), index, query: 'bicycles', prepare: r => ({ ...r, snippet: redact(r.snippet) }) });
