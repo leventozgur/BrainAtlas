@@ -154,14 +154,57 @@ export function loadPages(vaultDir) {
     return { path: path.relative(root, full).split(path.sep).join('/'), title: typeof frontmatter.title === 'string' ? frontmatter.title : (headings[0] || path.basename(full, path.extname(full))), aliases: strings(frontmatter.aliases), keywords: strings(frontmatter.keywords), headings, body, frontmatter };
   });
 }
+function isSupersededPage(p) {
+  const fm = p.frontmatter || {};
+  return String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by');
+}
+function successorOf(p) {
+  const value = (p.frontmatter || {}).superseded_by;
+  return typeof value === 'string' ? value : null;
+}
+// The indexed page that a superseded_by chain ends at, or null when the chain loops, leaves the walked pages, or ends at
+// a page that is not indexed. A chain A -> B -> C routes both A and B to C.
+function finalTarget(start, indexed, byPath) {
+  const seen = new Set();
+  let current = start;
+  while (typeof current === 'string') {
+    if (indexed.has(current)) return current;
+    if (seen.has(current) || !byPath.has(current)) return null;
+    seen.add(current);
+    current = successorOf(byPath.get(current));
+  }
+  return null;
+}
+/**
+ * Superseded routing (BA-04), computed at index time from the walked pages: a Map from each indexed replacement page to
+ * the sorted paths of the superseded pages that resolve to it. Superseded pages themselves stay out of the index.
+ * Ranking is not affected: no text is added to any indexed page.
+ */
+function resolveSupersession(pages) {
+  const indexed = new Set(), byPath = new Map();
+  for (const p of pages) {
+    if (!p || typeof p.path !== 'string' || !safePath(p.path)) continue;
+    if (isSupersededPage(p)) { if (!byPath.has(p.path)) byPath.set(p.path, p); }
+    else indexed.add(p.path);
+  }
+  const replaced = new Map();
+  for (const source of byPath.keys()) {
+    const target = finalTarget(successorOf(byPath.get(source)), indexed, byPath);
+    if (target === null) continue;
+    if (!replaced.has(target)) replaced.set(target, []);
+    replaced.get(target).push(source);
+  }
+  for (const sources of replaced.values()) sources.sort();
+  return replaced;
+}
 export function buildIndex(pages, options = {}) {
   if (!Array.isArray(pages)) fail('E_INVALID_INPUT', 'Expected pages');
   const docs = []; const postings = Object.create(null); const exact = Object.create(null); const totals = [0,0,0,0];
+  const replaced = resolveSupersession(pages);
   for (const p of pages) {
     if (!p || typeof p.path !== 'string' || typeof p.title !== 'string') fail('E_INVALID_INPUT', 'Invalid page');
     if (!safePath(p.path)) continue;
-    const fm = p.frontmatter || {};
-    if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) continue;
+    if (isSupersededPage(p)) continue;
     const fields = [p.title, [...strings(p.aliases), ...strings(p.keywords)].join(' '), strings(p.headings).join(' '), typeof p.body === 'string' ? p.body : ''];
     const lengths = []; const counts = new Map(); const identifiers = new Set();
     fields.forEach((field, i) => { const ts = tokens(field); lengths.push(ts.length); totals[i] += ts.length; for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; } identifierKeys(field, identifiers); });
@@ -169,7 +212,9 @@ export function buildIndex(pages, options = {}) {
     for (const [term, countsByField] of counts) (postings[term] ||= []).push([id, countsByField]);
     for (const key of identifiers) (exact[key] ||= []).push(id);
   }
-  return { version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString() };
+  const supersedes = Object.create(null);
+  for (const target of [...replaced.keys()].sort()) supersedes[target] = replaced.get(target);
+  return { version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString(), supersedes };
 }
 function stale(fm, asOf) {
   let expiry = dateValue(fm.stale_after); if (!expiry) return false;
@@ -179,8 +224,28 @@ function stale(fm, asOf) {
   }
   const time = new Date(expiry).getTime(); return Number.isFinite(time) && time < asOf.getTime();
 }
+// A heading's date: the first ISO `YYYY-MM-DD` (optionally `THH:MMZ`) or `DD.MM.YYYY`, as UTC milliseconds; null when absent or invalid.
+function headingTime(title) {
+  const iso = title.match(/(?<!\d)(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})Z)?(?!\d)/u);
+  const dmy = iso ? null : title.match(/(?<!\d)(\d{2})\.(\d{2})\.(\d{4})(?!\d)/u);
+  const m = iso || dmy;
+  if (!m) return null;
+  const [y, mo, d] = iso ? [Number(m[1]), Number(m[2]), Number(m[3])] : [Number(m[3]), Number(m[2]), Number(m[1])];
+  const hh = iso && m[4] !== undefined ? Number(m[4]) : 0, mm = iso && m[5] !== undefined ? Number(m[5]) : 0;
+  const time = Date.UTC(y, mo - 1, d, hh, mm);
+  const check = new Date(time);
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d || hh > 23 || mm > 59) return null;
+  return time;
+}
+// "Current state", "Güncel durum" or "Current" in the heading marks the section as the present state of its topic.
+const currentMarker = /\bcurrent\b|\bguncel durum\b/u;
 // Sections are deliberately derived at query time, after the ranking is final.
-function bestSection(body, terms, index) {
+// Date-aware choice (BA-04): among sections whose term score reaches DATED_SECTION_SHARE of the best score, a section
+// whose heading is "current" wins, then the newest dated heading not after asOf, then the higher score, then the earlier
+// section. Dates after asOf are not yet in force and are not preferred. Without such a candidate, the best score wins
+// as before, so pages without dated or current headings are unaffected.
+const DATED_SECTION_SHARE = 0.6;
+function bestSection(body, terms, index, asOf) {
   const lines = body.split('\n'), sections = [], ancestors = [], used = new Set();
   let current = null, fenceLength = 0, fenceChar = null;
   for (const [lineNumber, rawLine] of lines.entries()) {
@@ -201,11 +266,12 @@ function bestSection(body, terms, index) {
     let anchor = base, suffix = 0;
     while (used.has(anchor)) anchor = `${base}-${++suffix}`;
     used.add(anchor);
-    current = {heading:title, anchor, headingPath:ancestors.filter(Boolean).join(' > '), headingLine:rawLine, lines:[]};
+    current = {heading:title, anchor, headingPath:ancestors.filter(Boolean).join(' > '), headingLine:rawLine, lines:[], time:headingTime(title), isCurrent:currentMarker.test(normalizeText(title))};
     sections.push(current);
   }
   let best = null, bestScore = 0;
-  for (const section of sections) {
+  const scored = [];
+  for (const [position, section] of sections.entries()) {
     const text = section.lines.join('\n').trim();
     const found = new Set(tokens(text));
     let score = 0;
@@ -213,9 +279,18 @@ function bestSection(body, terms, index) {
       const count = Object.hasOwn(index.postings, term) ? index.postings[term].length : 0;
       score += Math.log(1 + (index.docs.length - count + 0.5) / (count + 0.5));
     }
+    if (score > 0) scored.push({section, score, position});
     if (score > bestScore) { bestScore = score; best = {...section, text:[section.headingLine, ...section.lines].join('\n').trim()}; }
   }
-  return best;
+  const asOfTime = asOf ? asOf.getTime() : Infinity;
+  const eligible = scored.filter(({section, score}) => score >= DATED_SECTION_SHARE * bestScore
+    && (section.isCurrent || section.time !== null) && (section.time === null || section.time <= asOfTime));
+  if (!eligible.length) return best;
+  const newer = (a, b) => (a.section.isCurrent !== b.section.isCurrent ? Number(a.section.isCurrent) > Number(b.section.isCurrent)
+    : (a.section.time ?? -Infinity) !== (b.section.time ?? -Infinity) ? (a.section.time ?? -Infinity) > (b.section.time ?? -Infinity)
+    : a.score !== b.score ? a.score > b.score : a.position < b.position);
+  const chosen = eligible.reduce((top, candidate) => (newer(candidate, top) ? candidate : top));
+  return {...chosen.section, text:[chosen.section.headingLine, ...chosen.section.lines].join('\n').trim()};
 }
 // The first `length` UTF-16 units of `text`, except that a surrogate pair is never split: when the cut falls between a
 // high and a low surrogate, the high one is dropped too, so the result never ends with a lone surrogate.
@@ -265,15 +340,21 @@ export function search(index, query, options = {}) {
   let remaining = Math.floor(budget), truncated = false;
   const results = ranked.slice(0,limit).map(({id,score}) => {
     const p = index.docs[id].page, fm = p.frontmatter || {};
-    const section = bestSection(p.body || '', terms, index);
+    const section = bestSection(p.body || '', terms, index, asOf);
     let snippet = section ? section.text : (p.body || '').trim();
     if (snippet.length > remaining) { truncated = true; snippet = remaining > 0 ? prefixKeepingPairs(snippet, remaining - 1) + '…' : ''; }
     remaining -= snippet.length;
-    return {path:p.path, title:p.title, score, snippet, stale:stale(fm,asOf), status:typeof fm.status === 'string' ? fm.status : null, heading:section?.heading ?? null, anchor:section?.anchor ?? null, headingPath:section?.headingPath ?? null};
+    const result = {path:p.path, title:p.title, score, snippet, stale:stale(fm,asOf), status:typeof fm.status === 'string' ? fm.status : null, heading:section?.heading ?? null, anchor:section?.anchor ?? null, headingPath:section?.headingPath ?? null};
+    // Optional (BA-04): the superseded pages this page replaces. Present only when there are some.
+    const replaced = index.supersedes?.[p.path];
+    if (replaced?.length) result.supersedes = [...replaced];
+    return result;
   });
   return {results, abstained:false, reason:null, truncated};
 }
 // Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
+// The tag stays `v6`: BA-17 acceptance tests pin it. The BA-04 cache change (the `supersedes` map) is detected by
+// decodeCachedIndex, which rejects any cache without it, so a pre-BA-04 cache is rebuilt once.
 const FINGERPRINT_SCHEMA = 'retrieval-stat-v6';
 function statFingerprint(vaultDir) {
   const { root, files } = markdownFiles(vaultDir);
@@ -367,7 +448,21 @@ function decodeCachedIndex(data, key, paths) {
     }
     exact[key] = list;
   }
-  return {version: 1, docs, postings, exact, averages: index.averages, now: index.now};
+  // Superseded routing (BA-04): each target is an indexed page, each non-empty sorted list holds skipped pages only.
+  // A cache written before BA-04 has no `supersedes` and is rejected here, so it is rebuilt once.
+  if (!isPlainObject(index.supersedes)) return null;
+  const skippedSet = new Set(skipped), indexedPaths = new Set(docs.map(doc => doc.page.path)), supersedes = Object.create(null);
+  for (const target of Object.keys(index.supersedes)) {
+    const sources = index.supersedes[target];
+    if (!indexedPaths.has(target) || !Array.isArray(sources) || sources.length === 0) return null;
+    let previous = null;
+    for (const source of sources) {
+      if (typeof source !== 'string' || !skippedSet.has(source) || (previous !== null && source <= previous)) return null;
+      previous = source;
+    }
+    supersedes[target] = sources;
+  }
+  return {version: 1, docs, postings, exact, averages: index.averages, now: index.now, supersedes};
 }
 /**
  * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
