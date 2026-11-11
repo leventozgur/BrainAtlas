@@ -77,5 +77,6 @@ This is a high-level comparison of project types, not a feature benchmark. Verif
 - [Retrieval behavior and measured quality](docs/user/retrieval.md)
 - [OKF-inspired metadata](docs/user/okf.md)
 - [Sync behavior](docs/user/sync.md)
+- [Maintenance report](docs/user/maintain.md)
 - [Troubleshooting](docs/user/troubleshooting.md)
 - [Demo recording script](docs/user/demo-gif-script.md)
