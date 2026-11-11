@@ -4,6 +4,10 @@ BrainAtlas retrieves evidence from Markdown pages with BM25F, a field-aware rank
 
 Each result includes its page path, title, score, snippet, freshness (`stale`), and status. When a section matches, it also includes `heading`, `anchor`, and `headingPath`; the snippet starts with the matching heading line and includes that section's text. If no section matches, these heading fields are null and the snippet starts at the page body. Anchors use GitHub-style kebab case, with numeric suffixes for duplicates.
 
+When a page has dated sections (for example `## Update 2026-03-04 — ...`) or a `Current state` section, the snippet prefers the section that is current: a `Current state` or `Güncel durum` heading first, then the newest date that is not in the future. Only sections that match the question about as well as the best one are considered, so an unrelated newer section is not shown. Ranking does not change; pages without dated or current headings show the same snippets as before.
+
+When a page replaces a superseded page, its result includes `supersedes`, the list of the superseded page paths it replaces. The superseded pages themselves are not returned. The field is absent when a page replaces nothing.
+
 ## Identifiers
 
 Identifiers such as `E_WIDGET_TIMEOUT`, `a1b2c3d`, `rc.12`, `src/lib/retry.mjs`, `--drain-timeout`, or `RouteSnapshotCache` are matched whole, so a page that contains one exactly ranks first for a query that names it. If a question is mostly about an identifier that no page contains, retrieval abstains with `reason: "identifier-not-found"` instead of returning pages that only share its fragments (for example `widget`). Common words such as `2026`, `v2`, or `follow-up` are not treated as identifiers, and neither are dates (`11.11.2025`, `2026.11.11`, `11/11/2025`, `2025-11-11`) or abbreviations such as `i.e` and `e.g`. The rules are in [the retrieval contract](../contracts/retrieval.md#identifiers-ba-03-additions-contract-version-1).
