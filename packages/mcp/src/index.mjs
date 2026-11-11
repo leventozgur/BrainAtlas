@@ -505,19 +505,28 @@ export function createServer(options) {
       // An empty slug (no ASCII letter or digit) would name a hidden `.md` file; refuse before anything is written.
       if (!slug) throw mcpError('E_INVALID_INPUT', 'The page name needs at least one ASCII letter or digit.');
       const rel = `${kind}/${slug}.md`;
-      const title = name;
-      const frontmatter = { type: kind === 'entities' ? 'entity' : 'concept', title, tags: [], created: new Date().toISOString() };
-      checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body: content }));
+      // Frontmatter in the content (summary, description, tags, ...) is the page's own frontmatter, as in wiki_write_page:
+      // it is written as frontmatter, not as body text, and the index line is built from it as wiki_update_index does.
+      const parsed = core.parseFrontmatter(content);
+      if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
+      // The title is always the create name; other keys (summary, description, tags, ...) come from the content.
+      const frontmatter = { type: kind === 'entities' ? 'entity' : 'concept', tags: [], created: new Date().toISOString(), ...parsed.data, title: name };
+      checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body: parsed.body }));
       const { target } = await safeFile(rel, { allowIndex: false });
       const indexTarget = (await safeFile('index.md')).target;
       try { await stat(target); throw mcpError('E_ALREADY_EXISTS', 'The destination page already exists.'); }
       catch (error) { if (error?.code !== 'ENOENT') throw error; }
       // Same minimal edit as wiki_update_index, limited to this page: the rest of the index is kept byte for byte.
-      const entry = { path: rel, title, frontmatter: {}, tags: [] };
+      const entry = {
+        path: rel,
+        title: typeof frontmatter.title === 'string' ? frontmatter.title : rel,
+        frontmatter,
+        tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : []
+      };
       const existing = await readOptionalIndex(indexTarget);
       const indexOutput = existing === null ? freshIndex([entry]) : mergeIndex(existing, [entry], { prune: false }).output;
       checkWrite('wiki/index.md', indexOutput);
-      await wiki.writePage(target, { frontmatter, body: content });
+      await wiki.writePage(target, { frontmatter, body: parsed.body });
       await writeFile(indexTarget, indexOutput, 'utf8');
       await logAndRefresh(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
       return { path: `wiki/${rel}`, created: true };
@@ -549,7 +558,10 @@ export function createServer(options) {
     tool('wiki_update_index', z.object({}), async () => {
       const entries = [];
       for (const { path, file } of await listManagedPages()) {
-        const page = await wiki.readPage(file);
+        // A page whose frontmatter cannot be read is still listed, with the no-title fallback, so one page never fails the whole update.
+        let page;
+        try { page = await wiki.readPage(file); }
+        catch { page = { frontmatter: {}, body: '' }; }
         entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
       }
       const { target } = await safeFile('index.md');
