@@ -14,6 +14,12 @@ Identifiers such as `E_WIDGET_TIMEOUT`, `a1b2c3d`, `rc.12`, `src/lib/retry.mjs`,
 
 Limits: an identifier glued to a Turkish suffix without an apostrophe (for example `src/lib/retry.mjsin`) is not split from its suffix, so it is not matched. A path given with skipped segments (for example `d3/d5/deep_retry.mjs` for `d3/d4/d5/deep_retry.mjs`) is not matched either; the basename (`deep_retry.mjs`) and the consecutive suffixes are.
 
+## Linked pages
+
+Pages that link to each other, with `[[Page name]]` (or `[[name|label]]`, `[[name#section]]`) or a relative Markdown link to a sibling `.md` page, are connected in the index. When a question is answered by a page that is linked to another relevant page, the linked page can also appear among the results, even if the question does not use its words. Such a result is marked `via: "link"`. A result lists its direct neighbours in `related` (at most five paths) when it has any.
+
+Links only add results around answers that were already found: an unanswered question still abstains, and a page without links gets exactly the same results as before. Links inside code blocks, external URLs and superseded pages are ignored.
+
 ## Abstention threshold
 
 The default `retrieval.abstainThreshold` is 0.35. Scores are compressed with a square root, making this default meaningful for natural-language queries. If you set a custom threshold, use the square root of its previous value to preserve equivalent strictness: for example, an old value of 0.5 maps to ≈0.71; an old value of 0.25 maps to 0.5.

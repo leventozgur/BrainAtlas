@@ -1,0 +1,20 @@
+[
+  {"id": "hop-f01", "category": "forward", "query": "kestrel courier handoff", "relevant": ["kestrel-courier.md", "tern-signature-window.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-f02", "category": "forward", "query": "quarry lamp battery", "relevant": ["quarry-lamp.md", "lithium-cell-chemistry.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-f03", "category": "forward", "query": "meridian ledger reconciliation", "relevant": ["meridian-ledger.md", "ferrous-invoice-cycle.md", "oxide-audit-policy.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-f04", "category": "forward", "query": "saltmarsh tide calendar", "relevant": ["saltmarsh-tide.md", "gull-harbor-closures.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-f05", "category": "forward", "query": "orchid nursery watering", "relevant": ["orchid-nursery.md", "peat-moisture-sensor.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-f06", "category": "forward", "query": "ember kiln schedule", "relevant": ["ember-kiln.md", "clay-firing-profile.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-f07", "category": "forward", "query": "juniper gateway timeout", "relevant": ["juniper-gateway.md", "upstream-retry-budget.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-f08", "category": "forward", "query": "larch archive", "relevant": ["larch-archive.md", "cold-storage-tiers.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-b01", "category": "backlink", "query": "sealing quorum missing", "relevant": ["sealing-quorum.md", "keyholder-roster.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-b02", "category": "backlink", "query": "pelican inspection interval", "relevant": ["pelican-inspection.md", "hangar-crew-notes.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-b03", "category": "backlink", "query": "cobalt permit renewal", "relevant": ["cobalt-permit.md", "mine-site-binder.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-b04", "category": "backlink", "query": "glacier sampling depth", "relevant": ["glacier-protocol.md", "field-kit-checklist.md"], "abstain": false, "requireAll": true},
+  {"id": "hop-k01", "category": "control", "query": "zircon polishing grit", "relevant": ["zircon-polishing.md"], "abstain": false},
+  {"id": "hop-k02", "category": "control", "query": "heron wetland survey", "relevant": ["heron-survey.md"], "abstain": false},
+  {"id": "hop-k03", "category": "control", "query": "quartz cutting fence", "relevant": ["quartz-cutting-fence.md"], "abstain": false},
+  {"id": "hop-k04", "category": "control", "query": "pumice stone count", "relevant": ["pumice-stone-count.md"], "abstain": false},
+  {"id": "hop-a01", "category": "abstain", "query": "nebula spectrograph calibration", "relevant": [], "abstain": true},
+  {"id": "hop-a02", "category": "abstain", "query": "quasar telescope cooling", "relevant": [], "abstain": true}
+]
