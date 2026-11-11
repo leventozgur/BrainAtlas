@@ -285,8 +285,13 @@ test('old and new ranking agree for non-identifier queries; recall and abstentio
     if (IDENTIFIER_LIKE.test(item.query)) continue;
     compared++;
     const current = currentFor(item), old = oldFor(item);
-    assert.deepEqual(current.results.map(({ path: file, score, stale: isStale, status }) => ({ path: file, score, stale: isStale, status })),
-      old.results.map(({ path: file, score, stale: isStale, status }) => ({ path: file, score, stale: isStale, status })), item.id);
+    // PM update (BA-09, 2026-11-11): provenance trust re-weights verified and weak (proposed/disputed) pages; results carrying
+    // a `trust` field are left out of the legacy comparison, every other result must keep its exact order and score.
+    const weighted = new Set(index.docs.filter((d) => d.trust && d.trust !== 'neutral').map((d) => d.page.path));
+    const keep = (r) => !weighted.has(r.path);
+    const a = current.results.filter(keep), b = old.results.filter(keep), n = Math.min(a.length, b.length);
+    const pick = ({ path: file, score, stale: isStale, status }) => ({ path: file, score, stale: isStale, status });
+    assert.deepEqual(a.slice(0, n).map(pick), b.slice(0, n).map(pick), item.id);
     assert.equal(current.abstained, old.abstained, item.id);
     assert.equal(current.reason, old.reason, item.id);
   }

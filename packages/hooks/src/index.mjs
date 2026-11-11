@@ -23,7 +23,9 @@ function envelope(client, event, context) {
 // refused (null, and the caller stops). The excerpt is cut to the room left and ends with an ellipsis.
 function packBlock(client, event, context, item, cap) {
   const fits = text => envelope(client,event,text).length <= cap;
-  const base = context + (context ? '\n\n' : '') + redact(`${item.title} (${item.path})`);
+  // Weak (proposed or disputed) pages get a short marker before the path; the line still ends with the path.
+  const marked = item.trust === 'weak' ? `${item.title} [unverified]` : item.title;
+  const base = context + (context ? '\n\n' : '') + redact(`${marked} (${item.path})`);
   if (!fits(base)) return null;
   const snippet = redact(item.snippet);
   if (!snippet) return base;
