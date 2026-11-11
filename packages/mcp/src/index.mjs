@@ -53,6 +53,13 @@ function entryDestination(trimmed) {
   while (i < trimmed.length && trimmed[i] !== ']') i += trimmed[i] === '\\' ? 2 : 1;
   if (trimmed[i] !== ']' || trimmed[i + 1] !== '(') return undefined;
   const start = i + 2;
+  if (trimmed[start] === '<') {
+    // Angle-bracket destination (may contain spaces): ends at the first unescaped '>' that is followed by ')'.
+    let j = start + 1;
+    while (j < trimmed.length && trimmed[j] !== '>') j += trimmed[j] === '\\' ? 2 : 1;
+    if (trimmed[j] !== '>' || trimmed[j + 1] !== ')') return undefined;
+    return unescapeDestination(trimmed.slice(start + 1, j));
+  }
   let depth = 0;
   for (i = start; i < trimmed.length; i++) {
     const ch = trimmed[i];
@@ -69,7 +76,17 @@ function indexLineInfo(line) {
   const heading = trimmed.match(INDEX_CATEGORY_LINE);
   if (heading) return { heading: heading[1].trim() };
   const destination = entryDestination(trimmed);
-  return destination === undefined ? {} : { entryPath: posix.normalize(destination) };
+  if (destination === undefined) return {};
+  // `page.md#anchor` and `page.md?query` name the page `page.md`; a fragment-only target names no page.
+  const path = destination.replace(/[#?].*$/s, '');
+  return path ? { entryPath: posix.normalize(path) } : {};
+}
+/** Local page paths named by the entry lines of an index text (null: no index). */
+function indexedPaths(content) {
+  const paths = new Set();
+  if (content === null) return paths;
+  for (const info of classifyLines(content.split('\n')).infos) if (info.entryPath !== undefined) paths.add(info.entryPath);
+  return paths;
 }
 /**
  * Classify every line. Lines inside a fenced code block (``` or ~~~) are opaque: no heading and no entry.
@@ -106,9 +123,16 @@ function indexEntryLine(entry) {
   const tags = entry.tags.filter((tag) => typeof tag === 'string' && /^[\w-]+$/.test(tag));
   const title = wiki.escapeMarkdownLinkText(String(entry.title).replace(/\s+/g, ' ').trim());
   const parts = [summary, ...(tags.length ? [tags.map((tag) => `#${tag}`).join(' ')] : [])].filter(Boolean);
-  // Parentheses and backslashes in the path are escaped so the destination ends where the path ends.
-  const destination = entry.path.replace(/([\\()])/g, '\\$1');
-  return `- [${title}](${destination})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
+  return `- [${title}](${indexDestination(entry.path)})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
+}
+/**
+ * Link destination for a page path. Parentheses and backslashes are escaped so the destination ends where the path ends;
+ * a space or control character (or a leading `<`) would end a plain destination, so such paths use `<...>`.
+ */
+function indexDestination(path) {
+  const escaped = path.replace(/([\\()])/g, '\\$1');
+  if (!/[\s\x00-\x1f\x7f]/.test(path) && !path.startsWith('<')) return escaped;
+  return `<${escaped.replace(/[<>]/g, '\\$&')}>`;
 }
 /**
  * Index text for a Wiki without an index (or with an empty one): one `## <first folder>` category per folder, `## Pages`
@@ -416,10 +440,14 @@ export function createServer(options) {
     const findings = await core.checkVault(vaultDir);
     let indexAgeMs = null;
     try { indexAgeMs = Math.max(0, Date.now() - (await stat(join(wikiDir, 'index.md'))).mtimeMs); } catch { /* index not initialized */ }
-    const entries = await wiki.getWikiStatus(vaultDir);
+    // Coverage uses the same index reader as wiki_update_index (escaped, angle-bracket and anchored destinations). The
+    // vendored getWikiStatus reads the index with its own parser, which misreads escaped parentheses.
+    const linked = indexedPaths(await readOptionalIndex(join(wikiDir, 'index.md')));
+    const covered = pages.filter((item) => linked.has(item.slice('wiki/'.length))).length;
+    const indexCoveragePct = pages.length ? Math.round((covered / pages.length) * 100) : 100;
     return { pageCount: pages.length, okfWarningCount: findings.filter((item) => item.severity === 'warn').length,
       okfErrorCount: findings.filter((item) => item.severity === 'error').length, indexAgeMs,
-      readOnly: config.readOnly === true, indexCoveragePct: entries.index_coverage_pct };
+      readOnly: config.readOnly === true, indexCoveragePct };
   });
   readTool('wiki_lint', z.object({}), () => wiki.lintWiki(wikiDir));
 
