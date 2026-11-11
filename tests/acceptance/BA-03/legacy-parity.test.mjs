@@ -67,7 +67,14 @@ test('identifier-free dev queries return results identical to main (path, score,
       if (mayContainIdentifier(c.query)) return;
       compared++;
       const current = shape(search(index, c.query, { limit: 10, abstainThreshold: 0, asOf: now }));
-      assert.deepEqual(current, shape(golden[set.key][i]), `${set.key}/${c.id}: ${c.query}`);
+      const expected = shape(golden[set.key][i]);
+      // PM update (BA-08, 2026-11-11): link-graph expansion intentionally adds or lifts linked neighbours below the first result
+      // on linked corpora (eval/corpus-ba); there the first result and abstention must still match main. Unlinked corpora keep
+      // full parity.
+      if (set.corpus === 'eval/corpus-ba') {
+        assert.deepEqual({ abstained: current.abstained, reason: current.reason, first: current.results[0] ?? null },
+          { abstained: expected.abstained, reason: expected.reason, first: expected.results[0] ?? null }, `${set.key}/${c.id}: ${c.query}`);
+      } else assert.deepEqual(current, expected, `${set.key}/${c.id}: ${c.query}`);
     });
     report.push(`${set.key}=${compared}/${cases.length}`);
     assert.ok(compared >= set.min, `${set.key}: expected at least ${set.min} identifier-free queries, got ${compared}`);

@@ -197,6 +197,75 @@ function resolveSupersession(pages) {
   for (const sources of replaced.values()) sources.sort();
   return replaced;
 }
+// Page links (BA-08). Wikilinks `[[name]]`, `[[name|label]]`, `[[name#section]]` and relative Markdown links
+// `[text](dir/page.md#anchor)` become undirected edges between indexed pages. Fenced code, inline code, external URLs,
+// links to non-Markdown files and links that leave the vault are ignored. A wikilink name resolves to the one indexed
+// page whose exact path matches it, otherwise to the one page whose path suffix, file name, title or alias matches
+// (case and diacritics folded); an ambiguous or unknown name links nothing. Superseded pages are never indexed, so links
+// to them are skipped.
+const LINK_TOP = 3, LINK_ALPHA = 0.5, RELATED_MAX = 5;
+const wikiLinkPattern = /(?<!!)\[\[([^\]\n]+)\]\]/gu;
+const markdownLinkPattern = /(?<!!)\[[^\]\n]*\]\(([^)\s]+)(?:\s+"[^"\n]*")?\)/gu;
+const externalOrAbsolute = /^(?:[a-z][a-z0-9+.-]*:|[/\\#])/iu;
+/** The body with fenced and inline code removed, line structure kept. */
+function withoutCode(body) {
+  let out = '', fenceLength = 0, fenceChar = null;
+  for (const rawLine of body.split('\n')) {
+    const fence = rawLine.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (!fenceLength) { fenceLength = fence[1].length; fenceChar = fence[1][0]; }
+      else if (fence[1][0] === fenceChar && fence[1].length >= fenceLength && !fence[2].trim()) { fenceLength = 0; fenceChar = null; }
+      out += '\n';
+      continue;
+    }
+    out += fenceLength ? '\n' : rawLine.replace(/`[^`\n]*`/gu, ' ') + '\n';
+  }
+  return out;
+}
+/** Undirected link graph over the indexed documents: a plain object from document id to sorted neighbour ids. */
+function buildLinks(docs) {
+  const byPath = new Map(), byName = new Map();
+  const add = (map, key, id) => { if (!map.has(key)) map.set(key, new Set()); map.get(key).add(id); };
+  docs.forEach((doc, id) => {
+    const full = normalizeText(doc.page.path.replace(/\.md$/iu, ''));
+    add(byPath, full, id);
+    const segments = full.split('/');
+    for (let k = 0; k < segments.length; k++) add(byName, segments.slice(k).join('/'), id);
+    add(byName, normalizeText(doc.page.title), id);
+    for (const alias of doc.page.aliases) add(byName, normalizeText(alias), id);
+  });
+  const only = (set) => (set && set.size === 1 ? [...set][0] : null);
+  const edges = new Map();
+  const connect = (a, b) => {
+    if (a === b) return;
+    for (const [from, to] of [[a, b], [b, a]]) {
+      if (!edges.has(from)) edges.set(from, new Set());
+      edges.get(from).add(to);
+    }
+  };
+  docs.forEach((doc, id) => {
+    const text = withoutCode(typeof doc.page.body === 'string' ? doc.page.body : '');
+    for (const m of text.matchAll(wikiLinkPattern)) {
+      const name = normalizeText(m[1].split('|')[0].split('#')[0].trim()).replace(/\.md$/u, '').trim();
+      const target = name ? (only(byPath.get(name)) ?? only(byName.get(name))) : null;
+      if (target !== null && target !== undefined) connect(id, target);
+    }
+    for (const m of text.matchAll(markdownLinkPattern)) {
+      const href = m[1];
+      if (externalOrAbsolute.test(href)) continue;
+      let target;
+      try { target = decodeURI(href.split(/[?#]/u)[0]); } catch { continue; }
+      if (!/\.md$/iu.test(target)) continue;
+      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(doc.page.path), target));
+      if (resolved === '.' || resolved.startsWith('../') || path.posix.isAbsolute(resolved)) continue;
+      const hit = only(byPath.get(normalizeText(resolved.replace(/\.md$/iu, ''))));
+      if (hit !== null && hit !== undefined) connect(id, hit);
+    }
+  });
+  const links = {};
+  for (const id of [...edges.keys()].sort((x, y) => x - y)) links[id] = [...edges.get(id)].sort((x, y) => x - y);
+  return links;
+}
 export function buildIndex(pages, options = {}) {
   if (!Array.isArray(pages)) fail('E_INVALID_INPUT', 'Expected pages');
   const docs = []; const postings = Object.create(null); const exact = Object.create(null); const totals = [0,0,0,0];
@@ -214,7 +283,7 @@ export function buildIndex(pages, options = {}) {
   }
   const supersedes = Object.create(null);
   for (const target of [...replaced.keys()].sort()) supersedes[target] = replaced.get(target);
-  return { version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString(), supersedes };
+  return { version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString(), supersedes, links: buildLinks(docs) };
 }
 function stale(fm, asOf) {
   let expiry = dateValue(fm.stale_after); if (!expiry) return false;
@@ -335,10 +404,12 @@ export function search(index, query, options = {}) {
   }
   // Compress low scores while retaining the penalty for every unmatched query term.
   // The transform is monotonic, so it leaves ranking and tie-breaking intact.
-  const ranked = [...scores].map(([id, score]) => ({id, score: Math.sqrt(score / (maxScore || 1))})).sort((a,b) => b.score - a.score || (index.docs[a.id].page.path < index.docs[b.id].page.path ? -1 : index.docs[a.id].page.path > index.docs[b.id].page.path ? 1 : 0));
+  const ranked = [...scores].map(([id, score]) => ({id, score: Math.sqrt(score / (maxScore || 1))})).sort(rankOrder(index.docs));
+  // Abstention is decided on the lexical ranking only: link expansion below never turns an unanswered query into an answer.
   if (!ranked.length || ranked[0].score < threshold) return { results: [], abstained: true, reason: ranked.length ? 'below_threshold' : 'no_match', truncated: false };
+  const linked = expandByLinks(ranked, index);
   let remaining = Math.floor(budget), truncated = false;
-  const results = ranked.slice(0,limit).map(({id,score}) => {
+  const results = linked.slice(0,limit).map(({id,score,via}) => {
     const p = index.docs[id].page, fm = p.frontmatter || {};
     const section = bestSection(p.body || '', terms, index, asOf);
     let snippet = section ? section.text : (p.body || '').trim();
@@ -348,13 +419,48 @@ export function search(index, query, options = {}) {
     // Optional (BA-04): the superseded pages this page replaces. Present only when there are some.
     const replaced = index.supersedes?.[p.path];
     if (replaced?.length) result.supersedes = [...replaced];
+    // Optional (BA-08): direct link neighbours (both directions, at most RELATED_MAX), and `via` for results that were
+    // placed or scored by a link. Both are absent otherwise, so pages without links keep the previous result shape.
+    const related = relatedPaths(index, id);
+    if (related.length) result.related = related;
+    if (via) result.via = via;
     return result;
   });
   return {results, abstained:false, reason:null, truncated};
 }
+/** Ranking order: higher score first, then path ascending. */
+function rankOrder(docs) {
+  return (a, b) => b.score - a.score || (docs[a.id].page.path < docs[b.id].page.path ? -1 : docs[a.id].page.path > docs[b.id].page.path ? 1 : 0);
+}
+/**
+ * Graph expansion (BA-08). Each direct neighbour of the top LINK_TOP lexical results gets LINK_ALPHA times its source's
+ * score. A neighbour that is already ranked keeps the larger of its own score and that value; a new one is added with
+ * `via: 'link'`, as is a neighbour whose link value exceeds its own score. The first result cannot change: every link
+ * value is below the best lexical score, so ties and ordering among lexical results stay as they were. No links, no change.
+ */
+function expandByLinks(ranked, index) {
+  const links = index.links || {};
+  const boosted = new Map();
+  for (const source of ranked.slice(0, LINK_TOP)) {
+    const value = LINK_ALPHA * source.score;
+    for (const neighbour of links[source.id] || []) if (value > (boosted.get(neighbour) ?? -Infinity)) boosted.set(neighbour, value);
+  }
+  if (!boosted.size) return ranked;
+  const merged = new Map(ranked.map(entry => [entry.id, {...entry}]));
+  for (const [id, value] of boosted) {
+    const current = merged.get(id);
+    if (!current) merged.set(id, {id, score: value, via: 'link'});
+    else if (value > current.score) Object.assign(current, {score: value, via: 'link'});
+  }
+  return [...merged.values()].sort(rankOrder(index.docs));
+}
+function relatedPaths(index, id) {
+  const neighbours = (index.links || {})[id] || [];
+  return neighbours.map(n => index.docs[n].page.path).sort().slice(0, RELATED_MAX);
+}
 // Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
-// The tag stays `v6`: BA-17 acceptance tests pin it. The BA-04 cache change (the `supersedes` map) is detected by
-// decodeCachedIndex, which rejects any cache without it, so a pre-BA-04 cache is rebuilt once.
+// The tag stays `v6`: BA-17 acceptance tests pin it. The BA-04 cache change (the `supersedes` map) and the BA-08 link graph
+// (`links`) are detected by decodeCachedIndex, which rejects any cache without them, so an older cache is rebuilt once.
 const FINGERPRINT_SCHEMA = 'retrieval-stat-v6';
 function statFingerprint(vaultDir) {
   const { root, files } = markdownFiles(vaultDir);
@@ -462,7 +568,23 @@ function decodeCachedIndex(data, key, paths) {
     }
     supersedes[target] = sources;
   }
-  return {version: 1, docs, postings, exact, averages: index.averages, now: index.now, supersedes};
+  // Link graph (BA-08): a cache without `links` (written before BA-08) is rejected and rebuilt once. Keys are document ids,
+  // each neighbour list is a non-empty, strictly increasing list of other in-range ids, and every edge is symmetric.
+  if (!isPlainObject(index.links)) return null;
+  const links = Object.create(null);
+  for (const key of Object.keys(index.links)) {
+    if (!/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= docCount) return null;
+    const id = Number(key), list = index.links[key];
+    if (!Array.isArray(list) || list.length === 0) return null;
+    let previous = -1;
+    for (const n of list) {
+      if (!Number.isInteger(n) || n <= previous || n >= docCount || n === id) return null;
+      previous = n;
+    }
+    links[id] = list;
+  }
+  for (const key of Object.keys(links)) for (const n of links[key]) if (!links[n] || !links[n].includes(Number(key))) return null;
+  return {version: 1, docs, postings, exact, averages: index.averages, now: index.now, supersedes, links};
 }
 /**
  * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
