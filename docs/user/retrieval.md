@@ -20,6 +20,16 @@ Pages that link to each other, with `[[Page name]]` (or `[[name|label]]`, `[[nam
 
 Links only add results around answers that were already found: an unanswered question still abstains, and a page without links gets exactly the same results as before. Links inside code blocks, external URLs and superseded pages are ignored.
 
+## Provenance and trust
+
+A page's frontmatter says how well it is established (`status`, and `verified` records; see [OKF-inspired metadata](okf.md)). Retrieval uses this when it ranks pages:
+
+- A **verified** page (`status: confirmed` with at least one valid `verified` record) ranks higher among matching pages. Its result carries `trust: "verified"`.
+- A **weak** page (`status: proposed` or `disputed`) ranks slightly lower. Its result carries `trust: "weak"`, and the prompt hook shows it as `Title [unverified] (path)`.
+- Every other page is neutral: its score and position are unchanged, and its result has no `trust` field.
+
+Trust changes only the order of pages that already match the question. It never decides whether an answer is given: a question with no good match still gets no answer, and a weak page still answers a question when it is the best match. A corpus whose pages have no provenance fields gets exactly the same results as before.
+
 ## Abstention threshold
 
 The default `retrieval.abstainThreshold` is 0.35. Scores are compressed with a square root, making this default meaningful for natural-language queries. If you set a custom threshold, use the square root of its previous value to preserve equivalent strictness: for example, an old value of 0.5 maps to ≈0.71; an old value of 0.25 maps to 0.5.

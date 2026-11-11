@@ -93,6 +93,20 @@ const answer = search(index, 'vault backup', {limit:3,budgetChars:1200});
 
 **Tuning.** `LINK_TOP` and `LINK_ALPHA` were checked on the development sets (K in {1, 2, 3, 5}, alpha in {0.25, 0.5, 0.75}). On those sets every combination gave the same metrics, so the defaults 3 and 0.5 from the BA-08 brief were kept. The graph development set is `eval/dev/multihop-hard-cases.json` over `eval/corpus-graph/`.
 
+## Provenance trust (BA-09 additions, contract version 1)
+
+**Classes.** Every indexed page has one trust class, computed at index time from its frontmatter. `verified`: `status: confirmed` and at least one `verified` record whose `date` is a valid calendar date (quoted, unquoted, `YYYY-MM-DD` or a UTC timestamp) and whose `evidence`, `scope` and `source` are non-empty strings. `weak`: `status: proposed` or `disputed`, with or without records. `neutral`: every other page, including `confirmed` without a valid record, a status outside these three, and pages with no provenance. Status values are matched exactly. Superseded pages are not indexed and have no class.
+
+**Scoring.** After the lexical BM25F score is computed and compressed as described above, it is multiplied by `1 + TRUST_BOOST` (1.5) for `verified` pages, by `1 - TRUST_PENALTY` (0.9) for `weak` pages and by 1 for `neutral` pages. The two constants are internal, not configuration keys. They were chosen on the BA-09 development set (`eval/dev/trust-cases.json` over `eval/corpus-trust/`) and checked against the other development sets; the holdout was not used for tuning. A `verified` score can therefore exceed 1 (at most 1.5); other scores keep their range.
+
+**Abstention.** The abstention decision uses the best lexical score before the trust factor and before link expansion. A weak page cannot turn an answered question into an abstention, and a verified page cannot turn an unanswered question into an answer. The abstain reasons are unchanged.
+
+**Order.** Results are ordered by the trust-adjusted score, then by path. Link expansion (BA-08) runs on the adjusted scores; the first result still cannot change through links, because a link value is at most half of its source score and the source score is below the best adjusted score.
+
+**Result field.** A result may carry `trust: 'verified' | 'weak'`. The field is absent for neutral pages, so a corpus without provenance returns exactly the previous results and scores. `status` and all other fields are unchanged.
+
+**Cache.** Each indexed document stores its `trust`. `decodeCachedIndex` recomputes the class from the cached frontmatter and rejects a cache whose stored class is missing or different; such a cache is rebuilt once. The schema tag stays `retrieval-stat-v6`. As with the other cache checks, this is structural validation under the threat model below.
+
 ## Threat model / cache trust
 
 The persisted cache lives under `stateDir`, which is user-owned and trusted. A cache is accepted only when its key matches the current stat fingerprint and its structure passes validation: plain-object roots and fields, page paths present on disk and unique, page field types, posting ids strictly increasing and in range, counts within their field lengths, and averages equal to the values `buildIndex` computes, and exact identifier postings are non-empty lists of strictly increasing in-range ids. Content is not validated: a cache whose key matches but whose content was made up (for example an emptied title, inflated lengths or a swapped path) is accepted as the index for that vault state. Detecting that would require re-reading page contents, which the cheap freshness check exists to avoid. Anyone able to write to `stateDir` can therefore change search results for the unchanged vault; this is an accepted risk, not a defect of the cache format.

@@ -266,6 +266,31 @@ function buildLinks(docs) {
   for (const id of [...edges.keys()].sort((x, y) => x - y)) links[id] = [...edges.get(id)].sort((x, y) => x - y);
   return links;
 }
+// Provenance trust (BA-09). A page is `verified` when its status is `confirmed` and at least one `verified` record has a
+// valid date and non-empty evidence, scope and source. It is `weak` when its status is `proposed` or `disputed`. Every
+// other page is `neutral`: no provenance fields, a status outside these, or `confirmed` without a valid record.
+// Trust is computed at index time. It scales the lexical score after the abstention decision (see search). Neutral
+// pages keep the factor 1, so a corpus without provenance gets exactly the previous scores and order. The two constants
+// were tuned on the BA-09 development set (eval/dev/trust-cases.json) only; they are not configuration keys.
+const TRUST_BOOST = 0.5, TRUST_PENALTY = 0.1;
+const trustFactor = {verified: 1 + TRUST_BOOST, weak: 1 - TRUST_PENALTY, neutral: 1};
+const dateOnly = /^\d{4}-\d{2}-\d{2}$/u, utcStamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u;
+// Quoted or unquoted (already canonical) UTC date or timestamp; an impossible calendar day such as 2026-02-30 is invalid.
+function validDate(value) {
+  const text = value instanceof Date ? (Number.isFinite(value.getTime()) ? value.toISOString() : '') : value;
+  if (typeof text !== 'string' || !(dateOnly.test(text) || utcStamp.test(text))) return false;
+  const time = Date.parse(text);
+  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === text.slice(0, 10);
+}
+function validVerifiedRecord(record) {
+  return Boolean(record) && typeof record === 'object' && !Array.isArray(record) && validDate(record.date)
+    && ['evidence', 'scope', 'source'].every(key => typeof record[key] === 'string' && record[key].trim() !== '');
+}
+function trustOf(frontmatter) {
+  const fm = frontmatter || {};
+  if (fm.status === 'confirmed') return Array.isArray(fm.verified) && fm.verified.some(validVerifiedRecord) ? 'verified' : 'neutral';
+  return fm.status === 'proposed' || fm.status === 'disputed' ? 'weak' : 'neutral';
+}
 export function buildIndex(pages, options = {}) {
   if (!Array.isArray(pages)) fail('E_INVALID_INPUT', 'Expected pages');
   const docs = []; const postings = Object.create(null); const exact = Object.create(null); const totals = [0,0,0,0];
@@ -277,7 +302,7 @@ export function buildIndex(pages, options = {}) {
     const fields = [p.title, [...strings(p.aliases), ...strings(p.keywords)].join(' '), strings(p.headings).join(' '), typeof p.body === 'string' ? p.body : ''];
     const lengths = []; const counts = new Map(); const identifiers = new Set();
     fields.forEach((field, i) => { const ts = tokens(field); lengths.push(ts.length); totals[i] += ts.length; for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; } identifierKeys(field, identifiers); });
-    const id = docs.length; docs.push({page: p, lengths});
+    const id = docs.length; docs.push({page: p, lengths, trust: trustOf(p.frontmatter)});
     for (const [term, countsByField] of counts) (postings[term] ||= []).push([id, countsByField]);
     for (const key of identifiers) (exact[key] ||= []).push(id);
   }
@@ -404,10 +429,14 @@ export function search(index, query, options = {}) {
   }
   // Compress low scores while retaining the penalty for every unmatched query term.
   // The transform is monotonic, so it leaves ranking and tie-breaking intact.
-  const ranked = [...scores].map(([id, score]) => ({id, score: Math.sqrt(score / (maxScore || 1))})).sort(rankOrder(index.docs));
-  // Abstention is decided on the lexical ranking only: link expansion below never turns an unanswered query into an answer.
-  if (!ranked.length || ranked[0].score < threshold) return { results: [], abstained: true, reason: ranked.length ? 'below_threshold' : 'no_match', truncated: false };
-  const linked = expandByLinks(ranked, index);
+  const lexical = [...scores].map(([id, score]) => ({id, score: Math.sqrt(score / (maxScore || 1))}));
+  // Abstention is decided on the best lexical score only, before trust and before link expansion: neither a weak page nor a
+  // link can turn an unanswered query into an answer, and a weak page cannot turn an answer into an abstention.
+  const best = lexical.reduce((top, entry) => Math.max(top, entry.score), -Infinity);
+  if (!lexical.length || best < threshold) return { results: [], abstained: true, reason: lexical.length ? 'below_threshold' : 'no_match', truncated: false };
+  // Trust (BA-09) scales each lexical score after that decision. Neutral pages keep factor 1, so their scores and order are unchanged.
+  const trusted = lexical.map(entry => ({...entry, score: entry.score * (trustFactor[index.docs[entry.id].trust] ?? 1)})).sort(rankOrder(index.docs));
+  const linked = expandByLinks(trusted, index);
   let remaining = Math.floor(budget), truncated = false;
   const results = linked.slice(0,limit).map(({id,score,via}) => {
     const p = index.docs[id].page, fm = p.frontmatter || {};
@@ -424,6 +453,9 @@ export function search(index, query, options = {}) {
     const related = relatedPaths(index, id);
     if (related.length) result.related = related;
     if (via) result.via = via;
+    // Optional (BA-09): `verified` or `weak` for pages with provenance; absent for neutral pages.
+    const trust = index.docs[id].trust;
+    if (trust === 'verified' || trust === 'weak') result.trust = trust;
     return result;
   });
   return {results, abstained:false, reason:null, truncated};
@@ -459,8 +491,9 @@ function relatedPaths(index, id) {
   return neighbours.map(n => index.docs[n].page.path).sort().slice(0, RELATED_MAX);
 }
 // Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
-// The tag stays `v6`: BA-17 acceptance tests pin it. The BA-04 cache change (the `supersedes` map) and the BA-08 link graph
-// (`links`) are detected by decodeCachedIndex, which rejects any cache without them, so an older cache is rebuilt once.
+// The tag stays `v6`: BA-17 acceptance tests pin it. The BA-04 cache change (the `supersedes` map), the BA-08 link graph
+// (`links`) and the BA-09 per-document `trust` are detected by decodeCachedIndex, which rejects any cache without them, so
+// an older cache is rebuilt once.
 const FINGERPRINT_SCHEMA = 'retrieval-stat-v6';
 function statFingerprint(vaultDir) {
   const { root, files } = markdownFiles(vaultDir);
@@ -513,6 +546,8 @@ function decodeCachedIndex(data, key, paths) {
     if (typeof page.title !== 'string' || typeof page.body !== 'string') return null;
     if (!isStringArray(page.headings) || !isStringArray(page.aliases) || !isStringArray(page.keywords)) return null;
     if (!isPlainObject(page.frontmatter)) return null;
+    // Trust (BA-09) is stored per document and must equal the class its frontmatter gives; a cache without it is rebuilt once.
+    if (doc.trust !== trustOf(page.frontmatter)) return null;
     const fm = page.frontmatter;
     if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) return null;
     if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;

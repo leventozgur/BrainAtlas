@@ -31,3 +31,7 @@ keywords: []
 ```
 
 Missing recommended fields produce warnings. Invalid frontmatter or field types produce errors. Expired pages and confirmed-but-unverified claims produce warnings. Date-only scalars should be quoted to avoid YAML reader differences. See [the local rules](../contracts/okf-rules.md) and [field mapping](../../modules/okf-strict/docs/okf-mapping.md).
+
+## Effect on retrieval
+
+Search ranks by provenance (see [Provenance and trust](retrieval.md#provenance-and-trust)). A page is **verified** when `status` is `confirmed` and at least one `verified` record has a valid `date` (`YYYY-MM-DD` or a UTC timestamp) and non-empty `evidence`, `scope` and `source`; it ranks higher. A page with `status` `proposed` or `disputed` is **weak**; it ranks slightly lower and is marked `[unverified]` in the prompt hook. Other pages, including `confirmed` pages without a valid record, are unchanged. Trust does not decide whether a question is answered.
