@@ -63,6 +63,18 @@ test('a line feed in the file name cannot be a CommonMark destination: the serve
     assert.equal(await readOrNull(join(f.wiki, 'index.md')), null, 'a refused run writes no index');
     return;
   }
+  // PM update (2026-11-11): a third valid outcome — the page is silently left out of the index (line-breaking characters cannot
+  // form a CommonMark destination; refusing the whole update for one file name would block every other page). The index must
+  // then contain no entry for it, and repeated runs must add nothing.
+  const first = await readOrNull(join(f.wiki, 'index.md'));
+  if (first !== null && !first.includes('name.md')) {
+    for (let i = 0; i < 2; i++) {
+      const again = okJson(await call(f.client, 'wiki_update_index', {}));
+      assert.equal(again.added, 0, 'an excluded page is never added on later runs');
+    }
+    assert.deepEqual(await readOrNull(join(f.wiki, 'index.md')), first, 'the index bytes stay the same');
+    return;
+  }
   const text = await assertThreeRuns(f, 1, 1);
   assert.deepEqual(readLinks(text).map((x) => x.dest), [name], 'the index holds exactly one readable entry for the page');
 });
