@@ -202,11 +202,15 @@ test('invalid semantic index settings are refused by the commands without callin
 });
 
 // ---------------- hook path and wiki_query (11) ----------------
+// Refined 2026-11-11 (PM, BA-07): the hook may now run an optional, time-budgeted semantic step that loads the
+// semantic module only by dynamic import (Lite purity is enforced by `npm run guard`). The invariant kept here:
+// no hook source statically imports the semantic module, and none depends on the index-build settings.
 test('the hook sources do not depend on the semantic module or the new settings', async () => {
   const dir = new URL('../../../packages/hooks/src/', import.meta.url).pathname;
   for (const name of await readdir(dir)) {
     const source = await readFile(join(dir, name), 'utf8');
-    assert.doesNotMatch(source, /semantic|indexTimeoutMs|indexBatchSize|index\.partial|index\.lock/u, name);
+    assert.doesNotMatch(source, /indexTimeoutMs|indexBatchSize|index\.partial|index\.lock/u, name);
+    assert.doesNotMatch(source, /^\s*import\b[^;]*from\s*['"][^'"]*modules\/semantic/mu, name);
   }
 });
 

@@ -7,6 +7,8 @@ import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { redact } from '../../core/src/safety/index.mjs';
 import { resolvePaths, vaultId } from '../../core/src/paths/index.mjs';
+import { SEMANTIC_DEFAULTS } from '../../core/src/config/index.mjs';
+import { SEMANTIC_BUDGET_MS, semanticEntryUrl, semanticRequested } from './semantic.mjs';
 
 const clients = new Set(['claude', 'codex', 'kiro', 'copilot', 'gemini']);
 const events = new Set(['prompt', 'session-start', 'session-end']);
@@ -80,13 +82,20 @@ async function metric(stateDir, record) {
     try { await h.writeFile(JSON.stringify(record) + '\n'); } finally { await h.close(); }
   } catch { /* Metrics never affect the hook. */ }
 }
-function retrieve(options, query, searchOptions, remaining) {
+// Settings for the semantic step, or null when the hook must not touch the semantic module at all (Lite, opt-out, no HOME).
+function semanticStep(config, env) {
+  if (!semanticRequested(config)) return null;
+  try { return {settings:{...SEMANTIC_DEFAULTS, ...config.semantic}, stateDir:resolvePaths({env}).stateDir, budgetMs:SEMANTIC_BUDGET_MS, entryUrl:semanticEntryUrl()}; }
+  catch { return null; }
+}
+// Resolves `{results, semantic?}`; `semantic` is present only when the semantic step was requested.
+function retrieve(options, query, searchOptions, remaining, semantic) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./worker.mjs', import.meta.url), {workerData:{options,query,searchOptions}});
+    const worker = new Worker(new URL('./worker.mjs', import.meta.url), {workerData:{options,query,searchOptions,semantic}});
     let done = false;
     const finish = (error, value) => { if (done) return; done = true; clearTimeout(timer); void worker.terminate(); error ? reject(error) : resolve(value); };
     const timer = setTimeout(() => finish(new Error('deadline')), Math.max(0, remaining));
-    worker.once('message', value => value.error ? finish(new Error('search')) : finish(null, value.results));
+    worker.once('message', value => value.error ? finish(new Error('search')) : finish(null, value));
     worker.once('error', () => finish(new Error('search')));
     worker.once('exit', () => finish(new Error('search')));
   });
@@ -99,7 +108,7 @@ export async function runHook(input = {}) {
   const mode = ['normal','economic','manual'].includes(config.hooks?.mode) ? config.hooks.mode : 'normal';
   let stateDir = config.stateDir || config.paths?.stateDir;
   if (!stateDir && config.vault?.path) { try { stateDir = join(resolvePaths({env}).stateDir, vaultId(config.vault.path)); } catch {} }
-  let session = '', context = '', results = 0, outcome = 'empty';
+  let session = '', context = '', results = 0, outcome = 'empty', semanticState;
   try {
     let data = {};
     if (stdin.trim()) { data = JSON.parse(stdin); if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('input'); }
@@ -128,7 +137,8 @@ export async function runHook(input = {}) {
         const file = join(dir, `${client}-${hash(session)}.json`);
         const seen = session ? await readState(file) : [];
         // No cumulative snippet budget here: the hook packs every result itself under its own cap.
-        const found = await retrieve({vaultDir:config.vault.path,stateDir,now}, query, {limit:20,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start));
+        const hit = await retrieve({vaultDir:config.vault.path,stateDir,now}, query, {limit:20,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start), semanticStep(config, env));
+        const found = hit.results; semanticState = hit.semantic;
         if (Date.now()-start >= deadline) throw new Error('deadline');
         const fresh = found.filter(item => !seen.includes(item.path));
         const cap = Math.min(client === 'codex' ? 1400 : mode === 'economic' ? 1500 : 4002, config.retrieval?.budgetChars ?? 4002);
@@ -146,7 +156,8 @@ export async function runHook(input = {}) {
     if (Date.now()-start >= deadline) { context = ''; results = 0; outcome = 'deadline'; }
     else if (context) outcome = 'ok';
   } catch (error) { context = ''; results = 0; outcome = error.message === 'deadline' ? 'deadline' : 'error'; }
-  await metric(stateDir, {ts:now.toISOString(),client,event,mode,durationMs:Date.now()-start,chars:context.length,results,outcome,session:hash(session).slice(0,16)});
+  // The `semantic` field appears only when the semantic step ran or was attempted; it never carries query or page text.
+  await metric(stateDir, {ts:now.toISOString(),client,event,mode,durationMs:Date.now()-start,chars:context.length,results,outcome,session:hash(session).slice(0,16),...(semanticState ? {semantic:semanticState} : {})});
   return {stdout:envelope(client,event,context),exitCode:0};
 }
 /** Build the node command used by client hook configuration. */
@@ -160,7 +171,10 @@ export function buildHookCommand({nodePath, shimPath, client, event, paths}) {
     try { defaultConfig = resolvePaths({env:process.env}).configFile; } catch {}
     let yamlDir;
     try { yamlDir = dirname(createRequire(import.meta.url).resolve('yaml/package.json')); } catch {}
-    const reads = [paths.vault, paths.state, paths.release, paths.configFile, process.env.BRAINATLAS_CONFIG, defaultConfig, yamlDir, dirname(nodePath), shimPath].filter(Boolean);
+    // The global semantic index (read-only) lives beside the per-vault state directories.
+    let semanticIndexDir;
+    try { semanticIndexDir = join(resolvePaths({env:process.env}).stateDir, 'semantic'); } catch {}
+    const reads = [paths.vault, paths.state, paths.release, paths.configFile, process.env.BRAINATLAS_CONFIG, defaultConfig, yamlDir, dirname(nodePath), shimPath, semanticIndexDir].filter(Boolean);
     // Retrieval runs in a worker so its deadline can interrupt synchronous search.
     args.push('--permission', ...[...new Set(reads.flatMap(value => [value, canonical(value)]))].map(value => `--allow-fs-read=${value}`), ...[...new Set([paths.state, canonical(paths.state)])].map(value => `--allow-fs-write=${value}`), '--allow-worker');
   }

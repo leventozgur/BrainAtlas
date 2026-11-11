@@ -17,6 +17,11 @@ To disable retrieval, run `brainatlas config set semantic.enabled false`. If Oll
 Measured on the evaluation corpus: approximately 239 MB model storage, 385 MB RAM, 5 seconds to index 60 pages, and 16 ms per query. Results vary by machine. Related but incorrect answers can score above the threshold; the threshold alone does not distinguish difficult negatives. The default `minScore` of 0.45 is calibrated for EmbeddingGemma and must be recalibrated when changing models.
 
 
+## Prompt hook
+
+When semantic retrieval is enabled, the prompt hook also uses it. Its search adds the query embedding to the same BM25 candidates, so a Turkish question can reach an English page. The hook reads the existing index and never writes it; run `brainatlas semanticIndex` after large Wiki changes. The embedding step has a 350 ms budget inside the hook deadline. If the provider is slow or stopped, if the index is missing or was built with another model, or if the provider URL is not loopback, the hook silently returns the same results as before semantic retrieval was enabled. The hook metrics record the outcome in the `semantic` field (`used` or `fallback:<reason>`); the prompt text is never recorded. Lite never loads the semantic module.
+
+
 ## Slow machines
 
 On a 2012 CPU with 8 GB RAM and a hard disk, an initial index of 819 chunks took approximately 16 minutes; a query took about 0.5 seconds. Times depend on the hardware and corpus. Run the first setup while the machine is idle. If interrupted, run `brainatlas semanticSetup --yes` again to resume saved progress. `brainatlas semanticStatus` reports the number of saved chunks as `partialChunks`.
