@@ -38,7 +38,9 @@ function mayContainIdentifier(query) {
 
 const shape = (r) => ({
   abstained: r.abstained, reason: r.reason,
-  results: r.results.map(x => ({ path: x.path, score: x.score, heading: x.heading })),
+  // PM update (BA-04, 2026-11-11): BA-04 intentionally changes which section is shown (newest valid dated section);
+  // ranking, scores and abstention must still match main exactly, so the section heading is no longer pinned here.
+  results: r.results.map(x => ({ path: x.path, score: x.score })),
 });
 
 const indexes = new Map();
@@ -55,7 +57,7 @@ test('golden fixture covers every dev set with the same query ids as the reposit
   }
 });
 
-test('identifier-free dev queries return results identical to main (path, score, heading, abstain reason)', () => {
+test('identifier-free dev queries return results identical to main (path, score, abstain reason)', () => {
   const report = [];
   for (const set of SETS) {
     const cases = JSON.parse(fs.readFileSync(path.join(root, set.cases), 'utf8'));
