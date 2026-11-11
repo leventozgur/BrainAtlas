@@ -68,6 +68,21 @@ function isIdentifier(raw) {
 // `URLSessionConfiguration.timeoutIntervalForRequest`, `rc.12` finds `2.4.0-rc.12`, and `retry.mjs` finds `src/lib/retry.mjs`.
 // Queries use only the whole identifier.
 const maxChainSegments = 12;
+// Deep keys (more than maxChainSegments segments) start chains only in their last four `/` path components. Each such
+// component is taken whole, however many `.` and `-` segments it contains, so a hyphenated basename is covered at any
+// depth. A key without `/` is a single component and keeps the last four segments.
+function deepChainStarts(pieces, segments) {
+  const slashesBefore = [];
+  let slashes = 0;
+  for (const piece of pieces) {
+    if (/^[./-]/.test(piece)) slashes += piece.split('/').length - 1;
+    else slashesBefore.push(slashes);
+  }
+  if (!slashes) return [segments - 4, segments - 3, segments - 2, segments - 1];
+  const starts = [];
+  for (let s = 0; s < segments; s++) if (slashesBefore[s] >= slashes - 3) starts.push(s);
+  return starts;
+}
 /** Normalized identifier keys of a document text, including the sub-chains described above. */
 function identifierKeys(text, keys = new Set()) {
   for (const m of text.matchAll(identifierCandidate)) {
@@ -77,9 +92,9 @@ function identifierKeys(text, keys = new Set()) {
     const pieces = key.match(/[^./-]+|[./-]+/g) || [];
     const segments = Math.ceil(pieces.length / 2);
     if (segments < 2) continue;
-    // Short identifiers get every contiguous chain. Deep paths get chains that start in their last four segments,
+    // Short identifiers get every contiguous chain. Deep paths get chains that start in their last four path components,
     // so the basename and its suffixes are always indexed whatever the depth.
-    const starts = segments <= maxChainSegments ? Array.from({ length: segments }, (_, k) => k) : [segments - 4, segments - 3, segments - 2, segments - 1];
+    const starts = segments <= maxChainSegments ? Array.from({ length: segments }, (_, k) => k) : deepChainStarts(pieces, segments);
     for (const first of starts) {
       for (let last = first; last < segments; last++) {
         const chain = pieces.slice(2 * first, 2 * last + 1).join('');
@@ -202,6 +217,15 @@ function bestSection(body, terms, index) {
   }
   return best;
 }
+// The first `length` UTF-16 units of `text`, except that a surrogate pair is never split: when the cut falls between a
+// high and a low surrogate, the high one is dropped too, so the result never ends with a lone surrogate.
+function prefixKeepingPairs(text, length) {
+  let end = Math.max(0, Math.min(length, text.length));
+  if (end > 0 && end < text.length && isHighSurrogate(text.charCodeAt(end - 1)) && isLowSurrogate(text.charCodeAt(end))) end--;
+  return text.slice(0, end);
+}
+const isHighSurrogate = (code) => code >= 0xd800 && code <= 0xdbff;
+const isLowSurrogate = (code) => code >= 0xdc00 && code <= 0xdfff;
 /** Non-string queries raise E_QUERY_INVALID; queries without terms abstain. */
 export function search(index, query, options = {}) {
   if (!index || index.version !== 1 || !Array.isArray(index.docs) || !index.postings || !index.exact || !Array.isArray(index.averages)) fail('E_INDEX_CORRUPT', 'Invalid index');
@@ -243,14 +267,14 @@ export function search(index, query, options = {}) {
     const p = index.docs[id].page, fm = p.frontmatter || {};
     const section = bestSection(p.body || '', terms, index);
     let snippet = section ? section.text : (p.body || '').trim();
-    if (snippet.length > remaining) { truncated = true; snippet = remaining > 0 ? snippet.slice(0, Math.max(0, remaining - 1)) + '…' : ''; }
+    if (snippet.length > remaining) { truncated = true; snippet = remaining > 0 ? prefixKeepingPairs(snippet, remaining - 1) + '…' : ''; }
     remaining -= snippet.length;
     return {path:p.path, title:p.title, score, snippet, stale:stale(fm,asOf), status:typeof fm.status === 'string' ? fm.status : null, heading:section?.heading ?? null, anchor:section?.anchor ?? null, headingPath:section?.headingPath ?? null};
   });
   return {results, abstained:false, reason:null, truncated};
 }
 // Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
-const FINGERPRINT_SCHEMA = 'retrieval-stat-v5';
+const FINGERPRINT_SCHEMA = 'retrieval-stat-v6';
 function statFingerprint(vaultDir) {
   const { root, files } = markdownFiles(vaultDir);
   const fingerprint = createHash('sha256').update(FINGERPRINT_SCHEMA);
