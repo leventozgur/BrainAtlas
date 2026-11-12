@@ -2,9 +2,12 @@
 // `brainatlas maintain`: read-only Wiki maintenance report. Nothing here writes to the vault.
 import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, join, posix, resolve } from 'node:path';
-import { checkPage, parseFrontmatter } from '@brainatlas/core';
+import { checkPage, loadPagesDetailed, parseFrontmatter } from '@brainatlas/core';
 
 export const KINDS = Object.freeze(['stale', 'superseded-broken', 'broken-link', 'orphan', 'index-missing', 'index-stale', 'oversized', 'update-sprawl']);
+// BA-23: `invalid-frontmatter` is reported in findings, the human output and receipt candidates. It is not a key of `counts`:
+// `counts` keeps the KINDS keys that the BA-12 acceptance contract pins.
+export const FINDING_KINDS = Object.freeze([...KINDS, 'invalid-frontmatter']);
 export const LIMITS = Object.freeze({ oversizedWords: 3000, updateSprawl: 6 });
 const SKIP_ROOT = new Set(['wiki/index.md', 'wiki/log.md']);
 // Same wikilink and Markdown link shapes as the retrieval link graph (packages/core/src/retrieval), copied because that
@@ -154,6 +157,13 @@ function resolveWikiName(index, name) {
   return { target: [...nameHits][0] };
 }
 
+/** Wiki pages whose frontmatter the retrieval index cannot parse (BA-23), as vault-relative paths. Symlinks are not followed. */
+async function unreadableWikiPages(root) {
+  const wiki = await lstat(join(root, 'wiki')).catch(() => null);
+  if (!wiki || !wiki.isDirectory() || wiki.isSymbolicLink()) return [];
+  return loadPagesDetailed(join(root, 'wiki')).skipped.map(rel => `wiki/${rel}`);
+}
+
 /**
  * Read-only maintenance scan of the Wiki under `vault`. Returns findings `{kind, path, detail}` (detail holds only counts,
  * paths, field names or short link targets, never page bodies), counts per kind, the number of content pages scanned
@@ -172,6 +182,9 @@ export async function runMaintenance(vault, { now = new Date() } = {}) {
   const content = pagePaths.filter(path => !SKIP_ROOT.has(path));
   const findings = [];
   const add = (kind, path, detail) => findings.push(finding(kind, path, detail));
+
+  // invalid-frontmatter: the same pages the retrieval index skips (BA-23). Paths only; the parser message is not kept.
+  for (const path of await unreadableWikiPages(root)) add('invalid-frontmatter', path, 'frontmatter cannot be parsed; the page is not indexed');
 
   // stale: reuse the OKF page check and keep only its expiry rule.
   for (const page of content.map(path => pages.get(path))) {
@@ -273,9 +286,9 @@ export async function runMaintenance(vault, { now = new Date() } = {}) {
     if (dated >= LIMITS.updateSprawl) add('update-sprawl', path, `${dated} dated Update sections (threshold ${LIMITS.updateSprawl})`);
   }
 
-  findings.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0) || (KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind)) || (a.detail < b.detail ? -1 : a.detail > b.detail ? 1 : 0));
+  findings.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0) || (FINDING_KINDS.indexOf(a.kind) - FINDING_KINDS.indexOf(b.kind)) || (a.detail < b.detail ? -1 : a.detail > b.detail ? 1 : 0));
   const counts = Object.fromEntries(KINDS.map(kind => [kind, 0]));
-  for (const item of findings) counts[item.kind]++;
+  for (const item of findings) if (Object.hasOwn(counts, item.kind)) counts[item.kind]++;
   return { ok: true, findings, counts, pages: content.length, durationMs: Date.now() - started };
 }
 
@@ -283,7 +296,7 @@ export async function runMaintenance(vault, { now = new Date() } = {}) {
 export function formatMaintenance(report) {
   const lines = [`BrainAtlas maintenance report (read-only): ${report.pages} pages, ${report.findings.length} findings, ${report.durationMs} ms`];
   if (!report.findings.length) lines.push('No findings.');
-  for (const kind of KINDS) {
+  for (const kind of FINDING_KINDS) {
     const items = report.findings.filter(item => item.kind === kind);
     if (!items.length) continue;
     lines.push('', `${kind} (${items.length})`);
@@ -294,7 +307,7 @@ export function formatMaintenance(report) {
 
 /** One review candidate per finding kind for the receipts queue: paths and counts only, never page content. */
 export function receiptCandidates(findings) {
-  return KINDS.flatMap(kind => {
+  return FINDING_KINDS.flatMap(kind => {
     const items = findings.filter(item => item.kind === kind);
     if (!items.length) return [];
     return [{

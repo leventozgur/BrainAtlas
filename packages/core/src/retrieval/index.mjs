@@ -141,33 +141,61 @@ function markdownFiles(vaultDir) {
   catch { fail('E_VAULT_MISSING', 'Vault unavailable'); }
   return { root, files };
 }
-/** Load only regular Markdown files; symlinks are never followed. */
-export function loadPages(vaultDir) {
+const frontmatterPattern = /^\uFEFF?---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/;
+/**
+ * One page. Throws E_INVALID_INPUT exactly where loadPages always threw: a YAML error (including duplicate keys) or an
+ * exception while converting the parsed frontmatter. Any other shape is kept as before: an opening `---` with no closing
+ * line leaves frontmatter empty and the whole text as body, and a root that is not a mapping gives empty frontmatter.
+ * loadPages keeps throwing (its contract is pinned by the acceptance tests); the searcher and maintenance skip exactly
+ * these pages through loadPagesDetailed (BA-23).
+ */
+function readPage(root, full) {
+  const raw = fs.readFileSync(full, 'utf8');
+  const match = raw.match(frontmatterPattern);
+  let frontmatter = {};
+  if (match) {
+    try {
+      const doc = parseDocument(match[1], { schema: 'yaml-1.1' });
+      if (doc.errors.length) throw doc.errors[0];
+      const obj = doc.toJS();
+      // BA-09: an unquoted YAML 1.1 timestamp is parsed to a Date that may have rolled over (2026-02-30 -> 2026-03-02).
+      // The verified record's date is taken from the author's text instead, so trust sees the real calendar value.
+      const verifiedNodes = isMap(doc.contents) ? doc.get('verified', true) : null;
+      if (isSeq(verifiedNodes) && Array.isArray(obj?.verified)) verifiedNodes.items.forEach((item, i) => {
+        const dateNode = isMap(item) ? item.get('date', true) : null;
+        const record = obj.verified[i];
+        if (isScalar(dateNode) && dateNode.type === 'PLAIN' && typeof dateNode.source === 'string' && record && typeof record === 'object' && !Array.isArray(record)) record.date = dateNode.source;
+      });
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) frontmatter = canonical(obj);
+    } catch (error) { if (error?.code === 'E_INVALID_INPUT') throw error; fail('E_INVALID_INPUT', 'Invalid frontmatter'); }
+  }
+  const body = match ? raw.slice(match[0].length) : raw;
+  const headings = [...body.matchAll(/^#{1,3}\s+(.+)$/gm)].map(m => m[1].trim());
+  return { path: path.relative(root, full).split(path.sep).join('/'), title: typeof frontmatter.title === 'string' ? frontmatter.title : (headings[0] || path.basename(full, path.extname(full))), aliases: strings(frontmatter.aliases), keywords: strings(frontmatter.keywords), headings, body, frontmatter };
+}
+/** Pages under the vault and, when `skipUnreadable`, the relative paths of pages whose frontmatter cannot be parsed. */
+function readVault(vaultDir, skipUnreadable) {
   const { root, files } = markdownFiles(vaultDir);
-  return files.map(full => {
-    const raw = fs.readFileSync(full, 'utf8');
-    const match = raw.match(/^\uFEFF?---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/);
-    let frontmatter = {};
-    if (match) {
-      try {
-        const doc = parseDocument(match[1], { schema: 'yaml-1.1' });
-        if (doc.errors.length) throw doc.errors[0];
-        const obj = doc.toJS();
-        // BA-09: an unquoted YAML 1.1 timestamp is parsed to a Date that may have rolled over (2026-02-30 -> 2026-03-02).
-        // The verified record's date is taken from the author's text instead, so trust sees the real calendar value.
-        const verifiedNodes = isMap(doc.contents) ? doc.get('verified', true) : null;
-        if (isSeq(verifiedNodes) && Array.isArray(obj?.verified)) verifiedNodes.items.forEach((item, i) => {
-          const dateNode = isMap(item) ? item.get('date', true) : null;
-          const record = obj.verified[i];
-          if (isScalar(dateNode) && dateNode.type === 'PLAIN' && typeof dateNode.source === 'string' && record && typeof record === 'object' && !Array.isArray(record)) record.date = dateNode.source;
-        });
-        if (obj && typeof obj === 'object' && !Array.isArray(obj)) frontmatter = canonical(obj);
-      } catch { fail('E_INVALID_INPUT', 'Invalid frontmatter'); }
+  const pages = [], skipped = [];
+  for (const full of files) {
+    try { pages.push(readPage(root, full)); }
+    catch (error) {
+      if (!skipUnreadable || error?.code !== 'E_INVALID_INPUT') throw error;
+      skipped.push(path.relative(root, full).split(path.sep).join('/'));
     }
-    const body = match ? raw.slice(match[0].length) : raw;
-    const headings = [...body.matchAll(/^#{1,3}\s+(.+)$/gm)].map(m => m[1].trim());
-    return { path: path.relative(root, full).split(path.sep).join('/'), title: typeof frontmatter.title === 'string' ? frontmatter.title : (headings[0] || path.basename(full, path.extname(full))), aliases: strings(frontmatter.aliases), keywords: strings(frontmatter.keywords), headings, body, frontmatter };
-  });
+  }
+  return { pages, skipped };
+}
+/** Load only regular Markdown files; symlinks are never followed. Throws E_INVALID_INPUT on a page with unparseable frontmatter. */
+export function loadPages(vaultDir) {
+  return readVault(vaultDir, false).pages;
+}
+/**
+ * Like loadPages, but a page whose frontmatter cannot be parsed is skipped (BA-23) instead of failing the whole load.
+ * `skipped` lists the vault-relative paths of those pages; they are not in `pages`. Paths only, no content or error text.
+ */
+export function loadPagesDetailed(vaultDir) {
+  return readVault(vaultDir, true);
 }
 function isSupersededPage(p) {
   const fm = p.frontmatter || {};
@@ -306,6 +334,14 @@ function trustOf(frontmatter) {
   if (fm.status === 'confirmed') return Array.isArray(fm.verified) && fm.verified.some(validVerifiedRecord) ? 'verified' : 'neutral';
   return fm.status === 'proposed' || fm.status === 'disputed' ? 'weak' : 'neutral';
 }
+// BA-26: a page with `sensitivity: personal` or `inject: never` is searchable as before, but the hook must never inject it.
+// The class is stored per document (only when true, so other documents keep the previous cache shape) and checked on cache load.
+function restrictedOf(frontmatter) {
+  const fm = frontmatter || {};
+  const sensitivity = typeof fm.sensitivity === 'string' ? fm.sensitivity.trim().toLowerCase() : '';
+  const inject = typeof fm.inject === 'string' ? fm.inject.trim().toLowerCase() : '';
+  return sensitivity === 'personal' || inject === 'never';
+}
 export function buildIndex(pages, options = {}) {
   if (!Array.isArray(pages)) fail('E_INVALID_INPUT', 'Expected pages');
   const docs = []; const postings = Object.create(null); const exact = Object.create(null); const totals = [0,0,0,0];
@@ -317,7 +353,7 @@ export function buildIndex(pages, options = {}) {
     const fields = [p.title, [...strings(p.aliases), ...strings(p.keywords)].join(' '), strings(p.headings).join(' '), typeof p.body === 'string' ? p.body : ''];
     const lengths = []; const counts = new Map(); const identifiers = new Set();
     fields.forEach((field, i) => { const ts = tokens(field); lengths.push(ts.length); totals[i] += ts.length; for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; } identifierKeys(field, identifiers); });
-    const id = docs.length; docs.push({page: p, lengths, trust: trustOf(p.frontmatter)});
+    const id = docs.length; docs.push({page: p, lengths, trust: trustOf(p.frontmatter), ...(restrictedOf(p.frontmatter) ? {restricted: true} : {})});
     for (const [term, countsByField] of counts) (postings[term] ||= []).push([id, countsByField]);
     for (const key of identifiers) (exact[key] ||= []).push(id);
   }
@@ -471,6 +507,8 @@ export function search(index, query, options = {}) {
     // Optional (BA-09): `verified` or `weak` for pages with provenance; absent for neutral pages.
     const trust = index.docs[id].trust;
     if (trust === 'verified' || trust === 'weak') result.trust = trust;
+    // Optional (BA-26): `never` for restricted pages (sensitivity personal or inject never); absent otherwise.
+    if (index.docs[id].restricted === true) result.inject = 'never';
     return result;
   });
   return {results, abstained:false, reason:null, truncated};
@@ -567,6 +605,9 @@ function decodeCachedIndex(data, key, paths) {
     if (!isPlainObject(page.frontmatter)) return null;
     // Trust (BA-09) is stored per document and must equal the class its frontmatter gives; a cache without it is rebuilt once.
     if (doc.trust !== trustOf(page.frontmatter)) return null;
+    // BA-26: the restriction flag must agree with the frontmatter; a missing or forged flag forces a rebuild.
+    if (doc.restricted !== undefined && doc.restricted !== true) return null;
+    if ((doc.restricted === true) !== restrictedOf(page.frontmatter)) return null;
     const fm = page.frontmatter;
     if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) return null;
     if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;
@@ -656,11 +697,12 @@ export function createSearcher(options) {
       if (index) { index.now = (now || new Date()).toISOString(); state = {key, index, pages: null}; return; }
     }
     catch { /* Rebuild malformed or missing cache. */ }
-    const pages = loadPages(vaultDir);
+    const { pages, skipped: unreadable } = loadPagesDetailed(vaultDir);
     const index = buildIndex(pages, {now});
     state = {key, index, pages};
     const indexed = new Set(index.docs.map(d => d.page.path));
-    const skipped = pages.map(p => p.path).filter(p => !indexed.has(p));
+    // Unreadable pages (BA-23) join the skipped list so the cache still partitions the walked file set.
+    const skipped = [...pages.map(p => p.path).filter(p => !indexed.has(p)), ...unreadable];
     try {
       fs.mkdirSync(stateDir, {recursive:true});
       atomicWriter(cache, JSON.stringify({key, index: flattenPostings(index), skipped}));
@@ -672,7 +714,7 @@ export function createSearcher(options) {
     const before = statFingerprint(vaultDir);
     if (before.key !== state.key) rebuild(before);
     if (state.pages) return;
-    const key = state.key, pages = loadPages(vaultDir);
+    const key = state.key, pages = loadPagesDetailed(vaultDir).pages;
     if (statFingerprint(vaultDir).key === key) { state.pages = pages; return; }
     state = {key: before.key, index: buildIndex(pages, {now}), pages};
   }
