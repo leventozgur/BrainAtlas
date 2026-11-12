@@ -1,0 +1,887 @@
+{
+  "version": "ba42-manifest-1",
+  "digest": "1e991a2a83de977816f17798daac21a95058ecc061f404b5259e28d4d304454f",
+  "entries": [
+    {
+      "path": "labels.json",
+      "type": "file",
+      "sha256": "7cef1d0992265bf5c3a2429b64b222d186f48de115c44c7406d83dc6f5a760d9",
+      "size": 46925
+    },
+    {
+      "path": "repo-main/cmd/server/main.go",
+      "type": "file",
+      "sha256": "e58183800bb1c16ed2bcf05ce44f1cf11cf1a700a16a87daf4bbfda89b20e55d",
+      "size": 52
+    },
+    {
+      "path": "repo-main/cmd/worker/main.go",
+      "type": "file",
+      "sha256": "a9eaf970f737c53fd3bd32c1b579598e8f22885e3acd35b669812e2857edc16e",
+      "size": 50
+    },
+    {
+      "path": "repo-main/docs/decisions/0001-queue.md",
+      "type": "file",
+      "sha256": "3057f7dfb7d4effe2a1f5001d55106959142042c53a74b037239ce51accc2586",
+      "size": 59
+    },
+    {
+      "path": "repo-main/docs/decisions/0002-cache.md",
+      "type": "file",
+      "sha256": "27db9a6f9ae1523083cd7558825b0c3e80719b6fa404726927737cac7dc59904",
+      "size": 59
+    },
+    {
+      "path": "repo-main/docs/ops/şifreleme_notu.md",
+      "type": "file",
+      "sha256": "33436bf07c6962a06d4f4beabb184919b680e6fe71c4f34d22c310c2c0fccf67",
+      "size": 58
+    },
+    {
+      "path": "repo-main/docs/ödeme/akış-notları.md",
+      "type": "file",
+      "sha256": "9455ebd03b28b964da74244e36e8e88565e95348537d20da267e57d4bfeb21d5",
+      "size": 61
+    },
+    {
+      "path": "repo-main/lib/config/loader.ts",
+      "type": "file",
+      "sha256": "a2fc06c811ee3136694b80cc6594cc6f794762fe4622c85a49a922f54ad19df0",
+      "size": 104
+    },
+    {
+      "path": "repo-main/lib/legacy-link.ts",
+      "type": "symlink",
+      "target": "util/strings.ts"
+    },
+    {
+      "path": "repo-main/lib/util/clock.ts",
+      "type": "file",
+      "sha256": "60f242e046b82b4f8329678bf8c536aecd400eeefd2d8ab9bd77c11d66b85133",
+      "size": 64
+    },
+    {
+      "path": "repo-main/lib/util/strings.ts",
+      "type": "file",
+      "sha256": "04f1016e5e32ec8629179f90f3aa50e1d11b39bc26b49d48597971b67384a6ba",
+      "size": 107
+    },
+    {
+      "path": "repo-main/ops/deploy/helm/values.yaml",
+      "type": "file",
+      "sha256": "b0d50ae1bbc2935258512898038d4c9e48d9f07bb38114a52328b735e1d537b2",
+      "size": 43
+    },
+    {
+      "path": "repo-main/ops/deploy/k8s.yaml",
+      "type": "file",
+      "sha256": "f61f5d254974e5cebd32fae75976758d8c7d55ef5ae100bbf2f942ac78728b40",
+      "size": 43
+    },
+    {
+      "path": "repo-main/ops/runbooks/restore.sh",
+      "type": "file",
+      "sha256": "96695db878445e3c62090cdcfc269b0be26aa82444f6da0258c06226351054a7",
+      "size": 29
+    },
+    {
+      "path": "repo-main/ops/runbooks/rotate_keys.sh",
+      "type": "file",
+      "sha256": "49a91fbaa3436ff5c225b0546fb038761aeafa02e552b378a23e64b6834847f6",
+      "size": 50
+    },
+    {
+      "path": "repo-main/pkg/v2/retry_policy.go",
+      "type": "file",
+      "sha256": "d18a199ca963e065b6e2c855e4ad3d06503d269c636f1a77a72b09ac64341275",
+      "size": 75
+    },
+    {
+      "path": "repo-main/services/auth/policy.py",
+      "type": "file",
+      "sha256": "83cdbedb32135a40bb1af9c1dbbfc96ca7fc491ad83bcfdcff22428c90e83c3a",
+      "size": 61
+    },
+    {
+      "path": "repo-main/services/auth/session.py",
+      "type": "file",
+      "sha256": "7f661550aa5e2ee1c70ea45f17d9247b813576827bd43ca67fd8e3bd858153ae",
+      "size": 116
+    },
+    {
+      "path": "repo-main/services/billing/invoice.ts",
+      "type": "file",
+      "sha256": "699f7f689b6fae8041dc9de369967daac0e1441fc4abe1c0b80687c636e49077",
+      "size": 145
+    },
+    {
+      "path": "repo-main/services/billing/ledger01.ts",
+      "type": "file",
+      "sha256": "6aa2152e1f2d3de69ab9c2da379524c48c4e25bff9d6db5cc0a752b6fd10cf4f",
+      "size": 109
+    },
+    {
+      "path": "repo-main/services/billing/refund/service.ts",
+      "type": "file",
+      "sha256": "c2dff49240fecf3fb5b3cb901fa32938d11fac24a29937502434c82ecb45176f",
+      "size": 111
+    },
+    {
+      "path": "repo-main/services/billing/tax_rules.ts",
+      "type": "file",
+      "sha256": "e9b8e0ddcfafc758e3b2c8f9bd91ee175861f9015aa4a5f0a3f9557280b7b066",
+      "size": 111
+    },
+    {
+      "path": "repo-main/services/notify/mailer.ts",
+      "type": "file",
+      "sha256": "b21fbecb128fe940a3823e40ed9990deda7f09b4b77a449cae630618213adbab",
+      "size": 162
+    },
+    {
+      "path": "repo-main/services/notify/sms.ts",
+      "type": "file",
+      "sha256": "86d812fdff987154e02c3b7faa3ccf93228859764b9fa7935fa91a21de17f700",
+      "size": 65
+    },
+    {
+      "path": "repo-main/services/search/indexer.go",
+      "type": "file",
+      "sha256": "872d258a4eec98f190146e55c776a11335485b09277de6fa8e98e29cc6e619ea",
+      "size": 77
+    },
+    {
+      "path": "repo-main/services/search/query.go",
+      "type": "file",
+      "sha256": "649777154b196a1eb9bbba5c2c1d82b94986a9754230f72299a5c512ff79f0a0",
+      "size": 73
+    },
+    {
+      "path": "repo-main/src/Modül/ÖzelDosya.ts",
+      "type": "file",
+      "sha256": "d6ae8d3464d974fe580554adbe6f0a540542f8eacfdaff088b79890cb3014814",
+      "size": 73
+    },
+    {
+      "path": "repo-main/tests/fixtures/sample.json",
+      "type": "file",
+      "sha256": "ce2664a0ed5a5533088a85ffd21ae67548ca26a06f92eb7a0967941df529a025",
+      "size": 39
+    },
+    {
+      "path": "vault-demo/.gitkeep",
+      "type": "file",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "vault-demo/AGENTS.md",
+      "type": "file",
+      "sha256": "024b997d20a5aae64a1618b85c576788e1fa813740d9335986be0a369d58fcaf",
+      "size": 18
+    },
+    {
+      "path": "vault-demo/EXPECTED-OKF.json",
+      "type": "file",
+      "sha256": "909c5acb4d75f0de91416f88fbbfd55ea4ee6e9fa2fdfafc10963a3636da7998",
+      "size": 1317
+    },
+    {
+      "path": "vault-demo/planning/backlog.md",
+      "type": "file",
+      "sha256": "827b02480b3a22253455fc280ca30aa1185c554d1c8ec9ed7d61f0d3662fbf48",
+      "size": 15
+    },
+    {
+      "path": "vault-demo/raw/demo-source.md",
+      "type": "file",
+      "sha256": "27962eeb7b13034a45dcdca77bea3ac48f04f40489bb882780139f4de420c0b8",
+      "size": 129
+    },
+    {
+      "path": "vault-demo/wiki/concepts/confirmed-empty.md",
+      "type": "file",
+      "sha256": "4c0fe9ca4a07f43d0b4e8c4c907805826ea0f8b79031e6173b08185b37b92b47",
+      "size": 176
+    },
+    {
+      "path": "vault-demo/wiki/concepts/sample-02.md",
+      "type": "file",
+      "sha256": "1538f8427298eacf82987e96da1e6ad4f5f4e4d20ad7ec6885041a7ac91e00db",
+      "size": 249
+    },
+    {
+      "path": "vault-demo/wiki/concepts/sample-07.md",
+      "type": "file",
+      "sha256": "41d24ba300ff76b3a4a242aacba2cf30e9b4bd121fe6c5bce1485bbaeb4f5d44",
+      "size": 249
+    },
+    {
+      "path": "vault-demo/wiki/concepts/sample-12.md",
+      "type": "file",
+      "sha256": "1703f27bb4a8fde75f6c50bd769b1bbffce4702027a5f29a5a1403760f4f4be2",
+      "size": 251
+    },
+    {
+      "path": "vault-demo/wiki/concepts/sample-17.md",
+      "type": "file",
+      "sha256": "ebd5cfeea5ff7bfbdbf7025baac692648e7f31362424137619ef61c139f55a3d",
+      "size": 251
+    },
+    {
+      "path": "vault-demo/wiki/concepts/superseded-missing.md",
+      "type": "file",
+      "sha256": "412405f38da8745ba28108fcde7844348512c954b96493b815d87450a70fa4f9",
+      "size": 204
+    },
+    {
+      "path": "vault-demo/wiki/entities/missing-status.md",
+      "type": "file",
+      "sha256": "a4da293141f8c3f9b0c235be63eee165835251572479c3d7dd99559ac1d32c90",
+      "size": 141
+    },
+    {
+      "path": "vault-demo/wiki/entities/sample-01.md",
+      "type": "file",
+      "sha256": "4f42f4cf958cf5ac58d0d0c06a9f6102316a07c59e877aa1caef2e02a80b41f6",
+      "size": 248
+    },
+    {
+      "path": "vault-demo/wiki/entities/sample-06.md",
+      "type": "file",
+      "sha256": "02fec3e523ea54c963f22bc3de7822d4d70d329d99d8a4d9e91e6d17ebae2050",
+      "size": 248
+    },
+    {
+      "path": "vault-demo/wiki/entities/sample-11.md",
+      "type": "file",
+      "sha256": "aa21abc3bbbdd0baa5f390bfd16a629bb1bda2849a68219e3f339820872364eb",
+      "size": 250
+    },
+    {
+      "path": "vault-demo/wiki/entities/sample-16.md",
+      "type": "file",
+      "sha256": "aa549bbf6c5d2ff9a4d1900305f810c0599c57226d59b7e413b06f15b1b56ab4",
+      "size": 250
+    },
+    {
+      "path": "vault-demo/wiki/entities/superseded-no-target.md",
+      "type": "file",
+      "sha256": "7bbf394a021fd2185a395ef08ee31ffc82f4d788f2b23c620ff808c900826004",
+      "size": 171
+    },
+    {
+      "path": "vault-demo/wiki/index.md",
+      "type": "file",
+      "sha256": "7418a0391217dd06cf6aee97308e085eed6fdff6854f2c085986183364d92c73",
+      "size": 13
+    },
+    {
+      "path": "vault-demo/wiki/log.md",
+      "type": "file",
+      "sha256": "0db1575834c21421a45803fec318397e77197c1fd6f04bcf627a1274c4ecd819",
+      "size": 11
+    },
+    {
+      "path": "vault-demo/wiki/queries/sample-05.md",
+      "type": "file",
+      "sha256": "e01b917756d36871602c7428a087915d42987745bae0755a200fb9e7ccdce8b7",
+      "size": 222
+    },
+    {
+      "path": "vault-demo/wiki/queries/sample-10.md",
+      "type": "file",
+      "sha256": "843a2b1c7d34c27f3800d086858236d243e4b7db8146dac84ef93f258299a7a5",
+      "size": 224
+    },
+    {
+      "path": "vault-demo/wiki/queries/sample-15.md",
+      "type": "file",
+      "sha256": "56ba31e3b93bf16750348c2fcf807e5964b50c8e4a274786d8df7f60dc5088ea",
+      "size": 224
+    },
+    {
+      "path": "vault-demo/wiki/queries/unquoted-date-trap.md",
+      "type": "file",
+      "sha256": "23ee6f0131a04cd6c934e3e7ad34fe004b2c22445632bd515d667ee36c46647e",
+      "size": 124
+    },
+    {
+      "path": "vault-demo/wiki/sources/bad-stale.md",
+      "type": "file",
+      "sha256": "15c8f7fb896eb87a378012e4583e6428629fe2667c210e42802c4b82501c9979",
+      "size": 140
+    },
+    {
+      "path": "vault-demo/wiki/sources/sample-03.md",
+      "type": "file",
+      "sha256": "b2090d6de4462eadd83e6e940b2448a74c52e37c550e3078663981d909dc7013",
+      "size": 223
+    },
+    {
+      "path": "vault-demo/wiki/sources/sample-08.md",
+      "type": "file",
+      "sha256": "621688a002253b32a114b629dd5107535c167f37e0dc1b96ed110dd80aacd952",
+      "size": 223
+    },
+    {
+      "path": "vault-demo/wiki/sources/sample-13.md",
+      "type": "file",
+      "sha256": "9b8e0ad20fe0af0302a23d9fe18f8f0be3da12b391e26ab6d7271854a1c2ddbf",
+      "size": 225
+    },
+    {
+      "path": "vault-demo/wiki/sources/sample-18.md",
+      "type": "file",
+      "sha256": "ee0750820497fcfa41de4ebbdc816564ba95cbed890866d9df7c671733c8ac60",
+      "size": 225
+    },
+    {
+      "path": "vault-demo/wiki/summaries/sample-04.md",
+      "type": "file",
+      "sha256": "a859ee5955bb8568e1bd83197c78055831e84301541bc6ea1c97bdc7194eb406",
+      "size": 224
+    },
+    {
+      "path": "vault-demo/wiki/summaries/sample-09.md",
+      "type": "file",
+      "sha256": "76b6245d5f07e172e5c46d3c24dc5b709df224a80da31811b0e19984b0d57936",
+      "size": 224
+    },
+    {
+      "path": "vault-demo/wiki/summaries/sample-14.md",
+      "type": "file",
+      "sha256": "44e7913b08fc110cb9a526641b38ad2bd3b80749cbe45de2ac1e98a0eecaf1d8",
+      "size": 226
+    },
+    {
+      "path": "vault-demo/wiki/summaries/stale-page.md",
+      "type": "file",
+      "sha256": "f165791fd1241b159e921a890944e4d22076370592dfe30769280d52153c1944",
+      "size": 138
+    },
+    {
+      "path": "vault-edge/wiki/concepts/bad-yaml.md",
+      "type": "file",
+      "sha256": "5ce81b00d89033243bd82e2b56fff14596df24aa76c5d15e0d68d05acaeb4680",
+      "size": 49
+    },
+    {
+      "path": "vault-edge/wiki/concepts/stale.md",
+      "type": "file",
+      "sha256": "1e24aac137775b23d83b0542a7ca6f2848c1ad376490a706ad7d1bf6a12283c2",
+      "size": 162
+    },
+    {
+      "path": "vault-edge/wiki/concepts/unlisted.md",
+      "type": "file",
+      "sha256": "3a360c88e62779294a12b19b184aac9874681be360b62d128b00219767d38ae2",
+      "size": 174
+    },
+    {
+      "path": "vault-edge/wiki/decisions/chain-1.md",
+      "type": "file",
+      "sha256": "c0c6bd8367169a6f36b9a128881bfad5199db6fc357a21dad5880f9d10d3c4f4",
+      "size": 204
+    },
+    {
+      "path": "vault-edge/wiki/decisions/chain-2.md",
+      "type": "file",
+      "sha256": "bab790a8de5cbfcb5be51b58ffda5d767b14be41ce3e1ae72c12e2a54c72a7a1",
+      "size": 204
+    },
+    {
+      "path": "vault-edge/wiki/decisions/chain-3.md",
+      "type": "file",
+      "sha256": "39837d54703b02388c94c45cca87b975e961dad48c54cdb79002adb45d1ea4fd",
+      "size": 159
+    },
+    {
+      "path": "vault-edge/wiki/decisions/gone.md",
+      "type": "file",
+      "sha256": "00a4fe0079da7175ce471a672e4b30e4ff3d75a9134b9532ecd766ed5ce82b9c",
+      "size": 201
+    },
+    {
+      "path": "vault-edge/wiki/decisions/loop-a.md",
+      "type": "file",
+      "sha256": "2ef47905a609fc1f287e2c6440e4871734302793b9704d536547c7d7b65b28d8",
+      "size": 202
+    },
+    {
+      "path": "vault-edge/wiki/decisions/loop-b.md",
+      "type": "file",
+      "sha256": "34bda613e44bf4a4173f5b1c5211aacc9da42a12eb7982099332adbd4167d7f3",
+      "size": 202
+    },
+    {
+      "path": "vault-edge/wiki/index.md",
+      "type": "file",
+      "sha256": "1b31d0c8c8374cf99edc4e985314eca22eb0aea3f38fee1260d1dbb9b87df023",
+      "size": 524
+    },
+    {
+      "path": "vault-edge/wiki/runbooks/broken-links.md",
+      "type": "file",
+      "sha256": "da5ba5f606f952ffebe986ba3ac830fddd4f5225a8cd28255d3fe4af70fd2bf4",
+      "size": 193
+    },
+    {
+      "path": "vault-edge/wiki/services/orphan.md",
+      "type": "file",
+      "sha256": "5ea7741a79c3810d4501050375f88250ee168a22aac9f7235d1f1d4114a8c7f8",
+      "size": 168
+    },
+    {
+      "path": "vault-edge/wiki/services/oversized.md",
+      "type": "file",
+      "sha256": "690249ea1bd6a000a4dc9eb407d5e593fa80e20afe73659a4b9f09b3f04df8f7",
+      "size": 18750
+    },
+    {
+      "path": "vault-edge/wiki/services/with-repo.md",
+      "type": "file",
+      "sha256": "1c4dc028493521bc5d894e36e6d4b067bd332e46ab3fc6696e00181e9c3689f9",
+      "size": 325
+    },
+    {
+      "path": "vault-edge/wiki/summaries/updates.md",
+      "type": "file",
+      "sha256": "5a9d100592e14ed302d9dcbf485209a44995bde034358a88059a7905a480daac",
+      "size": 263
+    },
+    {
+      "path": "vault-main/wiki/concepts/concept-01.md",
+      "type": "file",
+      "sha256": "b55a73f4651942ae90aec8051e685556038ab134656db57289da391a4bc7805b",
+      "size": 223
+    },
+    {
+      "path": "vault-main/wiki/concepts/concept-02.md",
+      "type": "file",
+      "sha256": "d4cba816735cb24c2e23b9cd10f6307a66bfe4cd8bf87914fc721c33d73e4b08",
+      "size": 223
+    },
+    {
+      "path": "vault-main/wiki/concepts/concept-03.md",
+      "type": "file",
+      "sha256": "c2c56b403723b057f20b204621ac1ed52a89830a5cde493b9fd5a06f6b2968ba",
+      "size": 223
+    },
+    {
+      "path": "vault-main/wiki/concepts/concept-04.md",
+      "type": "file",
+      "sha256": "8d80eee9f15241936e515ff9cd789f14384a9e738d7ada3ba36ca4b4f0abf854",
+      "size": 223
+    },
+    {
+      "path": "vault-main/wiki/decisions/auth-1.md",
+      "type": "file",
+      "sha256": "2de58bc2538912dc44700e2ac13747945afd19586daca5f0c4b9ae4dcdd6f2bc",
+      "size": 339
+    },
+    {
+      "path": "vault-main/wiki/decisions/auth-4.md",
+      "type": "file",
+      "sha256": "d35be205a9b95947cefa30c6df31b73c1124e8e6d7a2ac8bd5476ac682674a20",
+      "size": 281
+    },
+    {
+      "path": "vault-main/wiki/decisions/billing-1.md",
+      "type": "file",
+      "sha256": "602fa40e8704d246a688130d768263d8bad4bb52af9c601aa7585fed187cbcc1",
+      "size": 398
+    },
+    {
+      "path": "vault-main/wiki/decisions/billing-4.md",
+      "type": "file",
+      "sha256": "77491dd40abf268dd039c6d675763f3b713d51ad04a5c8e705d00ffc79dc0ecd",
+      "size": 456
+    },
+    {
+      "path": "vault-main/wiki/decisions/cmd-1.md",
+      "type": "file",
+      "sha256": "43d87082e3c8738f5a80669636a4b709d093742ca2413512714076ba70d3d44f",
+      "size": 266
+    },
+    {
+      "path": "vault-main/wiki/decisions/cmd-4.md",
+      "type": "file",
+      "sha256": "3b56268ab4544f49f6fa41c4324824a214a5d9955a1d169d156487e6e3909106",
+      "size": 253
+    },
+    {
+      "path": "vault-main/wiki/decisions/docs-1.md",
+      "type": "file",
+      "sha256": "f7143967e7f7702e6d6d7361873887e56cea1a4afadabc5483c6f785a34d6dd9",
+      "size": 274
+    },
+    {
+      "path": "vault-main/wiki/decisions/docs-4.md",
+      "type": "file",
+      "sha256": "a477228dfcf3823e34b83221a3c2d3574d64a0da2d89f62133c6b50b5e5a25a3",
+      "size": 269
+    },
+    {
+      "path": "vault-main/wiki/decisions/lib-1.md",
+      "type": "file",
+      "sha256": "7954650ab52419b651e342b022205fc11ab7f143e503fa18421d3bb8d90926a0",
+      "size": 335
+    },
+    {
+      "path": "vault-main/wiki/decisions/lib-4.md",
+      "type": "file",
+      "sha256": "d8865fa40df41451fbf6f6a65d28c82c4415069e978a5961d00383c6279db823",
+      "size": 310
+    },
+    {
+      "path": "vault-main/wiki/decisions/notify-1.md",
+      "type": "file",
+      "sha256": "9603b0e464ee3f4ef3095d4a63304d95552b77ba2f7d983b601dd348a8733ada",
+      "size": 315
+    },
+    {
+      "path": "vault-main/wiki/decisions/notify-4.md",
+      "type": "file",
+      "sha256": "cb06aa98bcfb75f14864ec7c6c2bbc55a932e808422b3d8f1329815edc51caa8",
+      "size": 287
+    },
+    {
+      "path": "vault-main/wiki/decisions/ops-1.md",
+      "type": "file",
+      "sha256": "7413a4365ef624841366371ada518691d31aae86f080ad32098f2659a04bda19",
+      "size": 272
+    },
+    {
+      "path": "vault-main/wiki/decisions/ops-4.md",
+      "type": "file",
+      "sha256": "10dddfb6aaf2170b541a2f7a0b2b75dc1890bea36e67da82e4988e826f09d584",
+      "size": 283
+    },
+    {
+      "path": "vault-main/wiki/decisions/pkg-1.md",
+      "type": "file",
+      "sha256": "7b37b22a11cc68e1d0a1116f6a4797bd50bc734ef7a161a4233e94cb370c6c83",
+      "size": 295
+    },
+    {
+      "path": "vault-main/wiki/decisions/pkg-4.md",
+      "type": "file",
+      "sha256": "4726c6dbdf4069706e1f91f68a55212ec790da8cd8bce87b855bbf13ff6fc288",
+      "size": 274
+    },
+    {
+      "path": "vault-main/wiki/decisions/search-1.md",
+      "type": "file",
+      "sha256": "9c5d22e3949939cf680791f70a514be2942cc953b3afaec6926921cf14804b8b",
+      "size": 307
+    },
+    {
+      "path": "vault-main/wiki/decisions/search-4.md",
+      "type": "file",
+      "sha256": "4264bf327556d4d348263a6aece8f2fb3f4710cb307f51ea5d4243626cd804ac",
+      "size": 282
+    },
+    {
+      "path": "vault-main/wiki/decisions/src-1.md",
+      "type": "file",
+      "sha256": "bf2c6bcff2cd7ebd99752182b0a7e748f359e3a716130e9ae943ffdb1455f395",
+      "size": 284
+    },
+    {
+      "path": "vault-main/wiki/decisions/src-4.md",
+      "type": "file",
+      "sha256": "ccc01ff037a8759195b0894b85b8c462ba83f782aa9d7c9a985353010ed1faba",
+      "size": 228
+    },
+    {
+      "path": "vault-main/wiki/index.md",
+      "type": "file",
+      "sha256": "df7eac37562ffdf486818d8e0d1824f3eaad5a044ebacc044d03bffbffd28c77",
+      "size": 2921
+    },
+    {
+      "path": "vault-main/wiki/log.md",
+      "type": "file",
+      "sha256": "127f1e230e3f4b7e38d92042ffd52c56bd4d8f10cb42c04437ea5a3c8506d29d",
+      "size": 58
+    },
+    {
+      "path": "vault-main/wiki/runbooks/auth-0.md",
+      "type": "file",
+      "sha256": "64a4eb94afa0505fdcea80b52ad322772aeacd7c923a8743b874675ad1c4bc5b",
+      "size": 316
+    },
+    {
+      "path": "vault-main/wiki/runbooks/auth-3.md",
+      "type": "file",
+      "sha256": "489f1a3dcfd20aaf556097b8c70ac9a698aec32bac1d737d57c7aa8bb4e34c46",
+      "size": 258
+    },
+    {
+      "path": "vault-main/wiki/runbooks/billing-0.md",
+      "type": "file",
+      "sha256": "7e7c6db6ae969f7012dec99da0aa401cd8216055ee77fd19fff08cbf20fad5cd",
+      "size": 404
+    },
+    {
+      "path": "vault-main/wiki/runbooks/billing-3.md",
+      "type": "file",
+      "sha256": "7c9e748829e93f6ebd0d7a8bbbf7185652235416a9bbe56a5fc5d0a9027fa562",
+      "size": 391
+    },
+    {
+      "path": "vault-main/wiki/runbooks/cmd-0.md",
+      "type": "file",
+      "sha256": "2c8751dc588429c430852200cf55deee89c7b32b2303890ed31eaff3ffc0d221",
+      "size": 270
+    },
+    {
+      "path": "vault-main/wiki/runbooks/cmd-3.md",
+      "type": "file",
+      "sha256": "f2b75bb8c5bf92e9895a912ebca75537e841a2c0e94bbb6d14aade67ac4f08d8",
+      "size": 246
+    },
+    {
+      "path": "vault-main/wiki/runbooks/docs-0.md",
+      "type": "file",
+      "sha256": "d9eccdaf60ea92d88b61833d1e134efd526b4e95444dcaae0a806b8b82ddba76",
+      "size": 240
+    },
+    {
+      "path": "vault-main/wiki/runbooks/docs-3.md",
+      "type": "file",
+      "sha256": "2e50c35b46637e3d06a345b23256d8363bcfe7dcceab4873dd2c42f5b9a8ea21",
+      "size": 239
+    },
+    {
+      "path": "vault-main/wiki/runbooks/edge-malformed.md",
+      "type": "file",
+      "sha256": "50555af709abc0ac8b9bc5a9f836738efd081b5ce3aaaac1d9b1744b9e1f206e",
+      "size": 664
+    },
+    {
+      "path": "vault-main/wiki/runbooks/edge-symbols.md",
+      "type": "file",
+      "sha256": "d33d4336ca532a43c2953f4bc7066cfe022f71a76d04767f4e1ea97eddf88d66",
+      "size": 453
+    },
+    {
+      "path": "vault-main/wiki/runbooks/lib-0.md",
+      "type": "file",
+      "sha256": "1771e8015ee301b2df26d6b5e1464a162e0bdede3020e105d2236d50411471b0",
+      "size": 351
+    },
+    {
+      "path": "vault-main/wiki/runbooks/lib-3.md",
+      "type": "file",
+      "sha256": "1c307cbd99ff78f0e450a4f76a23905e788f7729a4944dd5b348251a45804c8e",
+      "size": 299
+    },
+    {
+      "path": "vault-main/wiki/runbooks/notify-0.md",
+      "type": "file",
+      "sha256": "7ec699ac5e6016736e37f0b1e5aba99a98e3371bf3bf16aaed15856cbaf01a02",
+      "size": 312
+    },
+    {
+      "path": "vault-main/wiki/runbooks/notify-3.md",
+      "type": "file",
+      "sha256": "9f08c01ee8d97bd6211c936dbee2ff049461ee09ca8ed5864bc167d0cbb65980",
+      "size": 258
+    },
+    {
+      "path": "vault-main/wiki/runbooks/ops-0.md",
+      "type": "file",
+      "sha256": "0e4061b8295f2d860bfffa156fb0dd6d94bf617e36dbf2750c16265145327e1b",
+      "size": 268
+    },
+    {
+      "path": "vault-main/wiki/runbooks/ops-3.md",
+      "type": "file",
+      "sha256": "37cf00767aefbdfd4038ec653d0ebe302e44076d60e6db5972d36959459d9ae5",
+      "size": 238
+    },
+    {
+      "path": "vault-main/wiki/runbooks/pkg-0.md",
+      "type": "file",
+      "sha256": "65be9635fff90f71ee8787a2de4d467884b9910eed7a81932724433d7e73dbb5",
+      "size": 233
+    },
+    {
+      "path": "vault-main/wiki/runbooks/pkg-3.md",
+      "type": "file",
+      "sha256": "2ef7dde560a40bbb15a5b6a7561bb5a1579cf47dd589b01995d0d6b74b4f2313",
+      "size": 233
+    },
+    {
+      "path": "vault-main/wiki/runbooks/search-0.md",
+      "type": "file",
+      "sha256": "3dce03ecec9aee07209cb3b4daa7f235c17b6f82dfbfb444191b25b190d11b44",
+      "size": 285
+    },
+    {
+      "path": "vault-main/wiki/runbooks/search-3.md",
+      "type": "file",
+      "sha256": "e33bf963f615c363f0120965c5dee12c6c2aef93f62032e74d86045219cbc2d2",
+      "size": 308
+    },
+    {
+      "path": "vault-main/wiki/runbooks/src-0.md",
+      "type": "file",
+      "sha256": "173e7c19a6150c67415f08529b82023470967b11d933622094c84aed2e7ab37e",
+      "size": 235
+    },
+    {
+      "path": "vault-main/wiki/runbooks/src-3.md",
+      "type": "file",
+      "sha256": "12f85be2b68c281fc47ba4473fa29ac3405877deeb7843aee373394ddb096bb6",
+      "size": 257
+    },
+    {
+      "path": "vault-main/wiki/services/auth-2.md",
+      "type": "file",
+      "sha256": "4af0189401955fe12a7510573894e4cbd7bc878a81f1e7384b1784289a2e6787",
+      "size": 296
+    },
+    {
+      "path": "vault-main/wiki/services/auth-5.md",
+      "type": "file",
+      "sha256": "8e86c650986ed7137bde356be7acb659ffb307002145724269d5f702305688c0",
+      "size": 299
+    },
+    {
+      "path": "vault-main/wiki/services/billing-2.md",
+      "type": "file",
+      "sha256": "7e9ce05e152a15f1309edc31678c7b5d5385448b6b97bd7ff49e4889e3d3b87d",
+      "size": 401
+    },
+    {
+      "path": "vault-main/wiki/services/billing-5.md",
+      "type": "file",
+      "sha256": "70c47942ac48275cb260a4ee8300ce5b13c9cfe2c2f4ab3031a2ebd9ab42c981",
+      "size": 441
+    },
+    {
+      "path": "vault-main/wiki/services/cmd-2.md",
+      "type": "file",
+      "sha256": "8a849623485f875dbb0bfaae53121d9370ca7ce0c1d538be7f4f086dcfff50b5",
+      "size": 272
+    },
+    {
+      "path": "vault-main/wiki/services/cmd-5.md",
+      "type": "file",
+      "sha256": "2e9e6310bc1e089de7f4389d9ec1c645fed57e6997a56884bf8d6714ceeb6185",
+      "size": 289
+    },
+    {
+      "path": "vault-main/wiki/services/docs-2.md",
+      "type": "file",
+      "sha256": "5c223de0e68277c611069c1e3082da29701156239181c46380e175660478c29f",
+      "size": 266
+    },
+    {
+      "path": "vault-main/wiki/services/docs-5.md",
+      "type": "file",
+      "sha256": "fefa3746486da5eb69d2ade7e8aad7df7268003d5bb92df45f2a4816c322dd57",
+      "size": 257
+    },
+    {
+      "path": "vault-main/wiki/services/edge-dedupe.md",
+      "type": "file",
+      "sha256": "57d00418c49c4774a813b3701ea23e977b1cd2563c7ca0d2ab0baaa5dce677de",
+      "size": 358
+    },
+    {
+      "path": "vault-main/wiki/services/edge-nonarray.md",
+      "type": "file",
+      "sha256": "457fb12a8f63c09456b365fbc0d85af459cc05c1f7d12ba6d9f81bd47de0e9c0",
+      "size": 305
+    },
+    {
+      "path": "vault-main/wiki/services/edge-sources.md",
+      "type": "file",
+      "sha256": "ab71114b466ea9e4d88388600b58b09e4ecd9c056144a25ef32999ab38136eec",
+      "size": 735
+    },
+    {
+      "path": "vault-main/wiki/services/edge-valid.md",
+      "type": "file",
+      "sha256": "b88b6a5173d995e023aa79964ad78183da882010da54cb498221601a6bce1e3c",
+      "size": 323
+    },
+    {
+      "path": "vault-main/wiki/services/lib-2.md",
+      "type": "file",
+      "sha256": "a448227f2b33ad8ee882fb6d7e47afffbc52a0b9b1052589eb650b38f7f6fdc4",
+      "size": 343
+    },
+    {
+      "path": "vault-main/wiki/services/lib-5.md",
+      "type": "file",
+      "sha256": "b1b476d0b433ae3b5284da477a47d129878b4b9826947718db24b82fe97f1f3f",
+      "size": 291
+    },
+    {
+      "path": "vault-main/wiki/services/notify-2.md",
+      "type": "file",
+      "sha256": "854e0f8485731f003537e12ab8acae3203379a10241ac8e0f60c69f49f241762",
+      "size": 318
+    },
+    {
+      "path": "vault-main/wiki/services/notify-5.md",
+      "type": "file",
+      "sha256": "97a2da3e345fe628b285e30e5353c093c19fa7bcbd411d60a6240987fe0e50f1",
+      "size": 292
+    },
+    {
+      "path": "vault-main/wiki/services/ops-2.md",
+      "type": "file",
+      "sha256": "47e324bcc478a2d0ee01396dd5c705c24076f68d531231945323fac9dc126705",
+      "size": 254
+    },
+    {
+      "path": "vault-main/wiki/services/ops-5.md",
+      "type": "file",
+      "sha256": "6d73cc40f14923fd9a0bb40e417f6a2bd9dc5fbc0fcc9b1193ee2c49a1d0e40c",
+      "size": 261
+    },
+    {
+      "path": "vault-main/wiki/services/pkg-2.md",
+      "type": "file",
+      "sha256": "8f8ffabac6c4684adf02fef9e2677de97382bf03a5bc9c5d6d6c3d1c84ff913c",
+      "size": 277
+    },
+    {
+      "path": "vault-main/wiki/services/pkg-5.md",
+      "type": "file",
+      "sha256": "c0899da0389becdf70f7964602843eeb0aff6492c4d5d634cdee2ee4c207550c",
+      "size": 226
+    },
+    {
+      "path": "vault-main/wiki/services/search-2.md",
+      "type": "file",
+      "sha256": "6f231ffd8ba5c0e21357c76af0453d6640ce273c87bb2fc74173fb9a6df5d799",
+      "size": 326
+    },
+    {
+      "path": "vault-main/wiki/services/search-5.md",
+      "type": "file",
+      "sha256": "889362ae7adc0ca1bd4aee0ac967638bfe8e55c3e30d74d6ea62c3daeb0b5b94",
+      "size": 298
+    },
+    {
+      "path": "vault-main/wiki/services/src-2.md",
+      "type": "file",
+      "sha256": "875da0031fad3b322c67348a5bbb51b46958fe5b4c099fc2fd75d9b71653cdea",
+      "size": 297
+    },
+    {
+      "path": "vault-main/wiki/services/src-5.md",
+      "type": "file",
+      "sha256": "68b4f4005a81b5bf7a2b839de8dc758edd4cb439ce84138065d0408fcf250ea5",
+      "size": 226
+    }
+  ]
+}
