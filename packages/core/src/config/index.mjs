@@ -14,7 +14,7 @@ export const CONFIG_SCHEMA = {
     vault: { type: 'object', required: ['path'], properties: { path: { type: 'string', minLength: 1 } }, additionalProperties: false },
     modules: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true }, agents: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
     scope: { type: 'string', enum: ['global','vault'] },
-    retrieval: { type: 'object', required: ['budgetChars','abstainThreshold'], properties: { budgetChars: { type: 'integer', minimum: 1 }, abstainThreshold: { type: 'number', minimum: 0, maximum: 1 } }, additionalProperties: false },
+    retrieval: { type: 'object', required: ['budgetChars','abstainThreshold'], properties: { budgetChars: { type: 'integer', minimum: 1 }, abstainThreshold: { type: 'number', minimum: 0, maximum: 1 }, exclude: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 200 }, uniqueItems: true } }, additionalProperties: false },
     hooks: { type: 'object', required: ['mode','deadlineMs'], properties: { mode: { type: 'string', enum: ['normal','economic','manual'] }, deadlineMs: { type: 'integer', minimum: 1 } }, additionalProperties: false },
     safety: { type: 'object', required: ['secretFilter','extraDenyGlobs'], properties: {
       secretFilter: { const: true }, extraDenyGlobs: { type: 'array', items: { type: 'string' } },
@@ -88,6 +88,13 @@ export function validateConfig(obj) {
     try { const url = new URL(obj.semantic.baseUrl); if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || (!obj.semantic.allowRemote && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))) throw new Error(); }
     catch { errors.push(error('semantic.baseUrl', 'E_SEMANTIC_PROVIDER', 'Semantic provider configuration is invalid.')); }
   }
+  // BA-29: retrieval.exclude patterns are relative to the search root; an absolute, drive-letter, backslash or `..` pattern is refused.
+  const exclude = obj?.retrieval?.exclude;
+  if (Array.isArray(exclude)) exclude.forEach((pattern, index) => {
+    if (typeof pattern === 'string' && (pattern.startsWith('/') || /^[A-Za-z]:/.test(pattern) || pattern.includes('\\') || pattern.split('/').includes('..'))) {
+      errors.push(error(`retrieval.exclude[${index}]`, 'E_PATH_INVALID', 'Retrieval exclude patterns must be relative to the search root.'));
+    }
+  });
   const allow = obj?.safety?.allow;
   if (Array.isArray(allow)) {
     const seen = new Set();

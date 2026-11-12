@@ -269,7 +269,11 @@ export function createServer(options) {
       chmodSync(stateDir, 0o700);
     }
   }
-  let searcher = core.createSearcher({ vaultDir: wikiDir, stateDir });
+  // BA-29: the MCP search root stays wiki/ (as before: a vault without wiki/ is E_VAULT_MISSING). Only the exclusion list is new:
+  // root-level navigation and policy pages are not returned, unless retrieval.exclude says otherwise.
+  const excludeRules = config.retrieval?.exclude ?? core.DEFAULT_EXCLUDE_WIKI;
+  const isExcluded = (rel) => core.isExcludedPath(rel, excludeRules);
+  let searcher = core.createSearcher({ vaultDir: wikiDir, stateDir, exclude: excludeRules });
   const semanticEnabled = config.semantic?.enabled === true && config.profile !== 'lite' && (config.modules?.includes('*') || config.modules?.includes('semantic'));
   let semanticModulePromise;
   let background = null;
@@ -462,9 +466,11 @@ export function createServer(options) {
       if (!index || emptyIndexWithPages) { scheduleUpdate(false); return fallback(emptyIndexWithPages || !backgroundFailed ? 'index-missing' : 'provider-error'); }
       if (index.providerFingerprint !== provider.fingerprint || index.dims !== provider.dims) { scheduleUpdate(false); return fallback('fingerprint-mismatch'); }
       const snapshot = searcher.snapshot();
-      const results = await module.searchHybrid({ query, pages: snapshot.pages, lexicalIndex: snapshot.index, entries: index.entries, provider, limit: count, indexMeta: index, mode: settings.mode, minSemanticScore: settings.minScore, abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
+      // BA-29: excluded pages are removed from the semantic candidates and, as a guard, from the hybrid results.
+      const results = await module.searchHybrid({ query, pages: snapshot.pages, lexicalIndex: snapshot.index, entries: index.entries.filter(entry => !isExcluded(entry.path)), provider, limit: count, indexMeta: index, mode: settings.mode, minSemanticScore: settings.minScore, abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
       if (results.fallbackReason) return fallback(results.fallbackReason);
       if (results.abstained) return { ...lexical, semantic: { used: true }, mode: settings.mode };
+      const visible = results.filter(item => !isExcluded(item.path));
       // BA-24: section fields use the core's anchor rule (diacritics, `-N` collisions, astral headings). Order: (1) the
       // lexical section of this query, when the page is in the lexical answer; (2) the core's section for the query on
       // the page's own body (bestSection with the query terms, the same choice the core makes for that page); (3) the
@@ -487,7 +493,7 @@ export function createServer(options) {
       // Order is the module's order (RRF in rrf mode, cosine then lexical rank in semantic-primary); `score` is the
       // value of that ordering: rrfScore, or semanticScore in semantic-primary (0 for lexical-only hits, which the module places last).
       const semanticPrimary = settings.mode === 'semantic-primary';
-      const normalized = results.map(item => {
+      const normalized = visible.map(item => {
         const original = answer.results.find(row => row.path === item.path);
         const section = sections.get(item.path) ?? pageSection(item, queryTerms) ?? chunkSection(item);
         const chunkHeading = item.headingPath?.split(' > ').at(-1) || null;
