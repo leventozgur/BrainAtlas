@@ -2,12 +2,13 @@
 // BA-42 independent blind acceptance tests: hypotheses 1-3 and spec-edge cases for `brainatlas maintain --repo`.
 // Written from the brief only; the developer's ba42 tests were not read. Fixtures come from make-fixtures.mjs and are
 // frozen by the pinned digest below. Main (the parent of the git common dir) is run read-only from its checkout.
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cp, lstat, mkdir, readdir, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -15,7 +16,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = resolve(HERE, '../../..');
 const MAIN = dirname(resolve(DEV, execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: DEV, encoding: 'utf8' }).trim()));
 const FIX = join(HERE, 'fixtures');
-const SCRATCH = join(HERE, '.tmp', 'run');
+// Scratch lives outside the repository (os.tmpdir) and is removed after the file's tests, so no run leaves files behind.
+const SCRATCH = await mkdtemp(join(tmpdir(), 'ba42-blind-'));
+after(async () => { await rm(SCRATCH, { recursive: true, force: true }); });
 const PINNED_DIGEST = '1e991a2a83de977816f17798daac21a95058ecc061f404b5259e28d4d304454f';
 const VAULT = { main: join(FIX, 'vault-main'), demo: join(FIX, 'vault-demo'), edge: join(FIX, 'vault-edge') };
 const REPO = join(FIX, 'repo-main');
@@ -28,7 +31,6 @@ const LABELS = JSON.parse(await readFile(join(FIX, 'labels.json'), 'utf8'));
 const RESULTS = {};
 
 // ---- Scratch: an empty HOME and a git shim that logs every git invocation of the product, then runs the real git.
-await rm(SCRATCH, { recursive: true, force: true });
 await mkdir(HOME_DIR, { recursive: true });
 await mkdir(SHIM_DIR, { recursive: true });
 const REAL_GIT = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
