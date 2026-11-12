@@ -56,9 +56,10 @@ async function hookContext(f, prompt, session) {
 }
 
 test('prompt hook answers from the healthy pages when one page has broken frontmatter', async t => {
-  const f = fixture(t, { 'good.md': GOOD, 'broken.md': BROKEN });
+  // BA-29: the pages live under wiki/ (the hook's search root when wiki/ exists); the block header is vault-relative.
+  const f = fixture(t, { 'wiki/good.md': GOOD, 'wiki/broken.md': BROKEN });
   const context = await hookContext(f, 'zephyr', 'ba23-hook-skip');
-  assert.match(context, /Good \(good\.md\)/);
+  assert.match(context, /Good \(wiki\/good\.md\)/);
   assert.doesNotMatch(context, /broken\.md/);
 });
 

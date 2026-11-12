@@ -34,6 +34,10 @@ A page with `sensitivity: personal` or `inject: never` in its frontmatter is sti
 
 Trust changes only the order of pages that already match the question. It never decides whether an answer is given: a question with no good match still gets no answer, and a weak page still answers a question when it is the best match. A corpus whose pages have no provenance fields gets exactly the same results as before.
 
+## Search scope
+
+BrainAtlas searches the `wiki/` folder of a vault when it exists, otherwise the whole vault. Navigation and policy files at that top level (`index.md`, `log.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`) are not returned as answers; they remain readable with the read tools. In a vault without `wiki/`, the folders `planning/`, `archive/`, `inbox/` and `raw/` at the top level are also left out. To change this, set `retrieval.exclude` to your own list of patterns (for example `["drafts/**"]`), or to `[]` to return every page as before.
+
 ## Abstention threshold
 
 The default `retrieval.abstainThreshold` is 0.35. Scores are compressed with a square root, making this default meaningful for natural-language queries. If you set a custom threshold, use the square root of its previous value to preserve equivalent strictness: for example, an old value of 0.5 maps to ≈0.71; an old value of 0.25 maps to 0.5.

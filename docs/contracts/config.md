@@ -55,6 +55,10 @@ Do not log configuration values. Reject unknown or escaping paths and retain a m
 
 All listed functions are exported by `packages/core/src/config/index.mjs` and `packages/core/src/paths/index.mjs`; this is contract version 1.
 
+## Optional retrieval exclusions (BA-29)
+
+`retrieval.exclude` is an optional array of non-empty glob patterns relative to the search root (`<vault>/wiki` when present, otherwise the vault root). Absolute paths, drive letters, backslashes and `..` segments are refused with `E_PATH_INVALID`. When the key is absent the default list of `searchScope` applies; an array replaces the default and `[]` gives every page. The key is not written by `defaultConfig`, so existing configuration files stay byte-identical.
+
 ## Optional semantic configuration
 
 Version 1 accepts an optional `semantic` object. Defaults are `enabled:false`, `baseUrl:http://127.0.0.1:11434`, `model:embeddinggemma:300m-qat-q4_0`, `dims:768`, `queryPrefix:"task: search result | query: "`, `documentPrefix:"title: none | text: "`, `minScore:0.45`, `mode:semantic-primary`, `timeoutMs:5000`, `indexTimeoutMs:120000`, `indexBatchSize:32`, and `allowRemote:false`. Mode may also be `rrf`. Dimensions and timeouts are positive integers; `indexBatchSize` is an integer from 1 to 64. `timeoutMs` applies to queries; `indexTimeoutMs` applies to each indexing request; cosine scores are between -1 and 1. The score threshold is model-specific and must be recalibrated for a different model. Non-loopback providers require explicit `allowRemote:true`; invalid endpoints report `E_SEMANTIC_PROVIDER` without disclosing values.

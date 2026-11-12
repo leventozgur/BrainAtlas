@@ -169,12 +169,17 @@ export async function runHook(input = {}) {
       const query = prompt.replace(/(^|\s)(?:\/sb|@sb)(?=\s|$)/gi, '$1').trim();
       const knowledge = /\?|\b(?:what|why|how|where|when|which|who|explain|remember|knowledge|decision|nasıl|nedir|neden|hangi|nerede)\b/iu.test(query);
       if (query && (mode === 'normal' || trigger || (mode === 'economic' && knowledge))) {
+        // BA-29: the same search scope as the MCP server (wiki root when present) and its root-level exclusions.
+        const { searchScope, isExcludedPath } = await import('../../core/src/retrieval/index.mjs');
+        const scope = searchScope(config.vault.path, config.retrieval?.exclude);
         const dir = await stateSubdirectory(stateDir, 'hooks');
         const file = join(dir, `${client}-${hash(session)}.json`);
         const seen = session ? await readState(file) : [];
         // No cumulative snippet budget here: the hook packs every result itself under its own cap.
-        const hit = await retrieve({vaultDir:config.vault.path,stateDir,now}, query, {limit:20,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start), semanticStep(config, env));
-        const found = hit.results; semanticState = hit.semantic;
+        const hit = await retrieve({vaultDir:scope.root,stateDir,now,exclude:scope.exclude}, query, {limit:20,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start), semanticStep(config, env));
+        // Paths leave the hook vault-relative, as before (`wiki/x.md`); only the set of searched pages changed.
+        // The semantic step can name excluded pages (its entries come from the whole snapshot), so the same rule filters here.
+        const found = hit.results.filter(item => !isExcludedPath(item.path, scope.exclude)).map(item => ({...item, path: scope.prefix + item.path})); semanticState = hit.semantic;
         if (Date.now()-start >= deadline) throw new Error('deadline');
         const unseen = found.filter(item => !seen.includes(item.path));
         // BA-26: restricted results are removed before packing, so they are never injected and never marked as shown.

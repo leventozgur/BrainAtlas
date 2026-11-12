@@ -126,9 +126,28 @@ function canonical(x) {
   if (x && typeof x === 'object') return Object.fromEntries(Object.entries(x).map(([k,v]) => [k, canonical(v)]));
   return x;
 }
+// BA-29: exclusion globs relative to the search root. `**` crosses `/`, `*` and `?` do not, everything else is literal.
+function globRegExp(glob) {
+  let source = '';
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === '*' && glob[i + 1] === '*') {
+      if (glob[i + 2] === '/') { source += '(?:.*/)?'; i += 2; } else { source += '.*'; i += 1; }
+    } else if (c === '*') source += '[^/]*';
+    else if (c === '?') source += '[^/]';
+    else source += c.replace(/[.+^${}()|[\]\\]/gu, '\\$&');
+  }
+  return new RegExp(`^${source}$`, 'u');
+}
+function excludeMatcher(exclude) {
+  if (!exclude.length) return () => false;
+  const patterns = exclude.map(globRegExp);
+  return rel => patterns.some(pattern => pattern.test(rel));
+}
 /** Regular Markdown files under the vault, in loadPages order; symlinks are never followed. Reads no file contents. */
 function markdownFiles(vaultDir) {
   const files = [];
+  let root;
   function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name, 'en'))) {
       const full = path.join(dir, entry.name);
@@ -136,7 +155,6 @@ function markdownFiles(vaultDir) {
       else if (entry.isFile() && /\.md$/i.test(entry.name)) files.push(full);
     }
   }
-  let root;
   try { root = fs.realpathSync(vaultDir); if (!fs.statSync(root).isDirectory()) throw new Error(); walk(root); }
   catch { fail('E_VAULT_MISSING', 'Vault unavailable'); }
   return { root, files };
@@ -344,6 +362,7 @@ function restrictedOf(frontmatter) {
 }
 export function buildIndex(pages, options = {}) {
   if (!Array.isArray(pages)) fail('E_INVALID_INPUT', 'Expected pages');
+  const excluded = excludeMatcher(options.exclude ?? []);
   const docs = []; const postings = Object.create(null); const exact = Object.create(null); const totals = [0,0,0,0];
   const replaced = resolveSupersession(pages);
   for (const p of pages) {
@@ -353,7 +372,7 @@ export function buildIndex(pages, options = {}) {
     const fields = [p.title, [...strings(p.aliases), ...strings(p.keywords)].join(' '), strings(p.headings).join(' '), typeof p.body === 'string' ? p.body : ''];
     const lengths = []; const counts = new Map(); const identifiers = new Set();
     fields.forEach((field, i) => { const ts = tokens(field); lengths.push(ts.length); totals[i] += ts.length; for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; } identifierKeys(field, identifiers); });
-    const id = docs.length; docs.push({page: p, lengths, trust: trustOf(p.frontmatter), ...(restrictedOf(p.frontmatter) ? {restricted: true} : {})});
+    const id = docs.length; docs.push({page: p, lengths, trust: trustOf(p.frontmatter), ...(restrictedOf(p.frontmatter) ? {restricted: true} : {}), ...(excluded(p.path) ? {excluded: true} : {})});
     for (const [term, countsByField] of counts) (postings[term] ||= []).push([id, countsByField]);
     for (const key of identifiers) (exact[key] ||= []).push(id);
   }
@@ -486,7 +505,10 @@ export function search(index, query, options = {}) {
   const best = lexical.reduce((top, entry) => Math.max(top, entry.score), -Infinity);
   if (!lexical.length || best < threshold) return { results: [], abstained: true, reason: lexical.length ? 'below_threshold' : 'no_match', truncated: false };
   // Trust (BA-09) scales each lexical score after that decision. Neutral pages keep factor 1, so their scores and order are unchanged.
-  const trusted = lexical.map(entry => ({...entry, score: entry.score * (trustFactor[index.docs[entry.id].trust] ?? 1)})).sort(rankOrder(index.docs));
+  // BA-29: the abstention decision above uses the best score of every page, as before. Excluded pages are then removed from the
+  // results only, so a query whose best match is excluded is not abstained on: it returns no results (abstained: false).
+  const trusted = lexical.filter(entry => !index.docs[entry.id].excluded).map(entry => ({...entry, score: entry.score * (trustFactor[index.docs[entry.id].trust] ?? 1)})).sort(rankOrder(index.docs));
+  if (!trusted.length) return {results: [], abstained: false, reason: null, truncated: false};
   const linked = expandByLinks(trusted, index);
   let remaining = Math.floor(budget), truncated = false;
   const results = linked.slice(0,limit).map(({id,score,via}) => {
@@ -529,6 +551,7 @@ function expandByLinks(ranked, index) {
   const boosted = new Map();
   for (const source of ranked.slice(0, LINK_TOP)) {
     for (const neighbour of links[source.id] || []) {
+      if (index.docs[neighbour].excluded) continue;
       // BA-09: the link value carries the neighbour's own trust factor, so a weak neighbour cannot escape its penalty by a link.
       const value = LINK_ALPHA * source.score * (trustFactor[index.docs[neighbour].trust] ?? 1);
       if (value > (boosted.get(neighbour) ?? -Infinity)) boosted.set(neighbour, value);
@@ -544,7 +567,7 @@ function expandByLinks(ranked, index) {
   return [...merged.values()].sort(rankOrder(index.docs));
 }
 function relatedPaths(index, id) {
-  const neighbours = (index.links || {})[id] || [];
+  const neighbours = ((index.links || {})[id] || []).filter(n => !index.docs[n].excluded);
   return neighbours.map(n => index.docs[n].page.path).sort().slice(0, RELATED_MAX);
 }
 // Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
@@ -552,9 +575,11 @@ function relatedPaths(index, id) {
 // (`links`) and the BA-09 per-document `trust` are detected by decodeCachedIndex, which rejects any cache without them, so
 // an older cache is rebuilt once.
 const FINGERPRINT_SCHEMA = 'retrieval-stat-v6';
-function statFingerprint(vaultDir) {
+// BA-29: a non-empty exclusion list is part of the key, so a changed rule rebuilds the cache. An empty list adds nothing.
+function statFingerprint(vaultDir, exclude = []) {
   const { root, files } = markdownFiles(vaultDir);
   const fingerprint = createHash('sha256').update(FINGERPRINT_SCHEMA);
+  if (exclude.length) fingerprint.update(`\nexclude\0${JSON.stringify(exclude)}\n`);
   const paths = new Set();
   for (const full of files) {
     const rel = path.relative(root, full).split(path.sep).join('/');
@@ -591,7 +616,8 @@ const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArr
 // non-negative safe integers no larger than the field length they count, and averages equal buildIndex's value.
 // Page contents are not re-read: this is structural validation, not content verification (see the threat model in
 // docs/contracts/retrieval.md).
-function decodeCachedIndex(data, key, paths) {
+function decodeCachedIndex(data, key, paths, exclude = []) {
+  const excluded = excludeMatcher(exclude);
   if (!isPlainObject(data) || data.key !== key) return null;
   const index = data.index, skipped = data.skipped;
   if (!isPlainObject(index) || index.version !== 1 || !Array.isArray(index.docs) || !isPlainObject(index.postings) || !Array.isArray(index.averages) || !isStringArray(skipped)) return null;
@@ -608,6 +634,9 @@ function decodeCachedIndex(data, key, paths) {
     // BA-26: the restriction flag must agree with the frontmatter; a missing or forged flag forces a rebuild.
     if (doc.restricted !== undefined && doc.restricted !== true) return null;
     if ((doc.restricted === true) !== restrictedOf(page.frontmatter)) return null;
+    // BA-29: the excluded flag must agree with the exclusion rule that the cache key was computed with.
+    if (doc.excluded !== undefined && doc.excluded !== true) return null;
+    if ((doc.excluded === true) !== excluded(page.path)) return null;
     const fm = page.frontmatter;
     if (String(fm.status || '').toLowerCase() === 'superseded' || Object.hasOwn(fm, 'superseded_by')) return null;
     if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;
@@ -681,24 +710,54 @@ function decodeCachedIndex(data, key, paths) {
   for (const key of Object.keys(links)) for (const n of links[key]) if (!links[n] || !links[n].includes(Number(key))) return null;
   return {version: 1, docs, postings, exact, averages: index.averages, now: index.now, supersedes, links};
 }
+/** BA-29: whether a search-root-relative path is excluded by the rule (the hook also filters its semantic hits with it). */
+export function isExcludedPath(relPath, exclude = []) { return excludeMatcher(exclude)(relPath); }
+// BA-29: the default exclusions. At a wiki root only its own navigation and agent-policy files are left out; a vault root
+// (no wiki directory, the legacy layout) also leaves out its planning, archive, inbox and raw folders. Nested files are not affected.
+export const DEFAULT_EXCLUDE_WIKI = Object.freeze(['index.md', 'log.md', 'AGENTS.md', 'CLAUDE.md', 'GEMINI.md']);
+export const DEFAULT_EXCLUDE_VAULT = Object.freeze([...DEFAULT_EXCLUDE_WIKI, 'planning/**', 'archive/**', 'inbox/**', 'raw/**']);
+/**
+ * The search root and exclusion list shared by the hook and the MCP server (BA-29). The root is `<vault>/wiki` when that is a
+ * directory whose real path lies inside the vault (a symlink that leaves the vault is not followed); otherwise the vault itself.
+ * `prefix` is the root's vault-relative folder with a trailing `/` (`wiki/`), or '' for the vault root: the hook reports paths
+ * vault-relative with it. `configured` is `retrieval.exclude`: absent (undefined) gives the default for the root kind, an array
+ * replaces it, and an empty array restores the legacy scope with every page.
+ * @param {string} vaultDir
+ * @param {string[]} [configured]
+ * @returns {{root: string, exclude: string[], prefix: string}}
+ */
+export function searchScope(vaultDir, configured) {
+  const wiki = path.join(vaultDir, 'wiki');
+  let wikiRoot = false;
+  try {
+    const vaultReal = fs.realpathSync(vaultDir), wikiReal = fs.realpathSync(wiki);
+    wikiRoot = fs.statSync(wikiReal).isDirectory() && wikiReal.startsWith(vaultReal + path.sep);
+  } catch { wikiRoot = false; }
+  const fallback = wikiRoot ? DEFAULT_EXCLUDE_WIKI : DEFAULT_EXCLUDE_VAULT;
+  return { root: wikiRoot ? wiki : vaultDir, exclude: [...(configured ?? fallback)], prefix: wikiRoot ? 'wiki/' : '' };
+}
 /**
  * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
  * `snapshot()` returns pages and lexical index that describe the same vault state.
  */
 export function createSearcher(options) {
-  const {vaultDir, stateDir, now, atomicWriter = atomicWriteFileSync} = options || {};
+  const {vaultDir, stateDir, now, atomicWriter = atomicWriteFileSync, exclude} = options || {};
   if (typeof vaultDir !== 'string' || typeof stateDir !== 'string') fail('E_INVALID_INPUT', 'Expected vault and state directories');
+  // BA-29: `exclude` lists glob patterns (relative to vaultDir) whose pages are never returned as results; they stay in the index and its statistics. Absent or empty: every page is returned.
+  if (exclude !== undefined && (!Array.isArray(exclude) || exclude.some(p => typeof p !== 'string' || !p))) fail('E_INVALID_INPUT', 'Expected exclude patterns');
+  const rules = exclude ?? [];
+  const fingerprintOf = () => statFingerprint(vaultDir, rules);
   const cache = path.join(stateDir, 'retrieval-index.json');
   // pages is null when the index came from the cache; snapshot() then loads them on demand.
   let state = null;
   function rebuild({key, paths}) {
     try {
-      const index = decodeCachedIndex(JSON.parse(fs.readFileSync(cache, 'utf8')), key, paths);
+      const index = decodeCachedIndex(JSON.parse(fs.readFileSync(cache, 'utf8')), key, paths, rules);
       if (index) { index.now = (now || new Date()).toISOString(); state = {key, index, pages: null}; return; }
     }
     catch { /* Rebuild malformed or missing cache. */ }
     const { pages, skipped: unreadable } = loadPagesDetailed(vaultDir);
-    const index = buildIndex(pages, {now});
+    const index = buildIndex(pages, {now, exclude: rules});
     state = {key, index, pages};
     const indexed = new Set(index.docs.map(d => d.page.path));
     // Unreadable pages (BA-23) join the skipped list so the cache still partitions the walked file set.
@@ -711,19 +770,19 @@ export function createSearcher(options) {
   // Loads pages for a cache-hit state. They must describe the same vault state as the index: if the vault changed
   // while they were read, pages and index are rebuilt together from that one read, under the pre-read key.
   function loadPagesForSnapshot() {
-    const before = statFingerprint(vaultDir);
+    const before = fingerprintOf();
     if (before.key !== state.key) rebuild(before);
     if (state.pages) return;
     const key = state.key, pages = loadPagesDetailed(vaultDir).pages;
-    if (statFingerprint(vaultDir).key === key) { state.pages = pages; return; }
-    state = {key: before.key, index: buildIndex(pages, {now}), pages};
+    if (fingerprintOf().key === key) { state.pages = pages; return; }
+    state = {key: before.key, index: buildIndex(pages, {now, exclude: rules}), pages};
   }
-  rebuild(statFingerprint(vaultDir));
+  rebuild(fingerprintOf());
   return {
     search: (q,opts) => search(state.index,q,opts),
-    refresh: async () => { rebuild(statFingerprint(vaultDir)); },
+    refresh: async () => { rebuild(fingerprintOf()); },
     refreshIfChanged() {
-      const current = statFingerprint(vaultDir);
+      const current = fingerprintOf();
       if (current.key === state.key) return false;
       rebuild(current);
       return true;
