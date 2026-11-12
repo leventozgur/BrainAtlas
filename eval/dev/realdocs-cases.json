@@ -1,0 +1,597 @@
+[
+  {
+    "id": "rd-01",
+    "category": "user",
+    "query": "Hangi ağırlıklı alan sıralama yöntemi kullanılıyor?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-02",
+    "category": "user",
+    "query": "Varsayılan abstainThreshold değeri nedir?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-03",
+    "category": "user",
+    "query": "Eşik değeri 0,5 olan eski ayar karekök ölçeğinde hangi değere denk gelir?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-04",
+    "category": "user",
+    "query": "Sonuçta heading alanı yoksa snippet nereden başlar?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-05",
+    "category": "user",
+    "query": "Anchor değerleri hangi biçimde üretilir?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-06",
+    "category": "user",
+    "query": "Superseded sayfalar arama sonucunda döndürülür mü?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-07",
+    "category": "user",
+    "query": "E_WIDGET_TIMEOUT gibi tanımlayıcı içermeyen bir sorguda hangi abstain nedeni dönüyor?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-08",
+    "category": "user",
+    "query": "11.11.2025 gibi tarihler tanımlayıcı sayılır mı?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-09",
+    "category": "user",
+    "query": "Bağlantılı sonuçlarda related alanı en fazla kaç yol listeler?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-10",
+    "category": "user",
+    "query": "Bağlantı üzerinden eklenen sonuç hangi alanla işaretlenir?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-11",
+    "category": "user",
+    "query": "Bir sayfa doğrulanmış sayılmak için hangi status ve kayda ihtiyaç duyar?",
+    "relevant": [
+      "user/retrieval.md",
+      "user/okf.md"
+    ]
+  },
+  {
+    "id": "rd-12",
+    "category": "user",
+    "query": "Zayıf sayfa prompt hook çıktısında nasıl gösterilir?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-13",
+    "category": "user",
+    "query": "Güven bilgisi bir soruya cevap verilip verilmeyeceğini değiştirir mi?",
+    "relevant": [
+      "user/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-14",
+    "category": "user",
+    "query": "Semantic retrieval varsayılan olarak açık mı?",
+    "relevant": [
+      "user/semantic.md"
+    ]
+  },
+  {
+    "id": "rd-15",
+    "category": "user",
+    "query": "Semantic kurulumunda varsayılan model nedir ve yaklaşık boyutu ne kadar?",
+    "relevant": [
+      "user/semantic.md"
+    ]
+  },
+  {
+    "id": "rd-16",
+    "category": "user",
+    "query": "semanticSetup komutu Ollama'yı kurar veya başlatır mı?",
+    "relevant": [
+      "user/semantic.md"
+    ]
+  },
+  {
+    "id": "rd-17",
+    "category": "user",
+    "query": "Semantic indeks dosyası nerede tutulur?",
+    "relevant": [
+      "user/semantic.md"
+    ]
+  },
+  {
+    "id": "rd-18",
+    "category": "user",
+    "query": "Hook semantik adımının bütçesi kaç milisaniye?",
+    "relevant": [
+      "user/semantic.md"
+    ]
+  },
+  {
+    "id": "rd-19",
+    "category": "user",
+    "query": "Semantic indeks yoksa ya da başka bir modelle kurulduysa hook ne yapar?",
+    "relevant": [
+      "user/semantic.md"
+    ]
+  },
+  {
+    "id": "rd-20",
+    "category": "user",
+    "query": "Varsayılan minScore değeri kaç ve hangi modele göre kalibre edilmiş?",
+    "relevant": [
+      "user/semantic.md"
+    ]
+  },
+  {
+    "id": "rd-21",
+    "category": "user",
+    "query": "Yavaş bir makinede indeksleme isteği için varsayılan zaman aşımı ne kadar?",
+    "relevant": [
+      "user/semantic.md"
+    ]
+  },
+  {
+    "id": "rd-22",
+    "category": "user",
+    "query": "Kesintiye uğrayan indeksleme nasıl devam ettirilir?",
+    "relevant": [
+      "user/semantic.md",
+      "user/troubleshooting.md"
+    ]
+  },
+  {
+    "id": "rd-23",
+    "category": "user",
+    "query": "Git sync için remote hangi yapılandırma anahtarıyla ayarlanır?",
+    "relevant": [
+      "user/sync.md"
+    ]
+  },
+  {
+    "id": "rd-24",
+    "category": "user",
+    "query": "Git sync SSH üzerinde hangi modda çalışır?",
+    "relevant": [
+      "user/sync.md"
+    ]
+  },
+  {
+    "id": "rd-25",
+    "category": "user",
+    "query": "Silme işlemleri sync ile otomatik yayılır mı?",
+    "relevant": [
+      "user/sync.md"
+    ]
+  },
+  {
+    "id": "rd-26",
+    "category": "user",
+    "query": "Git sync için varsayılan dal hangisi?",
+    "relevant": [
+      "user/sync.md"
+    ]
+  },
+  {
+    "id": "rd-27",
+    "category": "user",
+    "query": "Klasör taşıma yöntemi üretim verisi için güvenilir mi?",
+    "relevant": [
+      "user/sync.md"
+    ]
+  },
+  {
+    "id": "rd-28",
+    "category": "user",
+    "query": "BrainAtlas kurulumu için en düşük Node.js sürümü nedir?",
+    "relevant": [
+      "user/install.md",
+      "user/troubleshooting.md"
+    ]
+  },
+  {
+    "id": "rd-29",
+    "category": "user",
+    "query": "Dağıtım klasöründeki SHA256SUMS dosyası hangi komutla imzalanır?",
+    "relevant": [
+      "user/install.md"
+    ]
+  },
+  {
+    "id": "rd-30",
+    "category": "user",
+    "query": "Kurulumda vault yolu nasıl seçilir?",
+    "relevant": [
+      "user/install.md"
+    ]
+  },
+  {
+    "id": "rd-31",
+    "category": "user",
+    "query": "Önceki sürüme dönmek için hangi komut kullanılır?",
+    "relevant": [
+      "user/install.md",
+      "user/troubleshooting.md"
+    ]
+  },
+  {
+    "id": "rd-32",
+    "category": "user",
+    "query": "Uninstall sırasında yapılandırılmış vault silinir mi?",
+    "relevant": [
+      "user/install.md"
+    ]
+  },
+  {
+    "id": "rd-33",
+    "category": "user",
+    "query": "Symlink üzerinden çözülen kurulum kökü varsayılan olarak kabul edilir mi?",
+    "relevant": [
+      "user/install.md"
+    ]
+  },
+  {
+    "id": "rd-34",
+    "category": "user",
+    "query": "brainatlas maintain komutu sayfaları değiştirir mi?",
+    "relevant": [
+      "user/maintain.md"
+    ]
+  },
+  {
+    "id": "rd-35",
+    "category": "user",
+    "query": "Kaç tarihli Güncelleme başlığı update-sprawl bulgusu üretir?",
+    "relevant": [
+      "user/maintain.md"
+    ]
+  },
+  {
+    "id": "rd-36",
+    "category": "user",
+    "query": "Bir Wiki sayfası kaç kelimeyi aşarsa oversized bulgusu çıkar?",
+    "relevant": [
+      "user/maintain.md"
+    ]
+  },
+  {
+    "id": "rd-37",
+    "category": "user",
+    "query": "Maintain taramasında sembolik bağlantılar izlenir mi?",
+    "relevant": [
+      "user/maintain.md"
+    ]
+  },
+  {
+    "id": "rd-38",
+    "category": "user",
+    "query": "stale_after alanı hangi biçimleri kabul eder?",
+    "relevant": [
+      "user/okf.md"
+    ]
+  },
+  {
+    "id": "rd-39",
+    "category": "user",
+    "query": "Tarih değerleri neden tırnak içinde yazılmalı?",
+    "relevant": [
+      "user/okf.md"
+    ]
+  },
+  {
+    "id": "rd-40",
+    "category": "user",
+    "query": "Claude Code entegrasyonu hangi hook olaylarını kullanır?",
+    "relevant": [
+      "user/agents.md"
+    ]
+  },
+  {
+    "id": "rd-41",
+    "category": "user",
+    "query": "Kiro istem tetikleyicisinin adı doğrulanmış mı?",
+    "relevant": [
+      "user/agents.md",
+      "user/troubleshooting.md"
+    ]
+  },
+  {
+    "id": "rd-42",
+    "category": "user",
+    "query": "Gemini CLI entegrasyonu hangi hook'ları ekler?",
+    "relevant": [
+      "user/agents.md"
+    ]
+  },
+  {
+    "id": "rd-43",
+    "category": "user",
+    "query": "Oturum başlangıç özeti en fazla kaç karakter olabilir?",
+    "relevant": [
+      "user/agents.md",
+      "contracts/hook-io.md"
+    ]
+  },
+  {
+    "id": "rd-44",
+    "category": "contracts",
+    "query": "Prompt hook çıktısı en fazla kaç karakter olabilir?",
+    "relevant": [
+      "contracts/hook-io.md"
+    ]
+  },
+  {
+    "id": "rd-45",
+    "category": "contracts",
+    "query": "Hook zaman sınırı kaç milisaniye ve aşıldığında çıktı ne olur?",
+    "relevant": [
+      "contracts/hook-io.md"
+    ]
+  },
+  {
+    "id": "rd-46",
+    "category": "contracts",
+    "query": "Hook metriklerinde istem metni tutulur mu?",
+    "relevant": [
+      "contracts/hook-io.md"
+    ]
+  },
+  {
+    "id": "rd-47",
+    "category": "contracts",
+    "query": "Gizli bilgi filtresi kapatılabilir mi?",
+    "relevant": [
+      "contracts/safety.md",
+      "user/troubleshooting.md"
+    ]
+  },
+  {
+    "id": "rd-48",
+    "category": "contracts",
+    "query": "Güvenlik filtresi bulgularında eşleşen değer döndürülür mü?",
+    "relevant": [
+      "contracts/safety.md"
+    ]
+  },
+  {
+    "id": "rd-49",
+    "category": "contracts",
+    "query": "Bir yazma gizli içerik nedeniyle reddedilirse hangi hata kodu döner?",
+    "relevant": [
+      "contracts/safety.md"
+    ]
+  },
+  {
+    "id": "rd-50",
+    "category": "contracts",
+    "query": "Gizli bilgi filtresi sentetik testte kaç pozitif örneği tespit etti?",
+    "relevant": [
+      "contracts/safety.md"
+    ]
+  },
+  {
+    "id": "rd-51",
+    "category": "contracts",
+    "query": "Yapılandırmada telemetri varsayılan olarak açık mı?",
+    "relevant": [
+      "contracts/config.md"
+    ]
+  },
+  {
+    "id": "rd-52",
+    "category": "contracts",
+    "query": "Semantic yapılandırmasında allowRemote varsayılanı nedir?",
+    "relevant": [
+      "contracts/config.md"
+    ]
+  },
+  {
+    "id": "rd-53",
+    "category": "contracts",
+    "query": "Varsayılan semantik sağlayıcı base URL adresi nedir?",
+    "relevant": [
+      "contracts/config.md"
+    ]
+  },
+  {
+    "id": "rd-54",
+    "category": "adr",
+    "query": "Rust neden ilk worker çalışma zamanı olarak reddedildi?",
+    "relevant": [
+      "adr/0002-language-runtime.md"
+    ]
+  },
+  {
+    "id": "rd-55",
+    "category": "adr",
+    "query": "Hook p95 hangi değeri aşarsa çalışma zamanı kararı yeniden açılmalı?",
+    "relevant": [
+      "adr/0002-language-runtime.md"
+    ]
+  },
+  {
+    "id": "rd-56",
+    "category": "adr",
+    "query": "Vendor edilen llmwiki çekirdeğinin sürümü nedir?",
+    "relevant": [
+      "adr/0003-vendor-llmwiki-core.md"
+    ]
+  },
+  {
+    "id": "rd-57",
+    "category": "adr",
+    "query": "BM25F puanlamasının sahibi kim?",
+    "relevant": [
+      "adr/0003-vendor-llmwiki-core.md"
+    ]
+  },
+  {
+    "id": "rd-58",
+    "category": "adr",
+    "query": "MCP araçlarının çekirdek eşlemesi hangi ADR'de anlatılıyor?",
+    "relevant": [
+      "adr/0004-mcp-core-usage.md"
+    ]
+  },
+  {
+    "id": "rd-59",
+    "category": "audit",
+    "query": "Bağımlılık lisans envanteri hangi denetim dosyasında?",
+    "relevant": [
+      "audit/dependencies.md"
+    ]
+  },
+  {
+    "id": "rd-60",
+    "category": "audit",
+    "query": "THIRD_PARTY_NOTICES kontrolü hangi vendor paketini kapsıyor?",
+    "relevant": [
+      "audit/notices-check.md"
+    ]
+  },
+  {
+    "id": "rd-61",
+    "category": "contracts",
+    "query": "Retrieval sözleşmesinde abstain nedenleri hangi başlık altında listelenir?",
+    "relevant": [
+      "contracts/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-62",
+    "category": "contracts",
+    "query": "Okunamayan frontmatter desteği hangi BA eklentisiyle geldi?",
+    "relevant": [
+      "contracts/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-63",
+    "category": "contracts",
+    "query": "Bağlantılı sayfalar grafiği hangi BA eklentisiyle sözleşmeye girdi?",
+    "relevant": [
+      "contracts/retrieval.md"
+    ]
+  },
+  {
+    "id": "rd-u01",
+    "category": "unanswerable",
+    "query": "Windows üzerinde kurulum adımları nelerdir?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u02",
+    "category": "unanswerable",
+    "query": "Kubernetes üzerinde nasıl ölçeklenir?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u03",
+    "category": "unanswerable",
+    "query": "Kullanıcı başına aylık fiyat nedir?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u04",
+    "category": "unanswerable",
+    "query": "Mobil uygulama ne zaman yayımlanacak?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u05",
+    "category": "unanswerable",
+    "query": "Kullanıcı şifreleri nasıl saklanır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u06",
+    "category": "unanswerable",
+    "query": "Hangi bulut sağlayıcısında barındırılır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u07",
+    "category": "unanswerable",
+    "query": "Azure üzerinde yedekleme nasıl yapılır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u08",
+    "category": "unanswerable",
+    "query": "PostgreSQL bağlantı havuzu ayarı nedir?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u09",
+    "category": "unanswerable",
+    "query": "Docker imajı hangi tabanı kullanıyor?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u10",
+    "category": "unanswerable",
+    "query": "Gece yedeklemesi saat kaçta alınır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u11",
+    "category": "unanswerable",
+    "query": "Lisans metni hangi yıl yayımlandı?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "rd-u12",
+    "category": "unanswerable",
+    "query": "Ürün lansmanı için hangi tarih planlandı?",
+    "relevant": [],
+    "abstain": true
+  }
+]

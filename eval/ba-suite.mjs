@@ -6,11 +6,21 @@ import { spawnSync } from 'node:child_process';
 import { runEval } from './run-eval.mjs';
 import { DEFAULT_NOW, runHookCases } from './hook-eval.mjs';
 import { summarizeHookRecords } from './lib/hook-records.mjs';
+import { runGrepBaseline } from './grep-baseline.mjs';
 import { runScaleBench } from './scale-bench.mjs';
 
 const evalRoot = fileURLToPath(new URL('.', import.meta.url));
 const SET_THRESHOLD = 0.35;
 const HOLDOUT_SETS = {identifier: 'identifier-cases.json', currentState: 'current-state-cases.json', multihop: 'multihop-cases.json', nearNegative: 'near-negative-cases.json'};
+// BA-27 sets. Dev: corpus under eval/ (realDocs: the repository docs/ directory, read in place) and eval/dev/<cases>.
+// Holdout: <holdout>/<key>/corpus and <holdout>/<key>/cases.json; a missing <holdout>/<key> directory gives null.
+const NEW_SETS = {
+  hookRealistic: {corpus: 'corpus-hook-realistic', cases: 'hook-realistic-cases.json'},
+  longpage: {corpus: 'corpus-longpage', cases: 'longpage-cases.json'},
+  temporal: {corpus: 'corpus-temporal', cases: 'temporal-cases.json'},
+  poison: {corpus: 'corpus-poison', cases: 'poison-cases.json'},
+  realDocs: {corpus: null, cases: 'realdocs-cases.json'},
+};
 
 function gitCommit(cwd) {
   const result = spawnSync('git', ['rev-parse', '--short', 'HEAD'], {cwd, encoding: 'utf8'});
@@ -18,12 +28,15 @@ function gitCommit(cwd) {
   return result.status === 0 && /^[0-9a-f]{4,40}$/u.test(value) ? value : 'unknown';
 }
 
+const readCases = (file) => JSON.parse(readFileSync(file, 'utf8'));
+
 /**
- * Run every BM25 set, the hook-level evaluation and optionally the scale benchmark; return one JSON-ready object.
- * `sourceRoot` is the eval directory (defaults to this one). `holdoutDir` replaces the four new sets and their corpus only.
- * @param {{sourceRoot?:string,holdoutDir?:string,scale?:boolean,now?:Date,scaleOptions?:object}} options
+ * Run every BM25 set, the hook-level evaluation, the grep baseline and optionally the scale benchmark; return one JSON-ready object.
+ * `sourceRoot` is the eval directory (defaults to this one). `holdoutDir` replaces the four historical new sets and the BA-27 sets
+ * (see NEW_SETS) and their corpora only. `docsDir` is the corpus of realDocs in dev mode.
+ * @param {{sourceRoot?:string,holdoutDir?:string,scale?:boolean,now?:Date,scaleOptions?:object,docsDir?:string}} options
  */
-export async function runBaSuite({sourceRoot = evalRoot, holdoutDir, scale = false, now = new Date(DEFAULT_NOW), scaleOptions = {}} = {}) {
+export async function runBaSuite({sourceRoot = evalRoot, holdoutDir, scale = false, now = new Date(DEFAULT_NOW), scaleOptions = {}, docsDir = resolve(evalRoot, '..', 'docs')} = {}) {
   const root = resolve(sourceRoot);
   const corpus = (name) => resolve(root, name);
   const dev = (name) => resolve(root, 'dev', name);
@@ -33,22 +46,68 @@ export async function runBaSuite({sourceRoot = evalRoot, holdoutDir, scale = fal
   const bm25 = (corpusDir, casesFile) => runEval({corpusDir, casesFile, now, repeat: 1, abstainThreshold: SET_THRESHOLD, extended: true});
 
   const naturalSource = {corpusDir: corpus('corpus-natural'), casesFile: dev('natural-cases.json')};
-  const readCases = (file) => JSON.parse(readFileSync(file, 'utf8'));
+  const xlingSource = {corpusDir: corpus('corpus-natural'), casesFile: dev('xling-cases.json')};
+  const sources = {
+    cases: {corpusDir: corpus('corpus'), casesFile: dev('cases.json')},
+    natural: naturalSource,
+    xling: xlingSource,
+    identifier: newSetSources.identifier,
+    currentState: newSetSources.currentState,
+    multihop: newSetSources.multihop,
+    nearNegative: newSetSources.nearNegative,
+  };
+  // BA-27 sources: null when a holdout directory for that set is absent.
+  for (const [key, spec] of Object.entries(NEW_SETS)) {
+    if (!holdoutDir) sources[key] = {corpusDir: spec.corpus === null ? resolve(docsDir) : corpus(spec.corpus), casesFile: dev(spec.cases)};
+    else sources[key] = existsSync(resolve(holdoutDir, key)) ? {corpusDir: resolve(holdoutDir, key, 'corpus'), casesFile: resolve(holdoutDir, key, 'cases.json')} : null;
+  }
+  const requireFile = (source) => { if (!existsSync(source.casesFile)) throw new Error('Missing case file'); };
+
+  // The historical hook summary covers the natural set and the four historical new sets only; BA-27 sets have their own summaries.
   const hookRecords = [];
   for (const source of [naturalSource, ...Object.values(newSetSources)]) {
-    if (!existsSync(source.casesFile)) throw new Error('Missing case file');
+    requireFile(source);
     hookRecords.push(...await runHookCases({corpusDir: source.corpusDir, cases: readCases(source.casesFile), mode: 'normal', abstainThreshold: SET_THRESHOLD, now}));
   }
+  const bm25Set = (key) => {
+    const source = sources[key];
+    requireFile(source);
+    return bm25(source.corpusDir, source.casesFile);
+  };
+  const newSet = async (key) => {
+    const source = sources[key];
+    if (!source) return null;
+    requireFile(source);
+    const cases = readCases(source.casesFile);
+    const records = await runHookCases({corpusDir: source.corpusDir, cases, mode: 'normal', abstainThreshold: SET_THRESHOLD, now});
+    return {n: cases.length, bm25: bm25(source.corpusDir, source.casesFile), hook: summarizeHookRecords(records)};
+  };
+  const grepSet = (key) => {
+    const source = sources[key];
+    if (!source) return null;
+    requireFile(source);
+    return runGrepBaseline({corpusDir: source.corpusDir, casesFile: source.casesFile});
+  };
+
+  const newResults = {};
+  for (const key of Object.keys(NEW_SETS)) newResults[key] = await newSet(key);
+  const grepKeys = ['cases', 'natural', 'xling', 'identifier', 'currentState', 'multihop', 'nearNegative', ...Object.keys(NEW_SETS)];
 
   const suite = {
-    cases: bm25(corpus('corpus'), dev('cases.json')),
-    natural: bm25(naturalSource.corpusDir, naturalSource.casesFile),
-    xling: bm25(corpus('corpus-natural'), dev('xling-cases.json')),
-    identifier: bm25(newSetSources.identifier.corpusDir, newSetSources.identifier.casesFile),
-    currentState: bm25(newSetSources.currentState.corpusDir, newSetSources.currentState.casesFile),
-    multihop: bm25(newSetSources.multihop.corpusDir, newSetSources.multihop.casesFile),
-    nearNegative: bm25(newSetSources.nearNegative.corpusDir, newSetSources.nearNegative.casesFile),
+    cases: bm25Set('cases'),
+    natural: bm25Set('natural'),
+    xling: bm25Set('xling'),
+    identifier: bm25Set('identifier'),
+    currentState: bm25Set('currentState'),
+    multihop: bm25Set('multihop'),
+    nearNegative: bm25Set('nearNegative'),
     hook: summarizeHookRecords(hookRecords),
+    hookRealistic: newResults.hookRealistic,
+    longpage: newResults.longpage,
+    temporal: newResults.temporal,
+    poison: newResults.poison,
+    realDocs: newResults.realDocs,
+    grepBaseline: Object.fromEntries(grepKeys.map((key) => [key, grepSet(key)])),
     scale: scale ? await runScaleBench({now, ...scaleOptions}) : null,
     meta: {commit: gitCommit(evalRoot), date: now.toISOString().slice(0, 10), node: process.version, holdout: Boolean(holdoutDir)},
   };

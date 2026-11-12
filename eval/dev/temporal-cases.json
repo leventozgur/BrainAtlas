@@ -1,0 +1,244 @@
+[
+  {
+    "id": "tm-01",
+    "kind": "knowledge",
+    "category": "payments",
+    "query": "geçen hafta ödeme tarafında ne değişti?",
+    "relevant": [
+      "payments/provider.md"
+    ],
+    "expectedHeading": "2026-11-05 Sağlayıcı B geçişi tamamlandı"
+  },
+  {
+    "id": "tm-02",
+    "kind": "knowledge",
+    "category": "payments",
+    "query": "Ekim'de hangi ödeme sağlayıcısına geçtik?",
+    "relevant": [
+      "payments/provider.md"
+    ],
+    "expectedHeading": "2026-10-14 Sağlayıcı B'ye geçiş kararı"
+  },
+  {
+    "id": "tm-03",
+    "kind": "knowledge",
+    "category": "payments",
+    "query": "son karar neydi?",
+    "relevant": [
+      "payments/provider.md"
+    ],
+    "expectedHeading": "2026-10-14 Sağlayıcı B'ye geçiş kararı"
+  },
+  {
+    "id": "tm-04",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "geçen ay yedekleme hatası neydi?",
+    "relevant": [
+      "ops/incidents.md"
+    ],
+    "expectedHeading": "2026-10-30 Gece yedekleme hatası"
+  },
+  {
+    "id": "tm-05",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "last month yedekleme hatası neydi?",
+    "relevant": [
+      "ops/incidents.md"
+    ],
+    "expectedHeading": "2026-10-30 Gece yedekleme hatası"
+  },
+  {
+    "id": "tm-06",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "dün önbellek kesintisi oldu mu?",
+    "relevant": [
+      "ops/incidents.md"
+    ],
+    "expectedHeading": "2026-11-09 Önbellek kontrolü (kesinti yok)"
+  },
+  {
+    "id": "tm-07",
+    "kind": "knowledge",
+    "category": "team",
+    "query": "2026-10 ayında işe alım planı neydi?",
+    "relevant": [
+      "team/hiring.md"
+    ],
+    "expectedHeading": "2026-10-09 Pozisyon sayısı ikiye indirildi (güncel)"
+  },
+  {
+    "id": "tm-08",
+    "kind": "knowledge",
+    "category": "team",
+    "query": "2026-08 işe alım planı nedir?",
+    "relevant": [
+      "team/hiring.md"
+    ],
+    "expectedHeading": "2026-08-01 Üç backend pozisyonu"
+  },
+  {
+    "id": "tm-09",
+    "kind": "knowledge",
+    "category": "product",
+    "query": "çevrimdışı mod ne durumda?",
+    "relevant": [
+      "product/roadmap.md"
+    ],
+    "expectedHeading": "2026-10-02 Çevrimdışı mod ertelendi"
+  },
+  {
+    "id": "tm-10",
+    "kind": "knowledge",
+    "category": "product",
+    "query": "geçen ay çevrimdışı mod için ne karar verildi?",
+    "relevant": [
+      "product/roadmap.md"
+    ],
+    "expectedHeading": "2026-10-02 Çevrimdışı mod ertelendi"
+  },
+  {
+    "id": "tm-11",
+    "kind": "knowledge",
+    "category": "product",
+    "query": "arama iyileştirmesinin güncel durumu nedir?",
+    "relevant": [
+      "product/roadmap.md"
+    ],
+    "expectedHeading": "Güncel durum: arama iyileştirmesi"
+  },
+  {
+    "id": "tm-12",
+    "kind": "knowledge",
+    "category": "payments",
+    "query": "Sağlayıcı A faturalama sorunu ne zamandı?",
+    "relevant": [
+      "payments/provider.md"
+    ],
+    "expectedHeading": "2026-07-19 Sağlayıcı A faturalama sorunu"
+  },
+  {
+    "id": "tm-13",
+    "kind": "knowledge",
+    "category": "payments",
+    "query": "ilk ödeme sağlayıcısı seçimi ne zaman yapıldı?",
+    "relevant": [
+      "payments/provider.md"
+    ],
+    "expectedHeading": "2026-02-03 İlk sağlayıcı seçimi"
+  },
+  {
+    "id": "tm-14",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "bu hafta bir olay oldu mu?",
+    "relevant": [
+      "ops/incidents.md"
+    ]
+  },
+  {
+    "id": "tm-15",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "Ekim'de yedekleme hatası oldu mu?",
+    "relevant": [
+      "ops/incidents.md"
+    ],
+    "expectedHeading": "2026-10-30 Gece yedekleme hatası"
+  },
+  {
+    "id": "tm-16",
+    "kind": "knowledge",
+    "category": "payments",
+    "query": "latest payment provider decision?",
+    "relevant": [
+      "payments/provider.md"
+    ],
+    "expectedHeading": "2026-10-14 Sağlayıcı B'ye geçiş kararı"
+  },
+  {
+    "id": "tm-17",
+    "kind": "knowledge",
+    "category": "payments",
+    "query": "what happened to the payment provider in July?",
+    "relevant": [
+      "payments/provider.md"
+    ],
+    "expectedHeading": "2026-07-19 Sağlayıcı A faturalama sorunu"
+  },
+  {
+    "id": "tm-18",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "2026-09 ayında kuyrukta ne oldu?",
+    "relevant": [
+      "ops/incidents.md"
+    ],
+    "expectedHeading": "2026-09-22 Kuyruk gecikmesi"
+  },
+  {
+    "id": "tm-19",
+    "kind": "knowledge",
+    "category": "product",
+    "query": "Nisan 2026 çevrimdışı mod planı neydi?",
+    "relevant": [
+      "product/roadmap.md"
+    ],
+    "expectedHeading": "2026-04-10 Çevrimdışı mod planı"
+  },
+  {
+    "id": "tm-20",
+    "kind": "knowledge",
+    "category": "none",
+    "query": "ödeme sisteminde dün değişiklik oldu mu?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "tm-21",
+    "kind": "knowledge",
+    "category": "none",
+    "query": "geçen hafta işe alım planında değişiklik var mı?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "tm-22",
+    "kind": "knowledge",
+    "category": "none",
+    "query": "Ocak 2026 da hangi karar alındı?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "tm-23",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "2026-11 ayında ne oldu?",
+    "relevant": [
+      "ops/incidents.md"
+    ]
+  },
+  {
+    "id": "tm-24",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "son olay ne oldu?",
+    "relevant": [
+      "ops/incidents.md"
+    ],
+    "expectedHeading": "2026-11-09 Önbellek kontrolü (kesinti yok)"
+  },
+  {
+    "id": "tm-25",
+    "kind": "knowledge",
+    "category": "payments",
+    "query": "geçen ay ödeme sağlayıcısında ne değişti?",
+    "relevant": [
+      "payments/provider.md"
+    ],
+    "expectedHeading": "2026-10-14 Sağlayıcı B'ye geçiş kararı"
+  }
+]

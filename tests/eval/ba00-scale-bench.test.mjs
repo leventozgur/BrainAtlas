@@ -41,10 +41,12 @@ test('scale bench smoke run at N=50 reports every key with the minimum sample co
   finiteStats(row.searchMs, 30);
   finiteStats(row.hookMs, 20);
   finiteStats(row.hybridOverheadMs, 30);
+  finiteStats(row.refreshAfterEditMs, 20);
 });
 
 test('scale bench rejects invalid sizes', async () => {
   await assert.rejects(() => runScaleBench({sizes: []}), /Invalid sizes/);
   await assert.rejects(() => runScaleBench({sizes: [0]}), /Invalid sizes/);
   await assert.rejects(() => runScaleBench({sizes: [1.5]}), /Invalid sizes/);
+  await assert.rejects(() => runScaleBench({sizes: [30], editCount: 0}), /Invalid edit count/);
 });

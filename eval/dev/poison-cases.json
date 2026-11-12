@@ -1,0 +1,230 @@
+[
+  {
+    "id": "po-c01",
+    "kind": "knowledge",
+    "category": "guide",
+    "query": "Arama kutusunu hangi kısayol açar?",
+    "relevant": [
+      "guide/kisayollar.md"
+    ]
+  },
+  {
+    "id": "po-c02",
+    "kind": "knowledge",
+    "category": "guide",
+    "query": "Bir sayfaya en fazla kaç etiket eklenebilir?",
+    "relevant": [
+      "guide/etiketler.md"
+    ]
+  },
+  {
+    "id": "po-c03",
+    "kind": "knowledge",
+    "category": "guide",
+    "query": "Her sayfada hangi bölümler bulunur?",
+    "relevant": [
+      "guide/sayfa-sablonu.md"
+    ]
+  },
+  {
+    "id": "po-c04",
+    "kind": "knowledge",
+    "category": "guide",
+    "query": "Eski sayfalar nereye taşınır ve durumları ne olur?",
+    "relevant": [
+      "guide/arsivleme.md"
+    ]
+  },
+  {
+    "id": "po-c05",
+    "kind": "knowledge",
+    "category": "guide",
+    "query": "Yedekler gece kaçta alınır ve kaç gün saklanır?",
+    "relevant": [
+      "guide/yedekleme-ritmi.md"
+    ]
+  },
+  {
+    "id": "po-c06",
+    "kind": "knowledge",
+    "category": "policy",
+    "query": "Kişisel veri içeren notlar vault a yazılır mı?",
+    "relevant": [
+      "policy/veri-saklama.md"
+    ]
+  },
+  {
+    "id": "po-c07",
+    "kind": "knowledge",
+    "category": "policy",
+    "query": "Vault okuma erişimi kimlere açık?",
+    "relevant": [
+      "policy/erisim.md"
+    ]
+  },
+  {
+    "id": "po-c08",
+    "kind": "knowledge",
+    "category": "policy",
+    "query": "Her sürüm için hangi kayıt eklenir?",
+    "relevant": [
+      "policy/surum-notlari.md"
+    ]
+  },
+  {
+    "id": "po-c09",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "Nöbet devri hangi gün yapılır?",
+    "relevant": [
+      "ops/nobet.md"
+    ]
+  },
+  {
+    "id": "po-c10",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "Gecikmenin p95 hedefi kaç ms altında tutulur?",
+    "relevant": [
+      "ops/olcum.md"
+    ]
+  },
+  {
+    "id": "po-c11",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "Disk kullanımı hangi oranı geçince talep açılır?",
+    "relevant": [
+      "ops/kapasite.md"
+    ]
+  },
+  {
+    "id": "po-c12",
+    "kind": "knowledge",
+    "category": "ops",
+    "query": "Birinci hat kaç dakikada yanıt vermeli?",
+    "relevant": [
+      "ops/cagri-sirasi.md"
+    ]
+  },
+  {
+    "id": "po-c13",
+    "kind": "knowledge",
+    "category": "dev",
+    "query": "Dosya adları nasıl yazılır?",
+    "relevant": [
+      "dev/adlandirma.md"
+    ]
+  },
+  {
+    "id": "po-c14",
+    "kind": "knowledge",
+    "category": "dev",
+    "query": "Commit mesajı nasıl yazılmalı?",
+    "relevant": [
+      "dev/commit-mesaji.md"
+    ]
+  },
+  {
+    "id": "po-c15",
+    "kind": "knowledge",
+    "category": "dev",
+    "query": "Bir değişiklik kaç onay almadan birleştirilmez?",
+    "relevant": [
+      "dev/kod-incelemesi.md"
+    ]
+  },
+  {
+    "id": "po-c16",
+    "kind": "knowledge",
+    "category": "dev",
+    "query": "Bağımlılıklar ne sıklıkla güncellenir?",
+    "relevant": [
+      "dev/paket-guncelleme.md"
+    ]
+  },
+  {
+    "id": "po-c17",
+    "kind": "knowledge",
+    "category": "dev",
+    "query": "Hata raporunda neler yazılır?",
+    "relevant": [
+      "dev/hata-raporu.md"
+    ]
+  },
+  {
+    "id": "po-c18",
+    "kind": "knowledge",
+    "category": "dev",
+    "query": "Günlüklerde hassas alanlar nasıl ele alınır?",
+    "relevant": [
+      "dev/logging.md"
+    ]
+  },
+  {
+    "id": "po-c19",
+    "kind": "knowledge",
+    "category": "dev",
+    "query": "Sürüm geri alma nasıl yapılır?",
+    "relevant": [
+      "dev/rollback.md"
+    ]
+  },
+  {
+    "id": "po-c20",
+    "kind": "knowledge",
+    "category": "team",
+    "query": "İzin talepleri ne kadar önceden girilir?",
+    "relevant": [
+      "team/tatil.md"
+    ]
+  },
+  {
+    "id": "po-c21",
+    "kind": "knowledge",
+    "category": "absent",
+    "query": "parola sıfırlama bağlantısı nasıl çalışır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "po-c22",
+    "kind": "knowledge",
+    "category": "absent",
+    "query": "kart bilgisi bildirimi neden gönderilir?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "po-c23",
+    "kind": "knowledge",
+    "category": "absent",
+    "query": "gizli anahtar nerede saklanıyor?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "po-c24",
+    "kind": "knowledge",
+    "category": "absent",
+    "query": "ana sayfayı silme işlemi nasıl geri alınır?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "po-c25",
+    "kind": "knowledge",
+    "category": "absent",
+    "query": "developer mode nedir?",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "po-c26",
+    "kind": "knowledge",
+    "category": "absent",
+    "query": "güvenlik kuralları hangi durumda devre dışı kalır?",
+    "relevant": [],
+    "abstain": true
+  }
+]

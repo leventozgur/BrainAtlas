@@ -3,41 +3,56 @@
     "id": "tr-01",
     "query": "Arşiv dosyalarını geri açabildiğimizi nasıl düzenli sınarız?",
     "relevant": [
-      "natural-01.md"
+      "natural-57.md"
     ],
-    "category": "tr"
+    "category": "tr",
+    "relevantLegacy": [
+      "natural-01.md"
+    ]
   },
   {
     "id": "tr-02",
     "query": "Yeni sürümün herkese açılmadan önce küçük bir kullanıcı diliminde izlenmesi",
     "relevant": [
-      "natural-02.md"
+      "natural-56.md"
     ],
-    "category": "tr"
+    "category": "tr",
+    "relevantLegacy": [
+      "natural-02.md"
+    ]
   },
   {
     "id": "tr-03",
     "query": "Bir hatayı çözmeden önce yeniden üretme koşullarını nasıl not etmeliyim?",
     "relevant": [
-      "natural-03.md"
+      "natural-27.md"
     ],
-    "category": "tr"
+    "category": "tr",
+    "relevantLegacy": [
+      "natural-03.md"
+    ]
   },
   {
     "id": "tr-04",
     "query": "Loglarda kimlik doğrulama bilgisinin görünmesini nasıl engelleriz?",
     "relevant": [
-      "natural-04.md"
+      "natural-58.md"
     ],
-    "category": "tr"
+    "category": "tr",
+    "relevantLegacy": [
+      "natural-04.md"
+    ]
   },
   {
     "id": "tr-05",
     "query": "Aynı kavram için kullanılan farklı kelimeleri aramada buluşturmak",
     "relevant": [
-      "natural-05.md"
+      "natural-28.md"
     ],
-    "category": "tr"
+    "category": "tr",
+    "relevantLegacy": [
+      "natural-05.md"
+    ]
   },
   {
     "id": "tr-06",
@@ -419,17 +434,23 @@
     "id": "synonym-01",
     "query": "How do I undo the last rollout if the new build behaves badly?",
     "relevant": [
-      "natural-02.md"
+      "natural-56.md"
     ],
-    "category": "synonym"
+    "category": "synonym",
+    "relevantLegacy": [
+      "natural-02.md"
+    ]
   },
   {
     "id": "synonym-02",
     "query": "Find guidance for bringing a saved snapshot back into service.",
     "relevant": [
-      "natural-01.md"
+      "natural-57.md"
     ],
-    "category": "synonym"
+    "category": "synonym",
+    "relevantLegacy": [
+      "natural-01.md"
+    ]
   },
   {
     "id": "synonym-03",
@@ -467,9 +488,12 @@
     "id": "synonym-07",
     "query": "Where are synonyms connected without changing the wording in source notes?",
     "relevant": [
-      "natural-05.md"
+      "natural-28.md"
     ],
-    "category": "synonym"
+    "category": "synonym",
+    "relevantLegacy": [
+      "natural-05.md"
+    ]
   },
   {
     "id": "synonym-08",
@@ -491,9 +515,12 @@
     "id": "synonym-10",
     "query": "Where is the guidance for a staged release to a small audience?",
     "relevant": [
-      "natural-02.md"
+      "natural-56.md"
     ],
-    "category": "synonym"
+    "category": "synonym",
+    "relevantLegacy": [
+      "natural-02.md"
+    ]
   },
   {
     "id": "technical-exact-01",
@@ -595,17 +622,23 @@
     "id": "typo-01",
     "query": "How do I safely restroe a saved archive?",
     "relevant": [
-      "natural-01.md"
+      "natural-57.md"
     ],
-    "category": "typo"
+    "category": "typo",
+    "relevantLegacy": [
+      "natural-01.md"
+    ]
   },
   {
     "id": "typo-02",
     "query": "Where is the canry traffic rollout guidance?",
     "relevant": [
-      "natural-02.md"
+      "natural-56.md"
     ],
-    "category": "typo"
+    "category": "typo",
+    "relevantLegacy": [
+      "natural-02.md"
+    ]
   },
   {
     "id": "typo-03",
