@@ -47,7 +47,7 @@ Her anahtar `{n, bm25, hook}` döndürür; `bm25` mevcut BM25 değerlendirmesini
 
 `--holdout-dir <dizin>` verildiğinde yeni setler `<dizin>/<anahtar>/corpus` ve `<dizin>/<anahtar>/cases.json` düzeninden okunur (`hookRealistic/`, `longpage/` gibi). `<dizin>/<anahtar>` dizini yoksa o anahtar `null` döner; hata değildir. Eski dört holdout seti için düzen değişmez.
 
-`grepBaseline` anahtarı aynı setler için düz grep sıralamasını (`eval/grep-baseline.mjs`) BM25 yanında verir: `recallAt5`, `mrrAt10`, `currentFirstRate`.
+`grepBaseline` anahtarı aynı setler için düz grep sıralamasını (`eval/grep-baseline.mjs`) BM25 yanında verir; alanları ve okuma kuralı için aşağıdaki "Adil karşılaştırma nasıl okunur" bölümüne bakın.
 
 ## Etiket hijyeni (BA-27, `eval/dev/natural-cases.json`)
 Önceden `relevant` değeri yalnız superseded bir sayfayı gösteren vakalar indekse girmediği için hiç tutturulamıyordu (superseded sayfalar aramada yoktur). Bu vakalarda `relevant`, sayfanın `superseded_by` ile gösterdiği güncel sayfaya çevrildi; eski değer `relevantLegacy` alanında korundu. Etkilenen vakalar (2026-11-12): `tr-01`, `tr-02`, `tr-03`, `tr-04`, `tr-05`, `synonym-01`, `synonym-02`, `synonym-07`, `synonym-10`, `typo-01`, `typo-02` (11 vaka; `natural-01`…`natural-05` sayfalarının yerine `natural-57`, `natural-56`, `natural-27`, `natural-58`, `natural-28`). Bu değişiklik `natural` BM25 değerlerini ve `hook` özetindeki `natural` kayıtlarını değiştirir; `ba00-dev-sets` testi, hiçbir vakanın superseded sayfayı göstermediğini ve her `relevantLegacy`'nin superseded olduğunu doğrular.
@@ -73,13 +73,9 @@ Okuma kuralı: sıralama farkını `bm25.noAbstain` ile grep'i karşılaştırar
 
 ## Bilinen sınırlar (BA-27)
 - `longpage` kod adıyla anahtarlandığı için kolaydır (BM25 neredeyse tam isabet verir); uzun sayfada bölüm seçimini ölçer, anlamsal zorluğu değil.
-- BM25 sonuçları varsayılan `abstainThreshold` 0.35 ile ölçülür. Bu eşik `hookRealistic` ve `realDocs` için cevaplanabilir soruların bir kısmını cevapsız bırakır (`hookRealistic` recall@5: 0.62 at 0.35, 1.00 at 0; `realDocs`: 0.32 at 0.35, 0.75 at 0). Eşik kararı ürün kararıdır; bu dosyalar eşik değiştirmez.
+- BM25 sonuçları varsayılan `abstainThreshold` 0.35 ile ölçülür. Bu eşik `hookRealistic` ve `realDocs` için cevaplanabilir soruların bir kısmını cevapsız bırakır (`hookRealistic` recall@5: 0.64 at 0.35, 1.00 at 0; `realDocs`: 0.317 at 0.35, 0.746 at 0). Eşik kararı ürün kararıdır; bu dosyalar eşik değiştirmez.
 - `grepBaseline` `rg` yolu yerelde bir çapraz kontroldur; Türkçe noktasız ı ve aksanlı harflerde JS yoluyla birebir olmayabilir. Testler JS yolunu kullanır.
 - `refreshAfterEditMs` her turda tüm indeksin yeniden kurulmasını ölçer (`refreshIfChanged` değişen korpusta tam yeniden kurar); 10k satır ölçümü PM tarafından yapılmalıdır.
 
-## Owned dışı kabul testleri (BA-27 sonrası PM güncellemesi gerekir)
-Aşağıdaki kabul testleri BA-27 öncesi çıktı şeklini sabitler. BA-27 bunları değiştirmedi (`tests/acceptance/**` Owned dışıdır); beklenen yeni değerler:
-- `tests/acceptance/BA-00/ba-suite.test.mjs` `TOP_KEYS`: `hookRealistic`, `longpage`, `temporal`, `poison`, `realDocs`, `grepBaseline` eklenir.
-- `tests/acceptance/BA-00/hook-eval.test.mjs` senaryo 1 anahtar listesi: `byKind`, `charsPerHit`, `injectedChars`, `metaShareTop5`, `neededPageInjected`, `poisonInjected`, `sectionCases`, `sectionHitAt1`, `sectionHitSources` eklenir.
-- `tests/acceptance/BA-00/scale-bench.test.mjs` satır anahtar listesi: `refreshAfterEditMs` eklenir.
-- `tests/acceptance/Q-SEMEVAL/eval.test.mjs` natural golden (eşik 0): recallAt5 `72/95` yerine `77/95` (0.8105); mrrAt10 0.7341. Fark, etiket hijyeninin 11 vakasından gelir.
+Dört kabul testi (`BA-00/ba-suite`, `BA-00/hook-eval`, `BA-00/scale-bench`, `Q-SEMEVAL/eval`) BA-27'nin bağımsız testçisi tarafından gerekçeli olarak güncellendi: yeni anahtarlar ve etiket hijyeninin natural golden değeri.
+
