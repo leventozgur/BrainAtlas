@@ -10,6 +10,7 @@ The local page profile recognizes these frontmatter fields:
 | `generated` | UTC date or timestamp string. |
 | `status` | Local assertion status; a confirmed page should have verification evidence. |
 | `sources` | List of source references. |
+| `symbols` | Optional list of code symbols (`{path, name}` or `"<path>#<name>"`) that `brainatlas maintain --repo` checks. |
 | `verified` | Verification records with UTC `date`, evidence, scope, and a source listed in `sources`. |
 | `stale_after` | UTC date/timestamp or positive `P<n>D` / `P<n>W` duration. |
 | `superseded_by` | Successor `wiki/*.md` path when `status` is superseded. |
