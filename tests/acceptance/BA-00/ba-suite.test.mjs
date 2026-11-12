@@ -9,7 +9,8 @@ import { pathToFileURL } from 'node:url';
 import { DEV, ROOT, runNode, tempDir, removeDir, listDir } from './helpers.mjs';
 
 const SUITE = join(ROOT, 'eval', 'ba-suite.mjs');
-const TOP_KEYS = ['cases', 'natural', 'xling', 'identifier', 'currentState', 'multihop', 'nearNegative', 'hook', 'scale', 'meta'];
+// BA-27: hookRealistic, longpage, temporal, poison, realDocs (new dev sets) and grepBaseline are added top-level keys; no other key changed.
+const TOP_KEYS = ['cases', 'natural', 'xling', 'identifier', 'currentState', 'multihop', 'nearNegative', 'hook', 'scale', 'meta', 'hookRealistic', 'longpage', 'temporal', 'poison', 'realDocs', 'grepBaseline'];
 const TIMING_KEYS = new Set(['latencyMs', 'indexBuildMs', 'durationMs', 'scale']);
 const strip = (value) => JSON.parse(JSON.stringify(value, (k, v) => (TIMING_KEYS.has(k) ? undefined : v)));
 const count = (file) => JSON.parse(readFileSync(join(DEV, file), 'utf8')).length;

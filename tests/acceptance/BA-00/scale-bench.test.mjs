@@ -39,7 +39,8 @@ test('scale-bench: small N run returns the documented shape with the minimum que
     assert.equal(out.seed, 1);
     assert.deepEqual(out.sizes.map((x) => x.n), [30, 60]);
     for (const row of out.sizes) {
-      assert.deepEqual(Object.keys(row).sort(), ['buildIndexMs', 'createSearcherColdMs', 'createSearcherWarmMs', 'hookMs', 'hybridOverheadMs', 'n', 'searchMs'].sort());
+      // BA-27: refreshAfterEditMs is added to each row (scale-bench `refreshAfterEditMs`); no other key changed.
+      assert.deepEqual(Object.keys(row).sort(), ['buildIndexMs', 'createSearcherColdMs', 'createSearcherWarmMs', 'hookMs', 'hybridOverheadMs', 'n', 'refreshAfterEditMs', 'searchMs'].sort());
       for (const f of ['buildIndexMs', 'createSearcherColdMs', 'createSearcherWarmMs']) assert.ok(Number.isFinite(row[f]) && row[f] >= 0, f);
       assert.equal(row.searchMs.count, 30, 'search queries (min 30)');
       assert.equal(row.hookMs.count, 20, 'hook prompts (min 20)');

@@ -66,7 +66,8 @@ test('scenario 1 mixed set: every metric equals the hand calculation', async () 
     close(m.injectionPrecision, 1 / 3);       // 3 injected paths, 1 relevant (alpha in m1)
     close(m.missRate, 1 / 2);                 // answerable m1 (hit), m2 (miss)
     close(m.falseInjectionRate, 1 / 2);       // abstain m3 (none), m4 (injected)
-    assert.deepEqual(Object.keys(m).sort(), ['byCategory', 'chars', 'durationMs', 'falseInjectionRate', 'injectionPrecision', 'injectionRate', 'missRate', 'n']);
+    // BA-27: added summary keys (byKind, injectedChars, charsPerHit, neededPageInjected, metaShareTop5, sectionHitAt1, sectionCases, sectionHitSources, poisonInjected); existing keys unchanged.
+    assert.deepEqual(Object.keys(m).sort(), ['byCategory', 'byKind', 'chars', 'charsPerHit', 'durationMs', 'falseInjectionRate', 'injectedChars', 'injectionPrecision', 'injectionRate', 'metaShareTop5', 'missRate', 'n', 'neededPageInjected', 'poisonInjected', 'sectionCases', 'sectionHitAt1', 'sectionHitSources']);
     close(m.byCategory['identifier'].injectionRate, 1);
     close(m.byCategory['identifier'].missRate, 0);
     close(m.byCategory['identifier'].precision, 1);
