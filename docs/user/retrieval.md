@@ -36,7 +36,7 @@ Trust changes only the order of pages that already match the question. It never 
 
 ## Search scope
 
-BrainAtlas searches the `wiki/` folder of a vault when it exists, otherwise the whole vault. Navigation and policy files at that top level (`index.md`, `log.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`) are not returned as answers; they remain readable with the read tools. In a vault without `wiki/`, the folders `planning/`, `archive/`, `inbox/` and `raw/` at the top level are also left out. To change this, set `retrieval.exclude` to your own list of patterns (for example `["drafts/**"]`), or to `[]` to return every page as before.
+BrainAtlas searches the `wiki/` folder of a vault when it exists, otherwise the whole vault. Navigation and policy files at that top level (`index.md`, `log.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`) are not returned as answers; they remain readable with the read tools. In a vault without `wiki/`, the folders `planning/`, `archive/`, `inbox/` and `raw/` at the top level are also left out. To change this, set `retrieval.exclude` to your own list of patterns (for example `["drafts/**"]`), or to `[]` to stop excluding anything: `[]` returns the root-level navigation and policy pages within the search root as results again. `retrieval.exclude` only controls that exclusion; which folder is searched (`wiki/` when it exists, otherwise the vault) is a separate rule and does not change with `exclude`.
 
 ## Abstention threshold
 

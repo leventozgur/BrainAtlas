@@ -131,7 +131,7 @@ An excluded page is only removed from results. It stays in the index: it is coun
 
 The exclusion rule is part of the cache key when it is non-empty (an empty list gives the legacy key). The cache records each document's `excluded` flag, and a cache whose flags disagree with the rule is rebuilt. Read tools (`wiki_read_index`, `wiki_read_page`, `wiki_list_pages`, `wiki_status`), the recap and `maintain` do not use the scope and are unchanged.
 
-Known limit: the MCP semantic path (`wiki_query` with semantic enabled) takes its entries from the Wiki-wide semantic index and does not filter excluded pages; the hook's semantic step does. Semantic is off by default.
+The MCP hybrid path (`wiki_query` with semantic enabled) applies the same rule: excluded paths are removed from the semantic entries before `searchHybrid` and from its results. Known limit: the hook's semantic step also filters by the rule in code, but no hermetic test covers it, because the retrieval worker uses the global `fetch`. Semantic is off by default.
 
 ## Threat model / cache trust
 

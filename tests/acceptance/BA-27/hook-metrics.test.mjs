@@ -149,8 +149,9 @@ test('BA-27 toy e2e (8 cases, real hook): every metric equals the hand calculati
   const corpusDir = corpus(PAGES);
   const records = await runHookCases({ corpusDir, cases: CASES, abstainThreshold: 0.35 });
   // Preconditions: what the hook injected and the section headings it exposed.
+  // BA-29: index.md is a root navigation page of a vault without wiki/, so it is excluded by default and never injected.
   assert.deepEqual(records.map((r) => r.injected), [
-    ['alpha.md', 'index.md'], [], ['alpha.md', 'index.md'], [], ['sub/beta.md'], ['alpha.md', 'index.md'], ['sub/beta.md'], ['alpha.md', 'index.md'],
+    ['alpha.md'], [], ['alpha.md'], [], ['sub/beta.md'], ['alpha.md'], ['sub/beta.md'], ['alpha.md'],
   ]);
   assert.deepEqual(records.filter((r) => r.sectionHit !== null).map((r) => [r.sectionHit, r.sectionSource]), [[true, 'hook'], [true, 'hook'], [false, 'hook']]);
 
@@ -161,13 +162,16 @@ test('BA-27 toy e2e (8 cases, real hook): every metric equals the hand calculati
   close(m.byKind.operational.falseInjectionRate, 1 / 2, 'byKind operational: o1, o2; o2 injects');
   close(m.missRate, 1 / 5, 'missRate: answerable k1..k5; k4 misses');
   close(m.neededPageInjected, 4 / 5, 'neededPageInjected');
-  close(m.injectionPrecision, 4 / 10, 'injectionPrecision: 4 relevant of 10 injected');
-  close(m.metaShareTop5, 4 / 10, 'metaShareTop5: index.md flags in 4 of 10 blocks (first five per case)');
+  // BA-29: kök index.md artık sonuç değil (dışlanır); 6 enjekte blokun 4'ü ilgili: 4 / 6.
+  close(m.injectionPrecision, 4 / 6, 'injectionPrecision: 4 relevant of 6 injected');
+  // BA-29: kök index.md artık sonuç değil (dışlanır); hiçbir blokta meta sayfa kalmaz: 0.
+  close(m.metaShareTop5, 0, 'metaShareTop5: no meta (index.md) flags remain');
   close(m.sectionHitAt1, 2 / 3, 'sectionHitAt1: k1 and k3 hit, k5 misses');
   assert.equal(m.sectionCases, 3);
   assert.deepEqual(m.sectionHitSources, { hook: 3, search: 0 });
   close(m.poisonInjected, 0, 'no eval_poison page in this corpus');
-  close(m.byKind.knowledge.precision, 4 / 8, 'knowledge precision: 4 relevant of 8 injected');
+  // BA-29: kök index.md artık sonuç değil (dışlanır); bilgi türünde 5 enjekte blokun 4'ü ilgili: 4 / 5.
+  close(m.byKind.knowledge.precision, 4 / 5, 'knowledge precision: 4 relevant of 5 injected');
 
   const chars = records.map((r) => r.chars);
   const total = chars.reduce((a, b) => a + b, 0);
