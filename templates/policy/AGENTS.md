@@ -22,5 +22,6 @@
 ## Safety
 
 - Validate paths stay within the vault. Review proposed changes before writing and preserve user-owned content.
+- Before editing a page, read it with `wiki_read_page` to get its `sha256`, then write with `expectedSha256`.
 - Do not put page bodies, prompts, credentials, or secret values in logs, metrics, or error messages.
 - Keep changes scoped to the requested work and do not publish or push without explicit authorization.

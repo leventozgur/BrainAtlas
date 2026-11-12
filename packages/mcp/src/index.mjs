@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { isAbsolute, join, relative, resolve, sep, posix } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep, posix } from 'node:path';
 import { chmodSync, mkdirSync } from 'node:fs';
-import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { chmod, lstat, readFile, realpath, rename, stat, unlink, writeFile, mkdir } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import * as core from '@brainatlas/core';
+import { LOCK_FILE_NAME, withLock } from './lock.mjs';
 
 import * as wiki from '@llmwiki/core';
 const TOOL_LIMIT = 20_000;
@@ -333,6 +334,8 @@ export function createServer(options) {
     let normalized = rel.replace(/^wiki\//, '');
     if (!allowIndex && ['index.md', 'log.md'].includes(normalized)) throw mcpError('E_PATH_ESCAPE', 'Managed Wiki files cannot be edited directly.');
     if (isAbsolute(normalized) || normalized.split('/').some((part) => !part || part === '.' || part === '..')) throw mcpError('E_PATH_ESCAPE', 'Path is invalid.');
+    // The write lock file is not a page: it cannot be read, written or replaced through the Wiki tools.
+    if (normalized.split('/').at(-1) === LOCK_FILE_NAME) throw mcpError('E_PATH_ESCAPE', 'Path is invalid.');
     if (core.scanPath(`wiki/${normalized}`, { extraDenyGlobs: config.safety?.extraDenyGlobs ?? [] }).length) throw mcpError('E_SECRET_DETECTED', 'write refused: denied path');
     const canonicalVault = await realpath(vaultDir);
     const canonicalWiki = join(canonicalVault, 'wiki');
@@ -347,11 +350,49 @@ export function createServer(options) {
   const checkWrite = (rel, content) => {
     if (core.scanPath(rel, { extraDenyGlobs: config.safety?.extraDenyGlobs ?? [] }).length || core.scanText(content).length) throw mcpError('E_SECRET_DETECTED', 'write refused: secret-like content detected');
   };
-  const logAndRefresh = async (action, rel) => {
+  // BA-25: every Wiki write (pages, index, log, crosslinks) runs inside one vault-wide lock file in wiki/ (see lock.mjs).
+  // The check of an expected hash and the write happen in that same critical section.
+  const writeLocked = async (work) => {
+    // lstat, not stat: a dangling wiki/ symlink must not be replaced by a directory (mkdir would create its target).
+    try { await lstat(wikiDir); } catch (error) { if (error?.code !== 'ENOENT') throw error; await mkdir(wikiDir, { recursive: true }); }
+    const canonicalWiki = await assertWikiInsideVault();
+    return withLock(join(canonicalWiki, LOCK_FILE_NAME), work);
+  };
+  const fileSha = async (file) => createHash('sha256').update(await readFile(file)).digest('hex');
+  // Writes a temporary file in the target's folder, then renames it over the target: readers see the old or the new bytes.
+  // The temporary name ends in `.tmp`, so no page listing or search counts it. An existing file keeps its permission bits.
+  const replaceFile = async (target, writeTemp) => {
+    const temp = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`);
+    try {
+      await writeTemp(temp);
+      const mode = await stat(target).then((st) => st.mode & 0o7777, () => null);
+      if (mode !== null) await chmod(temp, mode);
+      await rename(temp, target);
+    } catch (error) {
+      await unlink(temp).catch(() => {});
+      throw error;
+    }
+  };
+  const writePageAtomic = (target, page) => replaceFile(target, (temp) => wiki.writePage(temp, page));
+  const writeIndexAtomic = (target, text) => replaceFile(target, (temp) => writeFile(temp, text, 'utf8'));
+  /** E_CONFLICT when the expectation is set and the file is missing or its bytes hash to another value. Never echoes either. */
+  const checkExpectedSha = async (target, expected) => {
+    if (expected === undefined) return;
+    let current;
+    try { current = await readFile(target); }
+    catch (error) { if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error; }
+    if (current === undefined || createHash('sha256').update(current).digest('hex') !== expected.toLowerCase()) {
+      throw mcpError('E_CONFLICT', 'The page changed since it was read.');
+    }
+  };
+  // Called inside the lock: the log append is part of the same critical section as the write it records.
+  const logEntry = async (action, rel) => {
     const record = JSON.stringify({ action, path: rel });
     checkWrite('wiki/log.md', record);
     await core.appendLog(vaultDir, { action, path: rel });
-    // The write has succeeded; a failed refresh must not turn it into an error. The next wiki_query retries via refreshIfChanged.
+  };
+  // Called after the lock is released. A failed refresh must not turn a completed write into an error; the next wiki_query retries.
+  const afterWrite = async () => {
     try { await searcher.refresh(); } catch { /* Keep the last good index. */ }
     scheduleUpdate();
   };
@@ -462,9 +503,11 @@ export function createServer(options) {
     } catch (error) { return fallback(error?.fallbackReason === 'remote-not-allowed' ? 'remote-not-allowed' : 'provider-error'); }
   });
   readTool('wiki_read_page', z.object({ path: z.string() }), async ({ path }) => {
-    const { target } = await safeFile(path);
-    const raw = await readFile(target, 'utf8');
-    return { path: `wiki/${(await safeFile(path)).normalized}`, content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT };
+    const { normalized, target } = await safeFile(path);
+    // The hash covers all bytes on disk, also when the content is truncated; a write replaces the file by rename, so a read sees one whole version.
+    const bytes = await readFile(target);
+    const raw = bytes.toString('utf8');
+    return { path: `wiki/${normalized}`, content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT, sha256: createHash('sha256').update(bytes).digest('hex') };
   });
   readTool('wiki_read_index', z.object({}), async () => {
     const { target } = await safeFile('index.md');
@@ -495,36 +538,48 @@ export function createServer(options) {
   readTool('wiki_lint', z.object({}), () => wiki.lintWiki(wikiDir));
 
   if (config.readOnly !== true) {
-    tool('wiki_write_page', z.object({ path: z.string(), content: z.string() }), async ({ path, content }) => {
+    // Optional hash of the bytes the caller read (wiki_read_page `sha256`): the write is refused with E_CONFLICT when they differ.
+    const expectedSha256 = z.string().regex(/^[0-9a-fA-F]{64}$/).optional();
+    tool('wiki_write_page', z.object({ path: z.string(), content: z.string(), expectedSha256 }), async ({ path, content, expectedSha256 }) => {
       const { normalized, target } = await safeFile(path, { allowIndex: false });
       checkWrite(`wiki/${normalized}`, content);
       const parsed = core.parseFrontmatter(content);
       if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
-      await wiki.writePage(target, { frontmatter: parsed.data, body: parsed.body });
-      await logAndRefresh('write-page', `wiki/${normalized}`);
-      return { path: `wiki/${normalized}`, written: true };
+      const sha256 = await writeLocked(async () => {
+        await checkExpectedSha(target, expectedSha256);
+        await writePageAtomic(target, { frontmatter: parsed.data, body: parsed.body });
+        await logEntry('write-page', `wiki/${normalized}`);
+        return expectedSha256 === undefined ? undefined : fileSha(target);
+      });
+      await afterWrite();
+      return { path: `wiki/${normalized}`, written: true, ...(sha256 === undefined ? {} : { sha256 }) };
     });
     // patch is z.unknown() on purpose: a record schema silently drops a JSON "__proto__" key before the handler runs,
     // so validatePatch checks the object itself (own keys, plain prototype).
-    tool('wiki_update_page', z.object({ path: z.string(), content: z.string().optional(), patch: z.unknown().optional() }), async ({ path, content, patch }) => {
+    tool('wiki_update_page', z.object({ path: z.string(), content: z.string().optional(), patch: z.unknown().optional(), expectedSha256 }), async ({ path, content, patch, expectedSha256 }) => {
       const { normalized, target } = await safeFile(path, { allowIndex: false });
-      const old = await wiki.readPage(target);
-      let next;
-      if (patch !== undefined) validatePatch(patch);
-      if (content !== undefined) {
-        const parsed = core.parseFrontmatter(content);
-        if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
-        next = { frontmatter: parsed.data, body: parsed.body };
-      } else if (patch) {
-        // body replaces the body first; append is then added to the end of the resulting body, so both are applied.
-        const base = typeof patch.body === 'string' ? patch.body : old.body;
-        next = { frontmatter: { ...old.frontmatter, ...(patch.frontmatter && typeof patch.frontmatter === 'object' ? patch.frontmatter : {}) }, body: base + (typeof patch.append === 'string' ? patch.append : '') };
-      } else throw mcpError('E_INVALID_INPUT', 'content or patch is required.');
-      const output = serializePage(next);
-      checkWrite(`wiki/${normalized}`, output);
-      await wiki.writePage(target, next);
-      await logAndRefresh('update-page', `wiki/${normalized}`);
-      return { path: `wiki/${normalized}`, updated: true };
+      const sha256 = await writeLocked(async () => {
+        await checkExpectedSha(target, expectedSha256);
+        const old = await wiki.readPage(target);
+        let next;
+        if (patch !== undefined) validatePatch(patch);
+        if (content !== undefined) {
+          const parsed = core.parseFrontmatter(content);
+          if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
+          next = { frontmatter: parsed.data, body: parsed.body };
+        } else if (patch) {
+          // body replaces the body first; append is then added to the end of the resulting body, so both are applied.
+          const base = typeof patch.body === 'string' ? patch.body : old.body;
+          next = { frontmatter: { ...old.frontmatter, ...(patch.frontmatter && typeof patch.frontmatter === 'object' ? patch.frontmatter : {}) }, body: base + (typeof patch.append === 'string' ? patch.append : '') };
+        } else throw mcpError('E_INVALID_INPUT', 'content or patch is required.');
+        const output = serializePage(next);
+        checkWrite(`wiki/${normalized}`, output);
+        await writePageAtomic(target, next);
+        await logEntry('update-page', `wiki/${normalized}`);
+        return expectedSha256 === undefined ? undefined : fileSha(target);
+      });
+      await afterWrite();
+      return { path: `wiki/${normalized}`, updated: true, ...(sha256 === undefined ? {} : { sha256 }) };
     });
     const create = (name, content, kind) => async () => {
       const slug = wiki.slugify(name);
@@ -540,8 +595,6 @@ export function createServer(options) {
       checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body: parsed.body }));
       const { target } = await safeFile(rel, { allowIndex: false });
       const indexTarget = (await safeFile('index.md')).target;
-      try { await stat(target); throw mcpError('E_ALREADY_EXISTS', 'The destination page already exists.'); }
-      catch (error) { if (error?.code !== 'ENOENT') throw error; }
       // Same minimal edit as wiki_update_index, limited to this page: the rest of the index is kept byte for byte.
       const entry = {
         path: rel,
@@ -549,62 +602,75 @@ export function createServer(options) {
         frontmatter,
         tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : []
       };
-      const existing = await readOptionalIndex(indexTarget);
-      const indexOutput = existing === null ? freshIndex([entry]) : mergeIndex(existing, [entry], { prune: false }).output;
-      checkWrite('wiki/index.md', indexOutput);
-      await wiki.writePage(target, { frontmatter, body: parsed.body });
-      await writeFile(indexTarget, indexOutput, 'utf8');
-      await logAndRefresh(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
+      await writeLocked(async () => {
+        try { await stat(target); throw mcpError('E_ALREADY_EXISTS', 'The destination page already exists.'); }
+        catch (error) { if (error?.code !== 'ENOENT') throw error; }
+        const existing = await readOptionalIndex(indexTarget);
+        const indexOutput = existing === null ? freshIndex([entry]) : mergeIndex(existing, [entry], { prune: false }).output;
+        checkWrite('wiki/index.md', indexOutput);
+        await writePageAtomic(target, { frontmatter, body: parsed.body });
+        await writeIndexAtomic(indexTarget, indexOutput);
+        await logEntry(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
+      });
+      await afterWrite();
       return { path: `wiki/${rel}`, created: true };
     };
     tool('wiki_create_entity', z.object({ name: z.string().min(1), content: z.string() }), ({ name, content }) => create(name, content, 'entities')());
     tool('wiki_create_concept', z.object({ name: z.string().min(1), content: z.string() }), ({ name, content }) => create(name, content, 'concepts')());
     tool('wiki_add_crosslinks', z.object({ path: z.string() }), async ({ path }) => {
       const { normalized, target } = await safeFile(path, { allowIndex: false });
-      const page = await wiki.readPage(target);
-      const normalizedTargets = wiki.getPageLinksDetailed(page.body).map(({ target: link }) => {
-        const rel = posix.normalize(posix.join(posix.dirname(normalized), link));
-        if (!rel || rel === '..' || rel.startsWith('../') || posix.isAbsolute(rel)) throw mcpError('E_PATH_ESCAPE', 'Crosslink path is outside the Wiki.');
-        return rel;
+      const linked = await writeLocked(async () => {
+        const page = await wiki.readPage(target);
+        const normalizedTargets = wiki.getPageLinksDetailed(page.body).map(({ target: link }) => {
+          const rel = posix.normalize(posix.join(posix.dirname(normalized), link));
+          if (!rel || rel === '..' || rel.startsWith('../') || posix.isAbsolute(rel)) throw mcpError('E_PATH_ESCAPE', 'Crosslink path is outside the Wiki.');
+          return rel;
+        });
+        for (const rel of normalizedTargets) await safeFile(rel, { allowIndex: false });
+        const links = [];
+        for (const rel of normalizedTargets) {
+          const targetPage = await wiki.readPage((await safeFile(rel, { allowIndex: false })).target);
+          const title = typeof targetPage.frontmatter.title === 'string' ? targetPage.frontmatter.title : rel.split('/').at(-1).replace(/\.md$/, '');
+          if (core.scanText(title).length) throw mcpError('E_SECRET_DETECTED', 'write refused: secret-like content detected');
+          links.push(`- [${wiki.escapeMarkdownLinkText(title)}](${posix.relative(posix.dirname(normalized), rel)})`);
+        }
+        const resultBody = `${page.body}\n\n## See also\n${links.join('\n')}`;
+        checkWrite(`wiki/${normalized}`, serializePage({ frontmatter: page.frontmatter, body: resultBody }));
+        await wiki.addCrosslinks(wikiDir, normalized, normalizedTargets);
+        await logEntry('add-crosslinks', `wiki/${normalized}`);
+        return normalizedTargets.length;
       });
-      for (const rel of normalizedTargets) await safeFile(rel, { allowIndex: false });
-      const links = [];
-      for (const rel of normalizedTargets) {
-        const targetPage = await wiki.readPage((await safeFile(rel, { allowIndex: false })).target);
-        const title = typeof targetPage.frontmatter.title === 'string' ? targetPage.frontmatter.title : rel.split('/').at(-1).replace(/\.md$/, '');
-        if (core.scanText(title).length) throw mcpError('E_SECRET_DETECTED', 'write refused: secret-like content detected');
-        links.push(`- [${wiki.escapeMarkdownLinkText(title)}](${posix.relative(posix.dirname(normalized), rel)})`);
-      }
-      const resultBody = `${page.body}\n\n## See also\n${links.join('\n')}`;
-      checkWrite(`wiki/${normalized}`, serializePage({ frontmatter: page.frontmatter, body: resultBody }));
-      await wiki.addCrosslinks(wikiDir, normalized, normalizedTargets);
-      await logAndRefresh('add-crosslinks', `wiki/${normalized}`);
-      return { path: `wiki/${normalized}`, linked: normalizedTargets.length };
+      await afterWrite();
+      return { path: `wiki/${normalized}`, linked };
     });
     tool('wiki_update_index', z.object({}), async () => {
-      const entries = [];
-      for (const { path, file } of await listManagedPages()) {
-        // A page whose frontmatter cannot be read is still listed, with the no-title fallback, so one page never fails the whole update.
-        let page;
-        try { page = await wiki.readPage(file); }
-        catch { page = { frontmatter: {}, body: '' }; }
-        entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
-      }
       const { target } = await safeFile('index.md');
-      const existing = await readOptionalIndex(target);
-      if (existing === null) {
-        // No index yet (or an empty file): build it from the pages, with the same line format as the minimal edit.
-        const output = freshIndex(entries);
+      const result = await writeLocked(async () => {
+        const entries = [];
+        for (const { path, file } of await listManagedPages()) {
+          // A page whose frontmatter cannot be read is still listed, with the no-title fallback, so one page never fails the whole update.
+          let page;
+          try { page = await wiki.readPage(file); }
+          catch { page = { frontmatter: {}, body: '' }; }
+          entries.push({ path, title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path, tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [], frontmatter: page.frontmatter });
+        }
+        const existing = await readOptionalIndex(target);
+        if (existing === null) {
+          // No index yet (or an empty file): build it from the pages, with the same line format as the minimal edit.
+          const output = freshIndex(entries);
+          checkWrite('wiki/index.md', output);
+          await writeIndexAtomic(target, output);
+          await logEntry('update-index', 'wiki/index.md');
+          return { indexed: entries.length, added: entries.filter((entry) => indexablePath(entry.path)).length, removed: 0 };
+        }
+        const { output, added, removed } = mergeIndex(existing, entries);
         checkWrite('wiki/index.md', output);
-        await writeFile(target, output, 'utf8');
-        await logAndRefresh('update-index', 'wiki/index.md');
-        return { indexed: entries.length, added: entries.filter((entry) => indexablePath(entry.path)).length, removed: 0 };
-      }
-      const { output, added, removed } = mergeIndex(existing, entries);
-      checkWrite('wiki/index.md', output);
-      await writeFile(target, output, 'utf8');
-      await logAndRefresh('update-index', 'wiki/index.md');
-      return { indexed: entries.length, added, removed };
+        await writeIndexAtomic(target, output);
+        await logEntry('update-index', 'wiki/index.md');
+        return { indexed: entries.length, added, removed };
+      });
+      await afterWrite();
+      return result;
     });
   }
   return server;
