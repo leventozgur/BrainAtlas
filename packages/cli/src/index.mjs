@@ -635,7 +635,7 @@ const helpUsages = Object.freeze({
   config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', safety: 'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
-  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue]', help: 'brainatlas --help | brainatlas help [COMMAND]'
+  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]', help: 'brainatlas --help | brainatlas help [COMMAND]'
 });
 
 async function availableHelpCommands(paths, env) {
@@ -1102,10 +1102,11 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
   }
   if (command === 'maintain') {
     const requested = value('--vault');
+    const repo = value('--repo');
     const queue = flag('--queue');
     const cfg = requested === undefined || queue ? await loadConfig({ paths, env }) : null;
     if (queue && requested !== undefined && resolve(requested) !== resolve(cfg.vault.path)) throw error('E_ARGUMENT', '--queue only works with the configured vault.');
-    const report = await runMaintenance(requested ?? cfg.vault.path);
+    const report = await runMaintenance(requested ?? cfg.vault.path, repo === undefined ? {} : { repo });
     if (queue) {
       const candidates = receiptCandidates(report.findings);
       report.queue = candidates.length

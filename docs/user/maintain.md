@@ -4,10 +4,13 @@
 problems, oversized pages and pages with many dated Update sections. It is read-only. It never edits a page or the index.
 
 ```text
-brainatlas maintain [--json] [--vault PATH] [--queue]
+brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]
 ```
 
 - `--vault PATH`: scan this vault. Without it, the configured vault is scanned.
+- `--repo DIR`: also check code references against the working tree at `DIR`. Only the files are read: no git command
+  runs and nothing is written. Without `--repo`, no repository is read. A missing or non-directory `DIR` fails with
+  `E_REPO_MISSING`.
 - `--json`: print one JSON object: `{ok, findings, counts, pages, durationMs}`. Errors use the usual shape
   `{ok:false, error:{code, message}}`.
 - `--queue`: add one review candidate per finding kind to the receipts queue, for approval with `brainatlas review`.
@@ -29,6 +32,30 @@ page content.
 | `index-stale` | An index entry points to a page that does not exist. |
 | `oversized` | The page body has more than 3000 words. |
 | `update-sprawl` | The page has 6 or more dated `Update` or `Güncelleme` headings. |
+| `stale-source` | Only with `--repo`: a `sources` entry `repo:<path>[@<commit>]`, or the file of a `symbols:` entry, is not a regular file in the repository. |
+| `stale-symbol` | Only with `--repo`: a `symbols:` name is not found, as a whole word, in its repository file. |
+
+`stale-source` and `stale-symbol` appear in `findings`, the human output and `--queue` receipt candidates, not in
+`counts`. `counts` keeps the same keys as before.
+
+### Code references (`--repo`)
+
+- `sources: ["repo:src/total.mjs"]` and `sources: ["repo:src/total.mjs@<commit>"]` both check `src/total.mjs`. The
+  commit is **not verified** (no git runs). The suffix is removed only when it is 7 to 64 hexadecimal digits, in any
+  case. Other text after the last `@`, such as a branch name, stays part of the path, so `repo:src/a.mjs@main` reports
+  `stale-source`. Write the path without that suffix.
+- A path is checked as a regular file, one component at a time. A symlink anywhere on the way is not followed, so it is
+  reported as missing. A directory is not a file.
+- A path that is absolute, has a backslash or a drive letter, contains a `..` segment, ends with `/`, or is empty is
+  rejected. It is reported as `stale-source` with a fixed detail (`repo path is not a file path inside the repository`),
+  and the path itself is not echoed.
+- Optional `symbols:` list in the page frontmatter. Each entry is `{path: src/total.mjs, name: computeTotal}` or the
+  string `"src/total.mjs#computeTotal"`. The name follows the last `#`. The name must appear as plain text, bounded at both
+  ends by a non-letter, non-digit, non-underscore character. It is not a regular expression, and `Foo` does not match
+  `FooBar`.
+- Malformed `symbols:` entries are ignored silently. This covers a non-object and non-string entry, a missing or empty
+  path or name, a name with a line break or longer than 200 characters, and a `symbols:` value that is not a list.
+- A missing file named twice on one page, by a source and a symbol, is one `stale-source` finding.
 
 ## Rules
 
