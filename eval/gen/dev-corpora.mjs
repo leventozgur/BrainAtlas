@@ -389,11 +389,15 @@ function hookRealisticCases() {
     ['A7', LW, 'lumen-web', 'snapshot testini güncelle', 'lumen-web/theme-tokens.md'],
     ['A8', KS, 'kestrel-api', 'testte kırılan kodu düzelt', 'kestrel-api/test-setup.md'],
   ];
-  for (const [label, cwd, project, query, rel] of ambiguous) add(`hr-${label.toLowerCase()}`, 'knowledge', project, query, [rel], {cwd, project});
+  // Each ambiguous case excludes the test pages of the other projects: a page from another project is a wrong answer.
+  const TEST_PAGES = ['kestrel-api/test-setup.md', 'lumen-web/e2e-tests.md', 'quarry-jobs/testing.md'];
+  for (const [label, cwd, project, query, rel] of ambiguous) {
+    add(`hr-${label.toLowerCase()}`, 'knowledge', 'ambiguous-project', query, [rel], {cwd, project, excluded: TEST_PAGES.filter((p) => !p.startsWith(`${project}/`))});
+  }
   // Followups: short continuations that name a topic word of the earlier answer.
   add('hr-f01', 'followup', 'kestrel-api', 'peki döndürme penceresi kaç dakika?', ['kestrel-api/tokens.md'], {cwd: KS, project: 'kestrel-api'});
   add('hr-f02', 'followup', 'kestrel-api', 'bunun 429 tarafı nasıl çalışıyor?', ['kestrel-api/rate-limits.md'], {cwd: KS, project: 'kestrel-api'});
-  add('hr-f03', 'followup', 'kestrel-api', 'peki kaç denemeden sonra vazgeçiyor?', ['kestrel-api/webhook-retries.md']);
+  add('hr-f03', 'followup', 'kestrel-api', 'webhook teslimi kaç denemeden sonra vazgeçiyor?', ['kestrel-api/webhook-retries.md']);
   add('hr-f04', 'followup', 'kestrel-api', 'havuz tarafında en fazla kaç bağlantı var?', ['kestrel-api/connection-pool.md']);
   add('hr-f05', 'followup', 'kestrel-api', 'ya canary başarısız olursa geri alma nasıl?', ['kestrel-api/deploy-runbook.md']);
   add('hr-f06', 'followup', 'lumen-web', 'önbellek sürümü ETag ile nasıl ilişkili?', ['lumen-web/cache-policy.md'], {cwd: LW, project: 'lumen-web'});

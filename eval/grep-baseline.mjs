@@ -92,15 +92,22 @@ export function grepRanking(corpusDir, query, {rg = false} = {}) {
 /**
  * Grep-baseline metrics for one case file. Recall and MRR follow the BM25 definitions (answerable cases only).
  * currentFirstRate covers current-state cases: category `current-state` or an `expectedHeading`; null when there are none.
+ * unansweredReturnedRate: share of unanswerable cases where some term matches (grep then prints lines, i.e. "returns").
+ * abstainAccuracy is 1 - unansweredReturnedRate (0 when there are no unanswerable cases); abstainN is the denominator.
  * @param {{corpusDir:string,casesFile:string,rg?:boolean}} options
  */
 export function runGrepBaseline({corpusDir, casesFile, rg = false}) {
   const cases = JSON.parse(readFileSync(casesFile, 'utf8'));
   if (!Array.isArray(cases)) throw new Error('Invalid cases');
-  let recall = 0, reciprocal = 0, answerable = 0, currentHits = 0, currentCases = 0;
+  let recall = 0, reciprocal = 0, answerable = 0, currentHits = 0, currentCases = 0, abstainN = 0, unanswered = 0;
   for (const item of cases) {
     const relevant = Array.isArray(item?.relevant) ? item.relevant : [];
-    if (item?.abstain || !relevant.length) continue;
+    if (item?.abstain || !relevant.length) {
+      // Grep has no abstention of its own: an unanswerable case counts as answered when some term matches a line.
+      abstainN++;
+      if (grepRanking(corpusDir, item?.query ?? '', {rg}).length) unanswered++;
+      continue;
+    }
     answerable++;
     const ranked = grepRanking(corpusDir, item.query, {rg});
     const top5 = ranked.slice(0, 5).filter((p) => relevant.includes(p)).length;
@@ -112,12 +119,17 @@ export function runGrepBaseline({corpusDir, casesFile, rg = false}) {
       if (relevant.includes(ranked[0])) currentHits++;
     }
   }
+  const recallAt5 = answerable ? recall / answerable : 0;
   return {
     n: cases.length,
-    recallAt5: answerable ? recall / answerable : 0,
+    recallAt5,
     mrrAt10: answerable ? reciprocal / answerable : 0,
     currentFirstRate: currentCases ? currentHits / currentCases : null,
     currentCases,
+    answerableRecallAt5: recallAt5,
+    abstainN,
+    unansweredReturnedRate: abstainN ? unanswered / abstainN : 0,
+    abstainAccuracy: abstainN ? 1 - unanswered / abstainN : 0,
   };
 }
 

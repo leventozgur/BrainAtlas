@@ -20,6 +20,8 @@ Her vaka `id` (`[\w-]{1,64}`, set içinde benzersiz), `query` (boş olmayan meti
 
 **Korpus meta sayfaları.** Kökteki opsiyonel `eval-meta.json` (`{"meta": ["index.md", "log.md", "AGENTS.md", "planning/**", "archive/**"]}`) glob listesidir: `**` dizinleri geçer, `*` ve `?` geçmez. Dosya yoksa varsayılan: kökteki `index.md`, `log.md`, `AGENTS.md`, `CLAUDE.md`. Meta sayfa oranı (`metaShareTop5`) yalnız ilk beş enjekte bloğa bakar.
 
+**Belirsiz proje vakaları (`category: "ambiguous-project"`).** Sorgu proje adı taşımaz; yalnız `cwd` (ve `project`) doğru proje sayfasını gösterir. Her vakada `excluded`, öteki projelerin test sayfalarını listeler: bu sayfalar yanlış cevaptır. `excluded` opsiyonel bir liste alanıdır: korpus yolları, `relevant` ile ayrık, vakanın `project` dizininin dışında olmalıdır. BM25 tarafında `excluded` isabetleri `falsePositives` listesine düşer; hook özetinde bu vakalar `byCategory["ambiguous-project"]` ile ayrı görünür. Hook özetine ayrı bir excluded anahtarı eklenmedi (özet anahtar listesi BA-00 kabul testinde sabittir).
+
 **Doğrulayıcı.** `eval/lib/case-schema.mjs` (`validateCase`) tek vakayı, `tests/eval/ba27-schema.test.mjs` yardımcı fonksiyonları, `tests/eval/ba27-dev-sets.test.mjs` tüm BA-27 dev setlerini sınar.
 
 ## Hook metrikleri (BA-27 ekleri)
@@ -50,10 +52,20 @@ Her anahtar `{n, bm25, hook}` döndürür; `bm25` mevcut BM25 değerlendirmesini
 ## Etiket hijyeni (BA-27, `eval/dev/natural-cases.json`)
 Önceden `relevant` değeri yalnız superseded bir sayfayı gösteren vakalar indekse girmediği için hiç tutturulamıyordu (superseded sayfalar aramada yoktur). Bu vakalarda `relevant`, sayfanın `superseded_by` ile gösterdiği güncel sayfaya çevrildi; eski değer `relevantLegacy` alanında korundu. Etkilenen vakalar (2026-11-12): `tr-01`, `tr-02`, `tr-03`, `tr-04`, `tr-05`, `synonym-01`, `synonym-02`, `synonym-07`, `synonym-10`, `typo-01`, `typo-02` (11 vaka; `natural-01`…`natural-05` sayfalarının yerine `natural-57`, `natural-56`, `natural-27`, `natural-58`, `natural-28`). Bu değişiklik `natural` BM25 değerlerini ve `hook` özetindeki `natural` kayıtlarını değiştirir; `ba00-dev-sets` testi, hiçbir vakanın superseded sayfayı göstermediğini ve her `relevantLegacy`'nin superseded olduğunu doğrular.
 
+## Adil karşılaştırma nasıl okunur (BA-27 düzeltmesi)
+Tek bir eşik değeriyle "BM25 grep'ten iyi mi" sorusu sorulamaz: eşik cevapsız kalan cevaplanabilir soruları sıfırlar. Bu yüzden `grepBaseline[set]` iki sonucu yan yana verir:
+- Grep alanları: `recallAt5`, `mrrAt10`, `currentFirstRate`; ayrıca `answerableRecallAt5` (yalnız cevaplanabilir vakalar; `recallAt5` ile aynı tanım), `abstainN` (cevapsız vaka sayısı), `unansweredReturnedRate` (cevapsız vakaların en az birinde sayfa döndüren, yani en az bir terimi eşleşen grep oranı) ve `abstainAccuracy` (= 1 - `unansweredReturnedRate`; cevapsız vakası yoksa 0).
+- `bm25.atThreshold` (eşik 0,35, mevcut sayılarla aynı): `recallAt5`, `answerableRecallAt5`, `mrrAt10`, `abstainAccuracy`, `unansweredReturnedRate`, `abstainN`.
+- `bm25.noAbstain` (eşik 0, yani hiç cevapsız dönmeme): aynı alanlar. Bu, sıralama kalitesinin üst sınırıdır.
+
+Okuma kuralı: sıralama farkını `bm25.noAbstain` ile grep'i karşılaştırarak, eşik etkisini `bm25.atThreshold` ile `bm25.noAbstain` arasındaki farkla görün. Cevapsız sorularda grep kendi eşiği olmadığı için çoğu zaman bir şey döndürür (`unansweredReturnedRate` yüksek); bu, grep'in cevapsız durumu ayırt edemediğini gösterir, BM25'in daha iyi olduğunu değil. Yalnız cevaplanabilir sorularda karşılaştırın (`answerableRecallAt5`, `mrrAt10`).
+
+**Yerleşim notu.** Bu alanlar `grepBaseline[set].bm25` altındadır, set nesnelerinin içinde değil: `cases`, `xling`, `identifier`, `currentState`, `multihop`, `nearNegative` ve `natural` nesneleri, BA-00/BA-27 kabul testleri tarafından ana dal ile birebir karşılaştırılır. Set nesnelerine eklenen her alan bu karşılaştırmayı bozar. `abstainAccuracy` her iki tarafta da cevapsız vakası olmayan sette 0 döner (davranış korunmuştur; gate uyumluluğu); bu durumda `abstainN` = 0 bakılmalıdır.
+
 ## Dev setleri: üretim ve sayılar (BA-27)
 - `eval/gen/dev-corpora.mjs` (`eval/corpus-hook-realistic`, `eval/corpus-temporal`, `eval/corpus-poison` ve vaka dosyaları) ve `eval/gen/longpage.mjs` (`eval/corpus-longpage`, `eval/dev/longpage-cases.json`) deterministiktir: `node eval/gen/<dosya>.mjs` çıktıları yeniden üretir. Çıktılar repoda durur; `ba27-dev-sets` testi üreteçleri geçici dizine koşup dosyaların birebir aynı olduğunu sınar. Elle düzenleme yerine üreteci değiştirin.
 - Tüm içerik kurgusaldır (kestrel-api, lumen-web, quarry-jobs, "Sağlayıcı A/B"); kişisel veri, gerçek kişi, şirket veya proje adı yoktur.
-- `hookRealistic`: 23 sayfa (3 proje, `planning/`, kökte `index.md`, `log.md`, `AGENTS.md`; meta glob'ları `eval-meta.json` ile verilir), 72 vaka: 24 knowledge (8'i cwd+project, 8'i proje adı geçmeyen belirsiz "testi düzelt" türü), 22 operational, 10 followup, 8 long-brief (>= 600 karakter), 8 pasted-error. 20 vakada cwd ve project dolu.
+- `hookRealistic`: 23 sayfa (3 proje, `planning/`, kökte `index.md`, `log.md`, `AGENTS.md`; meta glob'ları `eval-meta.json` ile verilir), 72 vaka: knowledge 24 (cwd+project dolu 16: 8'i proje adını anan sorgu, 8'i `ambiguous-project` kategorili proje adı geçmeyen "testi düzelt" türü; cwd'siz 8), operational 22, followup 10, long-brief 8 (>= 600 karakter), pasted-error 8. cwd+project dolu toplam 20 vaka (followup 4 dahil).
 - `longpage`: 7 sayfa (61–110 KB), 39 vaka; her vakanın `expectedHeading` değeri, sorgudaki kod adına (benzersiz, rakamsız uydurma sözcük) sahip H3 bölümüdür. Bu yüzden set bölüm seçimini uzun sayfada ölçer, anlamsal zorluğu ölçmez.
 - `temporal`: 6 sayfa (`eval/corpus-temporal`), 25 vaka: göreli (geçen hafta, Ekim'de, son karar, dün, bu hafta, last month, latest) ve mutlak (2026-10) ifadeler; 3 vaka cevapsız. `now` = `DEFAULT_NOW`.
 - `poison`: 30 temiz + 12 `eval_poison: true` sayfa, 26 vaka (20 temiz sayfaya cevap, 6 cevapsız). Vakaların `relevant` değerleri asla eval_poison sayfası değildir.

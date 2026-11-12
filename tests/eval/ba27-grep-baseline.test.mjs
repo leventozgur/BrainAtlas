@@ -87,3 +87,19 @@ test('CLI prints one JSON line and rejects missing arguments', (t) => {
   assert.equal(bad.status, 1);
   assert.equal(bad.stderr.trim(), 'Grep baseline failed');
 });
+
+test('unanswerable cases: unansweredReturnedRate counts cases where a term matches; abstainAccuracy is its complement', (t) => {
+  const f = fixture(t);
+  const casesFile = path.join(f.dir, 'abstain.json');
+  fs.writeFileSync(casesFile, JSON.stringify([
+    {id: 'u1', query: 'cedar', relevant: [], abstain: true},          // matches delta.md
+    {id: 'u2', query: 'xylophone', relevant: [], abstain: true},      // no term matches
+    {id: 'u3', query: 'zebra', relevant: [], abstain: true},          // matches
+    {id: 'a1', query: 'ember', relevant: ['alpha.md']},
+  ]));
+  const r = runGrepBaseline({corpusDir: f.corpus, casesFile});
+  assert.equal(r.abstainN, 3);
+  assert.ok(Math.abs(r.unansweredReturnedRate - 2 / 3) < 1e-12, `rate ${r.unansweredReturnedRate}`);
+  assert.ok(Math.abs(r.abstainAccuracy - 1 / 3) < 1e-12);
+  assert.equal(r.answerableRecallAt5, r.recallAt5);
+});

@@ -162,90 +162,122 @@
   {
     "id": "hr-a1",
     "kind": "knowledge",
-    "category": "kestrel-api",
+    "category": "ambiguous-project",
     "query": "testi düzelt",
     "relevant": [
       "kestrel-api/test-setup.md"
     ],
     "cwd": "/srv/work/kestrel-api",
-    "project": "kestrel-api"
+    "project": "kestrel-api",
+    "excluded": [
+      "lumen-web/e2e-tests.md",
+      "quarry-jobs/testing.md"
+    ]
   },
   {
     "id": "hr-a2",
     "kind": "knowledge",
-    "category": "lumen-web",
+    "category": "ambiguous-project",
     "query": "şu başarısız testi düzelt",
     "relevant": [
       "lumen-web/e2e-tests.md"
     ],
     "cwd": "/srv/work/lumen-web",
-    "project": "lumen-web"
+    "project": "lumen-web",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "quarry-jobs/testing.md"
+    ]
   },
   {
     "id": "hr-a3",
     "kind": "knowledge",
-    "category": "quarry-jobs",
+    "category": "ambiguous-project",
     "query": "zamanlı testi düzelt",
     "relevant": [
       "quarry-jobs/testing.md"
     ],
     "cwd": "/srv/work/quarry-jobs",
-    "project": "quarry-jobs"
+    "project": "quarry-jobs",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "lumen-web/e2e-tests.md"
+    ]
   },
   {
     "id": "hr-a4",
     "kind": "knowledge",
-    "category": "kestrel-api",
+    "category": "ambiguous-project",
     "query": "failing test fix et",
     "relevant": [
       "kestrel-api/test-setup.md"
     ],
     "cwd": "/srv/work/kestrel-api",
-    "project": "kestrel-api"
+    "project": "kestrel-api",
+    "excluded": [
+      "lumen-web/e2e-tests.md",
+      "quarry-jobs/testing.md"
+    ]
   },
   {
     "id": "hr-a5",
     "kind": "knowledge",
-    "category": "lumen-web",
+    "category": "ambiguous-project",
     "query": "testi düzeltir misin",
     "relevant": [
       "lumen-web/e2e-tests.md"
     ],
     "cwd": "/srv/work/lumen-web",
-    "project": "lumen-web"
+    "project": "lumen-web",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "quarry-jobs/testing.md"
+    ]
   },
   {
     "id": "hr-a6",
     "kind": "knowledge",
-    "category": "quarry-jobs",
+    "category": "ambiguous-project",
     "query": "bu testi düzelt",
     "relevant": [
       "quarry-jobs/testing.md"
     ],
     "cwd": "/srv/work/quarry-jobs",
-    "project": "quarry-jobs"
+    "project": "quarry-jobs",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "lumen-web/e2e-tests.md"
+    ]
   },
   {
     "id": "hr-a7",
     "kind": "knowledge",
-    "category": "lumen-web",
+    "category": "ambiguous-project",
     "query": "snapshot testini güncelle",
     "relevant": [
       "lumen-web/theme-tokens.md"
     ],
     "cwd": "/srv/work/lumen-web",
-    "project": "lumen-web"
+    "project": "lumen-web",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "quarry-jobs/testing.md"
+    ]
   },
   {
     "id": "hr-a8",
     "kind": "knowledge",
-    "category": "kestrel-api",
+    "category": "ambiguous-project",
     "query": "testte kırılan kodu düzelt",
     "relevant": [
       "kestrel-api/test-setup.md"
     ],
     "cwd": "/srv/work/kestrel-api",
-    "project": "kestrel-api"
+    "project": "kestrel-api",
+    "excluded": [
+      "lumen-web/e2e-tests.md",
+      "quarry-jobs/testing.md"
+    ]
   },
   {
     "id": "hr-f01",
@@ -273,7 +305,7 @@
     "id": "hr-f03",
     "kind": "followup",
     "category": "kestrel-api",
-    "query": "peki kaç denemeden sonra vazgeçiyor?",
+    "query": "webhook teslimi kaç denemeden sonra vazgeçiyor?",
     "relevant": [
       "kestrel-api/webhook-retries.md"
     ]

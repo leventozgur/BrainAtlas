@@ -52,6 +52,31 @@ test('hook-realistic set: schema, counts by kind, cwd/project coverage and long 
   assert.ok(scoped.length >= 15, `cwd+project ${scoped.length}`);
   const ambiguous = scoped.filter((c) => !c.query.toLowerCase().includes(c.project.split('-')[0]));
   assert.ok(ambiguous.length >= 8, `ambiguous ${ambiguous.length}`);
+
+  // Ambiguous-project cases: category, cwd-bound relevant page, and other-project pages excluded.
+  const amb = cases.filter((c) => c.category === 'ambiguous-project');
+  assert.equal(amb.length, 8, 'ambiguous-project cases');
+  for (const item of amb) {
+    assert.ok(item.cwd && item.project && item.relevant[0].startsWith(`${item.project}/`), item.id);
+    assert.ok(Array.isArray(item.excluded) && item.excluded.length >= 1, `${item.id} excluded`);
+    assert.ok(item.excluded.every((p) => !p.startsWith(`${item.project}/`) && !item.relevant.includes(p)), `${item.id} excluded is another project`);
+  }
+
+  // Counts quoted in the README are computed from the data, not typed by hand.
+  const knowledge = byKind('knowledge');
+  const kCwd = knowledge.filter((c) => c.cwd && c.project).length;
+  const readme = fs.readFileSync(path.join(evalDir, 'README-ba.md'), 'utf8');
+  const quoted = [
+    `knowledge ${knowledge.length} (cwd+project dolu ${kCwd}:`,
+    `cwd'siz ${knowledge.length - kCwd})`,
+    `operational ${byKind('operational').length}`,
+    `followup ${byKind('followup').length}`,
+    `long-brief ${byKind('long-brief').length} `,
+    `pasted-error ${byKind('pasted-error').length}.`,
+    `${cases.length} vaka:`,
+    `toplam ${scoped.length} vaka`,
+  ];
+  for (const text of quoted) assert.ok(readme.includes(text), `README quotes ${text}`);
 });
 
 test('hook-realistic pages: meta pages are excluded by the meta predicate and no page carries eval_poison', () => {

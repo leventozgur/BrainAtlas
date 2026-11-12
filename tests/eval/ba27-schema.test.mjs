@@ -85,3 +85,15 @@ test('invalid cases are rejected with the rule that failed', () => {
   assert.throws(() => check({...base, expectedHeading: 'Not a heading'}), /expectedHeading/u);
   assert.throws(() => check({id: 'e', query: 'q', relevant: [], abstain: true, expectedHeading: 'Overlap window'}), /expectedHeading/u);
 });
+
+test('excluded lists other-project corpus pages: disjoint from relevant and outside the case project', () => {
+  check({...base, id: 'x-1', project: 'kestrel-api', cwd: '/srv/work/kestrel-api', excluded: ['lumen-web/routing.md']});
+  check({...base, id: 'x-2', excluded: []});
+  assert.throws(() => check({...base, excluded: ['missing.md']}), /excluded exists/u);
+  assert.throws(() => check({...base, excluded: 'lumen-web/routing.md'}), /excluded exists/u);
+  assert.throws(() => check({...base, excluded: ['kestrel-api/tokens.md']}), /excluded disjoint/u);
+  assert.throws(() => check({...base, project: 'kestrel-api', cwd: '/srv/work/kestrel-api', excluded: ['kestrel-api/tokens.md', 'lumen-web/routing.md']}), /excluded disjoint/u);
+  const other = {id: 'x-3', query: 'testi düzelt', relevant: ['lumen-web/routing.md'], project: 'lumen-web', cwd: '/srv/work/lumen-web'};
+  assert.throws(() => check({...other, excluded: ['lumen-web/routing.md']}), /excluded disjoint/u);
+  assert.throws(() => check({...other, excluded: ['kestrel-api/tokens.md', 'lumen-web/index.md']}), /excluded exists/u);
+});

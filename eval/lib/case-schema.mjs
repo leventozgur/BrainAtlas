@@ -99,6 +99,11 @@ export function validateCase(item, {paths, projects = null}) {
     if (!item.relevant.length || item.abstain === true) fail('expectedHeading only on answerable cases');
     if (!headingExists(paths.get(item.relevant[0]).body, item.expectedHeading)) fail('expectedHeading is a heading line of relevant[0]');
   }
+  if (item.excluded !== undefined) {
+    if (!Array.isArray(item.excluded) || !item.excluded.every((p) => typeof p === 'string' && paths.has(p))) fail('excluded exists');
+    if (item.excluded.some((p) => item.relevant.includes(p))) fail('excluded disjoint from relevant');
+    if (item.project && item.excluded.some((p) => p.startsWith(`${item.project}/`))) fail('excluded outside the case project');
+  }
   if (item.requireAll !== undefined && typeof item.requireAll !== 'boolean') fail('requireAll');
   return item;
 }

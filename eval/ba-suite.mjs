@@ -7,6 +7,7 @@ import { runEval } from './run-eval.mjs';
 import { DEFAULT_NOW, runHookCases } from './hook-eval.mjs';
 import { summarizeHookRecords } from './lib/hook-records.mjs';
 import { runGrepBaseline } from './grep-baseline.mjs';
+import { bm25Fair } from './lib/bm25-fair.mjs';
 import { runScaleBench } from './scale-bench.mjs';
 
 const evalRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -82,11 +83,17 @@ export async function runBaSuite({sourceRoot = evalRoot, holdoutDir, scale = fal
     const records = await runHookCases({corpusDir: source.corpusDir, cases, mode: 'normal', abstainThreshold: SET_THRESHOLD, now});
     return {n: cases.length, bm25: bm25(source.corpusDir, source.casesFile), hook: summarizeHookRecords(records)};
   };
+  // grepBaseline[set] is the fair comparison block: grep numbers plus BM25 at the default threshold and without abstention.
+  // It sits here, not on the set objects, because the set objects keep their BA-00 shape (main parity).
   const grepSet = (key) => {
     const source = sources[key];
     if (!source) return null;
     requireFile(source);
-    return runGrepBaseline({corpusDir: source.corpusDir, casesFile: source.casesFile});
+    const bm25Both = {
+      atThreshold: bm25Fair({corpusDir: source.corpusDir, casesFile: source.casesFile, now, abstainThreshold: SET_THRESHOLD}),
+      noAbstain: bm25Fair({corpusDir: source.corpusDir, casesFile: source.casesFile, now, abstainThreshold: 0}),
+    };
+    return {...runGrepBaseline({corpusDir: source.corpusDir, casesFile: source.casesFile}), bm25: bm25Both};
   };
 
   const newResults = {};

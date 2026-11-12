@@ -144,3 +144,20 @@ test('a holdout directory without a BA-27 set directory gives null for that set,
   assert.equal(second.hookRealistic, null);
   assert.equal(second.meta.holdout, true);
 });
+
+test('grepBaseline carries the fair comparison block: BM25 at 0.35 matches the set numbers, and both sides expose abstainN', async (t) => {
+  const {sourceRoot} = sourceFixture(t);
+  const suite = await runBaSuite({sourceRoot, docsDir: path.join(sourceRoot, 'docs'), now: NOW});
+  for (const key of ['cases', 'natural', 'xling', 'identifier', 'currentState', 'multihop', 'nearNegative', 'hookRealistic', 'longpage', 'temporal', 'poison', 'realDocs']) {
+    const entry = suite.grepBaseline[key];
+    for (const field of ['answerableRecallAt5', 'abstainN', 'unansweredReturnedRate', 'abstainAccuracy']) assert.ok(field in entry, `${key}.${field}`);
+    for (const mode of ['atThreshold', 'noAbstain']) {
+      for (const field of ['recallAt5', 'answerableRecallAt5', 'mrrAt10', 'abstainAccuracy', 'unansweredReturnedRate', 'abstainN']) assert.ok(field in entry.bm25[mode], `${key}.bm25.${mode}.${field}`);
+    }
+  }
+  assert.equal(suite.grepBaseline.cases.bm25.atThreshold.recallAt5, suite.cases.recallAt5);
+  assert.equal(suite.grepBaseline.cases.bm25.atThreshold.mrrAt10, suite.cases.mrrAt10);
+  assert.equal(suite.grepBaseline.cases.bm25.atThreshold.abstainAccuracy, suite.cases.abstainAccuracy);
+  assert.equal(suite.grepBaseline.cases.bm25.noAbstain.abstainN, suite.grepBaseline.cases.bm25.atThreshold.abstainN);
+  assert.equal('abstainN' in suite.cases, false, 'set objects keep their BA-00 shape');
+});
