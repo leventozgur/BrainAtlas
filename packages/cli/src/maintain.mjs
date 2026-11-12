@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
-// `brainatlas maintain`: read-only Wiki maintenance report. Nothing here writes to the vault.
+// `brainatlas maintain`: read-only Wiki maintenance report. Nothing here writes to the vault or to a `--repo` working tree.
 import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, join, posix, resolve } from 'node:path';
 import { checkPage, loadPagesDetailed, parseFrontmatter } from '@brainatlas/core';
 
 export const KINDS = Object.freeze(['stale', 'superseded-broken', 'broken-link', 'orphan', 'index-missing', 'index-stale', 'oversized', 'update-sprawl']);
 // BA-23: `invalid-frontmatter` is reported in findings, the human output and receipt candidates. It is not a key of `counts`:
-// `counts` keeps the KINDS keys that the BA-12 acceptance contract pins.
-export const FINDING_KINDS = Object.freeze([...KINDS, 'invalid-frontmatter']);
+// `counts` keeps the KINDS keys that the BA-12 acceptance contract pins. BA-42 adds `stale-source` and `stale-symbol`
+// (only with `--repo`) the same way.
+export const FINDING_KINDS = Object.freeze([...KINDS, 'invalid-frontmatter', 'stale-source', 'stale-symbol']);
 export const LIMITS = Object.freeze({ oversizedWords: 3000, updateSprawl: 6 });
 const SKIP_ROOT = new Set(['wiki/index.md', 'wiki/log.md']);
 // Same wikilink and Markdown link shapes as the retrieval link graph (packages/core/src/retrieval), copied because that
@@ -164,14 +165,146 @@ async function unreadableWikiPages(root) {
   return loadPagesDetailed(join(root, 'wiki')).skipped.map(rel => `wiki/${rel}`);
 }
 
+// ---- BA-42: code attribution (`--repo DIR`). Filesystem reads only: no git, no network, no symlink is followed, and commit
+// hashes are not verified. Findings carry repository-relative paths and symbol names, never file content.
+const COMMIT_SUFFIX = /^[0-9a-f]{7,64}$/iu;
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
+const SYMBOL_NAME_LIMIT = 200;
+const REJECTED_REPO_PATH = 'repo path is not a file path inside the repository';
+
+/** The repository working tree as a real directory, or E_REPO_MISSING. */
+async function repoDirectory(repo) {
+  const missing = () => Object.assign(new Error('Repository is missing or not a directory.'), { code: 'E_REPO_MISSING' });
+  if (typeof repo !== 'string' || !repo) throw missing();
+  let root;
+  try { root = await realpath(resolve(repo)); } catch { throw missing(); }
+  const info = await stat(root).catch(() => null);
+  if (!info || !info.isDirectory()) throw missing();
+  return root;
+}
+
+/**
+ * A repository-relative POSIX path, or null. Null for an empty path, a trailing slash (a directory, never a file), a
+ * backslash, a NUL, a drive letter, a leading slash, any `..` segment, or a path that names the repository root. The raw
+ * text is never echoed back.
+ */
+function repoRelativePath(rel) {
+  if (typeof rel !== 'string' || !rel || rel.endsWith('/') || /[\0\\]/u.test(rel) || /^[A-Za-z]:/u.test(rel) || rel.startsWith('/')) return null;
+  if (rel.split('/').some(part => part === '..')) return null;
+  const norm = posix.normalize(rel);
+  if (norm === '.' || posix.isAbsolute(norm)) return null;
+  return norm;
+}
+
+/**
+ * Text of a regular file at a repository-relative path, or null. Every path component is checked with lstat; a symlink
+ * anywhere on the way, a directory at the end, or an unreadable file yields null. Memoized per path within one run.
+ */
+async function repoFileText(repoRoot, rel, cache) {
+  if (cache.has(rel)) return cache.get(rel);
+  let text = null;
+  const parts = rel.split('/');
+  let current = repoRoot;
+  for (let i = 0; i < parts.length; i++) {
+    current = join(current, parts[i]);
+    const info = await lstat(current).catch(() => null);
+    if (!info || info.isSymbolicLink()) break;
+    if (i < parts.length - 1) {
+      if (!info.isDirectory()) break;
+      continue;
+    }
+    if (info.isFile()) text = await readFile(current, 'utf8').catch(() => null);
+  }
+  cache.set(rel, text);
+  return text;
+}
+
+/**
+ * The path part of a `repo:` entry. `repo:<path>@<commit>` strips the suffix only when it is 7 to 64 hexadecimal digits
+ * (any case). Any other text after the last `@`, such as a branch name, stays part of the path. Commits are not verified.
+ * Returns null for entries that are not `repo:` references.
+ */
+function repoSourcePath(entry) {
+  if (typeof entry !== 'string' || !entry.startsWith('repo:')) return null;
+  const ref = entry.slice('repo:'.length).trim();
+  const at = ref.lastIndexOf('@');
+  return at > 0 && COMMIT_SUFFIX.test(ref.slice(at + 1)) ? ref.slice(0, at) : ref;
+}
+
+/**
+ * A `symbols:` entry, `{path, name}` or `"<path>#<name>"` (the name follows the last `#`). Anything else is malformed and
+ * yields null, so it is ignored silently: a non-string or non-object entry, a missing or empty path or name, a name with a
+ * line break, or a name longer than 200 characters.
+ */
+function symbolReference(entry) {
+  let path, name;
+  if (typeof entry === 'string') {
+    const hash = entry.lastIndexOf('#');
+    if (hash < 0) return null;
+    path = entry.slice(0, hash);
+    name = entry.slice(hash + 1);
+  } else if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+    path = entry.path;
+    name = entry.name;
+  } else return null;
+  if (typeof path !== 'string' || !path.trim() || typeof name !== 'string') return null;
+  name = name.trim();
+  if (!name || name.length > SYMBOL_NAME_LIMIT || /[\r\n]/u.test(name)) return null;
+  return { path: path.trim(), name };
+}
+
+/** Plain-text search for `name` bounded at both ends by a non-word character. No regular expression is built from the name. */
+function containsWord(text, name) {
+  for (let at = text.indexOf(name); at >= 0; at = text.indexOf(name, at + 1)) {
+    const before = at > 0 ? text[at - 1] : '';
+    const after = text[at + name.length] ?? '';
+    if (!WORD_CHAR.test(before) && !WORD_CHAR.test(after)) return true;
+  }
+  return false;
+}
+
+/**
+ * Repository checks for one page: its `repo:` sources (stale-source) and its `symbols:` list (stale-symbol when the file
+ * exists and the name is not in it, stale-source when the file does not). Each finding is reported once per page.
+ */
+async function checkCodeReferences(page, repoRoot, cache, add) {
+  const reported = new Set();
+  const staleSource = (key, detail) => { if (!reported.has(key)) { reported.add(key); add('stale-source', page.path, detail); } };
+  const staleSymbol = (key, detail) => { if (!reported.has(key)) { reported.add(key); add('stale-symbol', page.path, detail); } };
+  const resolveRef = async rel => {
+    const norm = repoRelativePath(rel);
+    if (norm === null) { staleSource(`rejected:${rel}`, REJECTED_REPO_PATH); return null; }
+    const text = await repoFileText(repoRoot, norm, cache);
+    if (text === null) { staleSource(`missing:${norm}`, `repo file not found: ${short(norm)}`); return null; }
+    return { norm, text };
+  };
+  const sources = Array.isArray(page.data.sources) ? page.data.sources : [];
+  for (const entry of sources) {
+    const rel = repoSourcePath(entry);
+    if (rel !== null) await resolveRef(rel);
+  }
+  if (!Array.isArray(page.data.symbols)) return;
+  for (const entry of page.data.symbols) {
+    const ref = symbolReference(entry);
+    if (ref === null) continue;
+    const found = await resolveRef(ref.path);
+    if (found !== null && !containsWord(found.text, ref.name)) {
+      staleSymbol(`symbol:${found.norm}#${ref.name}`, `symbol not found in repo file: ${short(found.norm)}#${short(ref.name, 80)}`);
+    }
+  }
+}
+
 /**
  * Read-only maintenance scan of the Wiki under `vault`. Returns findings `{kind, path, detail}` (detail holds only counts,
  * paths, field names or short link targets, never page bodies), counts per kind, the number of content pages scanned
  * (wiki/index.md and wiki/log.md excluded) and the duration. Nothing is written.
+ * With `repo` (BA-42), `sources` `repo:` entries and `symbols:` are also checked against that working tree; without it no
+ * repository is read.
  */
-export async function runMaintenance(vault, { now = new Date() } = {}) {
+export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
   const started = Date.now();
   const root = await vaultRoot(vault);
+  const repoRoot = repo === undefined ? null : await repoDirectory(repo);
   const pagePaths = await listWikiMarkdown(root);
   const pages = new Map();
   for (const path of pagePaths) {
@@ -284,6 +417,12 @@ export async function runMaintenance(vault, { now = new Date() } = {}) {
     const lines = withoutCode(page.body).split('\n');
     const dated = lines.filter(line => updateHeading.test(line) && isoDate.test(line)).length;
     if (dated >= LIMITS.updateSprawl) add('update-sprawl', path, `${dated} dated Update sections (threshold ${LIMITS.updateSprawl})`);
+  }
+
+  // stale-source and stale-symbol: only with `repo`. Files are read, never written; symlinks are not followed.
+  if (repoRoot !== null) {
+    const cache = new Map();
+    for (const path of content) await checkCodeReferences(pages.get(path), repoRoot, cache, add);
   }
 
   findings.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0) || (FINDING_KINDS.indexOf(a.kind) - FINDING_KINDS.indexOf(b.kind)) || (a.detail < b.detail ? -1 : a.detail > b.detail ? 1 : 0));
