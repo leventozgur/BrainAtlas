@@ -154,7 +154,8 @@ test('legacy run-eval keeps dev output keys and golden metrics; natural dev rema
   assert.deepEqual([old.recallAt5, old.precisionAt5, old.abstainAccuracy, old.trToEnRecallAt5, old.n], [1, 0.2000000000000001, 1, 1, 46]);
 
   const natural = runEval({ corpusDir: path.join(rootDir, 'eval/corpus-natural'), casesFile: path.join(rootDir, 'eval/dev/natural-cases.json'), repeat: 1, abstainThreshold: 0 });
-  assert.ok(Math.abs(natural.recallAt5 - 72/95) <= 1e-9, `expected natural recallAt5 72/95 (0.7579, PM correction: brief value 0.758 was rounded) ± 1e-9, got ${natural.recallAt5}`);
+  // BA-27: 72/95 -> 77/95. The natural golden changed only because 11 superseded-only labels were moved to their superseded_by pages (eval/dev/natural-cases.json, relevantLegacy kept); corpus and retrieval are unchanged.
+  assert.ok(Math.abs(natural.recallAt5 - 77/95) <= 1e-9, `expected natural recallAt5 77/95 (0.8105) ± 1e-9 after BA-27 label hygiene, got ${natural.recallAt5}`);
   // PM update (BA-03, 2026-11-11): identifier-aware retrieval improves natural MRR (0.687 → 0.694); guard against regression.
   assert.ok(natural.mrrAt10 >= 0.687 - 1e-3, `natural mrrAt10 regressed: ${natural.mrrAt10}`);
   assert.equal(natural.n, 100);

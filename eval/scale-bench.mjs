@@ -4,13 +4,16 @@
  *
  * Output keys per size N: buildIndexMs, createSearcherColdMs (no cache), createSearcherWarmMs (cached
  * second setup), searchMs {p50,p95,count} (core search per query), hookMs {p50,p95,count} (runHook with
- * the real retrieval worker), hybridOverheadMs {p50,p95,count}.
+ * the real retrieval worker), hybridOverheadMs {p50,p95,count}, refreshAfterEditMs {p50,p95,count}.
+ *
+ * refreshAfterEditMs: a warm searcher; one page is appended to, then refreshIfChanged() and the first query are timed
+ * together. Each round edits a different page; the index is rebuilt from the vault after every edit.
  *
  * hybridOverheadMs is NOT the fusion cost alone. It is the total per-query time of the MCP hybrid path:
  * loadPages + searchHybrid (which includes buildIndex and the lexical search) with a fake provider
  * returning fixed vectors. It does not measure a real embedding provider.
  */
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -26,6 +29,7 @@ const MIN_QUERIES = 30;
 const MIN_PROMPTS = 20;
 const DEFAULT_SIZES = [500, 2000];
 const DIMS = 8;
+const DEFAULT_EDITS = 20;
 
 const stats = (values) => ({p50: percentile(values, 0.5), p95: percentile(values, 0.95), count: values.length});
 
@@ -40,10 +44,11 @@ async function timed(fn) {
  * hybridOverheadMs is the full per-query MCP hybrid-path time (loadPages + searchHybrid, buildIndex included),
  * measured with a fake provider; see the file header.
  * Timing values vary between runs; the synthetic content and queries do not.
- * @param {{sizes?:number[],seed?:number,queryCount?:number,hookCount?:number,now?:Date}} options
+ * @param {{sizes?:number[],seed?:number,queryCount?:number,hookCount?:number,editCount?:number,now?:Date}} options
  */
-export async function runScaleBench({sizes = DEFAULT_SIZES, seed = 1, queryCount = MIN_QUERIES, hookCount = MIN_PROMPTS, now = new Date(DEFAULT_NOW)} = {}) {
+export async function runScaleBench({sizes = DEFAULT_SIZES, seed = 1, queryCount = MIN_QUERIES, hookCount = MIN_PROMPTS, editCount = DEFAULT_EDITS, now = new Date(DEFAULT_NOW)} = {}) {
   if (!Array.isArray(sizes) || !sizes.length || sizes.some((n) => !Number.isInteger(n) || n < 1 || n > 50000)) throw new Error('Invalid sizes');
+  if (!Number.isInteger(editCount) || editCount < 1 || editCount > 10000) throw new Error('Invalid edit count');
   const queries = Math.max(MIN_QUERIES, queryCount);
   const prompts = Math.max(MIN_PROMPTS, hookCount);
   const results = [];
@@ -88,6 +93,17 @@ export async function runScaleBench({sizes = DEFAULT_SIZES, seed = 1, queryCount
         hybridTimes.push(ms);
       }
 
+      // Refresh after edit: one page appended per round, then refreshIfChanged() and the first query, timed together.
+      const editTimes = [];
+      for (let i = 0; i < editCount; i++) {
+        appendFileSync(join(vaultPath, relPaths[i % relPaths.length]), `\nEdit round ${i} marker.\n`);
+        const {ms} = await timed(async () => {
+          warm.value.refreshIfChanged();
+          return warm.value.search(queryList[i % queryList.length], {limit: 5, asOf: now});
+        });
+        editTimes.push(ms);
+      }
+
       results.push({
         n,
         buildIndexMs,
@@ -96,6 +112,7 @@ export async function runScaleBench({sizes = DEFAULT_SIZES, seed = 1, queryCount
         searchMs: stats(searchTimes),
         hookMs: stats(hookTimes),
         hybridOverheadMs: stats(hybridTimes),
+        refreshAfterEditMs: stats(editTimes),
       });
     } finally {
       rmSync(root, {recursive: true, force: true});

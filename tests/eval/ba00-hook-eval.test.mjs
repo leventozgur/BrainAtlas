@@ -42,7 +42,7 @@ test('hook metrics match hand-calculated values on the fixture', async (t) => {
   assert.ok(Math.abs(result.injectionPrecision - 1 / 3) < 1e-12);
   assert.equal(result.missRate, 0.5);
   assert.equal(result.falseInjectionRate, 0.5);
-  assert.deepEqual(Object.keys(result).sort(), ['byCategory', 'chars', 'durationMs', 'falseInjectionRate', 'injectionPrecision', 'injectionRate', 'missRate', 'n'].sort());
+  assert.deepEqual(Object.keys(result).sort(), ['byCategory', 'byKind', 'chars', 'charsPerHit', 'durationMs', 'falseInjectionRate', 'injectedChars', 'injectionPrecision', 'injectionRate', 'metaShareTop5', 'missRate', 'n', 'neededPageInjected', 'poisonInjected', 'sectionCases', 'sectionHitAt1', 'sectionHitSources'].sort());
   assert.deepEqual(Object.keys(result.chars).sort(), ['mean', 'p50', 'p95']);
   assert.deepEqual(Object.keys(result.durationMs).sort(), ['p50', 'p95']);
   assert.ok(result.chars.mean > 0 && result.chars.p95 >= result.chars.p50);

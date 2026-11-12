@@ -1,0 +1,8 @@
+{
+  "meta": [
+    "index.md",
+    "log.md",
+    "AGENTS.md",
+    "planning/**"
+  ]
+}

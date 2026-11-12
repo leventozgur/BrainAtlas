@@ -1,0 +1,700 @@
+[
+  {
+    "id": "hr-k01",
+    "kind": "knowledge",
+    "category": "kestrel-api",
+    "query": "Döndürme penceresi kaç dakika, eski belirteç ne zamana kadar geçerli?",
+    "relevant": [
+      "kestrel-api/tokens.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api"
+  },
+  {
+    "id": "hr-k02",
+    "kind": "knowledge",
+    "category": "kestrel-api",
+    "query": "Kiracı başına dakikalık istek sınırı kaç?",
+    "relevant": [
+      "kestrel-api/rate-limits.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api"
+  },
+  {
+    "id": "hr-k03",
+    "kind": "knowledge",
+    "category": "kestrel-api",
+    "query": "Webhook teslimi en fazla kaç kez denenir ve aralıklar nasıl büyür?",
+    "relevant": [
+      "kestrel-api/webhook-retries.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api"
+  },
+  {
+    "id": "hr-k04",
+    "kind": "knowledge",
+    "category": "kestrel-api",
+    "query": "Bağlantı havuzunda acquire zaman aşımı kaç milisaniye?",
+    "relevant": [
+      "kestrel-api/connection-pool.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api"
+  },
+  {
+    "id": "hr-k05",
+    "kind": "knowledge",
+    "category": "kestrel-api",
+    "query": "Canary aşamasında trafik yüzde kaçtan başlar?",
+    "relevant": [
+      "kestrel-api/deploy-runbook.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api"
+  },
+  {
+    "id": "hr-k06",
+    "kind": "knowledge",
+    "category": "lumen-web",
+    "query": "Oturumu olmayan kullanıcı korumalı sayfaya girince nereye gider?",
+    "relevant": [
+      "lumen-web/routing.md"
+    ],
+    "cwd": "/srv/work/lumen-web",
+    "project": "lumen-web"
+  },
+  {
+    "id": "hr-k07",
+    "kind": "knowledge",
+    "category": "lumen-web",
+    "query": "Katalog önbelleğinde stale-while-revalidate süresi ne kadar?",
+    "relevant": [
+      "lumen-web/cache-policy.md"
+    ],
+    "cwd": "/srv/work/lumen-web",
+    "project": "lumen-web"
+  },
+  {
+    "id": "hr-k08",
+    "kind": "knowledge",
+    "category": "lumen-web",
+    "query": "Doğrulama tetiklenmeden önce yazmayı bırakma gecikmesi kaç milisaniye?",
+    "relevant": [
+      "lumen-web/form-validation.md"
+    ],
+    "cwd": "/srv/work/lumen-web",
+    "project": "lumen-web"
+  },
+  {
+    "id": "hr-k09",
+    "kind": "knowledge",
+    "category": "lumen-web",
+    "query": "Karanlık modda kontrast oranı en az kaç olmalı?",
+    "relevant": [
+      "lumen-web/theme-tokens.md"
+    ]
+  },
+  {
+    "id": "hr-k10",
+    "kind": "knowledge",
+    "category": "quarry-jobs",
+    "query": "Zamanlayıcı, bir iş hâlâ çalışırken aynı işi tekrar başlatır mı?",
+    "relevant": [
+      "quarry-jobs/scheduler.md"
+    ]
+  },
+  {
+    "id": "hr-k11",
+    "kind": "knowledge",
+    "category": "quarry-jobs",
+    "query": "Başarısız işler kaç gün saklanır ve bu süre ne zaman değişti?",
+    "relevant": [
+      "quarry-jobs/retention.md"
+    ]
+  },
+  {
+    "id": "hr-k12",
+    "kind": "knowledge",
+    "category": "quarry-jobs",
+    "query": "DLQ ye düşmeden önce bir iş kaç denemeden geçer?",
+    "relevant": [
+      "quarry-jobs/dead-letter.md"
+    ]
+  },
+  {
+    "id": "hr-k13",
+    "kind": "knowledge",
+    "category": "quarry-jobs",
+    "query": "Geriye dönük doldurmada saniyedeki istek sınırı nedir?",
+    "relevant": [
+      "quarry-jobs/backfill.md"
+    ]
+  },
+  {
+    "id": "hr-k14",
+    "kind": "knowledge",
+    "category": "quarry-jobs",
+    "query": "Bir işçi süreci için bellek tavanı kaç MB?",
+    "relevant": [
+      "quarry-jobs/worker-memory.md"
+    ]
+  },
+  {
+    "id": "hr-k15",
+    "kind": "knowledge",
+    "category": "kestrel-api",
+    "query": "Entegrasyon testleri hangi porta bağlanır?",
+    "relevant": [
+      "kestrel-api/test-setup.md"
+    ]
+  },
+  {
+    "id": "hr-k16",
+    "kind": "knowledge",
+    "category": "lumen-web",
+    "query": "Giriş e2e testi neden karantinaya alındı?",
+    "relevant": [
+      "lumen-web/e2e-tests.md"
+    ]
+  },
+  {
+    "id": "hr-a1",
+    "kind": "knowledge",
+    "category": "ambiguous-project",
+    "query": "testi düzelt",
+    "relevant": [
+      "kestrel-api/test-setup.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api",
+    "excluded": [
+      "lumen-web/e2e-tests.md",
+      "quarry-jobs/testing.md"
+    ]
+  },
+  {
+    "id": "hr-a2",
+    "kind": "knowledge",
+    "category": "ambiguous-project",
+    "query": "şu başarısız testi düzelt",
+    "relevant": [
+      "lumen-web/e2e-tests.md"
+    ],
+    "cwd": "/srv/work/lumen-web",
+    "project": "lumen-web",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "quarry-jobs/testing.md"
+    ]
+  },
+  {
+    "id": "hr-a3",
+    "kind": "knowledge",
+    "category": "ambiguous-project",
+    "query": "zamanlı testi düzelt",
+    "relevant": [
+      "quarry-jobs/testing.md"
+    ],
+    "cwd": "/srv/work/quarry-jobs",
+    "project": "quarry-jobs",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "lumen-web/e2e-tests.md"
+    ]
+  },
+  {
+    "id": "hr-a4",
+    "kind": "knowledge",
+    "category": "ambiguous-project",
+    "query": "failing test fix et",
+    "relevant": [
+      "kestrel-api/test-setup.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api",
+    "excluded": [
+      "lumen-web/e2e-tests.md",
+      "quarry-jobs/testing.md"
+    ]
+  },
+  {
+    "id": "hr-a5",
+    "kind": "knowledge",
+    "category": "ambiguous-project",
+    "query": "testi düzeltir misin",
+    "relevant": [
+      "lumen-web/e2e-tests.md"
+    ],
+    "cwd": "/srv/work/lumen-web",
+    "project": "lumen-web",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "quarry-jobs/testing.md"
+    ]
+  },
+  {
+    "id": "hr-a6",
+    "kind": "knowledge",
+    "category": "ambiguous-project",
+    "query": "bu testi düzelt",
+    "relevant": [
+      "quarry-jobs/testing.md"
+    ],
+    "cwd": "/srv/work/quarry-jobs",
+    "project": "quarry-jobs",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "lumen-web/e2e-tests.md"
+    ]
+  },
+  {
+    "id": "hr-a7",
+    "kind": "knowledge",
+    "category": "ambiguous-project",
+    "query": "snapshot testini güncelle",
+    "relevant": [
+      "lumen-web/theme-tokens.md"
+    ],
+    "cwd": "/srv/work/lumen-web",
+    "project": "lumen-web",
+    "excluded": [
+      "kestrel-api/test-setup.md",
+      "quarry-jobs/testing.md"
+    ]
+  },
+  {
+    "id": "hr-a8",
+    "kind": "knowledge",
+    "category": "ambiguous-project",
+    "query": "testte kırılan kodu düzelt",
+    "relevant": [
+      "kestrel-api/test-setup.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api",
+    "excluded": [
+      "lumen-web/e2e-tests.md",
+      "quarry-jobs/testing.md"
+    ]
+  },
+  {
+    "id": "hr-f01",
+    "kind": "followup",
+    "category": "kestrel-api",
+    "query": "peki döndürme penceresi kaç dakika?",
+    "relevant": [
+      "kestrel-api/tokens.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api"
+  },
+  {
+    "id": "hr-f02",
+    "kind": "followup",
+    "category": "kestrel-api",
+    "query": "bunun 429 tarafı nasıl çalışıyor?",
+    "relevant": [
+      "kestrel-api/rate-limits.md"
+    ],
+    "cwd": "/srv/work/kestrel-api",
+    "project": "kestrel-api"
+  },
+  {
+    "id": "hr-f03",
+    "kind": "followup",
+    "category": "kestrel-api",
+    "query": "webhook teslimi kaç denemeden sonra vazgeçiyor?",
+    "relevant": [
+      "kestrel-api/webhook-retries.md"
+    ]
+  },
+  {
+    "id": "hr-f04",
+    "kind": "followup",
+    "category": "kestrel-api",
+    "query": "havuz tarafında en fazla kaç bağlantı var?",
+    "relevant": [
+      "kestrel-api/connection-pool.md"
+    ]
+  },
+  {
+    "id": "hr-f05",
+    "kind": "followup",
+    "category": "kestrel-api",
+    "query": "ya canary başarısız olursa geri alma nasıl?",
+    "relevant": [
+      "kestrel-api/deploy-runbook.md"
+    ]
+  },
+  {
+    "id": "hr-f06",
+    "kind": "followup",
+    "category": "lumen-web",
+    "query": "önbellek sürümü ETag ile nasıl ilişkili?",
+    "relevant": [
+      "lumen-web/cache-policy.md"
+    ],
+    "cwd": "/srv/work/lumen-web",
+    "project": "lumen-web"
+  },
+  {
+    "id": "hr-f07",
+    "kind": "followup",
+    "category": "lumen-web",
+    "query": "peki data-theme özniteliği nerede kullanılıyor?",
+    "relevant": [
+      "lumen-web/theme-tokens.md"
+    ]
+  },
+  {
+    "id": "hr-f08",
+    "kind": "followup",
+    "category": "quarry-jobs",
+    "query": "dlq yeniden oynatma komutu ne?",
+    "relevant": [
+      "quarry-jobs/dead-letter.md"
+    ],
+    "cwd": "/srv/work/quarry-jobs",
+    "project": "quarry-jobs"
+  },
+  {
+    "id": "hr-f09",
+    "kind": "followup",
+    "category": "quarry-jobs",
+    "query": "bu hatayı çözmek için worker bellek sınırını nasıl artırırım?",
+    "relevant": [
+      "quarry-jobs/worker-memory.md"
+    ]
+  },
+  {
+    "id": "hr-f10",
+    "kind": "followup",
+    "category": "quarry-jobs",
+    "query": "geriye doldurmada from parametresi nasıl verilir?",
+    "relevant": [
+      "quarry-jobs/backfill.md"
+    ]
+  },
+  {
+    "id": "hr-l1",
+    "kind": "long-brief",
+    "category": "kestrel-api",
+    "query": "Mobil uygulamada oturumlar sabah saatlerinde rastgele düşüyor. Destek ekibi gelen kayıtlarda 401 hatalarının çoğunun, kullanıcının uygulamayı kapatıp yarım saat sonra açmasından sonra başladığını gördü. İstemci kodunu inceledik: erişim belirteci dolunca yenileme isteği gönderiliyor, ama bazı eski belirteçlerle yapılan istekler de hâlâ başarılı dönüyor ve sonra birden 401 veriyor. Ekip, belirteç döndürme sırasında eski belirtecin ne kadar süre geçerli kaldığını ve yenileme belirtecinin ne kadar yaşadığını bilmek istiyor. Aynı kullanıcı iki cihazda oturum açıkken de sorun görülüyor. Bu bilgiler olmadan istemci tarafında yeniden deneme mantığını doğru ayarlayamayız. Sorumuz şu: eski erişim belirtecinin geçerlilik süresi kaç dakikadır ve yenileme belirtecinin ömrü ne kadar?",
+    "relevant": [
+      "kestrel-api/tokens.md"
+    ]
+  },
+  {
+    "id": "hr-l2",
+    "kind": "long-brief",
+    "category": "kestrel-api",
+    "query": "Bir ortak entegrasyonu gece toplu senkronizasyonu başlattığında 429 hataları yoğunlaşıyor. Senkronizasyon betiği tek bir kiracı için birkaç anahtar kullanıyor ve her anahtar ayrı çalışıyor gibi görünüyor. Ortak tarafı, anahtarları ayırırsa sınırın da ayrılacağını düşünüyor. Betik ayrıca büyük dosyaları yüklediğinde toplu içe aktarma uç noktasını da kullanıyor ve burada beklenmedik bir kayıt tavanına takılıyor gibi. Retry-After başlığını gördüklerinde ne kadar bekleyecekleri, betiğin yeniden deneme aralığını belirlemek için gerekli. Sorumuz: kiracı başına dakikada kaç istek sınırı uygulanıyor, anahtarlar bu sınırı paylaşıyor mu ve toplu uç noktalardaki ek sınır nedir?",
+    "relevant": [
+      "kestrel-api/rate-limits.md"
+    ]
+  },
+  {
+    "id": "hr-l3",
+    "kind": "long-brief",
+    "category": "kestrel-api",
+    "query": "Bir müşterimiz, bizim gönderdiğimiz ödeme bildirimlerinin bazılarını hiç almadığını bildiriyor. Kendi sunucusu geçici olarak 503 döndürmüş ve bu sırada birkaç bildirim düşmüş olabilir. Bizim tarafta teslim kayıtlarında denemelerin bir kısmı görünüyor fakat son denemeden sonra kayıt kapanıyor gibi. Müşteri, bildirimlerin tekrar gönderilip gönderilmediğini ve hangi aralıkla denendiğini soruyor. Ayrıca 410 yanıtı alan uç noktaların artık hiç denenmeyip denenmediğini öğrenmek istiyor, çünkü uç noktasını yeniden etkinleştirmeyi planlıyor. Destek ekibine ne söyleyeceğimizi netleştirmek için bu bilgiye ihtiyacımız var. Sorumuz: bir webhook teslimi en fazla kaç kez denenir, aralıklar nasıl büyür ve 410 yanıtında yeniden deneme yapılır mı?",
+    "relevant": [
+      "kestrel-api/webhook-retries.md"
+    ]
+  },
+  {
+    "id": "hr-l4",
+    "kind": "long-brief",
+    "category": "quarry-jobs",
+    "query": "Quarry kümesinde iki ana düğüm var ve gece yarısına yakın bir iş iki kez çalışmış gibi görünüyor. Kayıtlarda aynı iş kimliği iki farklı başlangıç zamanıyla geçiyor. Zamanlayıcının her 5 dakikada bir çalıştığını biliyoruz ama bir önceki çalıştırma uzun sürerse ne olacağını bilmiyoruz. Kullanıcılar veri aktarımının çift yazılmasından endişeleniyor. Düğümlerden birinin yeniden başlatıldığı dakikada da bir kayıt var. Bu yüzden liderlik seçimi ve çakışma davranışı hakkında kesin bilgiye ihtiyacımız var. Sorumuz şu: zamanlayıcı bir iş hâlâ çalışırken aynı işi ikinci kez başlatır mı ve birden fazla örnek çalıştığında iş kimin tarafından alınır?",
+    "relevant": [
+      "quarry-jobs/scheduler.md"
+    ]
+  },
+  {
+    "id": "hr-l5",
+    "kind": "long-brief",
+    "category": "quarry-jobs",
+    "query": "Uyum ekibi, başarısız iş kayıtlarının ne kadar süre saklanması gerektiğini sordu. Denetim tarafında bu süreyle ilgili eski bir not var ama hangi tarihte değiştiğini hatırlamıyorlar. Bir yandan depolama maliyetini düşürmek istiyoruz; diğer yandan başarısız işlerin incelenmesi için yeterli bir pencereye ihtiyacımız var. Denetim kayıtlarının da ayrı bir kuralı olup olmadığını bilmek istiyorlar, çünkü bu kayıtlar başarısız iş tablosunda da görünüyor. Yıllık denetimde hangi değerin geçerli olduğunu gösteren bir kaynak lazım. Sorumuz: başarısız işler kaç gün saklanıyor, bu değer ne zaman değişti ve denetim kayıtları ayrı bir süreye tabi mi?",
+    "relevant": [
+      "quarry-jobs/retention.md"
+    ]
+  },
+  {
+    "id": "hr-l6",
+    "kind": "long-brief",
+    "category": "lumen-web",
+    "query": "Yeni müşteri portalında bazı bağlantılar giriş yapılmadan açılınca beyaz ekran görünüyor. Sorun, korumalı sayfanın oturum kontrolü tamamlanmadan yönlendirme yapması olabilir. QA ekibi, giriş sonrası kullanıcının aynı sayfaya geri dönüp dönmediğini de test etti ama bazı durumlarda ana sayfaya düşüyor. Ayrıca tanımsız adreslerin nasıl ele alındığını ve dosya tabanlı rotaların kod bölmesiyle nasıl ilişkili olduğunu merak ediyorlar. Müşteri portalı için yönlendirme davranışının dokümante edilmiş bir referansa ihtiyacı var. Sorumuz: oturumu olmayan kullanıcı korumalı bir sayfaya girdiğinde nereye yönlendirilir ve geri dönüş adresi nasıl taşınır?",
+    "relevant": [
+      "lumen-web/routing.md"
+    ]
+  },
+  {
+    "id": "hr-l7",
+    "kind": "long-brief",
+    "category": "lumen-web",
+    "query": "Ürün kataloğu sayfası kampanya sırasında eski fiyatları gösteriyor gibi görünüyor. Pazarlama ekibi fiyat değişikliğinden sonra birkaç dakika içinde değişikliğin görünmesini istiyor, fakat bazı kullanıcılar bir saatten uzun süre eski fiyat görmüş. Teknik ekip CDN ayarlarına bakmadan önce uygulama katmanındaki önbellek politikasını doğrulamak istiyor. Ödeme sayfasının önbelleğe alınıp alınmadığı da tartışma konusu, çünkü bir müşteri sepetteki tutarın değiştiğini söylüyor. Sürüm anahtarının ETag ile nasıl eşleştiğini ve eski girdilerin ne zaman kullanılmayacağını da netleştirmemiz gerekiyor. Sorumuz: katalog yanıtları ne kadar süreyle stale-while-revalidate ile önbelleklenir ve ödeme sayfası önbelleğe alınır mı?",
+    "relevant": [
+      "lumen-web/cache-policy.md"
+    ]
+  },
+  {
+    "id": "hr-l8",
+    "kind": "long-brief",
+    "category": "quarry-jobs",
+    "query": "Gece işlerinden birkaçı sabaha karşı ölü harf kuyruğuna düşmüş. Hata kayıtlarında yük şeması uyuşmazlığı görünüyor, ama upstream tarafı son bir haftada alan adı değiştirmediğini söylüyor. Operatör, kuyruktaki işleri tek tek yeniden oynatmak yerine toplu bir çözüm arıyor. Ayrıca bir işin kaç denemeden sonra DLQ tarafına taşındığını bilmeden alarm eşiğini belirlemek zor. Gece vardiyası, yeniden oynatma komutunun hangi parametrelerle çalıştığını bilmediği için iş kimliklerini elle girmek zorunda kalıyor. Sorumuz: bir iş kaç denemeden sonra ölü harf kuyruğuna düşer ve yeniden oynatma komutu nasıl kullanılır?",
+    "relevant": [
+      "quarry-jobs/dead-letter.md"
+    ]
+  },
+  {
+    "id": "hr-p1",
+    "kind": "pasted-error",
+    "category": "kestrel-api",
+    "query": "Üretimde şu hata birkaç dakikada bir çıkıyor:\n    Error: timeout acquiring connection from pool after 3000ms\n    at Pool.acquire (db/pool.js:118)\n    at ReportService.load (reports/service.js:44)\nBu neden oluyor ve havuz ayarını değiştirmeli miyiz?",
+    "relevant": [
+      "kestrel-api/connection-pool.md"
+    ]
+  },
+  {
+    "id": "hr-p2",
+    "kind": "pasted-error",
+    "category": "kestrel-api",
+    "query": "Log satırı:\n    WebhookDeliveryError: attempt 4 of 6 failed status=503 endpoint=hooks/in\nBu noktada sistem tekrar deniyor mu, bir sonraki deneme ne zaman?",
+    "relevant": [
+      "kestrel-api/webhook-retries.md"
+    ]
+  },
+  {
+    "id": "hr-p3",
+    "kind": "pasted-error",
+    "category": "quarry-jobs",
+    "query": "İşçi çöktü:\n    <--- Last few GCs --->\n    FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\nBu sınır nereden geliyor ve ne kadar artırabiliriz?",
+    "relevant": [
+      "quarry-jobs/worker-memory.md"
+    ]
+  },
+  {
+    "id": "hr-p4",
+    "kind": "pasted-error",
+    "category": "quarry-jobs",
+    "query": "Zamanlayıcı log dosyasında şu satır var:\n    skip: lock not acquired for quarry:scheduler held by pid 4412\nAynı anda iki örnek mi çalışıyor, yoksa kilit neden tutuluyor?",
+    "relevant": [
+      "quarry-jobs/scheduler.md"
+    ]
+  },
+  {
+    "id": "hr-p5",
+    "kind": "pasted-error",
+    "category": "kestrel-api",
+    "query": "İstemci şu yanıtı alıyor:\n    HTTP/1.1 429 Too Many Requests\n    Retry-After: 12\nNe kadar beklemeliyiz ve bu limit anahtar başına mı uygulanıyor?",
+    "relevant": [
+      "kestrel-api/rate-limits.md"
+    ]
+  },
+  {
+    "id": "hr-p6",
+    "kind": "pasted-error",
+    "category": "kestrel-api",
+    "query": "Entegrasyon testi çalışmadan düşüyor:\n    Error: connect ECONNREFUSED 127.0.0.1:5544\n        at TCPConnectWrap.afterConnect\nHangi servis eksik ve nasıl başlatılır?",
+    "relevant": [
+      "kestrel-api/test-setup.md"
+    ]
+  },
+  {
+    "id": "hr-p7",
+    "kind": "pasted-error",
+    "category": "lumen-web",
+    "query": "Playwright çıktısı:\n    TimeoutError: locator(data-testid=login-submit).click: Timeout 5000ms exceeded.\nBu test neden düşüyor ve nasıl düzeltilir?",
+    "relevant": [
+      "lumen-web/e2e-tests.md"
+    ]
+  },
+  {
+    "id": "hr-p8",
+    "kind": "pasted-error",
+    "category": "quarry-jobs",
+    "query": "Kuyruk raporunda şu satır var:\n    job 7781 moved to DLQ after 5 attempts: payload schema mismatch (field amount)\nBu işi nasıl yeniden oynatabilirim?",
+    "relevant": [
+      "quarry-jobs/dead-letter.md"
+    ]
+  },
+  {
+    "id": "hr-o01",
+    "kind": "operational",
+    "category": "operational",
+    "query": "devam et",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o02",
+    "kind": "operational",
+    "category": "operational",
+    "query": "commit and push",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o03",
+    "kind": "operational",
+    "category": "operational",
+    "query": "evet",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o04",
+    "kind": "operational",
+    "category": "operational",
+    "query": "testleri koş",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o05",
+    "kind": "operational",
+    "category": "operational",
+    "query": "tamam, onaylıyorum",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o06",
+    "kind": "operational",
+    "category": "operational",
+    "query": "bir sonraki adıma geç",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o07",
+    "kind": "operational",
+    "category": "operational",
+    "query": "teşekkürler, bu kadar yeter",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o08",
+    "kind": "operational",
+    "category": "operational",
+    "query": "şimdi PR açıklamasını yaz",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o09",
+    "kind": "operational",
+    "category": "operational",
+    "query": "olur, öyle yap",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o10",
+    "kind": "operational",
+    "category": "operational",
+    "query": "hayır, geri al",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o11",
+    "kind": "operational",
+    "category": "operational",
+    "query": "dosyayı kaydet ve kapat",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o12",
+    "kind": "operational",
+    "category": "operational",
+    "query": "lint hatalarını düzelt",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o13",
+    "kind": "operational",
+    "category": "operational",
+    "query": "build al ve sonucu göster",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o14",
+    "kind": "operational",
+    "category": "operational",
+    "query": "bu değişikliği main e alma, sadece dalda kalsın",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o15",
+    "kind": "operational",
+    "category": "operational",
+    "query": "özet çıkar",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o16",
+    "kind": "operational",
+    "category": "operational",
+    "query": "sıradaki görevi başlat",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o17",
+    "kind": "operational",
+    "category": "operational",
+    "query": "yeniden dene",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o18",
+    "kind": "operational",
+    "category": "operational",
+    "query": "tek satırla açıkla",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o19",
+    "kind": "operational",
+    "category": "operational",
+    "query": "onay, devam",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o20",
+    "kind": "operational",
+    "category": "operational",
+    "query": "git status göster",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o21",
+    "kind": "operational",
+    "category": "operational",
+    "query": "değişiklik listesini ver",
+    "relevant": [],
+    "abstain": true
+  },
+  {
+    "id": "hr-o22",
+    "kind": "operational",
+    "category": "operational",
+    "query": "tamamlandı mı kontrol et",
+    "relevant": [],
+    "abstain": true
+  }
+]
