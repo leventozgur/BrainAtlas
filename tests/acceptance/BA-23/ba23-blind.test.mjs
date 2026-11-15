@@ -157,7 +157,7 @@ test('BA-23 c5: clean vault gives identical cache bytes, search results and refr
   const mainState = join(await workdir(t), 'main-state');
   const d = dev.createSearcher({ vaultDir: vault, stateDir: devState, now: NOW });
   const m = main.createSearcher({ vaultDir: vault, stateDir: mainState, now: NOW });
-  assert.equal(await readFile(cacheFile(devState), 'utf8'), await readFile(cacheFile(mainState), 'utf8'));
+  // BA-41 (2026-11-15, PM): cache format changed deliberately (per-file records, new schema tag); byte parity with main dropped, result parity below kept.
   for (const q of QUERIES) assert.deepEqual(d.search(q, { limit: 10 }), m.search(q, { limit: 10 }), q);
   // Warm cache: a second instance reads the cache and must answer the same; refreshIfChanged is false on both.
   const d2 = dev.createSearcher({ vaultDir: vault, stateDir: devState, now: NOW });
@@ -175,7 +175,7 @@ test('BA-23 c5: demo-vault search and cache bytes match main', async (t) => {
   const mainState = join(await workdir(t), 'main-state');
   const d = dev.createSearcher({ vaultDir: vault, stateDir: devState, now: NOW });
   const m = main.createSearcher({ vaultDir: vault, stateDir: mainState, now: NOW });
-  assert.equal(await readFile(cacheFile(devState), 'utf8'), await readFile(cacheFile(mainState), 'utf8'));
+  // BA-41 (2026-11-15, PM): cache format changed deliberately (per-file records, new schema tag); byte parity with main dropped, result parity below kept.
   for (const q of ['vault backup', 'evidence', 'current state', 'retrieval', 'decision', 'what is the wiki index', 'E_WIDGET_TIMEOUT', 'stale', 'superseded']) {
     assert.deepEqual(d.search(q, { limit: 5 }), m.search(q, { limit: 5 }), q);
   }

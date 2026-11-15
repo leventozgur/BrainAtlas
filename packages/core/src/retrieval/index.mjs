@@ -232,31 +232,33 @@ function finalTarget(start, indexed, byPath) {
     if (indexed.has(current)) return current;
     if (seen.has(current) || !byPath.has(current)) return null;
     seen.add(current);
-    current = successorOf(byPath.get(current));
+    current = byPath.get(current).successor;
   }
   return null;
 }
 /**
- * Superseded routing (BA-04), computed at index time from the walked pages: a Map from each indexed replacement page to
- * the sorted paths of the superseded pages that resolve to it. Superseded pages themselves stay out of the index.
- * Ranking is not affected: no text is added to any indexed page.
+ * Superseded routing (BA-04) from per-page records in walk order, `{path, superseded, successor}`, for every walked page with
+ * a safe path. Returns a plain object from each indexed replacement path to the sorted paths of the superseded pages that
+ * resolve to it. Superseded pages themselves stay out of the index, and ranking is not affected. BA-41: the incremental
+ * update and the full build both use this function, and cache validation recomputes it.
  */
-function resolveSupersession(pages) {
+function supersessionOf(records) {
   const indexed = new Set(), byPath = new Map();
-  for (const p of pages) {
-    if (!p || typeof p.path !== 'string' || !safePath(p.path)) continue;
-    if (isSupersededPage(p)) { if (!byPath.has(p.path)) byPath.set(p.path, p); }
-    else indexed.add(p.path);
+  for (const record of records) {
+    if (record.superseded) { if (!byPath.has(record.path)) byPath.set(record.path, record); }
+    else indexed.add(record.path);
   }
   const replaced = new Map();
   for (const source of byPath.keys()) {
-    const target = finalTarget(successorOf(byPath.get(source)), indexed, byPath);
+    const target = finalTarget(byPath.get(source).successor, indexed, byPath);
     if (target === null) continue;
     if (!replaced.has(target)) replaced.set(target, []);
     replaced.get(target).push(source);
   }
-  for (const sources of replaced.values()) sources.sort();
-  return replaced;
+  // Null-prototype, as in the cache decoder (BA-41): both paths must be deepStrictEqual.
+  const supersedes = Object.create(null);
+  for (const target of [...replaced.keys()].sort()) supersedes[target] = replaced.get(target).sort();
+  return supersedes;
 }
 // Page links (BA-08). Wikilinks `[[name]]`, `[[name|label]]`, `[[name#section]]` and relative Markdown links
 // `[text](dir/page.md#anchor)` become undirected edges between indexed pages. Fenced code, inline code, external URLs,
@@ -283,10 +285,42 @@ function withoutCode(body) {
   }
   return out;
 }
-/** Undirected link graph over the indexed documents: a plain object from document id to sorted neighbour ids. */
-function buildLinks(docs) {
+/**
+ * Link references of one page, before resolution (BA-41): `{w: name}` for a wikilink, normalized the way buildLinks matches
+ * names, and `{m: key}` for a relative Markdown link, normalized to the key of the page it names. The incremental update keeps
+ * these references per file, so an unchanged body is not scanned again.
+ */
+function linkRefs(page) {
+  const refs = [];
+  const text = withoutCode(typeof page.body === 'string' ? page.body : '');
+  for (const m of text.matchAll(wikiLinkPattern)) {
+    const name = normalizeText(m[1].split('|')[0].split('#')[0].trim()).replace(/\.md$/u, '').trim();
+    if (name) refs.push({w: name});
+  }
+  for (const m of text.matchAll(markdownLinkPattern)) {
+    const href = m[1];
+    if (externalOrAbsolute.test(href)) continue;
+    let target;
+    try { target = decodeURI(href.split(/[?#]/u)[0]); } catch { continue; }
+    if (!/\.md$/iu.test(target)) continue;
+    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(page.path), target));
+    if (resolved === '.' || resolved.startsWith('../') || path.posix.isAbsolute(resolved)) continue;
+    refs.push({m: normalizeText(resolved.replace(/\.md$/iu, ''))});
+  }
+  return refs;
+}
+/** Undirected link graph over the indexed documents: a plain object from document id to sorted neighbour ids. `refs[id]` lists the references of document id (see linkRefs). */
+function buildLinks(docs, refs) {
+  // No references anywhere: no edges, whatever the names are, so the name maps are not built.
+  if (refs.every(list => list.length === 0)) return {};
+  // A key maps to the one document that has it, or to AMBIGUOUS when two or more documents have it (BA-41: no Set per key).
+  const AMBIGUOUS = -1;
   const byPath = new Map(), byName = new Map();
-  const add = (map, key, id) => { if (!map.has(key)) map.set(key, new Set()); map.get(key).add(id); };
+  const add = (map, key, id) => {
+    const current = map.get(key);
+    if (current === undefined) map.set(key, id);
+    else if (current !== id) map.set(key, AMBIGUOUS);
+  };
   docs.forEach((doc, id) => {
     const full = normalizeText(doc.page.path.replace(/\.md$/iu, ''));
     add(byPath, full, id);
@@ -295,7 +329,7 @@ function buildLinks(docs) {
     add(byName, normalizeText(doc.page.title), id);
     for (const alias of doc.page.aliases) add(byName, normalizeText(alias), id);
   });
-  const only = (set) => (set && set.size === 1 ? [...set][0] : null);
+  const only = (found) => (found === undefined || found === AMBIGUOUS ? null : found);
   const edges = new Map();
   const connect = (a, b) => {
     if (a === b) return;
@@ -305,22 +339,9 @@ function buildLinks(docs) {
     }
   };
   docs.forEach((doc, id) => {
-    const text = withoutCode(typeof doc.page.body === 'string' ? doc.page.body : '');
-    for (const m of text.matchAll(wikiLinkPattern)) {
-      const name = normalizeText(m[1].split('|')[0].split('#')[0].trim()).replace(/\.md$/u, '').trim();
-      const target = name ? (only(byPath.get(name)) ?? only(byName.get(name))) : null;
+    for (const ref of refs[id]) {
+      const target = ref.w !== undefined ? (only(byPath.get(ref.w)) ?? only(byName.get(ref.w))) : only(byPath.get(ref.m));
       if (target !== null && target !== undefined) connect(id, target);
-    }
-    for (const m of text.matchAll(markdownLinkPattern)) {
-      const href = m[1];
-      if (externalOrAbsolute.test(href)) continue;
-      let target;
-      try { target = decodeURI(href.split(/[?#]/u)[0]); } catch { continue; }
-      if (!/\.md$/iu.test(target)) continue;
-      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(doc.page.path), target));
-      if (resolved === '.' || resolved.startsWith('../') || path.posix.isAbsolute(resolved)) continue;
-      const hit = only(byPath.get(normalizeText(resolved.replace(/\.md$/iu, ''))));
-      if (hit !== null && hit !== undefined) connect(id, hit);
     }
   });
   const links = {};
@@ -360,25 +381,71 @@ function restrictedOf(frontmatter) {
   const inject = typeof fm.inject === 'string' ? fm.inject.trim().toLowerCase() : '';
   return sensitivity === 'personal' || inject === 'never';
 }
+/** Tokens, term counts and identifiers of one page. `lengths` holds the token count of each field. */
+function analyzePage(p) {
+  const fields = [p.title, [...strings(p.aliases), ...strings(p.keywords)].join(' '), strings(p.headings).join(' '), typeof p.body === 'string' ? p.body : ''];
+  const lengths = [], counts = new Map(), identifiers = new Set();
+  fields.forEach((field, i) => {
+    const ts = tokens(field);
+    lengths.push(ts.length);
+    for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; }
+    identifierKeys(field, identifiers);
+  });
+  return {lengths, counts, identifiers};
+}
+/** The indexed document of a page. Flags are stored only when true, as before. */
+function docEntry(p, lengths, excluded) {
+  return {page: p, lengths, trust: trustOf(p.frontmatter), ...(restrictedOf(p.frontmatter) ? {restricted: true} : {}), ...(excluded(p.path) ? {excluded: true} : {})};
+}
+/** Merges two lists sorted by document id. The ids of the two lists are disjoint. */
+function mergeById(a, b, idOf) {
+  const out = [];
+  let i = 0, j = 0;
+  while (i < a.length && j < b.length) out.push(idOf(a[i]) < idOf(b[j]) ? a[i++] : b[j++]);
+  while (i < a.length) out.push(a[i++]);
+  while (j < b.length) out.push(b[j++]);
+  return out;
+}
+/**
+ * Rebuilds one inverted map (postings or exact) for a new document numbering (BA-41). Each old list is remapped through
+ * `oldToNew`, where a removed or replaced document maps to -1 and its entry is dropped. The additions of the changed
+ * documents are merged in by id, so every list stays strictly increasing. A term left without documents is removed.
+ * `remap` returns the entry itself when its id is unchanged, so a list that moves nowhere and gains nothing is shared with
+ * the previous index as it is. Lists are never mutated, so sharing them between two index versions is safe.
+ */
+function mergeLists(oldLists, oldToNew, additions, remap, idOf) {
+  const out = Object.create(null);
+  for (const term of Object.keys(oldLists)) {
+    const old = oldLists[term], extra = additions.get(term);
+    additions.delete(term);
+    if (!extra && old.every(entry => remap(entry, oldToNew) === entry)) { out[term] = old; continue; }
+    const kept = [];
+    for (const entry of old) { const mapped = remap(entry, oldToNew); if (mapped !== null) kept.push(mapped); }
+    const list = extra ? mergeById(kept, extra, idOf) : kept;
+    if (list.length) out[term] = list;
+  }
+  for (const [term, extra] of additions) out[term] = extra;
+  return out;
+}
 export function buildIndex(pages, options = {}) {
   if (!Array.isArray(pages)) fail('E_INVALID_INPUT', 'Expected pages');
   const excluded = excludeMatcher(options.exclude ?? []);
   const docs = []; const postings = Object.create(null); const exact = Object.create(null); const totals = [0,0,0,0];
-  const replaced = resolveSupersession(pages);
+  const refs = []; const records = [];
   for (const p of pages) {
     if (!p || typeof p.path !== 'string' || typeof p.title !== 'string') fail('E_INVALID_INPUT', 'Invalid page');
     if (!safePath(p.path)) continue;
+    records.push({path: p.path, superseded: isSupersededPage(p), successor: successorOf(p)});
     if (isSupersededPage(p)) continue;
-    const fields = [p.title, [...strings(p.aliases), ...strings(p.keywords)].join(' '), strings(p.headings).join(' '), typeof p.body === 'string' ? p.body : ''];
-    const lengths = []; const counts = new Map(); const identifiers = new Set();
-    fields.forEach((field, i) => { const ts = tokens(field); lengths.push(ts.length); totals[i] += ts.length; for (const t of ts) { if (!counts.has(t)) counts.set(t, [0,0,0,0]); counts.get(t)[i]++; } identifierKeys(field, identifiers); });
-    const id = docs.length; docs.push({page: p, lengths, trust: trustOf(p.frontmatter), ...(restrictedOf(p.frontmatter) ? {restricted: true} : {}), ...(excluded(p.path) ? {excluded: true} : {})});
+    const {lengths, counts, identifiers} = analyzePage(p);
+    lengths.forEach((n, i) => { totals[i] += n; });
+    const id = docs.length;
+    docs.push(docEntry(p, lengths, excluded));
+    refs.push(linkRefs(p));
     for (const [term, countsByField] of counts) (postings[term] ||= []).push([id, countsByField]);
     for (const key of identifiers) (exact[key] ||= []).push(id);
   }
-  const supersedes = Object.create(null);
-  for (const target of [...replaced.keys()].sort()) supersedes[target] = replaced.get(target);
-  return { version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString(), supersedes, links: buildLinks(docs) };
+  return { version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: (options.now || new Date()).toISOString(), supersedes: supersessionOf(records), links: buildLinks(docs, refs) };
 }
 export function stale(fm, asOf) {
   let expiry = dateValue(fm.stale_after); if (!expiry) return false;
@@ -570,61 +637,92 @@ function relatedPaths(index, id) {
   const neighbours = ((index.links || {})[id] || []).filter(n => !index.docs[n].excluded);
   return neighbours.map(n => index.docs[n].page.path).sort().slice(0, RELATED_MAX);
 }
+// BA-41: the searcher keeps a single cache file under stateDir, `retrieval-index.json`. Its `schema` tag changed (format 2),
+// because it now also holds the per-file records that an incremental update needs (stat token, kind, successor) next to the
+// index and its skipped list. Link references are not stored: they are re-derived from the cached page bodies in memory, so a
+// record stays small and the cache does not duplicate the link text. A cache with a missing or different schema tag (format 1,
+// written before BA-41) is rebuilt once; no separate records file is written.
+const CACHE_SCHEMA = 'retrieval-index-v2';
 // Cheap freshness fingerprint: lstat metadata of the same file set loadPages reads; no file contents are read.
-// The tag stays `v6`: BA-17 acceptance tests pin it. The BA-04 cache change (the `supersedes` map), the BA-08 link graph
-// (`links`) and the BA-09 per-document `trust` are detected by decodeCachedIndex, which rejects any cache without them, so
-// an older cache is rebuilt once.
+// The tag stays `v6`: BA-17 acceptance tests pin it. A cache whose key differs from the current one is not accepted as a
+// whole, but its per-file records are reused for the files whose stat tokens still match (see refreshTo).
 const FINGERPRINT_SCHEMA = 'retrieval-stat-v6';
 // BA-29: a non-empty exclusion list is part of the key, so a changed rule rebuilds the cache. An empty list adds nothing.
+// Returns the key, the realpath root and the walked entries `{rel, full, token}` in walk order. The token is the lstat
+// metadata of the file (BA-41: kept per file, so an unchanged file is not read again).
 function statFingerprint(vaultDir, exclude = []) {
   const { root, files } = markdownFiles(vaultDir);
   const fingerprint = createHash('sha256').update(FINGERPRINT_SCHEMA);
   if (exclude.length) fingerprint.update(`\nexclude\0${JSON.stringify(exclude)}\n`);
-  const paths = new Set();
+  const entries = [];
   for (const full of files) {
     const rel = path.relative(root, full).split(path.sep).join('/');
-    paths.add(rel);
     let token;
     try { const st = fs.lstatSync(full); token = [st.size, st.mtimeMs, st.ctimeMs, st.ino].join('\0'); }
-    catch { token = 'unstable'; } // Removed between walk and stat: never equal to a stored key, so the next check rebuilds.
+    catch { token = 'unstable'; } // Removed between walk and stat: never equal to a stored token, so the next check rebuilds.
     fingerprint.update(`${rel}\0${token}\n`);
+    entries.push({rel, full, token});
   }
-  return { key: fingerprint.digest('hex'), paths };
+  return { key: fingerprint.digest('hex'), root, entries };
 }
+// The cache text is assembled from per-object fragments (BA-41): a document, or a postings or identifier list, that the
+// incremental update shares with the previous index keeps its fragment, so a refresh serializes only what changed. The text is
+// the JSON that JSON.stringify gives for `{key, index: <postings flattened per term>, skipped}`, the layout used before BA-41.
 // On-disk postings are flat per term: [id, c0, c1, c2, c3, id, ...]. Decoding restores the in-memory nested shape
 // that buildIndex produces, so search results and scores are unchanged. Every field is checked before use.
-function flattenPostings(index) {
-  const postings = Object.create(null);
-  for (const term of Object.keys(index.postings)) {
-    const flat = [];
-    for (const [id, counts] of index.postings[term]) flat.push(id, counts[0], counts[1], counts[2], counts[3]);
-    postings[term] = flat;
-  }
-  return {...index, postings};
+const fragments = new WeakMap();
+function fragmentOf(object, render) {
+  let text = fragments.get(object);
+  if (text === undefined) { text = render(object); fragments.set(object, text); }
+  return text;
 }
-// Structural checks on a cache whose key already matches the current stat fingerprint. Any violation returns null,
-// and the caller rebuilds from the vault. Checks: pages exist on disk (paths is the walked file set) and are unique;
-// page fields have the types search() reads; posting doc ids are strictly increasing and in range; counts are
-// non-negative safe integers no larger than the field length they count; averages equal the value buildIndex computes.
+const flatPostingText = (list) => JSON.stringify(list.flatMap(([id, counts]) => [id, counts[0], counts[1], counts[2], counts[3]]));
+// On disk an indexed record is just `[token]`: its path is the document path at the same position, so it is not repeated.
+// A page that is not indexed carries its path and kind (superseded also carries its `superseded_by` value). The token is
+// stored compactly: the four NUL-separated stat values are written with `:` and an empty ctime field means "equal to mtime".
+// decodeRecords expands it back, so the in-memory token and the fingerprint key keep their exact previous form.
+function compactToken(token) {
+  const [size, mtime, ctime, ino] = token.split('\0');
+  return ctime === mtime ? `${size}:${mtime}::${ino}` : `${size}:${mtime}:${ctime}:${ino}`;
+}
+function expandToken(text) {
+  const parts = text.split(':');
+  if (parts.length !== 4) return text;
+  const [size, mtime, ctime, ino] = parts;
+  return [size, mtime, ctime === '' ? mtime : ctime, ino].join('\0');
+}
+const recordText = (rel, rec) => rec.kind === 'indexed'
+  ? JSON.stringify([compactToken(rec.token)])
+  : JSON.stringify(rec.kind === 'superseded' ? [rel, compactToken(rec.token), fileKindCode[rec.kind], rec.successor] : [rel, compactToken(rec.token), fileKindCode[rec.kind]]);
+function cacheText(key, index, skipped, files) {
+  const docs = index.docs.map(doc => fragmentOf(doc, JSON.stringify)).join(',');
+  const postings = Object.keys(index.postings).map(term => `${JSON.stringify(term)}:${fragmentOf(index.postings[term], flatPostingText)}`).join(',');
+  const exact = Object.keys(index.exact).map(identifier => `${JSON.stringify(identifier)}:${fragmentOf(index.exact[identifier], JSON.stringify)}`).join(',');
+  const records = [...files].map(([rel, rec]) => recordText(rel, rec)).join(',');
+  const body = `{"version":${JSON.stringify(index.version)},"docs":[${docs}],"postings":{${postings}},"exact":{${exact}},"averages":${JSON.stringify(index.averages)},"now":${JSON.stringify(index.now)},"supersedes":${JSON.stringify(index.supersedes)},"links":${JSON.stringify(index.links)}}`;
+  return `{"schema":${JSON.stringify(CACHE_SCHEMA)},"key":${JSON.stringify(key)},"files":[${records}],"index":${body},"skipped":${JSON.stringify(skipped)}}`;
+}
 const isCount = (x) => Number.isSafeInteger(x) && x >= 0;
 const isStringArray = (x) => Array.isArray(x) && x.every(v => typeof v === 'string');
 const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
-// Structural checks on a cache whose key already matches the current stat fingerprint. Any violation returns null,
-// and the caller rebuilds from the vault. The cache records every walked page as either indexed (docs) or skipped
-// (superseded or otherwise not indexed); the two lists must partition the walked file set exactly. Page fields
-// must have the types search() reads, posting doc ids are strictly increasing and in range, counts are
-// non-negative safe integers no larger than the field length they count, and averages equal buildIndex's value.
-// Page contents are not re-read: this is structural validation, not content verification (see the threat model in
-// docs/contracts/retrieval.md).
-function decodeCachedIndex(data, key, paths, exclude = []) {
-  const excluded = excludeMatcher(exclude);
-  if (!isPlainObject(data) || data.key !== key) return null;
+const fileKinds = ['indexed', 'superseded', 'other', 'unreadable'];
+const fileKindCode = Object.fromEntries(fileKinds.map((kind, code) => [kind, code]));
+/**
+ * Structural checks on a cache (the layout of BA-02 onwards, plus the BA-41 records). Any violation returns null, and the
+ * caller rebuilds from the vault. `paths` is the walked file set when the cache describes the current vault (same key): the
+ * documents and the skipped pages must then partition it exactly. The BA-41 records are checked against the index and the
+ * skipped list by decodeRecords. Page contents are not re-read: this is structural validation, not content verification (see
+ * the threat model in docs/contracts/retrieval.md).
+ */
+function decodeCache(data, exclude, paths) {
+  if (!isPlainObject(data) || data.schema !== CACHE_SCHEMA || typeof data.key !== 'string' || !isStringArray(data.skipped) || !Array.isArray(data.files)) return null;
   const index = data.index, skipped = data.skipped;
-  if (!isPlainObject(index) || index.version !== 1 || !Array.isArray(index.docs) || !isPlainObject(index.postings) || !Array.isArray(index.averages) || !isStringArray(skipped)) return null;
+  if (!isPlainObject(index) || index.version !== 1 || !Array.isArray(index.docs) || !isPlainObject(index.postings) || !Array.isArray(index.averages) || !isPlainObject(index.exact)) return null;
+  const excluded = excludeMatcher(exclude);
   const docs = index.docs, docCount = docs.length, seen = new Set();
   for (const doc of docs) {
     const page = doc?.page;
-    if (!isPlainObject(doc) || !isPlainObject(page) || typeof page.path !== 'string' || !safePath(page.path) || !paths.has(page.path) || seen.has(page.path)) return null;
+    if (!isPlainObject(doc) || !isPlainObject(page) || typeof page.path !== 'string' || !safePath(page.path) || (paths && !paths.has(page.path)) || seen.has(page.path)) return null;
     seen.add(page.path);
     if (typeof page.title !== 'string' || typeof page.body !== 'string') return null;
     if (!isStringArray(page.headings) || !isStringArray(page.aliases) || !isStringArray(page.keywords)) return null;
@@ -634,7 +732,7 @@ function decodeCachedIndex(data, key, paths, exclude = []) {
     // BA-26: the restriction flag must agree with the frontmatter; a missing or forged flag forces a rebuild.
     if (doc.restricted !== undefined && doc.restricted !== true) return null;
     if ((doc.restricted === true) !== restrictedOf(page.frontmatter)) return null;
-    // BA-29: the excluded flag must agree with the exclusion rule that the cache key was computed with.
+    // BA-29: the excluded flag must agree with the exclusion rule that the cache was written with.
     if (doc.excluded !== undefined && doc.excluded !== true) return null;
     if ((doc.excluded === true) !== excluded(page.path)) return null;
     const fm = page.frontmatter;
@@ -642,10 +740,10 @@ function decodeCachedIndex(data, key, paths, exclude = []) {
     if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;
   }
   for (const p of skipped) {
-    if (!safePath(p) || !paths.has(p) || seen.has(p)) return null;
+    if (!safePath(p) || (paths && !paths.has(p)) || seen.has(p)) return null;
     seen.add(p);
   }
-  if (seen.size !== paths.size) return null;
+  if (paths && seen.size !== paths.size) return null;
   const totals = [0, 0, 0, 0];
   for (const doc of docs) for (let i = 0; i < 4; i++) totals[i] += doc.lengths[i];
   if (index.averages.length !== 4 || !index.averages.every((avg, i) => avg === totals[i] / (docCount || 1))) return null;
@@ -666,7 +764,6 @@ function decodeCachedIndex(data, key, paths, exclude = []) {
     postings[term] = list;
   }
   // Exact identifier postings: non-empty lists of strictly increasing, in-range document ids.
-  if (!isPlainObject(index.exact)) return null;
   const exact = Object.create(null);
   for (const key of Object.keys(index.exact)) {
     const list = index.exact[key];
@@ -679,7 +776,6 @@ function decodeCachedIndex(data, key, paths, exclude = []) {
     exact[key] = list;
   }
   // Superseded routing (BA-04): each target is an indexed page, each non-empty sorted list holds skipped pages only.
-  // A cache written before BA-04 has no `supersedes` and is rejected here, so it is rebuilt once.
   if (!isPlainObject(index.supersedes)) return null;
   const skippedSet = new Set(skipped), indexedPaths = new Set(docs.map(doc => doc.page.path)), supersedes = Object.create(null);
   for (const target of Object.keys(index.supersedes)) {
@@ -692,10 +788,11 @@ function decodeCachedIndex(data, key, paths, exclude = []) {
     }
     supersedes[target] = sources;
   }
-  // Link graph (BA-08): a cache without `links` (written before BA-08) is rejected and rebuilt once. Keys are document ids,
-  // each neighbour list is a non-empty, strictly increasing list of other in-range ids, and every edge is symmetric.
+  // Link graph (BA-08): a plain object of in-range document ids; each neighbour list is non-empty, strictly increasing, in range,
+  // never self-referential, and every edge is symmetric.
   if (!isPlainObject(index.links)) return null;
-  const links = Object.create(null);
+  // Plain object, matching buildLinks (BA-41): both paths must be deepStrictEqual.
+  const links = {};
   for (const key of Object.keys(index.links)) {
     if (!/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= docCount) return null;
     const id = Number(key), list = index.links[key];
@@ -708,7 +805,54 @@ function decodeCachedIndex(data, key, paths, exclude = []) {
     links[id] = list;
   }
   for (const key of Object.keys(links)) for (const n of links[key]) if (!links[n] || !links[n].includes(Number(key))) return null;
-  return {version: 1, docs, postings, exact, averages: index.averages, now: index.now, supersedes, links};
+  const files = decodeRecords(data.files, skipped, docs, supersedes);
+  if (!files) return null;
+  return {key: data.key, skipped, files, index: {version: 1, docs, postings, exact, averages: index.averages, now: index.now, supersedes, links}};
+}
+/**
+ * The per-file records of a cache (BA-41), validated against the index it belongs to: one record per walked file, the indexed
+ * records are exactly the documents in order, the skipped list is the records that are not indexed (superseded or unsafe pages
+ * first, then unreadable pages, each in walk order, as the index writes it), and the superseded routing equals the value
+ * recomputed from the records. Returns the records as a Map from path (docId set for indexed records), or null.
+ */
+function decodeRecords(entries, skipped, docs, supersedes) {
+  const files = new Map(), indexed = [], notIndexed = [], unreadable = [], records = [];
+  let docIndex = 0;
+  for (const entry of entries) {
+    if (!Array.isArray(entry)) return null;
+    // Indexed record: only the stat token; the path is that of the next document, in document order.
+    if (entry.length === 1) {
+      if (typeof entry[0] !== 'string' || docIndex >= docs.length) return null;
+      const rel = docs[docIndex].page.path;
+      if (files.has(rel)) return null;
+      files.set(rel, {token: expandToken(entry[0]), kind: 'indexed', successor: null, refs: null, docId: docIndex});
+      indexed.push(rel);
+      records.push({path: rel, superseded: false, successor: null});
+      docIndex++;
+      continue;
+    }
+    if (entry.length < 3 || entry.length > 4) return null;
+    const [rel, token, code, successor] = entry;
+    const kind = Number.isInteger(code) ? fileKinds[code] : undefined;
+    if (typeof rel !== 'string' || typeof token !== 'string' || files.has(rel) || kind === undefined || kind === 'indexed') return null;
+    // Only a superseded record carries its `superseded_by` value (a string or null); the other kinds have exactly three fields.
+    if (kind === 'superseded' ? entry.length !== 4 || !(successor === null || typeof successor === 'string') : entry.length !== 3) return null;
+    files.set(rel, {token: expandToken(token), kind, successor: kind === 'superseded' ? successor : null, refs: null, docId: -1});
+    if (kind === 'unreadable') unreadable.push(rel);
+    else notIndexed.push(rel);
+    if (kind === 'superseded') records.push({path: rel, superseded: true, successor});
+  }
+  if (docIndex !== docs.length) return null;
+  if (indexed.length !== docs.length) return null;
+  for (let id = 0; id < docs.length; id++) {
+    const docPath = docs[id].page.path;
+    if (docPath !== indexed[id]) return null;
+    files.get(docPath).docId = id;
+  }
+  const expected = notIndexed.concat(unreadable);
+  if (expected.length !== skipped.length || expected.some((rel, i) => rel !== skipped[i])) return null;
+  if (JSON.stringify(supersedes) !== JSON.stringify(supersessionOf(records))) return null;
+  return files;
 }
 /** BA-29: whether a search-root-relative path is excluded by the rule (the hook also filters its semantic hits with it). */
 export function isExcludedPath(relPath, exclude = []) { return excludeMatcher(exclude)(relPath); }
@@ -737,8 +881,78 @@ export function searchScope(vaultDir, configured) {
   return { root: wikiRoot ? wiki : vaultDir, exclude: [...(configured ?? fallback)], prefix: wikiRoot ? 'wiki/' : '' };
 }
 /**
- * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and rebuilds only when it changed.
- * `snapshot()` returns pages and lexical index that describe the same vault state.
+ * Incremental update (BA-41). `base` is `{index, files}` for the last state, or null for a cold build. A walked file whose stat
+ * token is unchanged keeps its record and its document; every other file is read and analysed again. Postings, exact lists,
+ * averages, superseded routing and the link graph are then recomputed from those records in walk order, so the result equals
+ * buildIndex over the same pages. Returns {index, files, skipped, pages}; `pages` lists every readable page when all of them
+ * were read in this pass, and null otherwise.
+ */
+function update(base, walk, excluded, nowIso) {
+  const oldFiles = base ? base.files : new Map();
+  const oldDocs = base ? base.index.docs : [];
+  const oldToNew = new Int32Array(oldDocs.length).fill(-1);
+  const files = new Map(), docs = [], refs = [], adds = [], reads = [];
+  let reused = 0;
+  for (const {rel, full, token} of walk.entries) {
+    const old = oldFiles.get(rel);
+    if (old && old.token === token) {
+      reused++;
+      const rec = {token, kind: old.kind, successor: old.successor, refs: [], docId: -1};
+      if (old.kind === 'indexed') {
+        const pageRefs = old.refs ?? linkRefs(oldDocs[old.docId].page);
+        rec.refs = pageRefs;
+        rec.docId = docs.length;
+        oldToNew[old.docId] = docs.length;
+        docs.push(oldDocs[old.docId]);
+        refs.push(pageRefs);
+      }
+      files.set(rel, rec);
+      continue;
+    }
+    let page;
+    try { page = readPage(walk.root, full); }
+    catch (error) {
+      if (error?.code !== 'E_INVALID_INPUT') throw error;
+      files.set(rel, {token, kind: 'unreadable', successor: null, refs: [], docId: -1});
+      continue;
+    }
+    reads.push(page);
+    if (!safePath(rel)) { files.set(rel, {token, kind: 'other', successor: null, refs: [], docId: -1}); continue; }
+    if (isSupersededPage(page)) { files.set(rel, {token, kind: 'superseded', successor: successorOf(page), refs: [], docId: -1}); continue; }
+    const {lengths, counts, identifiers} = analyzePage(page);
+    const id = docs.length, pageRefs = linkRefs(page);
+    docs.push(docEntry(page, lengths, excluded));
+    refs.push(pageRefs);
+    adds.push({id, counts, identifiers});
+    files.set(rel, {token, kind: 'indexed', successor: null, refs: pageRefs, docId: id});
+  }
+  const postingAdds = new Map(), exactAdds = new Map();
+  for (const {id, counts, identifiers} of adds) {
+    for (const [term, c] of counts) { if (!postingAdds.has(term)) postingAdds.set(term, []); postingAdds.get(term).push([id, c]); }
+    for (const key of identifiers) { if (!exactAdds.has(key)) exactAdds.set(key, []); exactAdds.get(key).push(id); }
+  }
+  const postings = mergeLists(base ? base.index.postings : {}, oldToNew, postingAdds, (entry, map) => {
+    const nid = map[entry[0]];
+    return nid === entry[0] ? entry : nid < 0 ? null : [nid, entry[1]];
+  }, entry => entry[0]);
+  const exact = mergeLists(base ? base.index.exact : {}, oldToNew, exactAdds, (id, map) => {
+    const nid = map[id];
+    return nid === id ? id : nid < 0 ? null : nid;
+  }, id => id);
+  const totals = [0, 0, 0, 0];
+  for (const doc of docs) for (let i = 0; i < 4; i++) totals[i] += doc.lengths[i];
+  const records = [], skipped = [], unreadable = [];
+  for (const [rel, rec] of files) {
+    if (rec.kind === 'indexed' || rec.kind === 'superseded') records.push({path: rel, superseded: rec.kind === 'superseded', successor: rec.successor});
+    if (rec.kind === 'superseded' || rec.kind === 'other') skipped.push(rel);
+    else if (rec.kind === 'unreadable') unreadable.push(rel);
+  }
+  const index = {version: 1, docs, postings, exact, averages: totals.map(t => t / (docs.length || 1)), now: nowIso(), supersedes: supersessionOf(records), links: buildLinks(docs, refs)};
+  return {index, files, skipped: skipped.concat(unreadable), pages: reused === 0 ? reads : null};
+}
+/**
+ * Searcher over a vault. `refreshIfChanged()` re-checks the stat fingerprint and updates only the files whose stat token
+ * changed (BA-41). `snapshot()` returns pages and lexical index that describe the same vault state.
  */
 export function createSearcher(options) {
   const {vaultDir, stateDir, now, atomicWriter = atomicWriteFileSync, exclude} = options || {};
@@ -746,45 +960,65 @@ export function createSearcher(options) {
   // BA-29: `exclude` lists glob patterns (relative to vaultDir) whose pages are never returned as results; they stay in the index and its statistics. Absent or empty: every page is returned.
   if (exclude !== undefined && (!Array.isArray(exclude) || exclude.some(p => typeof p !== 'string' || !p))) fail('E_INVALID_INPUT', 'Expected exclude patterns');
   const rules = exclude ?? [];
+  const excluded = excludeMatcher(rules);
+  const nowIso = () => (now || new Date()).toISOString();
   const fingerprintOf = () => statFingerprint(vaultDir, rules);
   const cache = path.join(stateDir, 'retrieval-index.json');
-  // pages is null when the index came from the cache; snapshot() then loads them on demand.
+  // state: {key, index, skipped, files, pages}. `pages` is null when they must be loaded on demand (snapshot). `files` are the
+  // per-file records, kept in memory so the next change is incremental. `key` is null only after a race in snapshot().
   let state = null;
-  function rebuild({key, paths}) {
+  // The cache file, structurally checked. Its partition is checked against the walked files only when it describes this vault.
+  function readCache(walk) {
+    let data;
+    try { data = JSON.parse(fs.readFileSync(cache, 'utf8')); }
+    catch { return null; }
+    if (!isPlainObject(data) || typeof data.key !== 'string') return null;
+    const paths = data.key === walk.key ? new Set(walk.entries.map(entry => entry.rel)) : null;
+    return decodeCache(data, rules, paths);
+  }
+  function persist(next) {
     try {
-      const index = decodeCachedIndex(JSON.parse(fs.readFileSync(cache, 'utf8')), key, paths, rules);
-      if (index) { index.now = (now || new Date()).toISOString(); state = {key, index, pages: null}; return; }
-    }
-    catch { /* Rebuild malformed or missing cache. */ }
-    const { pages, skipped: unreadable } = loadPagesDetailed(vaultDir);
-    const index = buildIndex(pages, {now, exclude: rules});
-    state = {key, index, pages};
-    const indexed = new Set(index.docs.map(d => d.page.path));
-    // Unreadable pages (BA-23) join the skipped list so the cache still partitions the walked file set.
-    const skipped = [...pages.map(p => p.path).filter(p => !indexed.has(p)), ...unreadable];
-    try {
-      fs.mkdirSync(stateDir, {recursive:true});
-      atomicWriter(cache, JSON.stringify({key, index: flattenPostings(index), skipped}));
+      fs.mkdirSync(stateDir, {recursive: true});
+      atomicWriter(cache, cacheText(next.key, next.index, next.skipped, next.files));
     } catch { /* Search still works without a writable cache. */ }
   }
-  // Loads pages for a cache-hit state. They must describe the same vault state as the index: if the vault changed
-  // while they were read, pages and index are rebuilt together from that one read, under the pre-read key.
+  // Brings the state to the walked vault. Nothing is written when the key is unchanged.
+  function refreshTo(walk) {
+    if (state && state.key === walk.key) return;
+    let base = state;
+    if (!base) {
+      base = readCache(walk);
+      // The cache on disk describes this vault: use it as it is, with the current clock.
+      if (base && base.key === walk.key) {
+        state = {key: walk.key, index: {...base.index, now: nowIso()}, skipped: base.skipped, files: base.files, pages: null};
+        return;
+      }
+      // A key that differs although every walked file and stat token is the same cannot describe an edited vault: it was
+      // written with another fingerprint schema tag or exclusion rule (or its key was forged). Its records are not reused.
+      if (base && base.files.size === walk.entries.length && walk.entries.every(entry => base.files.get(entry.rel)?.token === entry.token)) base = null;
+    }
+    const next = update(base && base.files ? base : null, walk, excluded, nowIso);
+    persist({key: walk.key, ...next});
+    state = {key: walk.key, index: next.index, skipped: next.skipped, files: next.files, pages: next.pages};
+  }
+  // Loads pages for a state that came from the cache. They must describe the same vault state as the index: if the vault changed
+  // while they were read, pages and index are rebuilt together from that one read, and the key is left unmatched.
   function loadPagesForSnapshot() {
     const before = fingerprintOf();
-    if (before.key !== state.key) rebuild(before);
+    if (before.key !== state.key) refreshTo(before);
     if (state.pages) return;
     const key = state.key, pages = loadPagesDetailed(vaultDir).pages;
     if (fingerprintOf().key === key) { state.pages = pages; return; }
-    state = {key: before.key, index: buildIndex(pages, {now, exclude: rules}), pages};
+    state = {key: null, index: buildIndex(pages, {now, exclude: rules}), skipped: [], files: null, pages};
   }
-  rebuild(fingerprintOf());
+  refreshTo(fingerprintOf());
   return {
     search: (q,opts) => search(state.index,q,opts),
-    refresh: async () => { rebuild(fingerprintOf()); },
+    refresh: async () => { refreshTo(fingerprintOf()); },
     refreshIfChanged() {
       const current = fingerprintOf();
       if (current.key === state.key) return false;
-      rebuild(current);
+      refreshTo(current);
       return true;
     },
     snapshot() {
