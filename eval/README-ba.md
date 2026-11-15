@@ -34,6 +34,13 @@ Mevcut anahtarlar (`n`, `injectionRate`, `injectionPrecision`, `missRate`, `fals
 - `sectionHitAt1`, `sectionCases`, `sectionHitSources`: `expectedHeading` olan vakalarda, ilk ilgili enjekte bloğun başlık satırı beklenen başlıkla aynıysa isabet. Hook çıktısında bölüm adı yoksa (`sectionSource: "search"`), aynı sorgunun çekirdek `search()` sonucundaki `heading` alanı kullanılır. Hiç ilgili blok enjekte edilmemişse vaka ıska sayılır.
 - `poisonInjected`: `eval_poison` sayfası enjekte edilen vakaların oranı.
 
+## Proje farkındalığı ölçütleri (BA-31m, yalnız ek alanlar)
+- `top1RelevantRate`: cevaplanabilir vakalarda **ilk enjekte edilen bloğun** `relevant` listesinde olma oranı. Hiç blok enjekte edilmemişse vaka ıska sayılır (pay 0). Payda: cevaplanabilir vaka sayısı (0 ise 0).
+- `top1ExcludedRate`: `excluded` alanı boş olmayan bir dizi olan vakalarda ilk enjekte edilen bloğun `excluded` listesinde olma oranı (yanlış projeye gitme ölçüsü). Payda: `excluded` alanı boş olmayan bir dizi olan vaka sayısı; `abstain` vakalar dahil (0 ise 0).
+- `withCwd`: `cwd` değeri string olan vakaların (boş string dahil) alt özeti. Biçimi `falseInjectionRate` dahil `summarizeGroup` ile aynıdır (`n`, `injectionRate`, `missRate`, `precision`, `falseInjectionRate`) ve ek olarak `top1RelevantRate` ile `top1ExcludedRate` içerir. Kayıt yoksa `n: 0` ve tüm oranlar 0'dır.
+- Genel özet `top1RelevantRate` ve `top1ExcludedRate` alanlarını da taşır. `byCategory` ve `byKind` gruplarının anahtar kümesi değişmedi.
+- Hesap, `eval/lib/hook-records.mjs` içindeki `top1Rates` yardımcısındadır; testler `tests/eval/ba31m-top1-cwd.test.mjs`.
+
 ## Yeni dev setleri ve `ba-suite` anahtarları (BA-27)
 | Anahtar | Korpus (dev) | Vaka dosyası (dev) |
 |---|---|---|
