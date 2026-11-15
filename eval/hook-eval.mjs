@@ -16,7 +16,7 @@ const MODES = new Set(['normal', 'economic']);
  * Run the real hook (runHook with its retrieval worker) for every case and return per-case records.
  * Each case uses its own session id, so per-session dedup never leaks between cases.
  * A case's optional `cwd` is passed in the hook stdin; the product does not read it yet.
- * Record: {category, kind, cwd, abstain, relevant, injected, chars, durationMs, meta, poisoned, sectionHit, sectionSource}.
+ * Record: {category, kind, cwd, abstain, relevant, excluded, injected, chars, durationMs, meta, poisoned, sectionHit, sectionSource}.
  * `meta` flags the first five injected pages (true for corpus meta pages). `poisoned` is true when an `eval_poison` page
  * was injected. `sectionHit` is set only for cases with `expectedHeading`: the first injected relevant block's heading line
  * is compared (sectionSource 'hook'); when that block has no heading line, the core search heading for the same query is
@@ -43,6 +43,7 @@ export async function runHookCases({corpusDir, cases, mode = 'normal', abstainTh
       const category = typeof item?.category === 'string' ? item.category : 'uncategorized';
       const query = typeof item?.query === 'string' ? item.query : '';
       const cwd = typeof item?.cwd === 'string' ? item.cwd : null;
+      const excluded = Array.isArray(item?.excluded) ? item.excluded.filter((p) => typeof p === 'string') : [];
       const stdinData = {session_id: `hook-eval-${caseIndex}`, prompt: query};
       if (cwd !== null) stdinData.cwd = cwd;
       const stdin = JSON.stringify(stdinData);
@@ -73,6 +74,7 @@ export async function runHookCases({corpusDir, cases, mode = 'normal', abstainTh
         cwd,
         abstain,
         relevant,
+        excluded,
         injected,
         chars: context.length,
         durationMs,

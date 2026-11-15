@@ -67,7 +67,8 @@ test('scenario 1 mixed set: every metric equals the hand calculation', async () 
     close(m.missRate, 1 / 2);                 // answerable m1 (hit), m2 (miss)
     close(m.falseInjectionRate, 1 / 2);       // abstain m3 (none), m4 (injected)
     // BA-27: added summary keys (byKind, injectedChars, charsPerHit, neededPageInjected, metaShareTop5, sectionHitAt1, sectionCases, sectionHitSources, poisonInjected); existing keys unchanged.
-    assert.deepEqual(Object.keys(m).sort(), ['byCategory', 'byKind', 'chars', 'charsPerHit', 'durationMs', 'falseInjectionRate', 'injectedChars', 'injectionPrecision', 'injectionRate', 'metaShareTop5', 'missRate', 'n', 'neededPageInjected', 'poisonInjected', 'sectionCases', 'sectionHitAt1', 'sectionHitSources']);
+    // BA-31m: three keys added (top1ExcludedRate, top1RelevantRate, withCwd); existing keys unchanged. Pin updated by the PM decision.
+    assert.deepEqual(Object.keys(m).sort(), ['byCategory', 'byKind', 'chars', 'charsPerHit', 'durationMs', 'falseInjectionRate', 'injectedChars', 'injectionPrecision', 'injectionRate', 'metaShareTop5', 'missRate', 'n', 'neededPageInjected', 'poisonInjected', 'sectionCases', 'sectionHitAt1', 'sectionHitSources', 'top1ExcludedRate', 'top1RelevantRate', 'withCwd']);
     close(m.byCategory['identifier'].injectionRate, 1);
     close(m.byCategory['identifier'].missRate, 0);
     close(m.byCategory['identifier'].precision, 1);

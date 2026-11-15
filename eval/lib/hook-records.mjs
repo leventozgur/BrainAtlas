@@ -52,6 +52,22 @@ const hit = (r) => r.injected.some((p) => r.relevant.includes(p));
 const falseRecord = (r) => r.abstain || caseKind(r) === 'operational';
 
 /**
+ * BA-31m top-1 rates. Only the first injected block (injection order) is considered.
+ * top1RelevantRate: answerable cases whose first injected block is in `relevant` (no injection counts as a miss).
+ * top1ExcludedRate: cases with a non-empty `excluded` list whose first injected block is in `excluded` (wrong project).
+ * Both are 0 when their denominator is 0.
+ * @param {Array<object>} items
+ */
+function top1Rates(items) {
+  const answers = items.filter((r) => !r.abstain);
+  const withExcluded = items.filter((r) => Array.isArray(r.excluded) && r.excluded.length > 0);
+  return {
+    top1RelevantRate: ratio(answers.filter((r) => r.injected.length > 0 && r.relevant.includes(r.injected[0])).length, answers.length),
+    top1ExcludedRate: ratio(withExcluded.filter((r) => r.injected.length > 0 && r.excluded.includes(r.injected[0])).length, withExcluded.length),
+  };
+}
+
+/**
  * Aggregate per-case hook records into the hook-eval metric shape.
  * Record: {category, abstain, relevant, injected, chars, durationMs} plus the optional BA-27 fields
  * {kind, meta (flags of the first five injected blocks), poisoned, sectionHit (true|false|null), sectionSource}.
@@ -90,6 +106,9 @@ export function summarizeHookRecords(records) {
   };
   const byCategory = Object.fromEntries([...categories.entries()].sort(([a], [b]) => a.localeCompare(b, 'en')).map(([category, items]) => [category, summarizeGroup(items, false)]));
   const byKind = Object.fromEntries([...kinds.entries()].sort(([a], [b]) => a.localeCompare(b, 'en')).map(([kind, items]) => [kind, summarizeGroup(items, true)]));
+  // BA-31m: project-awareness summary. Only cases that carry a cwd; the same group shape plus the top-1 rates.
+  const withCwd = records.filter((r) => typeof r.cwd === 'string');
+  const withCwdSummary = {...summarizeGroup(withCwd, true), ...top1Rates(withCwd)};
   const chars = records.map((r) => r.chars);
   const durations = records.map((r) => r.durationMs);
   const hitCount = records.filter(hit).length;
@@ -118,5 +137,8 @@ export function summarizeHookRecords(records) {
       search: sectionCases.filter((r) => r.sectionSource === 'search').length,
     },
     poisonInjected: ratio(records.filter((r) => r.poisoned === true).length, n),
+    // BA-31m additions (existing keys above are unchanged).
+    ...top1Rates(records),
+    withCwd: withCwdSummary,
   };
 }
