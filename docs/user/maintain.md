@@ -38,6 +38,9 @@ page content.
 `stale-source` and `stale-symbol` appear in `findings`, the human output and `--queue` receipt candidates, not in
 `counts`. `counts` keeps the same keys as before.
 
+For an `oversized` page, `brainatlas compact` moves its older dated sections verbatim into
+`wiki/archive/<name>-history.md` (see [compact](compact.md)).
+
 ### Code references (`--repo`)
 
 - `sources: ["repo:src/total.mjs"]` and `sources: ["repo:src/total.mjs@<commit>"]` both check `src/total.mjs`. The
