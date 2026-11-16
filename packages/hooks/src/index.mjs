@@ -80,14 +80,17 @@ function packBlock(client, event, context, item, cap) {
   while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (fits(text(mid))) lo = mid; else hi = mid - 1; }
   return text(lo);
 }
-// BA-32: opt-in progressive packing. The first two results stay full blocks (their excerpt is clipped to 900 UTF-16 units,
-// never inside a surrogate pair), the next up to six become one-line pointers after a fixed header. Nothing else changes:
-// selection, dedup, restriction filtering, redaction and the cap are those of `full`. No page is read here.
-const PROGRESSIVE_BLOCKS = 2, PROGRESSIVE_POINTERS = 6, PROGRESSIVE_SNIPPET = 900;
+// BA-32: opt-in progressive packing. The first two results stay full blocks, the next up to six become one-line pointers
+// after a fixed header. BA-32b: the first excerpt is not clipped (only the cap of `packBlock` applies), the second is
+// clipped to 300 UTF-16 units, never inside a surrogate pair. Nothing else changes: selection, dedup, restriction
+// filtering, redaction and the cap are those of `full`. No page is read here.
+const PROGRESSIVE_BLOCKS = 2, PROGRESSIVE_POINTERS = 6, PROGRESSIVE_SNIPPET = 300;
+const PROGRESSIVE_FIRST_SNIPPET = Infinity;
 const POINTER_HEADER = 'More matches (open with wiki_read_page path + anchor):';
-// `cut` is the core's prefixKeepingPairs, imported lazily with the search scope so the full path stays lazy.
-const clipSnippet = (item, cut) => typeof item.snippet === 'string' && item.snippet.length > PROGRESSIVE_SNIPPET
-  ? {...item, snippet: cut(item.snippet, PROGRESSIVE_SNIPPET - 1) + '…'} : item;
+// `cut` is the core's prefixKeepingPairs, imported lazily with the search scope so the full path stays lazy. `Infinity`
+// means no clip at all, so the block reaches `packBlock` unchanged.
+const clipSnippet = (item, cut, limit) => limit < Infinity && typeof item.snippet === 'string' && item.snippet.length > limit
+  ? {...item, snippet: cut(item.snippet, limit - 1) + '…'} : item;
 const withAnchor = item => typeof item.anchor === 'string' && item.anchor ? {...item, path: `${item.path}#${item.anchor}`} : item;
 // `- Title › Heading [unverified] (path#anchor)`; heading, marker and anchor appear only when they exist.
 function pointerLine(item) {
@@ -101,8 +104,9 @@ function packProgressive(client, event, context, items, cap, cut) {
   const fits = text => envelope(client,event,text).length <= cap;
   const shown = [];
   let results = 0, header = false;
-  for (const item of items.slice(0, PROGRESSIVE_BLOCKS)) {
-    const next = packBlock(client, event, context, withAnchor(clipSnippet(item, cut)), cap);
+  for (const [index, item] of items.slice(0, PROGRESSIVE_BLOCKS).entries()) {
+    const limit = index === 0 ? PROGRESSIVE_FIRST_SNIPPET : PROGRESSIVE_SNIPPET;
+    const next = packBlock(client, event, context, withAnchor(clipSnippet(item, cut, limit)), cap);
     if (next === null) return {context, results, shown};
     context = next; results++; shown.push(item.path);
   }

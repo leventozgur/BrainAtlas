@@ -71,19 +71,25 @@ test('BA-32: one result gives one full block and no header; three results give t
   assert.equal(context.split(HEADER).length - 1, 1);
 });
 
-test('BA-32: a snippet over 900 units is clipped to 899 units plus an ellipsis', async t => {
+test('BA-32b: a 2000-unit snippet in the first full block is not clipped by progressive packing', async t => {
   const f = await fixture(t, { 'long.md': `# Long\nzebrafish ${'a'.repeat(2000)}` });
   const context = await ask(f, 'long', 'zebrafish');
   const excerpt = context.split('\n').slice(1).join('\n');
-  assert.equal(excerpt.length, 900);
-  assert.ok(excerpt.endsWith('…'));
+  assert.equal(excerpt.length, 2017);
+  assert.equal(excerpt, `# Long\nzebrafish ${'a'.repeat(2000)}`);
+  assert.equal(excerpt.endsWith('…'), false);
 });
 
-test('BA-32: the 900-unit clip never splits a surrogate pair', async t => {
-  const f = await fixture(t, { 'astral.md': `# Long\nzebrafish ${'a'.repeat(881)}😀${'b'.repeat(100)}` });
+test('BA-32b: the second full block is clipped to 300 units and the cut never splits a surrogate pair', async t => {
+  const f = await fixture(t, {
+    'aa.md': `# Strong\n${'zebrafish '.repeat(6)}`,
+    'zz-astral.md': `# Astral\nzebrafish ${'a'.repeat(279)}😀${'b'.repeat(100)}`,
+  });
   const context = await ask(f, 'astral', 'zebrafish');
-  const excerpt = context.split('\n').slice(1).join('\n');
-  assert.equal(excerpt.length, 899);
+  const blocks = context.split('\n\n');
+  assert.equal(blocks[0].split('\n').slice(1).join('\n'), ['# Strong', 'zebrafish '.repeat(6).trim()].join('\n'));
+  const excerpt = blocks[1].split('\n').slice(1).join('\n');
+  assert.equal(excerpt.length, 299);
   assert.ok(excerpt.endsWith('…'));
   assert.doesNotMatch(excerpt, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/u);
 });
