@@ -710,12 +710,24 @@ export function createServer(options) {
   return server;
 }
 
-/** @returns {Promise<void>} */
-export async function main() {
-  const env = process.env;
+/**
+ * Paths and config exactly as the stdio server builds them, so an in-process caller sees the same vault, config, state
+ * directory and retrieval settings.
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {Promise<{config:object,paths:object,env:object}>}
+ */
+export async function serverOptions(env) {
   const paths = core.resolvePaths({ env, platform: env.BRAINATLAS_PLATFORM || process.platform });
   if (env.BRAINATLAS_CONFIG) paths.configFile = resolve(env.BRAINATLAS_CONFIG);
   const config = await core.loadConfig({ paths, env });
-  const server = createServer({ config, paths, env });
+  return { config, paths, env };
+}
+
+/** @returns {Promise<void>} */
+export async function main() {
+  const env = process.env;
+  const server = createServer(await serverOptions(env));
   await server.connect(new StdioServerTransport());
 }
+
+export { callToolInProcess } from './in-process.mjs';
