@@ -124,10 +124,21 @@ function semanticStep(config, env) {
   try { return {settings:{...SEMANTIC_DEFAULTS, ...config.semantic}, stateDir:resolvePaths({env}).stateDir, budgetMs:SEMANTIC_BUDGET_MS, entryUrl:semanticEntryUrl()}; }
   catch { return null; }
 }
-// Resolves `{results, semantic?}`; `semantic` is present only when the semantic step was requested.
-function retrieve(options, query, searchOptions, remaining, semantic) {
+// BA-28: an opt-in shadow threshold from `retrieval.shadow`. Absent or invalid means the shadow search does not run.
+function shadowThreshold(retrieval) {
+  const shadow = retrieval?.shadow;
+  if (!shadow || typeof shadow !== 'object' || Array.isArray(shadow) || !hasOnlyKey(shadow, 'abstainThreshold')) return undefined;
+  const value = shadow.abstainThreshold;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : undefined;
+}
+function hasOnlyKey(object, key) {
+  const keys = Object.keys(object);
+  return keys.length === 1 && keys[0] === key;
+}
+// Resolves `{results, shadow?, semantic?}`; `shadow` is present only when the shadow search ran and succeeded.
+function retrieve(options, query, searchOptions, remaining, semantic, shadow) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./worker.mjs', import.meta.url), {workerData:{options,query,searchOptions,semantic}});
+    const worker = new Worker(new URL('./worker.mjs', import.meta.url), {workerData:{options,query,searchOptions,semantic,shadowThreshold:shadow}});
     let done = false;
     const finish = (error, value) => { if (done) return; done = true; clearTimeout(timer); void worker.terminate(); error ? reject(error) : resolve(value); };
     const timer = setTimeout(() => finish(new Error('deadline')), Math.max(0, remaining));
@@ -144,7 +155,7 @@ export async function runHook(input = {}) {
   const mode = ['normal','economic','manual'].includes(config.hooks?.mode) ? config.hooks.mode : 'normal';
   let stateDir = config.stateDir || config.paths?.stateDir;
   if (!stateDir && config.vault?.path) { try { stateDir = join(resolvePaths({env}).stateDir, vaultId(config.vault.path)); } catch {} }
-  let session = '', context = '', results = 0, outcome = 'empty', semanticState;
+  let session = '', context = '', results = 0, outcome = 'empty', semanticState, shadowState;
   try {
     let data = {};
     if (stdin.trim()) { data = JSON.parse(stdin); if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('input'); }
@@ -176,10 +187,10 @@ export async function runHook(input = {}) {
         const file = join(dir, `${client}-${hash(session)}.json`);
         const seen = session ? await readState(file) : [];
         // No cumulative snippet budget here: the hook packs every result itself under its own cap.
-        const hit = await retrieve({vaultDir:scope.root,stateDir,now,exclude:scope.exclude}, query, {limit:20,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start), semanticStep(config, env));
+        const hit = await retrieve({vaultDir:scope.root,stateDir,now,exclude:scope.exclude}, query, {limit:20,abstainThreshold:config.retrieval?.abstainThreshold ?? 0}, deadline - (Date.now()-start), semanticStep(config, env), shadowThreshold(config.retrieval));
         // Paths leave the hook vault-relative, as before (`wiki/x.md`); only the set of searched pages changed.
         // The semantic step can name excluded pages (its entries come from the whole snapshot), so the same rule filters here.
-        const found = hit.results.filter(item => !isExcludedPath(item.path, scope.exclude)).map(item => ({...item, path: scope.prefix + item.path})); semanticState = hit.semantic;
+        const found = hit.results.filter(item => !isExcludedPath(item.path, scope.exclude)).map(item => ({...item, path: scope.prefix + item.path})); semanticState = hit.semantic; shadowState = hit.shadow;
         if (Date.now()-start >= deadline) throw new Error('deadline');
         const unseen = found.filter(item => !seen.includes(item.path));
         // BA-26: restricted results are removed before packing, so they are never injected and never marked as shown.
@@ -206,7 +217,8 @@ export async function runHook(input = {}) {
     else if (context) outcome = 'ok';
   } catch (error) { context = ''; results = 0; outcome = error.message === 'deadline' ? 'deadline' : 'error'; }
   // The `semantic` field appears only when the semantic step ran or was attempted; it never carries query or page text.
-  await metric(stateDir, {ts:now.toISOString(),client,event,mode,durationMs:Date.now()-start,chars:context.length,results,outcome,session:hash(session).slice(0,16),...(semanticState ? {semantic:semanticState} : {})});
+  // BA-28: the `shadow` field appears only when a valid shadow threshold was configured and its search succeeded.
+  await metric(stateDir, {ts:now.toISOString(),client,event,mode,durationMs:Date.now()-start,chars:context.length,results,outcome,session:hash(session).slice(0,16),...(semanticState ? {semantic:semanticState} : {}),...(shadowState ? {shadow:shadowState} : {})});
   return {stdout:envelope(client,event,context),exitCode:0};
 }
 /** Build the node command used by client hook configuration. */
