@@ -476,7 +476,10 @@ const currentMarker = /\bcurrent\b|\bguncel durum\b/u;
 // section. Dates after asOf are not yet in force and are not preferred. Without such a candidate, the best score wins
 // as before, so pages without dated or current headings are unaffected.
 const DATED_SECTION_SHARE = 0.6;
-export function bestSection(body, terms, index, asOf) {
+// The H1–H3 sections of a body, in document order, with the split and anchor rule shared by bestSection and pageSections
+// (BA-32). Fenced code blocks are opaque, and a repeated heading gets a `-N` suffix. A section keeps its raw heading line
+// and raw body lines; text before the first heading is not a section.
+function splitSections(body) {
   const lines = body.split('\n'), sections = [], ancestors = [], used = new Set();
   let current = null, fenceLength = 0, fenceChar = null;
   for (const [lineNumber, rawLine] of lines.entries()) {
@@ -500,6 +503,17 @@ export function bestSection(body, terms, index, asOf) {
     current = {heading:title, anchor, headingPath:ancestors.filter(Boolean).join(' > '), headingLine:rawLine, lines:[], time:headingTime(title), isCurrent:currentMarker.test(normalizeText(title))};
     sections.push(current);
   }
+  return sections;
+}
+/**
+ * The H1–H3 sections of a page body in document order, as `{heading, anchor, headingPath, text}`. `text` is the heading
+ * line plus the section lines, trimmed — exactly the string bestSection returns for that section (BA-32).
+ */
+export function pageSections(body) {
+  return splitSections(body).map(section => ({heading: section.heading, anchor: section.anchor, headingPath: section.headingPath, text: [section.headingLine, ...section.lines].join('\n').trim()}));
+}
+export function bestSection(body, terms, index, asOf) {
+  const sections = splitSections(body);
   let best = null, bestScore = 0;
   const scored = [];
   for (const [position, section] of sections.entries()) {
