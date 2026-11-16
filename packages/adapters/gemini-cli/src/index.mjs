@@ -43,6 +43,33 @@ function indentAt(text,at){const line=text.lastIndexOf('\n',at-1)+1;return text.
 function setMember(text,node,key,value){const old=member(node,key),encoded=JSON.stringify(value);if(old)return text.slice(0,old.start)+encoded+text.slice(old.end);const close=node.end-1,nonempty=node.members.length>0,nl=text.includes('\r\n')?'\r\n':'\n',parent=indentAt(text,node.start),child=nonempty?indentAt(text,node.members[0].keyStart):parent+'  ';return text.slice(0,close)+`${nonempty?',':''}${nl}${child}${JSON.stringify(key)}: ${encoded}${nl}${parent}`+text.slice(close);}
 function appendArray(text,node,value){const close=node.end-1,nl=text.includes('\r\n')?'\r\n':'\n',parent=indentAt(text,node.start),child=node.items.length?indentAt(text,node.items[0].start):parent+'  ';return text.slice(0,close)+`${node.items.length?',':''}${nl}${child}${JSON.stringify(value)}${nl}${parent}`+text.slice(close);}
 function quote(value){return `"${String(value).replaceAll('\\','\\\\').replaceAll('"','\\"')}"`;}
+function isCli(ctx) { return ctx?.config?.channel === 'cli'; }
+const CHANNEL_SWITCH = 'Run brainatlas uninstall before changing the channel.';
+function cliPayload(ctx) {
+  const shim = quote(ctx.shimPath);
+  return `Use BrainAtlas as evidence-first project memory. Before substantial project changes, search it from the shell: ${shim} wiki query "<project name and topic terms>" --json, then read only relevant pages with ${shim} wiki read <path> --json. Treat retrieved pages as evidence, verify them against the current repository, and cite page paths when reporting findings. If no relevant page exists, proceed from current evidence. These commands are read-only.`;
+}
+function forgivingJson(text) {
+  // The cli channel never writes the MCP settings file: a BOM or malformed document
+  // means "no BrainAtlas entry" and must not block install.
+  try { const value = JSON.parse(text.replace(/^\uFEFF/, '')); return value && typeof value === 'object' && !Array.isArray(value) ? value : null; }
+  catch { return null; }
+}
+function assertNoMcp(text, ctx) {
+  if (text === null || text.trim() === '') return;
+  const value = forgivingJson(text);
+  if (!value) return;
+  if (value.mcpServers?.brainatlas !== undefined) fail('E_CHANNEL_SWITCH', CHANNEL_SWITCH);
+  // Managed hook detection matches the shim path plus `hook gemini <verb>` and the
+  // legacy form without the `hook` keyword, regardless of the current nodePath.
+  const shim = quote(ctx.shimPath);
+  const managed = ['BeforeAgent', 'SessionStart'].some(event => (Array.isArray(value.hooks?.[event]) ? value.hooks[event] : []).some(group => Array.isArray(group?.hooks) && group.hooks.some(hook => {
+    if (typeof hook?.command !== 'string') return false;
+    const tail = hook.command.split(shim)[1] || '';
+    return hook.command.includes(shim) && /^\s+(?:hook )?gemini (?:prompt|session-start)\b/.test(tail);
+  })));
+  if (managed) fail('E_CHANNEL_SWITCH', CHANNEL_SWITCH);
+}
 function hookCommand(ctx,verb,legacy=false){return `${quote(ctx.nodePath)} ${quote(ctx.shimPath)} ${legacy?'':'hook '}gemini ${verb}`;}
 function visitHooks(text,ctx,mode){
   for(const [event,name,verb] of [['BeforeAgent','brainatlas-context','prompt'],['SessionStart','brainatlas-session','session-start']]){
@@ -92,8 +119,10 @@ function geminiSettings(before,ctx){
   if(!sessionExists)text=appendArray(text,session.node,{matcher:'*',hooks:[sessionHook]});return text;
 }
 async function read(file) { try { return await readFile(file, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } }
-function blockText() {
-  const body = 'Use BrainAtlas in pull mode: query relevant project knowledge with the BrainAtlas wiki_query MCP tool when it can inform the task. Treat retrieved pages as evidence, verify them against the current project, and cite page paths when reporting findings.';
+function blockText(ctx) {
+  const body = isCli(ctx)
+    ? cliPayload(ctx)
+    : 'Use BrainAtlas in pull mode: query relevant project knowledge with the BrainAtlas wiki_query MCP tool when it can inform the task. Treat retrieved pages as evidence, verify them against the current project, and cite page paths when reporting findings.';
   return `${BEGIN}\n<!-- brainatlas:sha256:${digest(body)} -->\n${body}\n${END}`;
 }
 function getBlock(text) {
@@ -105,14 +134,42 @@ function getBlock(text) {
   if (!match || digest(match[2]) !== match[1]) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
   return { start, end: end + END.length };
 }
-function appendBlock(before) { const old = getBlock(before); if (old) return before.slice(0, old.start) + blockText() + before.slice(old.end); return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${blockText()}\n`; }
+// The cli channel accepts CRLF inside the managed block: the body is compared with
+// CRLF normalised to LF and an unchanged block is never rewritten.
+function getBlockCli(text) {
+  const start = text.indexOf(BEGIN), end = text.indexOf(END);
+  if (start < 0 && end < 0) return null;
+  if (start < 0 || end < start || text.indexOf(BEGIN, start + 1) >= 0 || text.indexOf(END, end + 1) >= 0) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block is damaged.');
+  const raw = text.slice(start, end + END.length);
+  const match = raw.match(/<!-- brainatlas:sha256:([a-f0-9]{64}) -->\r?\n([\s\S]*?)\r?\n<!-- brainatlas:end -->$/);
+  const body = match?.[2]?.replaceAll('\r\n', '\n');
+  if (!match || digest(body) !== match[1]) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
+  return { start, end: end + END.length, body };
+}
+function appendBlock(ctx, before) { const old = getBlock(before); if (old) return before.slice(0, old.start) + blockText(ctx) + before.slice(old.end); return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${blockText(ctx)}\n`; }
+function appendBlockCli(ctx, before) {
+  const old = getBlockCli(before);
+  if (old) return old.body === cliPayload(ctx) ? before : before.slice(0, old.start) + blockText(ctx) + before.slice(old.end);
+  return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${blockText(ctx)}\n`;
+}
+function restorable(prefix, suffix, original) {
+  if (typeof original !== 'string' || suffix.trim() !== '') return false;
+  const normalized = value => value.replaceAll('\r\n', '\n').replace(/\n+$/u, '');
+  return normalized(prefix) === normalized(original);
+}
 function changes(ctx, values) {
   const f = targets(ctx), result = [];
   const before = values[f.mcp];
   if (!ctx.nodePath || !ctx.shimPath) fail('E_ARGUMENT', 'nodePath and shimPath are required.');
+  if (isCli(ctx)) {
+    assertNoMcp(before, ctx);
+    const cliMd = values[f.instructions]; const cliAfter = appendBlockCli(ctx, cliMd ?? '');
+    if (cliAfter !== (cliMd ?? '')) result.push({ file: f.instructions, kind: cliMd === null ? 'create' : 'modify', before: cliMd, after: cliAfter, ownership: cliMd === null ? 'whole-file' : 'marked-block' });
+    return result;
+  }
   const updated=geminiSettings(before,ctx);
   if(updated!==before) result.push({file:f.mcp,kind:before===null?'create':'modify',before,after:updated,ownership:'json-key'});
-  const md = values[f.instructions]; const after = appendBlock(md ?? '');
+  const md = values[f.instructions]; const after = appendBlock(ctx, md ?? '');
   if (after !== (md ?? '')) result.push({ file: f.instructions, kind: md === null ? 'create' : 'modify', before: md, after, ownership: md === null ? 'whole-file' : 'marked-block' });
   return result;
 }
@@ -144,14 +201,17 @@ export async function apply(planResult, ctx) {
 export async function remove(ctx) {
   const f = targets(ctx), actions = [];
   // Preflight all targets before changing any user file.
-  for (const file of [f.mcp, f.instructions]) {
+  for (const file of (isCli(ctx) ? [f.instructions] : [f.mcp, f.instructions])) {
     const s = await state(ctx, file), raw = await read(s.record), current = await read(file);
     let rec;
     if (raw !== null) { try { rec = JSON.parse(raw); } catch { fail('E_STATE_CORRUPT', 'Adapter state is invalid.'); } if (!rec || rec.file !== file || typeof rec.existed !== 'boolean' || typeof rec.expected !== 'string' || (rec.existed && typeof rec.original !== 'string')) fail('E_STATE_CORRUPT', 'Adapter state is invalid.'); }
     if (current === null) { actions.push({ file, record: s.record, cleanup: raw !== null }); continue; }
     if (file === f.instructions) {
-      const b = getBlock(current); if (!b) { actions.push({ file, record: s.record, cleanup: raw !== null }); continue; }
-      actions.push({ file, record: s.record, cleanup: raw !== null, value: rec && current === rec.expected ? rec.existed ? rec.original : null : current.slice(0,b.start) + current.slice(b.end) });
+      const b = (isCli(ctx) ? getBlockCli(current) : getBlock(current)); if (!b) { actions.push({ file, record: s.record, cleanup: raw !== null }); continue; }
+      if (isCli(ctx) && b.body !== cliPayload(ctx)) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
+      const stripped = current.slice(0,b.start) + current.slice(b.end);
+      const keepOriginal = isCli(ctx) && restorable(current.slice(0,b.start), current.slice(b.end), rec?.existed ? rec.original : null);
+      actions.push({ file, record: s.record, cleanup: raw !== null, value: rec && current === rec.expected ? rec.existed ? rec.original : null : keepOriginal ? rec.original : stripped });
     } else {
       parseJson(current);
       if (rec && current === rec.expected) actions.push({ file, record: s.record, cleanup: true, value: rec.existed ? rec.original : null });
@@ -177,7 +237,19 @@ export async function remove(ctx) {
   for (const a of actions) { if (a.value === null) await unlink(a.file); else if (a.value !== undefined) await atomicWriteFile(a.file,a.value,{mode:0o600}); if (a.cleanup) await unlink(a.record); }
 }
 export async function doctor(ctx) {
-  const f = targets(ctx), checks = [], configText = await read(f.mcp); let registered = false;
+  const f = targets(ctx), checks = [], configText = await read(f.mcp);
+  if (isCli(ctx)) {
+    let present = false; const mdText = await read(f.instructions);
+    if (mdText !== null) {
+      try { present = getBlockCli(mdText)?.body === cliPayload(ctx); } catch { present = false; }
+    }
+    let shim = false; try { shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile()); } catch {}
+    checks.push({ id:'instructions', ok:present, message:present?'BrainAtlas CLI instructions are present.':'BrainAtlas CLI instructions are missing.' });
+    checks.push({ id:'shim',ok:shim,message:shim?'Shim file exists.':'Shim file is missing.' });
+    checks.push({ id:'version-drift',ok:true,message:'Version drift cannot be determined from adapter configuration.' });
+    return { ok:checks.every(c=>c.ok), checks };
+  }
+  let registered = false;
   if (configText !== null) { const o = parseJson(configText), e = o.mcpServers?.brainatlas; registered = e?.command === ctx.nodePath && JSON.stringify(e.args) === JSON.stringify([ctx.shimPath,'mcp']); }
   checks.push({ id:'registered', ok:registered, message:registered?'BrainAtlas MCP server is registered.':'BrainAtlas MCP server is not registered.' });
   let shim = false; try { shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile()); } catch {}

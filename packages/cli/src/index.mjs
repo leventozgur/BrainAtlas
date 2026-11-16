@@ -215,7 +215,18 @@ async function removeAdapters(cfg, paths, env) {
       const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
       if (typeof adapter.remove !== 'function') { warnings.push(`Adapter ${agent} has no remove operation.`); continue; }
       const ctx = { env, config: cfg, paths, scope: cfg.scope, nodePath: cfg.node.path, shimPath: paths.binPath, now: new Date() };
-      const planned = typeof adapter.plan === 'function' ? await adapter.plan(ctx) : { changes: [] };
+      // An init-time conflict (for example a pre-existing skill file) must not stop uninstall:
+      // removal reaches the adapter so it can report E_MANAGED_BLOCK_EDITED or restore user bytes.
+      // A user's MCP entry or hook must not block removing the cli-channel files either.
+      const planForRemoval = async () => {
+        if (typeof adapter.plan !== 'function') return { changes: [] };
+        try { return await adapter.plan(ctx); }
+        catch (cause) {
+          if (cfg.channel === 'cli' && (cause?.reason === 'skill-file' || cause?.code === 'E_CHANNEL_SWITCH')) return { changes: [] };
+          throw cause;
+        }
+      };
+      const planned = await planForRemoval();
       const managed = new Map();
       const manifest = await readInstallManifest(paths);
       for (const entry of manifest.files) {
@@ -633,7 +644,7 @@ const helpDescriptions = Object.freeze({
   migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', maintain: 'Read-only Wiki maintenance report (stale, broken, orphan and oversized pages); writes nothing unless --queue.', compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).', usage: 'Summarize hook metrics for the last days or record feedback.', wiki: 'Read-only Wiki tools from the shell (same results as the MCP read tools).', help: 'Show built-in and active module commands.'
 });
 const helpUsages = Object.freeze({
-  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
+  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--channel mcp|cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
   config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', safety: 'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
@@ -823,6 +834,8 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
     const requestedVault = value('--vault');
     const requestedProfile = value('--profile');
     const requestedAgents = value('--agents');
+    const requestedChannel = value('--channel');
+    if (requestedChannel !== undefined && !['mcp', 'cli'].includes(requestedChannel)) throw error('E_ARGUMENT', 'Channel must be mcp or cli.');
     const configExists = await exists(paths.configFile);
     const original = configExists ? await loadConfig({ paths, env }) : null;
     let vault = requestedVault;
@@ -863,6 +876,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
         recordChange('agents', cfg.agents, next);
         cfg.agents = next;
       }
+    }
+    if (requestedChannel !== undefined) {
+      const before = original?.channel ?? null;
+      const after = requestedChannel === 'cli' ? 'cli' : null;
+      const effective = channel => channel === 'cli' ? 'cli' : 'mcp';
+      if (original && (original.agents || []).length && effective(before) !== effective(after)) throw error('E_CHANNEL_SWITCH', 'Run brainatlas uninstall before changing the channel.');
+      recordChange('channel', before, after);
+      if (after === 'cli') cfg.channel = 'cli'; else delete cfg.channel;
     }
     const agents = cfg.agents;
     const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url));
