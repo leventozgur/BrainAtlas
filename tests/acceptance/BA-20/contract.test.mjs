@@ -43,7 +43,7 @@ test('wiki_create_entity line for a page with summary and tags equals the wiki_u
   const created = await startServer(t, {});
   okJson(await call(created.client, 'wiki_create_entity', { name: 'Kısa Özet', content }));
   const fromCreate = entryLines(await readIndexText(created));
-  const scanned = await startServer(t, { files: { 'entities/k-sa-zet.md': content } });
+  const scanned = await startServer(t, { files: { 'entities/kisa-ozet.md': content } });
   okJson(await call(scanned.client, 'wiki_update_index', {}));
   const fromUpdate = entryLines(await readIndexText(scanned));
   assert.equal(fromUpdate.length, 1);
