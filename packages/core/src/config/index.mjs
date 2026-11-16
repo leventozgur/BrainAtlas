@@ -11,6 +11,7 @@ export const CONFIG_SCHEMA = {
   required: ['schemaVersion','profile','vault','modules','agents','scope','retrieval','hooks','safety','okf','sync','telemetry','readOnly','node'],
   properties: {
     schemaVersion: { type: 'integer', enum: [1] }, profile: { type: 'string', enum: ['lite','full','custom'] },
+    channel: { type: 'string', enum: ['mcp','cli'] },
     vault: { type: 'object', required: ['path'], properties: { path: { type: 'string', minLength: 1 } }, additionalProperties: false },
     modules: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true }, agents: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
     scope: { type: 'string', enum: ['global','vault'] },
