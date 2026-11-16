@@ -52,7 +52,7 @@ const entryLines = (text) => text.split('\n').filter((line) => line.startsWith('
 test('BA20-CFM1: create writes the content frontmatter as page frontmatter, not as body text', async (t) => {
   const f = await fixture(t);
   await ok(f.client, 'wiki_create_entity', { name: 'Kısa Özet', content: CONTENT });
-  const written = await readFile(resolve(f.wiki, 'entities/k-sa-zet.md'), 'utf8');
+  const written = await readFile(resolve(f.wiki, 'entities/kisa-ozet.md'), 'utf8');
   assert.match(written, /^summary: Düz özet$/m);
   assert.match(written, /^tags:\n  - alfa$/m);
   assert.match(written, /^title: Kısa Özet$/m, 'the title is the create name');
@@ -64,7 +64,7 @@ test('BA20-CFM2: the create line for a page with summary and tags equals the wik
   const created = await fixture(t);
   await ok(created.client, 'wiki_create_entity', { name: 'Kısa Özet', content: CONTENT });
   const fromCreate = entryLines(await readFile(resolve(created.wiki, 'index.md'), 'utf8'));
-  const scanned = await fixture(t, { files: { 'entities/k-sa-zet.md': CONTENT } });
+  const scanned = await fixture(t, { files: { 'entities/kisa-ozet.md': CONTENT } });
   await ok(scanned.client, 'wiki_update_index');
   const fromUpdate = entryLines(await readFile(resolve(scanned.wiki, 'index.md'), 'utf8'));
   assert.equal(fromUpdate.length, 1);
@@ -75,8 +75,8 @@ test('BA20-CFM2: the create line for a page with summary and tags equals the wik
 test('BA20-CFM3: create content without frontmatter keeps the body and gets the name as title', async (t) => {
   const f = await fixture(t);
   await ok(f.client, 'wiki_create_concept', { name: 'Düz Kavram', content: 'Sadece gövde.\n' });
-  const written = await readFile(resolve(f.wiki, 'concepts/d-z-kavram.md'), 'utf8');
+  const written = await readFile(resolve(f.wiki, 'concepts/duz-kavram.md'), 'utf8');
   assert.match(written, /^title: Düz Kavram$/m);
   assert.ok(written.endsWith('Sadece gövde.\n'));
-  assert.deepEqual(entryLines(await readFile(resolve(f.wiki, 'index.md'), 'utf8')), ['- [Düz Kavram](concepts/d-z-kavram.md)']);
+  assert.deepEqual(entryLines(await readFile(resolve(f.wiki, 'index.md'), 'utf8')), ['- [Düz Kavram](concepts/duz-kavram.md)']);
 });

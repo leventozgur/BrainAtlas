@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import * as core from '@brainatlas/core';
 import { LOCK_FILE_NAME, withLock } from './lock.mjs';
+import { pageSlug } from './slug.mjs';
 
 import * as wiki from '@llmwiki/core';
 const TOOL_LIMIT = 20_000;
@@ -588,7 +589,7 @@ export function createServer(options) {
       return { path: `wiki/${normalized}`, updated: true, ...(sha256 === undefined ? {} : { sha256 }) };
     });
     const create = (name, content, kind) => async () => {
-      const slug = wiki.slugify(name);
+      const slug = pageSlug(name);
       // An empty slug (no ASCII letter or digit) would name a hidden `.md` file; refuse before anything is written.
       if (!slug) throw mcpError('E_INVALID_INPUT', 'The page name needs at least one ASCII letter or digit.');
       const rel = `${kind}/${slug}.md`;
