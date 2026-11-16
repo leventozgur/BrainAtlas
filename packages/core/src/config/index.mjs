@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile, copyFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,shadow?:{abstainThreshold:number}},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
 /** @type {object} */
 export const CONFIG_SCHEMA = {
@@ -14,7 +14,7 @@ export const CONFIG_SCHEMA = {
     vault: { type: 'object', required: ['path'], properties: { path: { type: 'string', minLength: 1 } }, additionalProperties: false },
     modules: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true }, agents: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
     scope: { type: 'string', enum: ['global','vault'] },
-    retrieval: { type: 'object', required: ['budgetChars','abstainThreshold'], properties: { budgetChars: { type: 'integer', minimum: 1 }, abstainThreshold: { type: 'number', minimum: 0, maximum: 1 }, exclude: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 200 }, uniqueItems: true } }, additionalProperties: false },
+    retrieval: { type: 'object', required: ['budgetChars','abstainThreshold'], properties: { budgetChars: { type: 'integer', minimum: 1 }, abstainThreshold: { type: 'number', minimum: 0, maximum: 1 }, exclude: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 200 }, uniqueItems: true }, shadow: { type: 'object', required: ['abstainThreshold'], properties: { abstainThreshold: { type: 'number', minimum: 0, maximum: 1 } }, additionalProperties: false } }, additionalProperties: false },
     hooks: { type: 'object', required: ['mode','deadlineMs'], properties: { mode: { type: 'string', enum: ['normal','economic','manual'] }, deadlineMs: { type: 'integer', minimum: 1 } }, additionalProperties: false },
     safety: { type: 'object', required: ['secretFilter','extraDenyGlobs'], properties: {
       secretFilter: { const: true }, extraDenyGlobs: { type: 'array', items: { type: 'string' } },

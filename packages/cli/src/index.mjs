@@ -11,9 +11,10 @@ import { inspectReleaseArchive, extractVerifiedRelease } from './archive.mjs';
 import { managePath, recordManagedWrite, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
 import { adoptPlan, migrateVault } from './migrate.mjs';
 import { formatMaintenance, receiptCandidates, runMaintenance } from './maintain.mjs';
+import { formatUsage, isFeedbackVerdict, recordFeedback, usageSummary } from './usage.mjs';
 
 const error = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details });
-const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'safety', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'maintain', 'help']);
+const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'safety', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'maintain', 'usage', 'help']);
 const validVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
 function compareVersions(left, right) {
   const parse = value => /^(?:v)?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
@@ -628,14 +629,14 @@ const helpDescriptions = Object.freeze({
   doctor: 'Check installation health.', config: 'Read or change BrainAtlas configuration.', safety: 'Review and manage fingerprinted safety allowances.', module: 'List, add, or remove installed modules.',
   uninstall: 'Remove BrainAtlas while preserving the vault.', update: 'Install or inspect a release update.', rollback: 'Switch to a previous release.',
   recover: 'Inspect or recover an interrupted update.', eval: 'Run the local retrieval evaluation.', hook: 'Run an agent hook.', mcp: 'Start the BrainAtlas MCP server.',
-  migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', maintain: 'Read-only Wiki maintenance report (stale, broken, orphan and oversized pages); writes nothing unless --queue.', help: 'Show built-in and active module commands.'
+  migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', maintain: 'Read-only Wiki maintenance report (stale, broken, orphan and oversized pages); writes nothing unless --queue.', usage: 'Summarize hook metrics for the last days or record feedback.', help: 'Show built-in and active module commands.'
 });
 const helpUsages = Object.freeze({
   init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
   config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', safety: 'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
-  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]', help: 'brainatlas --help | brainatlas help [COMMAND]'
+  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]', usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful', help: 'brainatlas --help | brainatlas help [COMMAND]'
 });
 
 async function availableHelpCommands(paths, env) {
@@ -1118,6 +1119,35 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
     if (queue) output(`${text}\n${report.queue.queued ? `Queued ${report.queue.candidates} review candidate(s) for receipts review.` : `Nothing queued (${report.queue.reason}).`}`);
     else output(text);
     return;
+  }
+  if (command === 'usage') {
+    const rawDays = value('--days');
+    let days = 7;
+    if (rawDays !== undefined) {
+      const parsedDays = Number(rawDays);
+      if (!/^\d+$/.test(rawDays) || !Number.isSafeInteger(parsedDays) || parsedDays < 1) throw error('E_ARGUMENT', 'Usage --days must be an integer of at least 1.');
+      days = parsedDays;
+    }
+    const positional = [];
+    for (let index = 0; index < args.length; index++) {
+      const argument = args[index];
+      if (argument === '--json') continue;
+      if (argument === '--days') { index++; continue; }
+      if (argument.startsWith('--')) throw error('E_ARGUMENT', 'Usage arguments are invalid.');
+      positional.push(argument);
+    }
+    const feedbackAction = positional[0] === 'feedback';
+    if (feedbackAction && (positional.length !== 2 || !isFeedbackVerdict(positional[1]))) throw error('E_ARGUMENT', 'Feedback verdict must be useful or not-useful.');
+    if (feedbackAction && rawDays !== undefined) throw error('E_ARGUMENT', 'Usage --days is only valid for the summary.');
+    if (!feedbackAction && positional.length) throw error('E_ARGUMENT', 'Usage arguments are invalid.');
+    const cfg = await config();
+    const stateDir = join(paths.stateDir, vaultId(cfg.vault.path));
+    if (feedbackAction) {
+      const result = await recordFeedback({ stateDir, verdict: positional[1] });
+      output(json ? result : `Recorded feedback: ${positional[1]}.`); return;
+    }
+    const summary = await usageSummary({ stateDir, days });
+    output(json ? summary : formatUsage(summary)); return;
   }
   if (command === 'eval') {
     let component;
