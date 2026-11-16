@@ -2,14 +2,21 @@
 import { percentile } from './metrics.mjs';
 import { caseKind } from './case-schema.mjs';
 
-const BLOCK_TITLE = / \(([^()\n]+\.md)\)$/u;
+const BLOCK_TITLE = / \(([^()\n]+\.md)(?:#[^()\n]*)?\)$/u;
 const HEADING_LINE = /^#{1,3}[\t ]+(.+)$/u;
+// BA-32: a progressive pointer line, `- Title › Heading [unverified] (path#anchor)`, names its page without the fragment.
+const POINTER_HEADER = 'More matches (open with wiki_read_page path + anchor):';
+const POINTER_LINE = /^- .* \(([^()\n]+\.md)(?:#[^()\n]*)?\)$/u;
 
 /**
  * Extract injected corpus paths from hook additionalContext.
  * A block starts at the beginning of the context or after an empty line, and its
- * first line has the form `Title (relative/path.md)`. Only paths present in the
- * corpus are accepted, so snippet text cannot create false injections.
+ * first line has the form `Title (relative/path.md)`; a progressive block title may
+ * end in `(path.md#anchor)` and names the page without the fragment (BA-32).
+ * Only paths present in the corpus are accepted, so snippet text cannot create false injections.
+ * BA-32: the lines directly after the exact progressive header line are pointer lines; their
+ * paths are appended after the block paths, without duplicates. Pointer-like lines anywhere
+ * else are ignored.
  * @param {string} context
  * @param {Set<string>} knownPaths
  * @returns {string[]} unique paths in injection order
@@ -20,15 +27,24 @@ export function parseInjectedPaths(context, knownPaths) {
   const out = [];
   for (let i = 0; i < lines.length; i++) {
     if (i > 0 && lines[i - 1] !== '') continue;
+    if (lines[i].startsWith('- ')) continue;
     const match = lines[i].match(BLOCK_TITLE);
     if (!match || !knownPaths.has(match[1]) || out.includes(match[1])) continue;
     out.push(match[1]);
+  }
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] !== POINTER_HEADER) continue;
+    for (let j = i + 1; j < lines.length && lines[j].startsWith('- '); j++) {
+      const match = lines[j].match(POINTER_LINE);
+      if (match && knownPaths.has(match[1]) && !out.includes(match[1])) out.push(match[1]);
+    }
   }
   return out;
 }
 
 /**
  * Heading of the injected block for `path`: the first snippet line of that block when it is a Markdown heading.
+ * A block title may end in `(path#anchor)`; the block is found by the path without the fragment (BA-32).
  * Returns null when the block is absent or its excerpt starts with plain text (no section name in the output).
  * @param {string} context
  * @param {string} path
@@ -39,6 +55,7 @@ export function parseBlockHeading(context, path) {
   const lines = context.split('\n');
   for (let i = 0; i < lines.length; i++) {
     if (i > 0 && lines[i - 1] !== '') continue;
+    if (lines[i].startsWith('- ')) continue;
     const match = lines[i].match(BLOCK_TITLE);
     if (!match || match[1] !== path) continue;
     const heading = (lines[i + 1] ?? '').match(HEADING_LINE);

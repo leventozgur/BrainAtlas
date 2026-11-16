@@ -18,7 +18,7 @@ export function main();
 
 ## Input
 
-Tool schemas are: `wiki_query{query:string,limit?:number}`, `wiki_read_page{path:string}`, `wiki_read_index{}`, `wiki_list_pages{type?:string}`, `wiki_status{}`, `wiki_lint{}`, `wiki_write_page{path:string,content:string,expectedSha256?:string}`, `wiki_update_page{path:string,content?:string,patch?:object,expectedSha256?:string}`, `wiki_create_entity{name:string,content:string}`, `wiki_create_concept{name:string,content:string}`, `wiki_add_crosslinks{path:string}`, and `wiki_update_index{}`.
+Tool schemas are: `wiki_query{query:string,limit?:number,compact?:boolean}`, `wiki_read_page{path:string,anchor?:string,maxChars?:number}`, `wiki_read_index{}`, `wiki_list_pages{type?:string}`, `wiki_status{}`, `wiki_lint{}`, `wiki_write_page{path:string,content:string,expectedSha256?:string}`, `wiki_update_page{path:string,content?:string,patch?:object,expectedSha256?:string}`, `wiki_create_entity{name:string,content:string}`, `wiki_create_concept{name:string,content:string}`, `wiki_add_crosslinks{path:string}`, and `wiki_update_index{}`.
 
 ## Output and errors
 
@@ -31,6 +31,8 @@ Tool schemas are: `wiki_query{query:string,limit?:number}`, `wiki_read_page{path
 `wiki_status` `indexCoveragePct` is the rounded share of countable Wiki pages (0 to 100; 100 when there are none, including the empty-Wiki view for a `wiki/` directory that resolves outside the vault) whose path an entry line of `wiki/index.md` links, read with the same parser as `wiki_update_index`; a missing index gives 0. The other `wiki_status` fields are unchanged.
 
 `wiki_read_page` also returns `sha256`: the lowercase hex SHA-256 of the file bytes on disk, computed over the whole file even when `content` is truncated. Read tools take no lock.
+
+Section read and compact query (BA-32): `wiki_read_page{path,anchor?,maxChars?}` may name one section. The path may end in `#fragment`, which is then the anchor; a leading `#` on `anchor` is ignored, a conflict between the two or an empty anchor is `E_INVALID_INPUT`. The body is the file text without its frontmatter, split exactly as the index loads pages, and the section whose anchor matches is returned as `{path,anchor,heading,headingPath,content,truncated,sha256}` (`content` is the section text). An unknown anchor is `E_INVALID_INPUT: Unknown anchor.` and no page text appears in an error. `maxChars` is an integer 1–20000 (`E_INVALID_INPUT` otherwise); `content` is cut with `prefixKeepingPairs` and `truncated` is true when a cut happened. Without an anchor, `content` is the whole file cut to `min(maxChars,20000)`. Without `anchor` and `maxChars` (and without `#` in the path) the response is unchanged. `wiki_query{query,limit?,compact?}` with `compact:true` drops only the `snippet` key of every result, on the lexical and the hybrid path; other keys, values and order, and the top-level keys, are unchanged.
 
 Write tools: `wiki_write_page` and `wiki_update_page` accept an optional `expectedSha256` (64 hex digits; any other value is `E_INVALID_INPUT`). When it is given, the current bytes of the page are hashed inside the write lock. A different hash, or a missing page, returns `E_CONFLICT` with a fixed message that echoes neither content nor hash; a refused call changes no file and writes no log record. A successful write returns `sha256` of the bytes written, only when `expectedSha256` was given; without it the response and behaviour are unchanged from before.
 

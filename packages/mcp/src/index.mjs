@@ -15,8 +15,8 @@ import { pageSlug } from './slug.mjs';
 import * as wiki from '@llmwiki/core';
 const TOOL_LIMIT = 20_000;
 const descriptions = {
-  wiki_query: 'Search verified Wiki evidence and return ranked snippets.',
-  wiki_read_page: 'Read a bounded Wiki page.', wiki_read_index: 'Read the bounded Wiki index.',
+  wiki_query: 'Search verified Wiki evidence and return ranked snippets; compact omits the snippets.',
+  wiki_read_page: 'Read a bounded Wiki page, or one of its sections by anchor.', wiki_read_index: 'Read the bounded Wiki index.',
   wiki_list_pages: 'List Wiki Markdown page paths.', wiki_status: 'Read Wiki counts and health summary.',
   wiki_lint: 'Run the vendored Wiki quality checks.', wiki_write_page: 'Create or replace a Wiki page.',
   wiki_update_page: 'Update a Wiki page.', wiki_create_entity: 'Create an entity page.',
@@ -38,6 +38,10 @@ function serializePage(page) {
   const fm = Object.entries(page.frontmatter ?? {}).map(([key, value]) => `${key}: ${typeof value === 'string' ? JSON.stringify(value) : JSON.stringify(value)}`).join('\n');
   return `---\n${fm}\n---\n${page.body ?? ''}\n`;
 }
+// BA-32: the frontmatter rule of the retrieval index (same pattern), so a section read splits the body exactly as the
+// search index does. An opening `---` without a closing line leaves the whole text as body.
+const FRONTMATTER = /^\uFEFF?---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/;
+function pageBody(text) { const match = text.match(FRONTMATTER); return match ? text.slice(match[0].length) : text; }
 const INDEX_CATEGORY_LINE = /^##\s+(.+)$/;
 const FENCE_OPEN = /^(`{3,}|~{3,})/;
 const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
@@ -447,13 +451,15 @@ export function createServer(options) {
     return handler(args);
   });
 
-  readTool('wiki_query', z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional() }), async ({ query, limit }) => {
+  readTool('wiki_query', z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional(), compact: z.boolean().optional() }), async ({ query, limit, compact }) => {
     const count = limit ?? 5;
     // Edits made outside this server (Obsidian, sync, another agent's MCP process) are picked up here.
     // A failed freshness check (e.g. a file removed between the scan and the read) keeps the current index; the next query retries.
     try { if (searcher.refreshIfChanged() && semanticEnabled) scheduleUpdate(); } catch { /* Keep serving the last good index. */ }
     const answer = searcher.search(query, { limit: count, budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT), abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35 });
-    const lexical = { results: answer.results, abstained: answer.abstained };
+    // BA-32: compact drops only the `snippet` key from every result; all other keys, values and their order are unchanged.
+    const stripSnippets = rows => compact === true ? rows.map(({snippet, ...rest}) => rest) : rows;
+    const lexical = { results: stripSnippets(answer.results), abstained: answer.abstained };
     if (!semanticEnabled) return lexical;
     const fallback = reason => ({ ...lexical, semantic: { used: false, fallbackReason: reason }, mode: 'lexical' });
     try {
@@ -506,15 +512,36 @@ export function createServer(options) {
           ...(item.semanticScore !== undefined ? { semanticScore: item.semanticScore } : {}), rrfScore: item.rrfScore,
           snippet, stale: item.stale, status: item.status, ...sectionFields };
       });
-      return { results: normalized, abstained: false, semantic: { used: true }, mode: settings.mode };
+      return { results: stripSnippets(normalized), abstained: false, semantic: { used: true }, mode: settings.mode };
     } catch (error) { return fallback(error?.fallbackReason === 'remote-not-allowed' ? 'remote-not-allowed' : 'provider-error'); }
   });
-  readTool('wiki_read_page', z.object({ path: z.string() }), async ({ path }) => {
-    const { normalized, target } = await safeFile(path);
+  readTool('wiki_read_page', z.object({ path: z.string(), anchor: z.unknown().optional(), maxChars: z.unknown().optional() }), async ({ path, anchor, maxChars }) => {
+    // A `#fragment` on the path is the anchor; an explicit `anchor` may carry one leading `#`. Path checks run first, as before.
+    const hashAt = path.indexOf('#');
+    const pathPart = hashAt < 0 ? path : path.slice(0, hashAt);
+    const fragment = hashAt < 0 ? undefined : path.slice(hashAt + 1);
+    const { normalized, target } = await safeFile(pathPart);
+    if (anchor !== undefined && typeof anchor !== 'string') throw mcpError('E_INVALID_INPUT', 'anchor must be a string.');
+    if (maxChars !== undefined && (!Number.isInteger(maxChars) || maxChars < 1 || maxChars > TOOL_LIMIT)) throw mcpError('E_INVALID_INPUT', 'maxChars must be an integer between 1 and 20000.');
+    const wanted = anchor === undefined ? fragment : anchor.startsWith('#') ? anchor.slice(1) : anchor;
+    if (anchor !== undefined && fragment !== undefined && wanted !== fragment) throw mcpError('E_INVALID_INPUT', 'The path fragment and the anchor differ.');
+    if (wanted !== undefined && wanted === '') throw mcpError('E_INVALID_INPUT', 'The anchor is empty.');
     // The hash covers all bytes on disk, also when the content is truncated; a write replaces the file by rename, so a read sees one whole version.
     const bytes = await readFile(target);
     const raw = bytes.toString('utf8');
-    return { path: `wiki/${normalized}`, content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT, sha256: createHash('sha256').update(bytes).digest('hex') };
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const shownPath = `wiki/${normalized}`;
+    if (wanted !== undefined) {
+      // BA-32: the section is chosen from the body split of the index loader (pageSections), by its anchor only.
+      const section = core.pageSections(pageBody(raw)).find(item => item.anchor === wanted);
+      if (!section) throw mcpError('E_INVALID_INPUT', 'Unknown anchor.');
+      const content = maxChars === undefined ? section.text : core.prefixKeepingPairs(section.text, maxChars);
+      return { path: shownPath, anchor: section.anchor, heading: section.heading, headingPath: section.headingPath, content, truncated: content.length < section.text.length, sha256 };
+    }
+    // Without maxChars the response is byte-identical to before (plain slice and the same truncation flag).
+    if (maxChars === undefined) return { path: shownPath, content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT, sha256 };
+    const content = core.prefixKeepingPairs(raw, Math.min(maxChars, TOOL_LIMIT));
+    return { path: shownPath, content, truncated: content.length < raw.length, sha256 };
   });
   readTool('wiki_read_index', z.object({}), async () => {
     const { target } = await safeFile('index.md');

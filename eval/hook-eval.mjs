@@ -21,11 +21,14 @@ const MODES = new Set(['normal', 'economic']);
  * was injected. `sectionHit` is set only for cases with `expectedHeading`: the first injected relevant block's heading line
  * is compared (sectionSource 'hook'); when that block has no heading line, the core search heading for the same query is
  * used instead (sectionSource 'search'). A case with no injected relevant block is a miss (sectionHit false).
- * @param {{corpusDir:string,cases:object[],mode?:string,abstainThreshold?:number,now?:Date}} options
+ * BA-32: `disclosure` is `full` (default, the hook config is exactly as before) or `progressive`, which sets
+ * `hooks.disclosure` in the hook config.
+ * @param {{corpusDir:string,cases:object[],mode?:string,abstainThreshold?:number,disclosure?:string,now?:Date}} options
  */
-export async function runHookCases({corpusDir, cases, mode = 'normal', abstainThreshold = 0.35, now = new Date(DEFAULT_NOW)}) {
+export async function runHookCases({corpusDir, cases, mode = 'normal', abstainThreshold = 0.35, disclosure = 'full', now = new Date(DEFAULT_NOW)}) {
   if (!MODES.has(mode)) throw new Error('Invalid mode');
   if (typeof abstainThreshold !== 'number' || !Number.isFinite(abstainThreshold) || abstainThreshold < 0 || abstainThreshold > 1) throw new Error('Invalid abstain threshold');
+  if (disclosure !== 'full' && disclosure !== 'progressive') throw new Error('Invalid disclosure');
   if (!Array.isArray(cases)) throw new Error('Invalid cases');
   const vaultDir = resolve(corpusDir);
   const pages = loadPages(vaultDir);
@@ -34,7 +37,7 @@ export async function runHookCases({corpusDir, cases, mode = 'normal', abstainTh
   const isMeta = loadMetaPredicate(vaultDir);
   let index = null;
   const stateDir = mkdtempSync(join(tmpdir(), 'ba-hook-eval-'));
-  const config = {vault: {path: vaultDir}, stateDir, hooks: {mode, deadlineMs: 4700}, retrieval: {abstainThreshold}};
+  const config = {vault: {path: vaultDir}, stateDir, hooks: {mode, deadlineMs: 4700, ...(disclosure === 'progressive' ? {disclosure: 'progressive'} : {})}, retrieval: {abstainThreshold}};
   const records = [];
   try {
     for (const [caseIndex, item] of cases.entries()) {
@@ -92,7 +95,7 @@ export async function runHookCases({corpusDir, cases, mode = 'normal', abstainTh
 
 /**
  * Hook-level metrics for one corpus and one case file.
- * @param {{corpusDir:string,casesFile:string,mode?:string,abstainThreshold?:number,now?:Date}} options
+ * @param {{corpusDir:string,casesFile:string,mode?:string,abstainThreshold?:number,disclosure?:string,now?:Date}} options
  */
 export async function runHookEval({corpusDir, casesFile, ...rest}) {
   const cases = JSON.parse(readFileSync(casesFile, 'utf8'));

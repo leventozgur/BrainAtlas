@@ -80,6 +80,42 @@ function packBlock(client, event, context, item, cap) {
   while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (fits(text(mid))) lo = mid; else hi = mid - 1; }
   return text(lo);
 }
+// BA-32: opt-in progressive packing. The first two results stay full blocks (their excerpt is clipped to 900 UTF-16 units,
+// never inside a surrogate pair), the next up to six become one-line pointers after a fixed header. Nothing else changes:
+// selection, dedup, restriction filtering, redaction and the cap are those of `full`. No page is read here.
+const PROGRESSIVE_BLOCKS = 2, PROGRESSIVE_POINTERS = 6, PROGRESSIVE_SNIPPET = 900;
+const POINTER_HEADER = 'More matches (open with wiki_read_page path + anchor):';
+// `cut` is the core's prefixKeepingPairs, imported lazily with the search scope so the full path stays lazy.
+const clipSnippet = (item, cut) => typeof item.snippet === 'string' && item.snippet.length > PROGRESSIVE_SNIPPET
+  ? {...item, snippet: cut(item.snippet, PROGRESSIVE_SNIPPET - 1) + '…'} : item;
+const withAnchor = item => typeof item.anchor === 'string' && item.anchor ? {...item, path: `${item.path}#${item.anchor}`} : item;
+// `- Title › Heading [unverified] (path#anchor)`; heading, marker and anchor appear only when they exist.
+function pointerLine(item) {
+  const heading = typeof item.heading === 'string' && item.heading ? ` › ${item.heading}` : '';
+  const marker = item.trust === 'weak' ? ' [unverified]' : '';
+  const anchor = typeof item.anchor === 'string' && item.anchor ? `#${item.anchor}` : '';
+  return `- ${item.title}${heading}${marker} (${item.path}${anchor})`;
+}
+/** Packs `items` progressively; returns the new context, the number of injected results and the full-block paths. */
+function packProgressive(client, event, context, items, cap, cut) {
+  const fits = text => envelope(client,event,text).length <= cap;
+  const shown = [];
+  let results = 0, header = false;
+  for (const item of items.slice(0, PROGRESSIVE_BLOCKS)) {
+    const next = packBlock(client, event, context, withAnchor(clipSnippet(item, cut)), cap);
+    if (next === null) return {context, results, shown};
+    context = next; results++; shown.push(item.path);
+  }
+  // Pointers are written only after at least one full block.
+  if (!results) return {context, results, shown};
+  for (const item of items.slice(PROGRESSIVE_BLOCKS, PROGRESSIVE_BLOCKS + PROGRESSIVE_POINTERS)) {
+    const line = redact(pointerLine(item), REDACT_OUTPUT);
+    const next = header ? `${context}\n${line}` : `${context}\n\n${POINTER_HEADER}\n${line}`;
+    if (!fits(next)) break;
+    context = next; results++; header = true;
+  }
+  return {context, results, shown};
+}
 // Open the inode itself without following links; check its identity and permissions before use.
 async function secureFile(file, flags) {
   const handle = await open(file, flags | (constants.O_NOFOLLOW || 0), 0o600);
@@ -181,7 +217,7 @@ export async function runHook(input = {}) {
       const knowledge = /\?|\b(?:what|why|how|where|when|which|who|explain|remember|knowledge|decision|nasıl|nedir|neden|hangi|nerede)\b/iu.test(query);
       if (query && (mode === 'normal' || trigger || (mode === 'economic' && knowledge))) {
         // BA-29: the same search scope as the MCP server (wiki root when present) and its root-level exclusions.
-        const { searchScope, isExcludedPath } = await import('../../core/src/retrieval/index.mjs');
+        const { searchScope, isExcludedPath, prefixKeepingPairs } = await import('../../core/src/retrieval/index.mjs');
         const scope = searchScope(config.vault.path, config.retrieval?.exclude);
         const dir = await stateSubdirectory(stateDir, 'hooks');
         const file = join(dir, `${client}-${hash(session)}.json`);
@@ -202,10 +238,16 @@ export async function runHook(input = {}) {
           fresh.push(item);
         }
         const cap = Math.min(client === 'codex' ? 1400 : mode === 'economic' ? 1500 : 4002, config.retrieval?.budgetChars ?? 4002);
-        for (const item of fresh) {
-          const next = packBlock(client, event, context, item, cap);
-          if (next === null) break;
-          context = next; results++; seen.push(item.path);
+        // BA-32: progressive packing is opt-in; without it the loop below is byte-identical to before.
+        if (config.hooks?.disclosure === 'progressive') {
+          const packed = packProgressive(client, event, context, fresh, cap, prefixKeepingPairs);
+          context = packed.context; results = packed.results; seen.push(...packed.shown);
+        } else {
+          for (const item of fresh) {
+            const next = packBlock(client, event, context, item, cap);
+            if (next === null) break;
+            context = next; results++; seen.push(item.path);
+          }
         }
         if (session && results) await writeState(file, seen);
       }
