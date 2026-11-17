@@ -19,7 +19,7 @@ export function bm25Fair({corpusDir, casesFile, now, abstainThreshold}) {
   for (const item of cases) {
     const relevant = Array.isArray(item?.relevant) ? item.relevant : [];
     const abstain = Boolean(item?.abstain || !relevant.length);
-    let result = null;
+    let result;
     try { result = search(index, item.query, {limit: 10, asOf: now, abstainThreshold}); } catch { result = null; }
     const results = result?.results || [];
     if (abstain) {

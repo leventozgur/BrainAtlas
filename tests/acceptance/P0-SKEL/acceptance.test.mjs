@@ -57,7 +57,7 @@ const signatures = [
  ...['okf-strict','receipts','semantic','sync-dropbox','sync-engine','sync-folder','sync-git'].map(a=>[`modules/${a}/src/index.mjs`,{activate:1}])
 ];
 for (const [file, expected] of signatures) test(`stub imzaları: ${file}`,async()=>{
- const mod=await import(pathToFileURL(join(root,file))); const source=await readFile(join(root,file),'utf8');
+ const mod=await import(pathToFileURL(join(root,file)));
  for(const [name,count] of Object.entries(expected)) { assert.equal(typeof mod[name],'function',name); const match=mod[name].toString().match(/^(?:async\s+)?(?:function\s*[^ (]*\s*)?\(([^)]*)\)/); assert.ok(match,name); assert.equal(match[1].trim()?match[1].split(',').length:0,count,name); }
 });
 test('CLI sürüm ve bilinmeyen komut',()=>{

@@ -98,4 +98,5 @@ export function entryLines(text) {
 }
 
 /** Any C0, DEL, C1, U+2028 or U+2029 character. */
+// eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
 export const CONTROL_RE = new RegExp('[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]');

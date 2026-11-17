@@ -85,7 +85,7 @@ export async function moduleCommand({ args, paths, env, output, plan, value }) {
   if (action === 'remove') {
     const directory = join(releaseDir, 'modules', name);
     if (!(await exists(directory))) throw error('E_MODULE_MISSING', 'Module is not installed.');
-    const manifest = readModuleManifest(directory);
+    readModuleManifest(directory);
     const manifests = await discoverModules(releaseDir);
     const remaining = manifests.filter(item => item.name !== name && (cfg.modules.includes('*') || cfg.modules.includes(item.name)));
     if (remaining.some(item => item.requires.includes(name))) throw error('E_MODULE_DEPENDENCY', 'Another enabled module requires this module.');
@@ -206,7 +206,7 @@ export async function configCommand({ args, plan, output, paths, env, markRedact
     const updated = setConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env);
     let credentialUrl = false;
     if (key === 'sync.options.remote' && typeof parsed === 'string' && /^https:\/\//i.test(parsed)) {
-      try { const remote = new URL(parsed); credentialUrl = Boolean(remote.username || remote.password); } catch {}
+      try { const remote = new URL(parsed); credentialUrl = Boolean(remote.username || remote.password); } catch { /* an unparsable URL cannot embed credentials */ }
     }
     const warnings = credentialUrl ? ['Remote URL contains embedded credentials; use a credential helper instead.'] : [];
     if (warnings.length) console.error(warnings[0]);

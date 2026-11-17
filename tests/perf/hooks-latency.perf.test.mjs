@@ -128,7 +128,6 @@ test('4700 ms deadline fails open under an artificially delayed retrieval', asyn
 
 // ---------- tests/hooks/ba01-recap.test.mjs ----------
 
-const RECAP_NOW = new Date('2026-11-10T00:00:00.000Z');
 const logLine = (ts, entry) => `- ${ts} ${JSON.stringify(entry)}`;
 
 async function recapHookFixture(t, { pages = {}, log = [], receipts = null } = {}) {

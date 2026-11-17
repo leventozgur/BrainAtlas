@@ -12,7 +12,7 @@ const page = (file, body, frontmatter = {}) => ({ path: file, title: file, alias
 const makeSecret = () => ['sk', 'test' + 'x'.repeat(24)].join('-');
 function legacyRrf(lists) {
   const scores = new Map();
-  for (const [listIndex, list] of lists.entries()) {
+  for (const [, list] of lists.entries()) {
     const seen = new Set();
     list.forEach((item, rank) => {
       if (seen.has(item.path)) return;

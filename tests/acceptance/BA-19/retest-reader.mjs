@@ -7,6 +7,7 @@
 // Node 20 APIs only.
 
 const PUNCT = /[!-/:-@[-`{-~]/;
+// eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
 const CONTROL = /[\x00-\x1f\x7f]/;
 
 /** Inline link destinations of a Markdown text, unescaped. Lines are split on '\n' with a trailing '\r' removed. */

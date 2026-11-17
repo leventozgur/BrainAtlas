@@ -60,6 +60,7 @@ test('a control-character page created through wiki_create_entity is not possibl
   const text = (await readIndex(f)).toString('utf8');
   const entry = text.split('\n').find((line) => line.includes('entities/ad-kontrol.md'));
   assert.ok(entry, 'the page has one entry line');
+  // eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
   assert.ok(!/[\u0000-\u001f\u007f-\u009f]/.test(entry.slice(entry.indexOf(']('))), 'the link destination holds no control character');
   // Observation (not a contract rule): the title is the raw create name, so control characters can appear in the link text.
   t.diagnostic(`title as written in the index link text: ${JSON.stringify(entry.slice(0, entry.indexOf('](')))}`);

@@ -7,7 +7,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { createSearcher, buildIndex, loadPages, search } from '../../../packages/core/src/retrieval/index.mjs';
 
 const ASOF = new Date('2026-02-01T00:00:00Z');

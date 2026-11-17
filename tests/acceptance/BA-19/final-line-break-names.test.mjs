@@ -10,8 +10,8 @@ const page = (title) => `---\ntitle: ${title}\n---\nKısa gövde.\n`;
 const LINE_BREAKS = [
   ['CR', '\r'],
   ['U+0085 NEL', '\u0085'],
-  ['U+2028 LINE SEPARATOR', ' '],
-  ['U+2029 PARAGRAPH SEPARATOR', ' ']
+  ['U+2028 LINE SEPARATOR', '\u2028'],
+  ['U+2029 PARAGRAPH SEPARATOR', '\u2029']
 ];
 const OK_PAGES = {
   'entities/ok-a.md': page('Tamam A'),
@@ -102,7 +102,7 @@ test('only excluded pages on disk: no countable page, so coverage is 100 (empty-
 });
 
 test('an excluded page does not stop a later create: the new ordinary page is added as one line, the excluded page stays out', async (t) => {
-  const f = await startServer(t, { files: { ...OK_PAGES, [badName(' ')]: page('GIZLI') } });
+  const f = await startServer(t, { files: { ...OK_PAGES, [badName('\u2028')]: page('GIZLI') } });
   const seed = okJson(await call(f.client, 'wiki_update_index', {}));
   assert.equal(seed.added, 3);
   const before = await readIndex(f);
@@ -111,12 +111,12 @@ test('an excluded page does not stop a later create: the new ordinary page is ad
   const after = await readIndex(f);
   const inserted = singleInsertion(before, after);
   assert.ok(inserted.line.includes('entities/yeni-kayit.md'), 'the single new line is the new page');
-  assert.ok(!after.toString('utf8').includes(' ') && !after.toString('utf8').includes('gizli'));
+  assert.ok(!after.toString('utf8').includes('\u2028') && !after.toString('utf8').includes('gizli'));
 });
 
 test('an existing hand-written line for an excluded page (U+2028 in the name) is kept byte for byte by index runs and creates', async (t) => {
-  const hand = `# Wiki Index\n\n## entities\n\n- [Elle gizli](entities/bad gizli.md) — elle yazılmış\n- [Tamam A](entities/ok-a.md)\n`;
-  const f = await startServer(t, { files: { ...OK_PAGES, [badName(' ')]: page('GIZLI'), 'index.md': hand } });
+  const hand = `# Wiki Index\n\n## entities\n\n- [Elle gizli](entities/bad\u2028gizli.md) — elle yazılmış\n- [Tamam A](entities/ok-a.md)\n`;
+  const f = await startServer(t, { files: { ...OK_PAGES, [badName('\u2028')]: page('GIZLI'), 'index.md': hand } });
   const result = okJson(await call(f.client, 'wiki_update_index', {}));
   assert.equal(result.removed, 0, 'the line is for a page that exists, so it is not stale');
   const afterIndex = await readIndex(f);

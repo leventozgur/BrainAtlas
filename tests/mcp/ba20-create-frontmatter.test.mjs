@@ -54,7 +54,7 @@ test('BA20-CFM1: create writes the content frontmatter as page frontmatter, not 
   await ok(f.client, 'wiki_create_entity', { name: 'Kısa Özet', content: CONTENT });
   const written = await readFile(resolve(f.wiki, 'entities/kisa-ozet.md'), 'utf8');
   assert.match(written, /^summary: Düz özet$/m);
-  assert.match(written, /^tags:\n  - alfa$/m);
+  assert.match(written, /^tags:\n {2}- alfa$/m);
   assert.match(written, /^title: Kısa Özet$/m, 'the title is the create name');
   assert.equal(written.split('\n---\n').length, 2, 'exactly one frontmatter block');
   assert.ok(written.endsWith('Gövde.\n'));

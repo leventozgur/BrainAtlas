@@ -54,7 +54,6 @@ function forgeCache(f, mutate) {
   mutate(d);
   fs.writeFileSync(f.cache, JSON.stringify(d));
 }
-const docEntry = (d, p) => d.index.docs.find((doc) => doc.page.path === p);
 
 // ---- (a) page-set mismatch forgeries: rebuild, fresh-install results, rewritten consistent cache ----
 const PAGE_SET_CASES = [

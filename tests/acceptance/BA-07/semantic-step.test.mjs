@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { performance } from 'node:perf_hooks';
 import { createSearcher } from '../../../packages/core/src/retrieval/index.mjs';
 import { SEMANTIC_DEFAULTS } from '../../../packages/core/src/config/index.mjs';
 import { semanticHits, semanticEntryUrl, semanticRequested } from '../../../packages/hooks/src/semantic.mjs';

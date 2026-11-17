@@ -4,7 +4,7 @@ import { lstat, mkdir, open, readFile, rename, rm, stat, unlink } from 'node:fs/
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { scanPath, scanText } from '../../../packages/core/src/safety/index.mjs';
 import { BrainAtlasError } from '../../../packages/core/src/util/errors.mjs';
-import { globMatch, inventoryVault, isLocalOnlyFrontmatter, resolveSyncScope } from './scope.mjs';
+import { globMatch, inventoryVault, isLocalOnlyFrontmatter } from './scope.mjs';
 import { mergeCanonicalPath } from './merge.mjs';
 import { SyncTransportError } from './transport.mjs';
 import { resolveHostId } from './host-id.mjs';
@@ -20,7 +20,6 @@ const INIT_SEED_TEMPLATE_URLS = new Map([
   ['planning/backlog.md', new URL('../../../templates/vault/backlog.md', import.meta.url)],
 ]);
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
-const asBytes = (value) => value instanceof Uint8Array ? Buffer.from(value) : Buffer.from(String(value));
 const isMissing = (error) => error?.code === 'ENOENT';
 let initSeedTemplatesPromise;
 
@@ -333,7 +332,7 @@ export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, 
       const key = tombstonePath(path);
       const object = await tx.get(path);
       const current = await tx.get(key);
-      let existingTombstone = null;
+      let existingTombstone;
       try { existingTombstone = current ? JSON.parse(Buffer.from(current.bytes).toString('utf8')) : null; }
       catch { throw new SyncTransportError('E_STATE_INVALID'); }
       if (object && (object.rev !== record.rev || (record.hash && sha256(object.bytes) !== record.hash))) throw new SyncTransportError('E_CONFLICT');

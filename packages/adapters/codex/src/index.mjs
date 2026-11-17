@@ -464,7 +464,7 @@ function assertNoMcp(ctx, p) {
   const forgivingJson = text => { try { const value = JSON.parse(text.replace(/^\uFEFF/, '')); return value && typeof value === 'object' && !Array.isArray(value) ? value : null; } catch { return null; } };
   const tomlBefore = read(p.toml);
   if (tomlBefore !== null) {
-    let parsed = null;
+    let parsed;
     try { parsed = tomlCheck(tomlBefore.replace(/^\uFEFF/, '')); } catch { parsed = null; }
     if (parsed?.headers.some(header => !header.array && header.path.length === 2 && header.path[0] === 'mcp_servers' && header.path[1] === 'brainatlas')) err('E_CHANNEL_SWITCH', CHANNEL_SWITCH);
   }
@@ -593,9 +593,9 @@ export async function doctor(ctx) {
   const p = paths(ctx), toml = await read(p.toml), instructions = await read(p.instructions), hooks = p.hooks ? await read(p.hooks) : null;
   if (isCli(ctx)) {
     let instructionsOk = false;
-    try { if (instructions !== null) { mdCheckCli(instructions); instructionsOk = mdBody(instructions) === cliPayload(ctx); } } catch {}
+    try { if (instructions !== null) { mdCheckCli(instructions); instructionsOk = mdBody(instructions) === cliPayload(ctx); } } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
     let shimExists = false;
-    try { await access(ctx.shimPath); shimExists = true; } catch {}
+    try { await access(ctx.shimPath); shimExists = true; } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
     const checks = [
       { id: 'instructions', ok: instructionsOk, message: instructionsOk ? 'BrainAtlas CLI instructions are present.' : 'BrainAtlas CLI instructions are missing.' },
       { id: 'shim', ok: shimExists, message: shimExists ? 'Shim path exists.' : 'Shim path is missing.' },
@@ -616,10 +616,10 @@ export async function doctor(ctx) {
       const args = block.match(/^args\s*=\s*\[("(?:[^"\\]|\\.)*"),\s*"mcp"\]$/m)?.[1];
       versionDrift = !command || !args || JSON.parse(command) !== ctx.nodePath || JSON.parse(args) !== ctx.shimPath;
     }
-  } catch {}
-  if (hooks) { try { hookPresent = managedHooks(parseJson(hooks), ctx).length > 0; } catch {} }
+  } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
+  if (hooks) { try { hookPresent = managedHooks(parseJson(hooks), ctx).length > 0; } catch { /* tolerant read: an unreadable or missing file never fails the check */ } }
   let shimExists = false;
-  try { await access(ctx.shimPath); shimExists = true; } catch {}
+  try { await access(ctx.shimPath); shimExists = true; } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
   return { ok: registered && shimExists && !versionDrift, checks: [
     { id: 'registered', ok: registered, message: registered ? 'MCP server is registered.' : 'MCP server is not registered.' },
     { id: 'shim', ok: shimExists, message: shimExists ? 'Shim path exists.' : 'Shim path is missing.' },

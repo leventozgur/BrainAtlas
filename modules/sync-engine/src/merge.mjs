@@ -26,7 +26,7 @@ function parseIndex(text) {
     if (heading) { category = heading[1]; sawCategory = true; continue; }
     const match = /^-\s+\[((?:\\.|[^\]])+)\]\(([^)]+)\)(?:\s+[—–-]\s+(.*))?\s*$/.exec(line);
     if (match) {
-      const title = match[1].replace(/\\([\\\[\]])/g, '$1');
+      const title = match[1].replace(/\\([\\[\]])/g, '$1');
       const path = match[2];
       const metadata = match[3] ?? '';
       entries.set(path, { path, category, title, summary: metadata.replace(/#[\w-]+/g, '').trim(), tags: [...metadata.matchAll(/#([\w-]+)/g)].map((tag) => tag[1]) });

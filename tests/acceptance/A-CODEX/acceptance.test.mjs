@@ -89,9 +89,9 @@ test('unrelated edits survive removal', async t => {
   await adapter.remove(f.ctx); assert.match(await get(f.toml), /model = "two"/); assert.equal(JSON.parse(await get(f.hooks)).user, 'changed');
 });
 test('symlinked target file cannot redirect writes outside scope', async t => {
-  const f = await fixture(t); await writeFile(f.sentinel, 'model = \"outside\"\n'); await mkdir(path.dirname(f.toml), { recursive: true }); await symlink(f.sentinel, f.toml);
-  try { await adapter.apply(adapter.plan(f.ctx), f.ctx); } catch {}
-  assert.equal(await get(f.sentinel), 'model = \"outside\"\n');
+  const f = await fixture(t); await writeFile(f.sentinel, 'model = "outside"\n'); await mkdir(path.dirname(f.toml), { recursive: true }); await symlink(f.sentinel, f.toml);
+  try { await adapter.apply(adapter.plan(f.ctx), f.ctx); } catch { /* the write is expected to fail; the assertion below covers the outcome */ }
+  assert.equal(await get(f.sentinel), 'model = "outside"\n');
 });
 test('synthetic secret does not appear in errors or review', async t => {
   const f = await fixture(t); const secret = ['sk', 'test' + 'x'.repeat(24)].join('-'); await put(f.hooks, `{${secret}`);

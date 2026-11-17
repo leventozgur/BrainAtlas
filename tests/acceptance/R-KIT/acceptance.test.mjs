@@ -37,7 +37,7 @@ test('offline release kit acceptance', { timeout: 180000 }, async t => {
     assert.deepEqual(await files(two), names);
     for (const name of names) assert.deepEqual(await readFile(join(one, name)), await readFile(join(two, name)), name);
     const lines = (await readFile(sumsPath, 'utf8')).trimEnd().split('\n');
-    const entries = new Map(lines.map(line => { const m = /^([a-f0-9]{64})  (.+)$/.exec(line); assert.ok(m, line); return [m[2], m[1]]; }));
+    const entries = new Map(lines.map(line => { const m = /^([a-f0-9]{64}) {2}(.+)$/.exec(line); assert.ok(m, line); return [m[2], m[1]]; }));
     assert.equal(entries.size, lines.length);
     assert.deepEqual([...entries.keys()].sort(), names.filter(n => n !== 'SHA256SUMS'));
     for (const [name, sha] of entries) assert.equal(digest(await readFile(join(one, name))), sha, name);

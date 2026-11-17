@@ -2,7 +2,7 @@
 // BA-00 blind acceptance: format, label and corpus-contract audit of the new dev sets and eval/corpus-ba.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { CORPUS_BA, DEV } from './helpers.mjs';
 import { buildIndex, loadPages, search } from '../../../packages/core/src/retrieval/index.mjs';

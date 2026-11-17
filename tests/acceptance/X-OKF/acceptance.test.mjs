@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, readdir } from 'node:
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { check, checkCommand, lintGate } from '../../../modules/okf-strict/src/index.mjs';
+import { checkCommand, lintGate } from '../../../modules/okf-strict/src/index.mjs';
 import { checkpoint } from '../../../packages/core/src/checkpoint/index.mjs';
 import { readModuleManifest } from '../../../packages/core/src/modules/index.mjs';
 

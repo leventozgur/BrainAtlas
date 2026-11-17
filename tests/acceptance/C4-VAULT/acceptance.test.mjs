@@ -74,7 +74,7 @@ test('injected secret scanner blocks staged content without exposing its value',
 });
 test('log helper must not write through a symlink outside vault', async t => {
   const d=await temp(t); const vault=join(d,'vault'); await initVault(vault); const outside=join(d,'outside'); await writeFile(outside,'OUTSIDE\n'); await rm(join(vault,'wiki/log.md')); await symlink(outside,join(vault,'wiki/log.md'));
-  try { await appendLog(vault,{action:'update'},{now:new Date('2026-01-01T00:00:00Z')}); } catch {} assert.equal(await readFile(outside,'utf8'),'OUTSIDE\n');
+  try { await appendLog(vault,{action:'update'},{now:new Date('2026-01-01T00:00:00Z')}); } catch { /* the write is expected to fail; the assertion below covers the outcome */ } assert.equal(await readFile(outside,'utf8'),'OUTSIDE\n');
 });
 test('full and changed scans handle missing targets and unreadable pages', async t => {
   const d=await temp(t); await initVault(d); const metadata={...base,status:'superseded',superseded_by:'wiki/entities/target.md'}; const yaml=Object.entries(metadata).map(([k,v])=>`${k}: ${JSON.stringify(v)}`).join('\n'); await writeFile(join(d,'wiki/entities/a.md'),`---\n${yaml}\n---\n`);

@@ -276,7 +276,7 @@ async function runSourceSafetyProbes({ temp, home, vault, env, pageSecret, pageC
   const server = createServer({ config, paths, env: { HOME: home } });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'e2e-safety-check', version: '1.0.0' });
-  let writeSafe = false;
+  let writeSafe;
   try {
     await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
     const writeSecret = syntheticSecret();

@@ -886,7 +886,7 @@ export const DEFAULT_EXCLUDE_VAULT = Object.freeze([...DEFAULT_EXCLUDE_WIKI, 'pl
  */
 export function searchScope(vaultDir, configured) {
   const wiki = path.join(vaultDir, 'wiki');
-  let wikiRoot = false;
+  let wikiRoot;
   try {
     const vaultReal = fs.realpathSync(vaultDir), wikiReal = fs.realpathSync(wiki);
     wikiRoot = fs.statSync(wikiReal).isDirectory() && wikiReal.startsWith(vaultReal + path.sep);

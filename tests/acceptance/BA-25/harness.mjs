@@ -2,7 +2,7 @@
 // BA-25 independent acceptance harness (written by the tester, not by the developer). Not a test file.
 // Starts real MCP stdio server processes (one per client) from the worktree (candidate). No network: the servers use the
 // lite profile and no embedding provider.
-import { mkdtemp, mkdir, cp, writeFile, readFile, readdir, rm, stat, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, cp, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';

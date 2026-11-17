@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { updateSemanticIndex, buildSemanticIndex, markdownChunks } from '../../../modules/semantic/src/index.mjs';
 import { exists, fakeClock, fakeProvider, readJson, sectionPage, workspace } from './helpers.mjs';

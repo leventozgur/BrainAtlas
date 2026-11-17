@@ -2,7 +2,7 @@
 // BA-02 shared case generator: deterministic synthetic vault (no network), fixed fake provider.
 // runHybridCases(root) returns sha256 digests of every output so two code trees can be compared byte-for-byte.
 // Digests are key-order independent (object keys are sorted before hashing).
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -24,7 +24,7 @@ export async function runHybridCases(root, { pages: n = 300 } = {}) {
   try {
     const vault = join(base, 'vault'), stateDir = join(base, 'state');
     mkdirSync(vault); mkdirSync(stateDir);
-    const { paths, queries } = synth.writeSyntheticCorpus(vault, { pages: n, seed: 7, queryCount: 40 });
+    const { queries } = synth.writeSyntheticCorpus(vault, { pages: n, seed: 7, queryCount: 40 });
     // Edge pages: superseded (must be excluded), stale_after in the past (stale flag), aliases/keywords, empty body.
     writeFileSync(join(vault, 'superseded-note.md'), '---\ntitle: Superseded note\nstatus: superseded\nsuperseded_by: wiki/x.md\n---\n# Superseded\ntopic-zero word one two\n');
     writeFileSync(join(vault, 'stale-note.md'), '---\ntitle: Stale note\nstatus: active\ngenerated: "2020-01-01"\nstale_after: P1D\naliases: [oldname]\nkeywords: [legacy]\n---\n# Stale\n## Part\nlegacy content here\n');

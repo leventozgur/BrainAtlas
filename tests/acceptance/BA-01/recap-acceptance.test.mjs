@@ -631,6 +631,7 @@ const LINE_SPEC = /^- \d{4}-\d{2}-\d{2} .+ \(wiki\/.+\.md\)$/;
 // JSON.stringify leaves U+2028/U+2029 raw; escape them so the log line itself stays one line.
 const safeEntry = (ms, path) => `- ${new Date(ms).toISOString()} ${JSON.stringify({ action: 'update', path })
   .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}`;
+// eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
 const CONTROL_RE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/;
 function assertCardWellFormed(card) {
   if (card === '') return;
@@ -729,6 +730,7 @@ test('BA-01-F4 property: 40 seeded vaults with control characters in paths and t
     const expected = pages
       .filter(p => p.kind !== 'dirty-path')
       .slice(0, 5)
+      // eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
       .map(p => `- ${new Date(msAgo(p.age)).toISOString().slice(0, 10)} ${p.title.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim()} (${p.rel})`);
     const listed = card.split('\n').filter(l => LINE_SPEC.test(l));
     assert.deepEqual(listed, expected, `seed ${seed}`);

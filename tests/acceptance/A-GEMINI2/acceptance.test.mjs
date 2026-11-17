@@ -48,7 +48,7 @@ test('remove preserves user edits and removes owned hook',async t=>{
 });
 test('symlinked settings cannot cause writes outside the target tree',{skip:'PM: cross-adapter policy (briefs/notes/A-common-fix.md) — a symlinked agent config dir such as ~/.gemini is a legitimate user-directed setup (dotfiles) and is followed'},async t=>{
  const f=await fixture(t), outside=join(f.root,'outside'); await mkdir(outside); await writeFile(join(outside,'settings.json'),'{}'); await symlink(outside,join(f.home,'.gemini'));
- try { await adapter.apply(adapter.plan(f.ctx),f.ctx); } catch {}
+ try { await adapter.apply(adapter.plan(f.ctx),f.ctx); } catch { /* the write is expected to fail; the assertions below cover the outcome */ }
  assert.equal(await readFile(join(outside,'settings.json'),'utf8'),'{}'); assert.deepEqual(await readdir(outside),['settings.json']);
 });
 test('Gemini JSON envelope, empty, malformed, deadline, and secret-free metrics',async t=>{

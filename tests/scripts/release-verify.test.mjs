@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { appendFile, chmod, link, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { appendFile, link, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -355,6 +355,7 @@ test('control characters in release folder names are escaped in reasons', { skip
     await writeFile(join(folder, 'evil\u001b[31mname'), 'x');
     const result = await run(['--dir', folder, '--version', version, '--skip-install'], env);
     assert.equal(result.status, 1);
+    // eslint-disable-next-line no-control-regex -- the test asserts that output carries no ANSI escape on purpose
     assert.doesNotMatch(result.stdout, /\u001b/);
     assert.match(result.stdout, /extra: .*evil\\x1b\[31mname/);
   } finally { await cleanup(base); }

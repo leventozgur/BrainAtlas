@@ -94,7 +94,6 @@ function top1Rates(items) {
 export function summarizeHookRecords(records) {
   const n = records.length;
   const answerable = records.filter((r) => !r.abstain);
-  const abstaining = records.filter((r) => r.abstain);
   const injectedTotal = records.reduce((sum, r) => sum + r.injected.length, 0);
   const injectedRelevant = records.reduce((sum, r) => sum + r.injected.filter((p) => r.relevant.includes(p)).length, 0);
   const categories = new Map();

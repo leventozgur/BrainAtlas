@@ -114,7 +114,7 @@ test('offline distribution is reproducible, self-contained, and rejects changed 
 
   const sums = await readFile(join(kit, 'SHA256SUMS'), 'utf8');
   const entries = sums.trimEnd().split('\n').map(line => {
-    const match = line.match(/^([a-f0-9]{64})  (.+)$/);
+    const match = line.match(/^([a-f0-9]{64}) {2}(.+)$/);
     assert.ok(match, 'checksum entry uses the expected format');
     return { digest: match[1], name: match[2] };
   });

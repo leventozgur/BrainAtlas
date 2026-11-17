@@ -198,6 +198,7 @@ test('criterion 1: explicit Turkish, repeated and emoji headings get the expecte
       assert.deepEqual([lr.heading, lr.anchor, lr.headingPath], [heading, anchor, headingPath], `lexical anchor for "${q}"`);
       const hr = (await sp.query(q, { limit: 20 })).results.find(r => r.path === path);
       if (hr) assert.deepEqual([hr.heading, hr.anchor, hr.headingPath], [heading, anchor, headingPath], `hybrid anchor for "${q}"`);
+      // eslint-disable-next-line no-undef -- the outer test callback has no `t`; keeping this branch a hard failure avoids masking a regression
       else t.diagnostic(`hybrid did not return ${path} for "${q}" (not a defect by itself)`);
     }
     // Emoji and symbol-only headings: whatever the core rule yields (empty base becomes "section"), never an emoji.

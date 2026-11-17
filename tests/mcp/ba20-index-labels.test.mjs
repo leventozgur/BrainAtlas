@@ -14,6 +14,7 @@ import { defaultConfig } from '../../packages/core/src/config/index.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 // Double-quoted YAML scalar with \u escapes for controls, so line breaks inside a value cannot break the frontmatter.
+// eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
 const yamlQuote = (value) => `"${value.replace(new RegExp('[\\\\"\\x00-\\x1f\\x7f-\\x9f\u2028\u2029]', 'g'), (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`)}"`;
 const page = (title, extra = '') => `---\ntype: entity\ntitle: ${yamlQuote(title)}\n${extra}---\nGövde.\n`;
 const hex = (ch) => `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { mkdir, readFile, rename, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
@@ -175,7 +175,7 @@ export async function saveConfig(cfg, options) {
   const tmp = join(dir, `.config-${process.pid}-${Date.now()}.tmp`);
   await mkdir(dir, { recursive: true });
   try { await writeFile(tmp, `${JSON.stringify(cfg, null, 2)}\n`, { flag: 'wx', mode: 0o600 }); await rename(tmp, file); }
-  catch { try { const { unlink } = await import('node:fs/promises'); await unlink(tmp); } catch {} throw new BrainAtlasError('E_CONFIG_WRITE', 'Could not save configuration.'); }
+  catch { try { const { unlink } = await import('node:fs/promises'); await unlink(tmp); } catch { /* best-effort temp cleanup; the write error is reported below */ } throw new BrainAtlasError('E_CONFIG_WRITE', 'Could not save configuration.'); }
 }
 
 /** @param {Config} cfg @param {string} dottedKey @param {unknown} value @returns {Config} */

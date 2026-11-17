@@ -3,10 +3,9 @@
 // the previous title line. Contract: docs/contracts/retrieval.md, "Result field"; docs/user/okf.md, "Effect on retrieval".
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 import { runHook } from '../../../packages/hooks/src/index.mjs';
-import { makeVault, removeDir, page, record, NOW, repoRoot } from './helpers.mjs';
+import { makeVault, removeDir, page, record, NOW } from './helpers.mjs';
 
 const dirs = [];
 after(() => dirs.forEach(removeDir));

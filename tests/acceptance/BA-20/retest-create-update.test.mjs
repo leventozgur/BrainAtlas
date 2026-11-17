@@ -16,6 +16,7 @@ const WORKTREE = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 // BA20_TARGET=main runs the main checkout's server (executed only; every write goes to a temporary vault).
 const ROOT = process.env.BA20_TARGET === 'main' ? resolve(WORKTREE, '..', '..', 'BrainAtlas') : WORKTREE;
 const OPTS = { timeout: 60_000 };
+// eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
 const CONTROL_RE = new RegExp('[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]');
 
 async function fixture(t, files = {}) {

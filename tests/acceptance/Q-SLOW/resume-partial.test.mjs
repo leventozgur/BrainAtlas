@@ -6,7 +6,7 @@ import { chmod, mkdir, readFile, stat, symlink, writeFile, unlink } from 'node:f
 import { join } from 'node:path';
 import { updateSemanticIndex, buildSemanticIndex, readSemanticIndex, markdownChunks } from '../../../modules/semantic/src/index.mjs';
 import { readPartialIndex, countPendingChunks } from '../../../modules/semantic/src/index-store.mjs';
-import { exists, fakeClock, fakeProvider, normalizedIndexText, readJson, sectionPage, sha256, vecFor, workspace, snapshot } from './helpers.mjs';
+import { exists, fakeProvider, normalizedIndexText, readJson, sectionPage, sha256, vecFor, workspace, snapshot } from './helpers.mjs';
 
 const CHUNKS = 100;
 async function setup(t, count = CHUNKS) {

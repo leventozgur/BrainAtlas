@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir, stat, mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
-import { resolve, dirname, relative, isAbsolute } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -15,7 +15,7 @@ const commands = new Set([...cli.matchAll(/command\s*===\s*['"]([\w-]+)['"]/g)].
 const moduleCommands = new Set();
 // PM update (Q-SEMWIRE): optional modules expose CLI commands dynamically (dispatchModuleCommand); count their `commands` export keys as dispatchable.
 for (const moduleName of await readdir(resolve(root, 'modules'))) {
-  let source = '';
+  let source;
   try { source = await readFile(resolve(root, 'modules', moduleName, 'src/index.mjs'), 'utf8'); } catch { continue; }
   const block = source.match(/export const commands\s*=\s*(?:Object\.freeze\()?\{([\s\S]*?)\n\}\)?;/);
   if (block) for (const m of block[1].matchAll(/^\s{2}(?:async\s+)?([A-Za-z][\w-]*)\s*[(:]/gm)) moduleCommands.add(m[1]);
@@ -105,6 +105,6 @@ test('online quickstart points to the GitHub Releases channel and the signing ke
   for (const [file, start, end] of [['README.md', '### Online', '### Offline'], ['README.tr.md', '### Çevrimiçi', '### Çevrimdışı']]) {
     const text = docs.find(d => d.file === file).text; const section = text.split(start)[1]?.split(end)[0] || '';
     assert.match(section, /github\.com\/[\w.-]+\/BrainAtlas\/releases/i, `${file}: release channel missing`);
-    assert.match(section, /SHA256:[A-Za-z0-9+\/]{43}/, `${file}: signing key fingerprint missing`);
+    assert.match(section, /SHA256:[A-Za-z0-9+/]{43}/, `${file}: signing key fingerprint missing`);
   }
 });

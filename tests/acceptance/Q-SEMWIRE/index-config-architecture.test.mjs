@@ -9,10 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { defaultConfig, loadConfig, saveConfig, setConfigValue, SEMANTIC_DEFAULTS, validateConfig } from '../../../packages/core/src/config/index.mjs';
 import { resolvePaths } from '../../../packages/core/src/paths/index.mjs';
 import { main as cliMain } from '../../../packages/cli/src/index.mjs';
-import { buildSemanticIndex, createOllamaProvider, markdownChunks, readSemanticIndex, searchHybrid, updateSemanticIndex } from '../../../modules/semantic/src/index.mjs';
+import { buildSemanticIndex, markdownChunks, readSemanticIndex, searchHybrid, updateSemanticIndex } from '../../../modules/semantic/src/index.mjs';
 
 const repo = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
-const testRoot = dirname(fileURLToPath(import.meta.url));
 const makeSecret = () => ['sk', 'test' + 'x'.repeat(24)].join('-');
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'q-semwire-index-'));

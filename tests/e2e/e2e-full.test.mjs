@@ -280,7 +280,6 @@ test('Full release syncs two offline hosts, reconciles content, protects secrets
   remember(firstPull.status === 'SYNCED' && firstPull.pulled > 0, 'git-peer-pull');
   remember((await readFile(join(vaultB, 'wiki', 'entities', 'shared.md'), 'utf8')) === sharedContent, 'git-page-delivery');
 
-  const stateA = resolvePaths({ platform: hostA.platform, env: hostA.env }).stateDir;
   const stateB = resolvePaths({ platform: hostB.platform, env: hostB.env }).stateDir;
   let peerCheck = jsonOutput(cli(hostA.cli, ['sync', 'check', '--peer', stateB, '--json'], hostA.env), 'Equal peer check');
   remember(peerCheck.status === 'PASS', 'peer-check-pass');
@@ -390,7 +389,7 @@ test('Full release syncs two offline hosts, reconciles content, protects secrets
   for (const host of hosts) {
     const strict = cli(host.cli, ['okf', 'check', '--strict', '--json'], host.env);
     let findings = null;
-    try { findings = JSON.parse(strict.stdout).findings; } catch {}
+    try { findings = JSON.parse(strict.stdout).findings; } catch { /* non-JSON output is handled as "invalid-output" below */ }
     if (strict.status !== 0 || !Array.isArray(findings) || findings.length) {
       const detail = Array.isArray(findings) ? findings.map(row => `${row.path}:${row.rule}`).join('+') : 'invalid-output';
       issues.push(`strict-okf-${host.id}:${detail}`);

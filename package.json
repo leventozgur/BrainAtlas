@@ -17,9 +17,15 @@
     "modules/*",
     "vendor/llmwiki-core"
   ],
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.15.0",
+    "globals": "17.14.0"
+  },
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "test:perf": "node scripts/run-tests.mjs perf",
+    "lint": "eslint .",
     "guard": "node scripts/guard.mjs",
     "build:release": "node release/build-release.mjs",
     "release:verify": "node scripts/release-verify.mjs",

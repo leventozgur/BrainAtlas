@@ -24,7 +24,6 @@ async function vaultWith(t, files) {
 const page = ({ title = 'Page', generated = '2026-11-01', stale = 'P90D', status = 'confirmed', extra = '', body = '' } = {}) =>
   `---\ntype: concept\ngenerated: "${generated}"\nstatus: ${status}\nsources: []\nverified: []\nstale_after: "${stale}"\naliases: []\nkeywords: []\n${extra}---\n\n# ${title}\n\n${body}\n`;
 const index = (...entries) => `# Wiki Index\n\n## Pages\n\n${entries.map(e => `- [${e[0]}](${e[1]})`).join('\n')}\n`;
-const kinds = report => report.findings.map(f => `${f.kind}:${f.path}`);
 const of = (report, kind) => report.findings.filter(f => f.kind === kind);
 
 test('a clean vault yields zero findings', async t => {

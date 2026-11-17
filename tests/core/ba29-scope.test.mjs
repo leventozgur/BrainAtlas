@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { createSearcher, searchScope, loadPagesDetailed } from '../../packages/core/src/retrieval/index.mjs';
 
 const now = new Date('2026-11-11T00:00:00Z');

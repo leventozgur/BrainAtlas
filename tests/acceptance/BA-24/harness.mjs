@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // BA-24 independent acceptance harness. Loads the worktree MCP and the main checkout MCP side by side with the same
 // fake embedding provider (no network, no Ollama) and the same vault. Not a test file: run by ba24-acceptance.test.mjs.
-import { mkdtemp, mkdir, cp, symlink, writeFile, rm } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { mkdtemp, mkdir, cp, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';

@@ -3,7 +3,7 @@
 // destinations, read back exactly, are covered by wiki_status, and three wiki_update_index runs are idempotent.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { call, okJson, textOf, startServer, readIndexText, entryLines } from './harness.mjs';
+import { call, okJson, startServer, readIndexText, entryLines } from './harness.mjs';
 
 const OPTS = { timeout: 60_000 };
 const page = (title) => `---\ntitle: ${title}\n---\nKısa gövde.\n`;

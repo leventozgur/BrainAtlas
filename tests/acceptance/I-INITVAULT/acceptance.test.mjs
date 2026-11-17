@@ -157,7 +157,6 @@ test('two source CLI hosts initialize uncreated vaults and sync byte-equal pages
       })
     };
   });
-  const sourceCli = join(root, 'packages/cli/bin/brainatlas.mjs');
   for (const host of hosts) {
     await mkdir(host.home, { recursive: true });
     const paths = resolvePaths({ platform: 'linux', env: host.env });

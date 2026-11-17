@@ -153,7 +153,7 @@ test('text output follows the query, read, index and list formats', async t => {
   const query = f.run('wiki', 'query', 'alpha');
   assert.equal(query.status, 0, query.stderr);
   assert.match(query.stdout, /^1\. concepts\/alpha\.md/mu);
-  assert.match(query.stdout, /\n   /u);
+  assert.match(query.stdout, /\n {3}/u);
   assert.equal(f.run('wiki', 'query', 'nothing-matches-this').stdout.trim(), 'No confident match.');
 
   const read = f.run('wiki', 'read', 'concepts/alpha.md', '--max-chars', '10');

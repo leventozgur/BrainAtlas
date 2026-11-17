@@ -116,9 +116,8 @@ export async function init({ flag, value, plan, output, paths, env }) {
     recordChange('channel', before, after);
     if (after === 'cli') cfg.channel = 'cli'; else delete cfg.channel;
   }
-  const agents = cfg.agents;
   const adapterRoot = fileURLToPath(new URL('../../../adapters/', import.meta.url));
-  let available = []; try { available = await readdir(adapterRoot); } catch {}
+  let available = []; try { available = await readdir(adapterRoot); } catch { /* a missing adapters directory means no adapters are available */ }
   if (cfg.agents.some(a => !/^[a-z0-9-]+$/.test(a))) throw error('E_AGENT_UNKNOWN', 'Invalid agent adapter name.');
   const warnings = []; const plannedAdapters = [];
   for (const agent of cfg.agents) {

@@ -35,7 +35,7 @@ async function readLogTail(file) {
     const buf = Buffer.alloc(st.size - from);
     const { bytesRead } = await h.read(buf, 0, buf.length, from);
     const bytes = buf.subarray(0, bytesRead);
-    if (start === 0) return bytes.toString('utf8').replace(/^﻿/, '');
+    if (start === 0) return bytes.toString('utf8').replace(/^\uFEFF/, '');
     if (bytes[0] === 0x0a) return bytes.subarray(1).toString('utf8');
     // Mid-line start: the first (partial) line is dropped.
     const body = bytes.subarray(1);
@@ -83,7 +83,7 @@ async function readPageHead(vaultReal, rel) {
 }
 // Minimal frontmatter split for the title only; no YAML parser is loaded on the hook path.
 function frontmatterSplit(head) {
-  const lines = head.replace(/^﻿/, '').split(/\r?\n/);
+  const lines = head.replace(/^\uFEFF/, '').split(/\r?\n/);
   if (lines[0] !== '---') return { fields: null, body: lines.join('\n') };
   const end = lines.findIndex((line, i) => i > 0 && line === '---');
   if (end < 0) return { fields: null, body: '' };

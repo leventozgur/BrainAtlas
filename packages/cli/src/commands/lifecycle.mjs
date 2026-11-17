@@ -87,7 +87,7 @@ async function readJournal(paths) {
 }
 async function clearJournal(paths) { await rm(journalPath(paths), { force: true }); }
 async function doctorResult(paths, env) {
-  let cfg; let configOk = true;
+  let cfg; let configOk;
   try { cfg = await loadConfig({ paths, env }); configOk = validateConfig(cfg).ok; }
   catch { cfg = defaultConfig('lite'); configOk = false; }
   const checks = { config: configOk };
@@ -311,7 +311,7 @@ export async function status({ command, output, paths, env }) {
 }
 
 export async function uninstall({ plan, output, paths, env, dependencies }) {
-  const manifest = await readInstallManifest(paths); const cfg = await loadConfig({ paths, env }).catch(() => defaultConfig('lite'));
+  await readInstallManifest(paths); const cfg = await loadConfig({ paths, env }).catch(() => defaultConfig('lite'));
   const roots = managedRoots(paths, env);
   if (plan) {
     const scheduler = await installedSyncSchedule('remove', { paths, env, config: cfg, dependencies: { ...dependencies, plan: true } });
@@ -323,7 +323,7 @@ export async function uninstall({ plan, output, paths, env, dependencies }) {
   const configFile = await resolveManagedPath(paths.configFile);
   const priorConfig = activeManifest.files.find(item => item.path === configFile && item.beforeSha256 && item.backupPath);
   let priorVault = null;
-  if (priorConfig) try { priorVault = JSON.parse(await readFile(priorConfig.backupPath, 'utf8'))?.vault?.path; } catch {}
+  if (priorConfig) try { priorVault = JSON.parse(await readFile(priorConfig.backupPath, 'utf8'))?.vault?.path; } catch { /* a missing or unreadable backup means there is no prior vault path */ }
   const restored = await uninstallManagedFiles(paths, { home: env.HOME, roots });
   const dataDir = await resolveManagedPath(paths.dataDir, { followFinal: true });
   const preserved = activeManifest.files.filter(item => item.beforeSha256 && item.path.startsWith(`${dataDir}${sep}`)).map(item => item.path);

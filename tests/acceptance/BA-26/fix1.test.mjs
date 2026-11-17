@@ -83,7 +83,7 @@ test('fix1 hook: query, fragment, matrix and Turkish upper-case secrets never re
   const vault = path.join(root, 'vault'), home = path.join(root, 'home'), state = path.join(root, 'state');
   fs.mkdirSync(path.join(vault, 'wiki'), { recursive: true }); fs.mkdirSync(home); fs.mkdirSync(state);
   const leaks = [], shown = [];
-  for (const [i, [text, rule]] of POSITIVES.entries()) {
+  for (const [i, [text]] of POSITIVES.entries()) {
     // Each page carries a unique keyword so its own prompt retrieves it.
     fs.writeFileSync(path.join(vault, 'wiki', `f${i}.md`), `---\ntitle: Bağlantı ${i}\nstatus: confirmed\n---\nfix1kw${i} ${text}\n`);
   }

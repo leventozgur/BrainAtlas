@@ -5,13 +5,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { runHookCases } from '../../../eval/hook-eval.mjs';
 import { parseBlockHeading, parseInjectedPaths, summarizeHookRecords } from '../../../eval/lib/hook-records.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(here, '..', '..', '..');
 const dirs = [];
 process.on('exit', () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 const tempDir = (prefix) => { const d = mkdtempSync(join(tmpdir(), `ba27-${prefix}-`)); dirs.push(d); return d; };

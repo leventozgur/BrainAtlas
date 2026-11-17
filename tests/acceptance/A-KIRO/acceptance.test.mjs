@@ -77,9 +77,9 @@ test('hook package fails open on malformed input without leaking secrets',async 
 });
 test('symlinked settings directory cannot redirect writes outside scope',{ skip: 'PM: a symlinked agent config dir (e.g. dotfile managers) is a legitimate user-directed setup; adapters follow it (same policy as I-INSTALL). Plan-target validation and ../ rejection cover the real risks.' }, async t=>{
   const f=await setup(t); const outside=join(f.root,'outside'); await mkdir(outside); await mkdir(dirname(dirname(f.mcp)),{recursive:true}); await symlink(outside,dirname(f.mcp));
-  try { await kiro.apply(await kiro.plan(f.ctx),f.ctx); } catch {} assert.equal(await get(join(outside,'mcp.json')),null);
+  try { await kiro.apply(await kiro.plan(f.ctx),f.ctx); } catch { /* the write is expected to fail; the assertion below covers the outcome */ } assert.equal(await get(join(outside,'mcp.json')),null);
 });
 test('relative vault traversal cannot escape HOME',async t=>{
   const f=await setup(t,'vault'); f.ctx.vaultDir='../outside'; f.ctx.config.vault.path='../outside';
-  try { await kiro.apply(await kiro.plan(f.ctx),f.ctx); } catch {} assert.equal(await get(join(dirname(f.home),'outside/.kiro/settings/mcp.json')),null);
+  try { await kiro.apply(await kiro.plan(f.ctx),f.ctx); } catch { /* the write is expected to fail; the assertion below covers the outcome */ } assert.equal(await get(join(dirname(f.home),'outside/.kiro/settings/mcp.json')),null);
 });

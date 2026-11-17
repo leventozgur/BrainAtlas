@@ -10,7 +10,7 @@ import { createServer } from '../../../packages/mcp/src/index.mjs';
 import { createSearcher } from '../../../packages/core/src/retrieval/index.mjs';
 import { CONFIG_SCHEMA, SEMANTIC_DEFAULTS, defaultConfig, loadConfig, resolvePaths, saveConfig, setConfigValue, validateConfig } from '@brainatlas/core';
 import { commands, createOllamaProvider, markdownChunks, updateSemanticIndex, buildSemanticIndex } from '../../../modules/semantic/src/index.mjs';
-import { fakeClock, normalizedIndexText, sectionPage, sha256, tempRoot, workspace } from './helpers.mjs';
+import { normalizedIndexText, sectionPage, sha256, tempRoot, workspace } from './helpers.mjs';
 
 // ---------------- golden (9) ----------------
 const FILES = {

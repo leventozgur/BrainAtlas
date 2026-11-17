@@ -10,9 +10,14 @@ From a clean checkout with the lockfile:
 npm ci --ignore-scripts
 npm test
 npm run guard
+npm run lint
 ```
 
 Do not use `npm install` to update the lockfile as part of an unrelated change. Network access may be unavailable in the development environment; if dependencies are missing, report that rather than changing dependency policy.
+
+## Lint
+
+`npm run lint` runs ESLint with the flat config in `eslint.config.mjs`. ESLint is development-only: the root `devDependencies` are limited to `eslint`, `@eslint/js` and `globals`, the supply-chain guard allows exactly those dev roots, and they never enter a release archive. Fix findings in the code without changing behaviour; a narrow `// eslint-disable-next-line <rule> -- <reason>` is reserved for intentional patterns.
 
 ## Verify before publishing
 

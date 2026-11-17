@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { loadRetrieval, configUrl, mcpBin, LONE_SURROGATE, ROOT } from './support.mjs';
+import { configUrl, mcpBin, LONE_SURROGATE, ROOT } from './support.mjs';
 
 const { defaultConfig } = await import(configUrl);
 const ELL = '…';

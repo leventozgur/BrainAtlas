@@ -69,10 +69,12 @@ export async function checkRule(root, id) {
     const out=[]; const lp=join(root,'package-lock.json'); let lock;
     try { lock=JSON.parse(await readFile(lp,'utf8')); } catch { return [{file:'package-lock.json',line:1,rule:id}]; }
     const allowedRoots=['@modelcontextprotocol/sdk','yaml','gray-matter','zod']; // zod: MCP SDK peer used directly by packages/mcp (PLAN §2)
+    // Development-only tools (lint). Keep this list minimal: these never ship in a release archive and may only appear in root devDependencies.
+    const devRoots=['eslint','@eslint/js','globals'];
     const workspaces=(lock.packages||{});
-    for(const [path,pkg] of Object.entries(workspaces)) if(pkg.hasInstallScript===true) out.push({file:'package-lock.json',line:1,rule:id});
+    for(const pkg of Object.values(workspaces)) if(pkg.hasInstallScript===true) out.push({file:'package-lock.json',line:1,rule:id});
     const allowedNames=new Set(allowedRoots);
-    for(const [path,pkg] of Object.entries(workspaces)) if(pkg.name&&/^(?:@brainatlas\/|@llmwiki\/|brainatlas$)/.test(pkg.name)) allowedNames.add(pkg.name);
+    for(const pkg of Object.values(workspaces)) if(pkg.name&&/^(?:@brainatlas\/|@llmwiki\/|brainatlas$)/.test(pkg.name)) allowedNames.add(pkg.name);
     const resolveLocked=(from, name) => {
       let cursor=from;
       while (true) {
@@ -83,28 +85,45 @@ export async function checkRule(root, id) {
         cursor=cut>=0 ? cursor.slice(0,cut) : '';
       }
     };
-    const reachable=new Set(); const queue=[];
-    for(const [path,pkg] of Object.entries(workspaces)) {
-      if(path==='' || (!path.startsWith('node_modules/') && !path.includes('/node_modules/'))) {
-        for(const name of Object.keys(pkg.dependencies||{})) if(allowedRoots.includes(name)) { const target=resolveLocked(path,name); if(target) queue.push(target); }
+    const isRootPath=(path) => path==='' || (!path.startsWith('node_modules/') && !path.includes('/node_modules/'));
+    const reachableFrom=(roots, seedFields, walkFields, extraSeedNames=[]) => {
+      const seen=new Set(); const queue=[];
+      for(const [path,pkg] of Object.entries(workspaces)) {
+        if(!isRootPath(path)) continue;
+        for(const field of seedFields) for(const name of Object.keys(pkg[field]||{})) {
+          if(!roots.includes(name)) continue;
+          const target=resolveLocked(path,name); if(target) queue.push(target);
+        }
+        if(path==='') for(const name of extraSeedNames) if(roots.includes(name)) { const target=resolveLocked('',name); if(target) queue.push(target); }
       }
-    }
-    while(queue.length) {
-      const path=queue.pop(); if(reachable.has(path)) continue; reachable.add(path);
-      const pkg=workspaces[path]||{};
-      for(const name of Object.keys(pkg.dependencies||{})) { const target=resolveLocked(path,name); if(target&&!reachable.has(target)) queue.push(target); }
-    }
+      while(queue.length) {
+        const path=queue.pop(); if(seen.has(path)) continue; seen.add(path);
+        const pkg=workspaces[path]||{};
+        for(const field of walkFields) for(const name of Object.keys(pkg[field]||{})) {
+          const target=resolveLocked(path,name); if(target&&!seen.has(target)) queue.push(target);
+        }
+      }
+      return seen;
+    };
+    let rootDevdependencies;
+    try { rootDevdependencies=JSON.parse(await readFile(join(root,'package.json'),'utf8')).devDependencies||{}; } catch { rootDevdependencies={}; }
+    const reachable=reachableFrom(allowedRoots,['dependencies'],['dependencies']);
+    const devReachable=reachableFrom(devRoots,['devDependencies'],['dependencies','peerDependencies'],Object.keys(rootDevdependencies));
     for(const path of Object.keys(workspaces)) {
       if(!(path.startsWith('node_modules/')||path.includes('/node_modules/'))) continue;
       const marker='/node_modules/'; const at=path.lastIndexOf(marker); const linkedName=path.slice(at+marker.length);
       if(allowedNames.has(linkedName)) continue;
+      if(workspaces[path]?.dev===true&&devReachable.has(path)) continue;
       if(!reachable.has(path)) out.push({file:'package-lock.json',line:1,rule:id});
     }
     const tree=await walk(root);
     for(const file of tree.files) if(/(^|\/)package\.json$/.test(file)&&file!=='package-lock.json'&&!file.includes('node_modules/')&&!file.startsWith('tests/')) {
       let p; try{p=JSON.parse(await readFile(join(root,file),'utf8'))}catch{out.push({file,line:1,rule:id});continue;}
       for(const [s] of Object.entries(p.scripts||{})) if(/^(preinstall|install|postinstall|prepare)$/.test(s)) out.push({file,line:1,rule:id});
-      for(const field of ['dependencies','devDependencies','optionalDependencies']) for(const name of Object.keys(p[field]||{})) if(!allowedNames.has(name)&&!name.startsWith('@brainatlas/')&&!name.startsWith('@llmwiki/')) out.push({file,line:1,rule:id});
+      for(const field of ['dependencies','devDependencies','optionalDependencies']) for(const name of Object.keys(p[field]||{})) {
+        if(field==='devDependencies'&&file==='package.json') { if(!devRoots.includes(name)) out.push({file,line:1,rule:id}); continue; }
+        if(!allowedNames.has(name)&&!name.startsWith('@brainatlas/')&&!name.startsWith('@llmwiki/')) out.push({file,line:1,rule:id});
+      }
     }
     out.push(...tree.escaped.map(file=>({file,line:1,rule:'symlink-escape'})));
     return out;

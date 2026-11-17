@@ -2,7 +2,7 @@
 // BA-02 hook-path parity: runHook output on a deterministic synthetic vault, no network.
 // usage: node hook-parity.mjs <repoRoot> [pages=2000] [prompts=20]
 // Prints one JSON line: per-prompt injected paths plus a digest of the full stdout envelopes.
-import { mkdtempSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';

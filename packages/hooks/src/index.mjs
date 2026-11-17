@@ -194,7 +194,7 @@ export async function runHook(input = {}) {
   const start = Date.now(); const deadline = Math.min(4700, Math.max(1, config.hooks?.deadlineMs ?? 4700));
   const mode = ['normal','economic','manual'].includes(config.hooks?.mode) ? config.hooks.mode : 'normal';
   let stateDir = config.stateDir || config.paths?.stateDir;
-  if (!stateDir && config.vault?.path) { try { stateDir = join(resolvePaths({env}).stateDir, vaultId(config.vault.path)); } catch {} }
+  if (!stateDir && config.vault?.path) { try { stateDir = join(resolvePaths({env}).stateDir, vaultId(config.vault.path)); } catch { /* fail-open: an unavailable optional value stays unset or empty */ } }
   let session = '', context = '', results = 0, outcome = 'empty', semanticState, shadowState;
   try {
     let data = {};
@@ -206,7 +206,7 @@ export async function runHook(input = {}) {
       const geminiStartup = client !== 'gemini' || ['startup','resume','clear'].includes(data.source);
       if (stateDir && geminiStartup) {
         let handoff = '';
-        try { handoff = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch {}
+        try { handoff = await readFile(join(stateDir, 'handoff.md'), 'utf8'); } catch { /* fail-open: an unavailable optional value stays unset or empty */ }
         // An explicit handoff card wins; otherwise build the bounded recap (never in manual mode).
         // The recap module loads lazily so prompt hooks never pay for it; a load failure means an empty card.
         if (handoff.trim()) context = handoff;
@@ -275,12 +275,12 @@ export function buildHookCommand({nodePath, shimPath, client, event, paths}) {
   const canonical = value => { try { return realpathSync(value); } catch { return value; } };
   if (supported) {
     let defaultConfig;
-    try { defaultConfig = resolvePaths({env:process.env}).configFile; } catch {}
+    try { defaultConfig = resolvePaths({env:process.env}).configFile; } catch { /* fail-open: an unavailable optional value stays unset or empty */ }
     let yamlDir;
-    try { yamlDir = dirname(createRequire(import.meta.url).resolve('yaml/package.json')); } catch {}
+    try { yamlDir = dirname(createRequire(import.meta.url).resolve('yaml/package.json')); } catch { /* fail-open: an unavailable optional value stays unset or empty */ }
     // The global semantic index (read-only) lives beside the per-vault state directories.
     let semanticIndexDir;
-    try { semanticIndexDir = join(resolvePaths({env:process.env}).stateDir, 'semantic'); } catch {}
+    try { semanticIndexDir = join(resolvePaths({env:process.env}).stateDir, 'semantic'); } catch { /* fail-open: an unavailable optional value stays unset or empty */ }
     const reads = [paths.vault, paths.state, paths.release, paths.configFile, process.env.BRAINATLAS_CONFIG, defaultConfig, yamlDir, dirname(nodePath), shimPath, semanticIndexDir].filter(Boolean);
     // Retrieval runs in a worker so its deadline can interrupt synchronous search.
     args.push('--permission', ...[...new Set(reads.flatMap(value => [value, canonical(value)]))].map(value => `--allow-fs-read=${value}`), ...[...new Set([paths.state, canonical(paths.state)])].map(value => `--allow-fs-write=${value}`), '--allow-worker');

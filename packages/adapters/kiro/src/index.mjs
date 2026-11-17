@@ -238,7 +238,7 @@ export async function doctor(ctx) {
   if (isCli(ctx)) {
     const steering=await readOptional(files.steering);
     const steeringOk=steering!==null && steering===steeringText(ctx);
-    let commandExists=false; try { await access(ctx.shimPath); commandExists=true; } catch {}
+    let commandExists=false; try { await access(ctx.shimPath); commandExists=true; } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
     checks.push({id:'steering',ok:steeringOk,message:steeringOk?'BrainAtlas CLI steering instructions are present.':'BrainAtlas CLI steering instructions are missing.'});
     checks.push({id:'command',ok:commandExists,message:commandExists?'Shim path exists.':'Shim path is missing.'});
     checks.push({id:'version-drift',ok:true,message:'No command drift detected.'});
@@ -246,8 +246,8 @@ export async function doctor(ctx) {
   }
   const mcpRaw=await readOptional(files.mcp), hookRaw=await readOptional(files.hook);
   let registered=false, hookPresent=false, commandExists=false, drift=false;
-  try { const obj=mcpRaw===null?{}:parseJson(files.mcp,mcpRaw); const container=obj.mcpServers||obj.servers||{}; registered=!!container.brainatlas; if(container.brainatlas?.args?.[0]===ctx.shimPath) { try { await access(ctx.shimPath); commandExists=true; } catch {} } drift=container.brainatlas?.command!==(ctx.nodePath||'node'); } catch {}
-  try { const obj=hookRaw===null?{}:parseJson(files.hook,hookRaw); hookPresent=Array.isArray(obj.hooks)&&obj.hooks.some(h=>typeof h?.action?.command==='string'&&h.action.command.includes(' hook kiro ')&&h.action.command.includes(ctx.shimPath||'')); } catch {}
+  try { const obj=mcpRaw===null?{}:parseJson(files.mcp,mcpRaw); const container=obj.mcpServers||obj.servers||{}; registered=!!container.brainatlas; if(container.brainatlas?.args?.[0]===ctx.shimPath) { try { await access(ctx.shimPath); commandExists=true; } catch { /* tolerant read: an unreadable or missing file never fails the check */ } } drift=container.brainatlas?.command!==(ctx.nodePath||'node'); } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
+  try { const obj=hookRaw===null?{}:parseJson(files.hook,hookRaw); hookPresent=Array.isArray(obj.hooks)&&obj.hooks.some(h=>typeof h?.action?.command==='string'&&h.action.command.includes(' hook kiro ')&&h.action.command.includes(ctx.shimPath||'')); } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
   checks.push({id:'registered',ok:registered,message:registered?'BrainAtlas MCP server is registered.':'BrainAtlas MCP server is not registered.'});
   checks.push({id:'command',ok:commandExists,message:commandExists?'MCP command points to the configured shim.':'MCP command does not point to the configured shim.'});
   checks.push({id:'version-drift',ok:!drift,message:drift?'Configured Node executable differs from the current configuration.':'No command drift detected.'});

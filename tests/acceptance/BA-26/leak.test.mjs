@@ -103,7 +103,7 @@ test('H3 hook: restricted pages never appear in prompt-hook output (12 prompts, 
 
 test('H3 state: restricted pages are never marked as shown in the hook state', async (t) => {
   const v = makeVault(t, 'h3s');
-  for (const [i, prompt] of PROMPTS.entries()) await ask(v, prompt, 'h3-state-session');
+  for (const [, prompt] of PROMPTS.entries()) await ask(v, prompt, 'h3-state-session');
   await ask(v, 'açık kontrol notu ortak kavramlar', 'h3-state-session');
   const hooksDir = path.join(v.state, 'hooks');
   const files = fs.existsSync(hooksDir) ? fs.readdirSync(hooksDir) : [];

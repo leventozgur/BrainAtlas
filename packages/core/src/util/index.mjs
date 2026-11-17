@@ -20,7 +20,7 @@ export async function atomicWriteFile(file, data, options = {}) {
     await fsOps.writeFile(temp, data, { mode: options.mode });
     await fsOps.rename(temp, target);
   } catch (error) {
-    try { await fsOps.unlink(temp); } catch {}
+    try { await fsOps.unlink(temp); } catch { /* best-effort temp cleanup; the original error is rethrown */ }
     throw error;
   }
 }
@@ -37,7 +37,7 @@ export function atomicWriteFileSync(file, data, options = {}) {
     fsOps.writeFileSync(temp, data, { mode: options.mode });
     fsOps.renameSync(temp, target);
   } catch (error) {
-    try { fsOps.unlinkSync(temp); } catch {}
+    try { fsOps.unlinkSync(temp); } catch { /* best-effort temp cleanup; the original error is rethrown */ }
     throw error;
   }
 }

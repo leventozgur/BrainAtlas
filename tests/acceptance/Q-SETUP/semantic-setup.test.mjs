@@ -243,7 +243,6 @@ function failingFetch(f, failure) {
   return async (url, request = {}) => {
     if (failure.failIndex && String(url).endsWith('/api/embed') && !JSON.parse(request.body).input[0]?.startsWith(f.config.semantic.queryPrefix)) {
       f.ctx.fetchImpl = original;
-      const body = JSON.parse(request.body);
       f.calls.push({ url: String(url), method: request.method, body: request.body });
       return { ok: false, status: 500 };
     }

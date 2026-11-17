@@ -56,6 +56,7 @@ test('ASCII snippets at every budget are byte-identical to main (snippet, trunca
     if (e.budgetChars == null) continue;
     const out = runEntry(e);
     if (JSON.stringify(out) !== JSON.stringify(e.out)) continue;
+    // eslint-disable-next-line no-control-regex -- the fixture asserts ASCII-only snippets on purpose
     for (const r of out.results) { assert.equal(/^[\x00-\x7f]*\u2026?$/.test(r.snippet), true, 'ASCII snippet (an ellipsis may end it)'); checked++; }
   }
   assert.ok(checked > 100, `checked ${checked} ASCII snippets`);

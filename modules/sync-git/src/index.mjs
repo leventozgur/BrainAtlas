@@ -15,6 +15,7 @@ const missing = (error) => error?.code === 'ENOENT';
 function transportPath(path) {
   validateTransportPath(path);
   if (path.split('/').includes('.git')) throw new SyncTransportError('E_INVALID_PATH');
+  // eslint-disable-next-line no-control-regex -- control characters are stripped from transport paths and commit messages on purpose
   if (/[\u0001-\u001f\u007f]/.test(path)) throw new SyncTransportError('E_INVALID_PATH');
   return path;
 }
@@ -453,6 +454,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   async function commitAndPush(message = 'sync: update objects') {
     await ensureReady();
     const cleanMessage = typeof message === 'string' && message.trim()
+      // eslint-disable-next-line no-control-regex -- control characters are stripped from transport paths and commit messages on purpose
       ? message.replace(/[\r\n\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 160)
       : 'sync: update objects';
     await stageAndCommit(cleanMessage);

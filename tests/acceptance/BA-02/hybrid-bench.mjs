@@ -13,7 +13,7 @@ import { performance } from 'node:perf_hooks';
 const [rootArg, mode, pagesArg = '2000', queriesArg = '30', passesArg = '3'] = process.argv.slice(2);
 if (!rootArg || !['old', 'new'].includes(mode)) { console.error('usage'); process.exit(2); }
 const root = resolve(rootArg);
-const { loadPages, buildIndex, createSearcher } = await import(join(root, 'packages/core/src/retrieval/index.mjs'));
+const { loadPages, createSearcher } = await import(join(root, 'packages/core/src/retrieval/index.mjs'));
 const { searchHybrid } = await import(join(root, 'modules/semantic/src/hybrid.mjs'));
 const { writeSyntheticCorpus, fixedVectors } = await import(join(root, 'eval/lib/synthetic-corpus.mjs'));
 const { percentile } = await import(join(root, 'eval/lib/metrics.mjs'));

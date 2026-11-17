@@ -50,7 +50,7 @@ for(const vaultDir of ['relative','/tmp/one/../two']) test(`vault path rejected:
 });
 test('file symlink does not alter outside target',async t=>{
  const x=await setup(t); await mkdir(join(x.home,'.gemini'),{recursive:true}); await symlink(x.sentinel,x.json); const before=await read(x.sentinel);
- try {await a.apply(a.plan(x.ctx),x.ctx)} catch {} assert.equal(await read(x.sentinel),before);
+ try {await a.apply(a.plan(x.ctx),x.ctx)} catch { /* the write is expected to fail; the assertion below covers the outcome */ } assert.equal(await read(x.sentinel),before);
 });
 test('doctor, detection and trust review distinguish states and identify Gemini',async t=>{
  const x=await setup(t); assert.equal(a.detect({HOME:x.home}),false); assert.equal(a.detect({HOME:x.home,GEMINI_CLI:'1'}),true);

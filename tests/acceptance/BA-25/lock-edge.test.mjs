@@ -2,12 +2,12 @@
 // BA-25 hypothesis 3 (guard), part B: lock visibility, refusals, takeover, busy, cleanup, expectedSha256 edges, read-only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, rm, stat, utimes, readdir, chmod } from 'node:fs/promises';
+import { readFile, writeFile, rm, stat, utimes, chmod } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { makeFixture, openClient, call, textOf, isErr, okJson, page, liveChild, deadPid, filesUnder, sha256, readText, WT, LOCK_NAME } from './harness.mjs';
+import { makeFixture, openClient, call, textOf, isErr, okJson, page, liveChild, deadPid, sha256, readText, WT, LOCK_NAME } from './harness.mjs';
 
 const lockBody = (pid, time, token = 'foreign') => `${JSON.stringify({ pid, time, token })}\n`;
 const EN = 'entities/lock-probe.md';

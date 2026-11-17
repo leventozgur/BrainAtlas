@@ -103,7 +103,7 @@ function geminiSettings(before,ctx){
   const entry={command:ctx.nodePath,args:[ctx.shimPath,'mcp']};let root=sourceTree(text),mcp=member(root,'mcpServers');
   if(!mcp){text=setMember(text,root,'mcpServers',{});root=sourceTree(text);mcp=member(root,'mcpServers');}
   if(mcp.node.type!=='object')fail('E_CONFIG_PARSE','MCP server configuration must be an object.');
-  if(JSON.stringify(conf.mcpServers?.brainatlas)!==JSON.stringify(entry)){text=setMember(text,mcp.node,'brainatlas',entry);root=sourceTree(text);}
+  if(JSON.stringify(conf.mcpServers?.brainatlas)!==JSON.stringify(entry)){text=setMember(text,mcp.node,'brainatlas',entry);}
   const hook={name:'brainatlas-context',type:'command',command:hookCommand(ctx,'prompt'),timeout:5000,description:'Add relevant BrainAtlas context before the agent responds.'};
   const sessionHook={name:'brainatlas-session',type:'command',command:hookCommand(ctx,'session-start'),timeout:5000,description:'Restore BrainAtlas session continuity at session start.'};
   text=visitHooks(text,ctx,'upgrade');root=sourceTree(text);conf.hooks=parseJson(text).hooks;
@@ -229,7 +229,7 @@ export async function remove(ctx) {
   if(settingAction&&settingAction.value.trim()){
     let text=visitHooks(settingAction.value,ctx,'remove');
     // Drop adapter-created empty hook containers only when they were absent originally.
-    const original=settingAction.record?await read(settingAction.record):null;let rec;try{rec=original&&JSON.parse(original);}catch{}
+    const original=settingAction.record?await read(settingAction.record):null;let rec;try{rec=original&&JSON.parse(original);}catch{/* tolerant read: an unreadable or missing file never fails the check */}
     const before=rec?.existed?parseJson(rec.original):{};let root=sourceTree(text),hooks=member(root,'hooks');
     if(hooks){for(const event of ['BeforeAgent','SessionStart']){const list=member(hooks.node,event);if(list?.node.type==='array'&&!list.node.items.length&&!Array.isArray(before.hooks?.[event]))text=removeMember(text,hooks.node,event);root=sourceTree(text);hooks=member(root,'hooks');}if(hooks&&!hooks.node.members.length&&!before.hooks)text=removeMember(text,root,'hooks');}
     settingAction.value=text;
@@ -243,7 +243,7 @@ export async function doctor(ctx) {
     if (mdText !== null) {
       try { present = getBlockCli(mdText)?.body === cliPayload(ctx); } catch { present = false; }
     }
-    let shim = false; try { shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile()); } catch {}
+    let shim = false; try { shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile()); } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
     checks.push({ id:'instructions', ok:present, message:present?'BrainAtlas CLI instructions are present.':'BrainAtlas CLI instructions are missing.' });
     checks.push({ id:'shim',ok:shim,message:shim?'Shim file exists.':'Shim file is missing.' });
     checks.push({ id:'version-drift',ok:true,message:'Version drift cannot be determined from adapter configuration.' });
@@ -252,7 +252,7 @@ export async function doctor(ctx) {
   let registered = false;
   if (configText !== null) { const o = parseJson(configText), e = o.mcpServers?.brainatlas; registered = e?.command === ctx.nodePath && JSON.stringify(e.args) === JSON.stringify([ctx.shimPath,'mcp']); }
   checks.push({ id:'registered', ok:registered, message:registered?'BrainAtlas MCP server is registered.':'BrainAtlas MCP server is not registered.' });
-  let shim = false; try { shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile()); } catch {}
+  let shim = false; try { shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile()); } catch { /* tolerant read: an unreadable or missing file never fails the check */ }
   checks.push({ id:'shim',ok:shim,message:shim?'Shim file exists.':'Shim file is missing.' });
   checks.push({ id:'version-drift',ok:true,message:'Version drift cannot be determined from adapter configuration.' });
   const hookConfig=configText===null?{}:parseJson(configText).hooks||{};

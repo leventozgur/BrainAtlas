@@ -46,7 +46,7 @@ const INDEX_CATEGORY_LINE = /^##\s+(.+)$/;
 const FENCE_OPEN = /^(`{3,}|~{3,})/;
 const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
 /** Undo CommonMark backslash escapes of ASCII punctuation in a link destination. */
-function unescapeDestination(raw) { return raw.replace(/\\([!-\/:-@\[-`{-~])/g, '$1'); }
+function unescapeDestination(raw) { return raw.replace(/\\([!-/:-@[-`{-~])/g, '$1'); }
 /**
  * Destination of a `- [Title](destination)` line, read the way CommonMark reads a link: escaped parentheses and
  * balanced unescaped parentheses belong to the destination; the first unbalanced `)` ends it.
@@ -132,6 +132,7 @@ function isLocalMarkdownTarget(path) {
  * Line-safe label text: every run of whitespace, C0/C1 control character or DEL (this includes CR, LF, U+0085, U+2028
  * and U+2029) becomes one space, and the result is trimmed. An index entry must stay on one line.
  */
+// eslint-disable-next-line no-control-regex -- index labels match C0/C1 control characters on purpose so an entry stays on one line
 function cleanLabel(text) { return text.replace(/[\s\x00-\x1f\x7f-\x9f]+/g, ' ').trim(); }
 /** Link text of an entry: the cleaned title, else the cleaned file name without `.md`, else the cleaned path. */
 function entryTitle(entry) {
@@ -153,6 +154,7 @@ function indexEntryLine(entry) {
  */
 function indexDestination(path) {
   const escaped = path.replace(/([\\()])/g, '\\$1');
+  // eslint-disable-next-line no-control-regex -- index labels match C0/C1 control characters on purpose so an entry stays on one line
   if (!/[\s\x00-\x1f\x7f-\x9f]/.test(path) && !path.startsWith('<')) return escaped;
   return `<${escaped.replace(/[<>]/g, '\\$&')}>`;
 }

@@ -44,7 +44,7 @@ function decodeJson(text) {
   catch { throw error('E_CONFIG_PARSE', 'Configuration JSON is invalid.'); }
 }
 function indentOf(text) {
-  const match = text.match(/\n([\t ]+)\"[^\n]+\"\s*:/);
+  const match = text.match(/\n([\t ]+)"[^\n]+"\s*:/);
   if (match) return match[1];
   return text.includes('\n\t') ? '\t' : '  ';
 }
@@ -118,7 +118,7 @@ function assertNoMcp(ctx) {
     const text = readText(file); if (text === null) continue;
     // Tolerant read: a BOM or an unreadable document means "no BrainAtlas entry" because
     // the cli channel never writes these files.
-    let data = null;
+    let data;
     try { data = decodeJson(text.replace(/^\uFEFF/, '')); } catch { data = null; }
     if (data?.mcpServers?.brainatlas !== undefined || data?.servers?.brainatlas !== undefined) throw error('E_CHANNEL_SWITCH', CHANNEL_SWITCH);
   }

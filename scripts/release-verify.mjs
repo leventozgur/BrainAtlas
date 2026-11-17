@@ -93,7 +93,7 @@ async function checkFiles(dir, version) {
   } catch { missing.push('release/'); }
   if (!missing.length) return { ok: true };
   const names = [...new Set(missing)];
-  let extra = [];
+  let extra;
   try {
     extra = (await readdir(dir, { withFileTypes: true }))
       .filter(entry => (entry.isFile() || entry.isSymbolicLink()) && !top.includes(entry.name))
@@ -155,6 +155,7 @@ async function checkSignature(dir) {
   }
 }
 
+// eslint-disable-next-line no-control-regex -- archive member names are checked for control characters on purpose
 const hasControl = name => /[\\\u0000-\u001f\u007f-\u009f]/.test(name);
 
 async function walkTree(base, relative, types) {
@@ -359,6 +360,7 @@ async function main() {
   }
   const dir = resolve(options.dir);
   const checks = [];
+  // eslint-disable-next-line no-control-regex -- archive member names are checked for control characters on purpose
   const escape = text => text.replace(/[\u0000-\u001f\u007f-\u009f]/g, ch => `\\x${ch.charCodeAt(0).toString(16).padStart(2, '0')}`);
   const record = (id, result) => checks.push({ id, ok: result.ok, ...(result.reason ? { reason: escape(result.reason) } : {}) });
   const skipRest = reason => { for (const id of ['checksums', 'allowed-signers', 'signature', 'distribution', 'version', 'install']) record(id, fail(reason)); };

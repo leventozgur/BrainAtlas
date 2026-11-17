@@ -108,7 +108,7 @@ export async function upsertIndexEntry(vaultDir, entry) {
   const file = await resolveSafePath(base, rel);
   await mkdir(dirname(file), { recursive: true });
   let content; try { content = await readFile(file, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; content = '# Wiki index\n'; }
-  const row = `- [${entry.title.replace(/[\[\]]/g, '')}](${entry.path})`;
+  const row = `- [${entry.title.replace(/[[\]]/g, '')}](${entry.path})`;
   const lines = content.split(/\r?\n/).filter((line) => !/^\s*- \[[^\]]*\]\(wiki\/[^)]*\)\s*$/.test(line) || !line.includes(`(${entry.path})`));
   const heading = lines.findIndex((line) => /^##? Entries\s*$/i.test(line));
   if (heading < 0) lines.push('', '## Entries', row);

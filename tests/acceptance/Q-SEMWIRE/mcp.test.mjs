@@ -173,7 +173,7 @@ test('missing and malformed indexes fall back to BM25 and a first miss starts an
     try {
       const data = JSON.parse(await readFile(join(f.stateDir, 'semantic/index.json'), 'utf8'));
       if (Array.isArray(data.entries) && data.entries.length > 0) { recovered = true; break; }
-    } catch {}
+    } catch { /* the index may not exist yet; keep polling */ }
     await new Promise(resolve => setTimeout(resolve, 5));
   }
   assert.equal(recovered, true, 'the malformed index should be rebuilt in the background');

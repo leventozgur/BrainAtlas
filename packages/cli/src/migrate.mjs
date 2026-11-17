@@ -155,7 +155,7 @@ function instructionBytes(item) {
   if (!item.old) return Buffer.from(templateText);
   const oldText = item.old.toString('utf8');
   if (oldText === item.template.toString('utf8')) return Buffer.from(templateText);
-  let userText = oldText;
+  let userText;
   if (oldText.includes(instructionMarker)) {
     userText = oldText.split(instructionMarker).slice(1).map(section => section.split('<!-- /migrated:user-section -->')[0]).join('\n').trim();
   } else {
@@ -194,7 +194,7 @@ async function checkIndexLog(vault) {
     try { await readFile(file); } catch { return false; }
   }
   const log = await readFile(join(vault, 'wiki/log.md'), 'utf8');
-  return /\"action\":\"migrated\"/.test(log);
+  return /"action":"migrated"/.test(log);
 }
 
 export async function migrateVault(from, to, { plan = false } = {}) {
@@ -274,17 +274,17 @@ function walkValues(value, callback, key = '') {
 }
 
 function inspectConfigText(text) {
-  let parsed = null; try { parsed = JSON.parse(text); } catch {}
+  let parsed = null; try { parsed = JSON.parse(text); } catch { /* unparsable or non-serialisable JSON is treated as absent */ }
   const servers = new Set(); let promptHook = false;
   if (parsed) {
     walkValues(parsed, (value, key) => {
       if (key.toLowerCase() === 'hooks' && value && typeof value === 'object') {
-        let serialized = ''; try { serialized = JSON.stringify(value); } catch {}
+        let serialized = ''; try { serialized = JSON.stringify(value); } catch { /* unparsable or non-serialisable JSON is treated as absent */ }
         if (/UserPromptSubmit|BeforeSubmit|prompt[-_ ]?hook|\bhook[^\n]*\bprompt\b/i.test(serialized)) promptHook = true;
       }
       if ((key.toLowerCase() === 'mcpservers' || key.toLowerCase() === 'servers') && value && typeof value === 'object') {
         for (const [name, config] of Object.entries(value)) {
-          let serialized = ''; try { serialized = JSON.stringify(config); } catch {}
+          let serialized = ''; try { serialized = JSON.stringify(config); } catch { /* unparsable or non-serialisable JSON is treated as absent */ }
           if (name.toLowerCase() === 'second-brain' || /wiki_query/i.test(serialized)) servers.add(name);
         }
       }

@@ -18,7 +18,7 @@ const BROKEN_BODY = 'SECRET-BODY-TEXT zephyr broken body.';
 const BROKEN = {
   'wiki/concepts/yaml.md': `---\ntitle: [oops\n---\n\n# Yaml\n\n${BROKEN_BODY}\n`,
   'wiki/concepts/dup.md': `---\ntitle: A\ntitle: B\n---\n\n# Dup\n\n${BROKEN_BODY}\n`,
-  'wiki/concepts/bom-yaml.md': `﻿---\ntitle: [oops\n---\n\n# BomYaml\n\n${BROKEN_BODY}\n`,
+  'wiki/concepts/bom-yaml.md': `\uFEFF---\ntitle: [oops\n---\n\n# BomYaml\n\n${BROKEN_BODY}\n`,
 };
 // Pages that loadPages accepts (an unclosed block, a non-mapping root): not reported, as before.
 const ACCEPTED = {

@@ -3,7 +3,7 @@
 // Main (def482f) is imported and executed read-only from its checkout; all fixtures and caches live under ./.tmp.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -71,7 +71,6 @@ async function mainVerdict(t, rel, content) {
   try { main.loadPages(dir); return null; } catch (error) { return error.code; }
 }
 
-const cacheFile = (stateDir) => join(stateDir, 'retrieval-index.json');
 // MCP indexes <vault>/wiki, so its fixtures live under wiki/.
 const underWiki = (files) => Object.fromEntries(Object.entries(files).map(([k, v]) => [`wiki/${k}`, v]));
 

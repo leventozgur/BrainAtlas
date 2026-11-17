@@ -30,7 +30,7 @@ export async function loadMainRetrieval() {
     return { retrieval, dir };
   } catch (error) {
     fs.rmSync(dir, { recursive: true, force: true });
-    throw new Error(`Cannot load main ${MAIN_COMMIT} retrieval module: ${error.code ?? 'error'}`);
+    throw new Error(`Cannot load main ${MAIN_COMMIT} retrieval module: ${error.code ?? 'error'}`, { cause: error });
   }
 }
 

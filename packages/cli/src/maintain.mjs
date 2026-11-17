@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // `brainatlas maintain`: read-only Wiki maintenance report. Nothing here writes to the vault or to a `--repo` working tree.
 import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
-import { dirname, join, posix, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 import { checkPage, loadPagesDetailed, parseFrontmatter } from '@brainatlas/core';
 
 export const KINDS = Object.freeze(['stale', 'superseded-broken', 'broken-link', 'orphan', 'index-missing', 'index-stale', 'oversized', 'update-sprawl']);
@@ -79,7 +79,7 @@ function withoutCode(body) {
 }
 
 // ---- Index parsing: same rules as packages/mcp (CommonMark-style destinations, fences opaque, anchors and queries dropped).
-function unescapeDestination(raw) { return raw.replace(/\\([!-\/:-@\[-`{-~])/g, '$1'); }
+function unescapeDestination(raw) { return raw.replace(/\\([!-/:-@[-`{-~])/g, '$1'); }
 function entryDestination(trimmed) {
   const head = /^-\s+\[/.exec(trimmed);
   if (!head) return undefined;
