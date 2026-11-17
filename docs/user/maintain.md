@@ -146,3 +146,44 @@ Safety:
 - Report-only findings stay in `unfixed`: other broken links from the read-only report (`unknown-target`), archive matches
   that are ambiguous (`broken-link` with `ambiguous-archive`), orphan pages (`report-only`, kind `orphan`, dropped when
   this plan adds the page to the index) and a missing index (`index-absent`). Nothing else from the report is changed.
+
+## Weekly run (`--weekly`)
+
+```text
+brainatlas maintain --weekly [--vault PATH] [--json]
+```
+
+One read-only run: the report above, the `--fix` plan (without `--sources`) and one `compact --plan` for every page the
+report calls `oversized` (the newest 3 dated sections stay). Nothing is applied and the vault tree is byte-identical
+afterwards. A failing compaction plan for one page is recorded as `{page, error: "<code>"}` and the run continues.
+
+Two files are written under `<stateDir>/<vaultId>/maintenance/`:
+
+- `weekly-YYYY-MM-DD.json` (UTC date; a second run on the same day overwrites it):
+  `{ranAt, pages, counts, fix: {changes, counts, unfixed}, compact: [{page, moved, error?}], queue}`. Only paths, counts
+  and error codes: never page text, titles, summaries or the vault's absolute path.
+- `last-weekly.json`: `{ranAt}`.
+
+At most twelve `weekly-*.json` snapshots are kept; the oldest ones are deleted and nothing else in that folder is
+touched. The `queue` field follows `--queue`: on the configured vault the report findings, the fix plan
+(`Maintenance fix plan: <n> change(s)`) and the compaction pages (`Compaction candidates: <n> page(s)`) go to the
+receipts queue, with at most 20 source paths each. Another vault gives
+`{queued: false, reason: "not-configured-vault"}`, no candidates give `{queued: false, reason: "no-findings"}`, and a
+queue failure never fails the run. `--json` prints the snapshot object; otherwise one summary line and one queue line are
+printed.
+
+## Running it on a schedule
+
+BrainAtlas installs no scheduler of its own: `--schedule` is not a `maintain` option and fails with `E_ARGUMENT`. To run
+the weekly check automatically, schedule the command yourself, for example with a launch agent on macOS, a systemd user
+timer on Linux or `cron`:
+
+```text
+<binPath> maintain --weekly
+```
+
+Plain `brainatlas maintain` (the configured vault, no `--vault`, no `--weekly`, no `--fix`) appends exactly one reminder
+line when `last-weekly.json` exists for that vault and its `ranAt` is more than 8 days old; with `--json` the report also
+carries `weekly: {lastRun, overdue: true}` in exactly that case. A vault that never ran `--weekly` gets no reminder, and
+`--vault` runs never do. The check only reads the state directory: it starts no background process and writes nothing.
+

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `brainatlas maintain --weekly`: one read-only weekly run that writes a content-free snapshot (report counts, fix plan counts, compaction candidates) to `<stateDir>/<vaultId>/maintenance/weekly-YYYY-MM-DD.json`, keeps the newest 12 snapshots and optionally queues review candidates; plain `maintain` prints one reminder line when the vault's last weekly run is more than 8 days old. BrainAtlas installs no OS scheduler; run `brainatlas maintain --weekly` from your own scheduler (launchd, a systemd user timer or cron) if you want it automated. Nothing in the vault is ever written; no LLM and no network. See docs/user/maintain.md.
+
 - `brainatlas maintain --fix (--plan | --apply) [--sources]`: a safe, mechanical repair mode on top of the read-only report. It appends one index line per unlisted page under the page folder's H2 section (or `## Unsorted (maintain --fix)`), rewrites a broken wikilink to plain text when exactly one vault-root `archive/` file matches, and with `--sources` lists existing, unlinked `sources` files under `## Source files`. `--plan` writes nothing; `--apply` runs under the Wiki write lock, proves line by line that no original line was lost (`E_FIX_VERIFY`), writes atomically, adds one content-free `wiki/log.md` entry per changed file and is idempotent. Everything else stays report-only in `unfixed`. On a 300-page vault `--plan` took about 1 s. See docs/user/maintain.md.
 
 - Added TypeScript `checkJs` type checking without a build or emit: `npm run typecheck` runs `tsc -p tsconfig.json` over the product code, CI runs it after `npm run lint`, and the supply-chain guard allows the pinned dev-only roots `typescript` and `@types/node`; no runtime dependency and no release archive changes.

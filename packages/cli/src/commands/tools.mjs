@@ -7,6 +7,7 @@ import { recordCreatedDirectories, missingDirectories } from '../install-manifes
 import { formatMaintenance, receiptCandidates, runMaintenance } from '../maintain.mjs';
 import { applyCompaction, formatCompaction, planCompaction } from '../compact.mjs';
 import { applyFix, formatFix, planFix } from '../maintain-fix.mjs';
+import { runWeeklyMaintenance, weeklyReminder } from '../maintain-weekly.mjs';
 import { formatUsage, isFeedbackVerdict, recordFeedback, usageSummary } from '../usage.mjs';
 import { error, readCurrent, currentReleaseDir, managedRoots, enabledModuleEntries, moduleContext, activateEnabledModules } from './shared.mjs';
 
@@ -94,12 +95,26 @@ export async function compact({ flag, value, plan, json, output, paths, env }) {
   return;
 }
 
-export async function maintain({ flag, value, json, plan, output, paths, env }) {
+export async function maintain({ args, flag, value, json, plan, output, paths, env, dependencies }) {
   const requested = value('--vault');
   const repo = value('--repo');
   const queue = flag('--queue');
   const fix = flag('--fix');
   const sources = flag('--sources');
+  const weekly = flag('--weekly');
+  if (args.includes('--schedule')) throw error('E_ARGUMENT', 'maintain does not support --schedule; run "brainatlas maintain --weekly" from your own scheduler.');
+  if (weekly) {
+    if (fix || queue || sources || repo !== undefined) throw error('E_ARGUMENT', 'maintain --weekly cannot be combined with --fix, --queue, --sources or --repo.');
+    const cfg = requested === undefined
+      ? await loadConfig({ paths, env, readOnly: true })
+      : await loadConfig({ paths, env, readOnly: true }).catch(() => null);
+    const vaultPath = requested ?? cfg.vault.path;
+    const configured = Boolean(cfg) && resolve(vaultPath) === resolve(cfg.vault.path);
+    const queued = configured ? candidates => queueMaintenanceReceipt({ config: cfg, paths, env, candidates }) : null;
+    const { snapshot, text } = await runWeeklyMaintenance(vaultPath, { paths, env, queue: queued });
+    output(json ? snapshot : text);
+    return;
+  }
   if (fix) {
     const apply = flag('--apply');
     if (queue) throw error('E_ARGUMENT', 'maintain --fix cannot be combined with --queue.');
@@ -121,10 +136,15 @@ export async function maintain({ flag, value, json, plan, output, paths, env }) 
       ? await queueMaintenanceReceipt({ config: cfg, paths, env, candidates })
       : { queued: false, reason: 'no-findings' };
   }
-  if (json) { output(report); return; }
+  const reminder = requested === undefined && cfg ? await weeklyReminder({ paths, vaultPath: cfg.vault.path }) : null;
+  if (json) {
+    if (reminder) report.weekly = { lastRun: reminder.lastRun, overdue: true };
+    output(report); return;
+  }
   const text = formatMaintenance(report);
-  if (queue) output(`${text}\n${report.queue.queued ? `Queued ${report.queue.candidates} review candidate(s) for receipts review.` : `Nothing queued (${report.queue.reason}).`}`);
-  else output(text);
+  const lines = queue ? [text, report.queue.queued ? `Queued ${report.queue.candidates} review candidate(s) for receipts review.` : `Nothing queued (${report.queue.reason}).`] : [text];
+  if (reminder) lines.push(reminder.line);
+  output(lines.join('\n'));
   return;
 }
 
