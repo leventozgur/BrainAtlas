@@ -144,10 +144,6 @@ test('rule ids: existing content-rule ids are unchanged and in the same order as
   assert.deepEqual(wtRules.PERSONAL_RULES.map((r) => r.id), ['tckn', 'tr-iban']);
 });
 
-test('pre-fix baseline: main had no personal rules before the BA-26 merge', { skip: 'main now contains the BA-26 merge (b77a663); this pre-fix comparison no longer holds' }, () => {
-  assert.deepEqual((mainRules.PERSONAL_RULES ?? []).map((r) => r.id), []);
-});
-
 test('write path: wiki_write_page refuses TCKN, IBAN and secrets; accepts e-mail, phone and placeholders; no value in error', async (t) => {
   const v = makeVault(t, 'edge-mcp');
   const config = defaultConfig('lite');

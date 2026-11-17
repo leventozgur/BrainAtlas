@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // BA-25 independent acceptance harness (written by the tester, not by the developer). Not a test file.
-// Starts real MCP stdio server processes (one per client) from either the worktree (candidate) or the main checkout
-// (baseline). No network: the servers use the lite profile and no embedding provider.
+// Starts real MCP stdio server processes (one per client) from the worktree (candidate). No network: the servers use the
+// lite profile and no embedding provider.
 import { mkdtemp, mkdir, cp, writeFile, readFile, readdir, rm, stat, utimes } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -14,12 +14,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 
 export const WT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-// Main checkout = parent of the shared git common dir (works for the worktree and after merge; no relative ../../ path).
-export const MAIN = dirname(execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: WT, encoding: 'utf8' }).trim());
 export const LOCK_NAME = '.brainatlas-write.lock';
-export const FEATURE_FILE = 'packages/mcp/src/lock.mjs';
-// The feature is "present in main" once main's MCP package contains the lock module. Baseline tests skip then.
-export const mainHasFeature = existsSync(join(MAIN, FEATURE_FILE));
 export const BIN = (root) => join(root, 'packages/mcp/bin/brainatlas-mcp.mjs');
 export const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 export const secret = () => ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-'); // built at runtime

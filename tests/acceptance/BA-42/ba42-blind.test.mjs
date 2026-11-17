@@ -329,11 +329,6 @@ test('edge: repeated runs are deterministic', () => {
 
 const mainSource = await readFile(join(MAIN, 'packages/cli/src/maintain.mjs'), 'utf8');
 const mainHasFeature = mainSource.includes('stale-source');
-test('main (old behaviour): --repo produces no stale-source or stale-symbol findings', { skip: mainHasFeature ? 'main already has the BA-42 feature' : false }, () => {
-  const r = runJson('main', ['--vault', VAULT.main, '--repo', REPO]);
-  assert.equal(r.status, 0);
-  assert.deepEqual(r.body.findings, []);
-});
 
 test('edge: the symbol used on a page is matched on whole words only (prefix of a longer word is not a match)', () => {
   const r = runJson('dev', ['--vault', VAULT.main, '--repo', REPO]);

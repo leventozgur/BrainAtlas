@@ -95,15 +95,6 @@ test('BA-23 c1: skipped set is exactly the pages main loadPages rejects, and the
   assert.deepEqual(pages, main.loadPages(clean));
 });
 
-test('BA-23 c1: main loadPages throws on the bad vault (defect reproduction on main)', async (t) => {
-  // Reproduces the pre-fix defect only: once main carries BA-23 (loadPagesDetailed exists), main no longer throws here.
-  if ('loadPagesDetailed' in main) return t.skip('main already includes BA-23; defect reproduction applies to def482f only');
-  const vault = await writeTree(await workdir(t), { 'a.md': '# A\nAAA', 'b.md': '---\ntitle: [x\n---\nBBB' });
-  assert.throws(() => main.loadPages(vault), (e) => e.code === 'E_INVALID_INPUT');
-  const stateDir = join(await workdir(t), 'state');
-  assert.throws(() => main.createSearcher({ vaultDir: vault, stateDir, now: NOW }), (e) => e.code === 'E_INVALID_INPUT');
-});
-
 // ---------- Criterion 1 + 5: searcher results on a broken vault equal main on the same vault with those pages deleted ----------
 
 const GOOD = {

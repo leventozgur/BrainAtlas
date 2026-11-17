@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // BA-16 blind acceptance (independent tester). Black-box: drives runHook only.
 // BA16_HOOK_MODULE selects the hook module under test (default: this worktree).
-// BA16_MAIN_HOOK_MODULE (optional) enables main-comparison tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
@@ -10,9 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HOOK = process.env.BA16_HOOK_MODULE || fileURLToPath(new URL('../../../packages/hooks/src/index.mjs', import.meta.url));
-const MAIN = process.env.BA16_MAIN_HOOK_MODULE || '';
 const { runHook } = await import(pathToFileURL(HOOK).href);
-const mainHook = MAIN ? await import(pathToFileURL(MAIN).href) : null;
 const NOW = new Date('2026-11-10T00:00:00Z');
 // Synthetic Anthropic-style key, assembled at run time so the whole value never appears in source.
 const TAIL = 'Zx9Qw3rT7yU1iO5pA2sD8fGh';
@@ -36,11 +33,11 @@ function contextOf(stdout, client) {
   if (!stdout || stdout === '{}') return '';
   return JSON.parse(stdout).hookSpecificOutput.additionalContext;
 }
-async function ask(f, prompt, { budget, session = 's', client = 'claude', mode = 'normal', hook = runHook, event = 'prompt', now = NOW } = {}) {
+async function ask(f, prompt, { budget, session = 's', client = 'claude', mode = 'normal', event = 'prompt', now = NOW } = {}) {
   const retrieval = { abstainThreshold: 0 };
   if (budget !== undefined) retrieval.budgetChars = budget;
   const config = { vault: { path: f.vault }, stateDir: f.state, hooks: { mode, deadlineMs: 4700 }, retrieval };
-  const res = await hook({ client, event, stdin: JSON.stringify({ session_id: session, prompt }), env: f.env, config, now });
+  const res = await runHook({ client, event, stdin: JSON.stringify({ session_id: session, prompt }), env: f.env, config, now });
   return { stdout: res.stdout, exitCode: res.exitCode, context: contextOf(res.stdout, client) };
 }
 
@@ -210,35 +207,4 @@ test('session-start output is independent of prompt packing (handoff card wins, 
   await writeFile(join(f.state, 'handoff.md'), 'continuity card');
   const r = await runHook({ client: 'claude', event: 'session-start', stdin: '{"session_id":"ss"}', env: f.env, config: { vault: { path: f.vault }, stateDir: f.state, hooks: { mode: 'normal' }, retrieval: {} }, now: NOW });
   assert.equal(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, 'continuity card');
-});
-
-// ---- main comparison (runs only with BA16_MAIN_HOOK_MODULE set) ----
-const mainTest = MAIN ? test : test.skip;
-mainTest('normal budget: output without truncation is byte-identical to main for claude, codex, gemini, kiro', async t => {
-  const f = await fixture(t, files(SMALL.slice(0, 2)));
-  for (const client of ['claude', 'codex', 'gemini', 'kiro']) {
-    const a = await ask(f, 'zebrafish', { client, session: `cmp-${client}` });
-    const b = await ask(f, 'zebrafish', { client, session: `cmp-${client}-main`, hook: mainHook.runHook });
-    assert.equal(a.stdout, b.stdout, client);
-  }
-});
-mainTest('normal budget: truncated output differs from main only at the cut point (ellipsis)', async t => {
-  const f = await fixture(t, files(SMALL.slice(0, 3)));
-  const a = await ask(f, 'zebrafish', { session: 'cut-wt' });
-  const b = await ask(f, 'zebrafish', { session: 'cut-main', hook: mainHook.runHook });
-  let i = 0;
-  while (i < a.stdout.length && a.stdout[i] === b.stdout[i]) i++;
-  assert.equal(a.stdout.slice(0, i), b.stdout.slice(0, i));
-  assert.ok(i > 3000, `first difference at ${i}`);
-  assert.equal(a.stdout[i], '…', `worktree should place the ellipsis at the cut, got ${JSON.stringify(a.stdout.slice(i - 20, i + 10))}`);
-  console.log(`# BA-16 truncation tail: worktree ${JSON.stringify(a.stdout.slice(i - 12, i + 1))} main ${JSON.stringify(b.stdout.slice(i - 12, i + 12))}`);
-});
-mainTest('normal budget: long fixture first blocks match main in header and order', async t => {
-  const six = Array.from({ length: 6 }, (_, i) => page(`Long ${i}`, `long${i}.md`, `# Long ${i}\nzebrafish ` + 'word '.repeat(700)));
-  const f = await fixture(t, files(six));
-  const a = await ask(f, 'zebrafish', { session: 'cl' });
-  const b = await ask(f, 'zebrafish', { session: 'cl-main', hook: mainHook.runHook });
-  const ha = audit(a.context, six), hb = audit(b.context, six);
-  assert.deepEqual(pathsOf(ha.blocks).slice(0, 1), pathsOf(hb.blocks).slice(0, 1));
-  console.log(`# BA-16 first-block length: worktree ${ha.blocks[0]?.lines.join('\n').length}, main ${hb.blocks[0]?.lines.join('\n').length}`);
 });

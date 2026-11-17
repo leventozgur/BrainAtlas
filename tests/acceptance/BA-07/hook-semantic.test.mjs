@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolvePaths } from '../../../packages/core/src/paths/index.mjs';
 import { SEMANTIC_DEFAULTS } from '../../../packages/core/src/config/index.mjs';
@@ -139,24 +139,4 @@ test('buildHookCommand grants read-only access to the semantic index directory',
     if (previous === undefined) delete process.env.HOME; else process.env.HOME = previous;
     f.cleanup();
   }
-});
-
-test('lexical output matches the main checkout (skipped unless this worktree is on track/BA-07)', async t => {
-  const branch = execFileSync('git', ['-C', ROOT, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).trim();
-  if (branch !== 'track/BA-07') { t.skip(`branch is ${branch}`); return; }
-  const common = execFileSync('git', ['-C', ROOT, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
-  const mainRoot = dirname(common);
-  const mainHook = join(mainRoot, 'packages/hooks/src/index.mjs');
-  if (!existsSync(mainHook)) { t.skip('main checkout not found'); return; }
-  const { runHook: mainRunHook } = await import(mainHook);
-  const f = fixture();
-  try {
-    for (const [i, prompt] of [PROMPT, 'bridges inspection', 'what about rivers?'].entries()) {
-      // One fresh session per prompt and pair: per-session dedup must not make the two outputs diverge.
-      const cfg = config(f, { enabled: false });
-      const mine = await hook(f, cfg, prompt, `ba07-cmp-mine-${i}`);
-      const { stdout: theirs } = await mainRunHook({ client: 'claude', event: 'prompt', stdin: JSON.stringify({ session_id: `ba07-cmp-main-${i}`, prompt }), env: { HOME: f.home }, config: cfg, now: new Date() });
-      assert.equal(mine, theirs, `identical lexical output for "${prompt}"`);
-    }
-  } finally { f.cleanup(); }
 });

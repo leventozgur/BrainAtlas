@@ -38,6 +38,3 @@ export function runNode(args, { env = {}, cwd = ROOT, preload = false } = {}) {
   return spawnSync(process.execPath, execArgs, { cwd, env: childEnv, encoding: 'utf8' });
 }
 
-export function git(args, cwd = ROOT) {
-  return spawnSync('git', args, { cwd, encoding: 'utf8' });
-}
