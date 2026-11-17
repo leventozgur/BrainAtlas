@@ -29,6 +29,35 @@ Semantik retrieval deneysel, isteğe bağlı, yerel Ollama kullanır ve varsayı
 | Codex CLI | MCP ve yönetilen talimat işaretçisi; hook desteği adaptöre bağlıdır | MCP ve talimat yapılandırmasını inceleyin. |
 | Gemini CLI | MCP, yönetilen talimat işaretçisi, `BeforeAgent` ve `SessionStart` hook'ları | Gerekirse Gemini `/hooks` panelinden etkinleştirin. |
 
+## Özellikler ve açma/kapama
+
+Ayarlar BrainAtlas yapılandırma dosyasındadır (macOS'ta `~/Library/Application Support/BrainAtlas/config.json`; diğer yollar [config sözleşmesinde](docs/contracts/config.md)). `brainatlas config get [ANAHTAR]` ile okur, `brainatlas config set ANAHTAR DEĞER [--plan]` ile değiştirirsiniz; `--plan` değişikliği yazmadan önizler.
+
+| Özellik | Varsayılan | Açma / kapama | Ayrıntı |
+|---|---|---|---|
+| Prompt hook enjeksiyonu | açık (`hooks.mode normal`) | `brainatlas config set hooks.mode economic` yalnızca soru benzeri prompt'larda veya `/sb`, `@sb` ile enjekte eder; `manual` yalnızca `/sb` veya `@sb` ile enjekte eder ve oturum başı özetini de kapatır; `normal` geri açar | [Ajan kurulumu](docs/user/agents.md) |
+| Aşamalı açıklama | kapalı (`hooks.disclosure` yok = `full`) | Yapılandırma dosyasında `hooks` altına `"disclosure": "progressive"` ekleyin. Bu sürümde `config set` bu anahtarı henüz kabul etmiyor. Anahtarı silmek kapatır | [Retrieval](docs/user/retrieval.md) |
+| Anlamsal retrieval (Full, deneysel) | kapalı | `brainatlas config set semantic.enabled true` / `false`; yerel Ollama gerekir | [Anlamsal retrieval](docs/user/semantic.md) |
+| Arama kapsamı | varsa `wiki/`; kök gezinme sayfaları hariç | Yapılandırma dosyasında `retrieval` altına `"exclude": ["drafts/**"]` ekleyin (`config set` bu anahtarı henüz kabul etmiyor); `[]` hiçbir şeyi hariç tutmaz; anahtarı silmek varsayılana döner | [Retrieval](docs/user/retrieval.md) |
+| MCP yazma araçları | açık | `brainatlas config set readOnly true` yalnızca okuma araçlarını bırakır; `false` yazmayı geri açar | [Sözleşmeler](docs/contracts/) |
+| MCP ve hook yerine kabuk | kapalı (varsayılan kanal MCP) | `brainatlas init --channel cli`; mevcut kurulumu değiştirmek için önce `brainatlas uninstall` | [CLI kanalı](docs/user/cli-channel.md) |
+| Klasör veya Git senkronu (Full, deneysel) | kapalı | `sync.transport` ile yapılandırılır; açmadan önce rehbere bakın | [Sync](docs/user/sync.md) |
+| Telemetri ve gizli bilgi filtresi | kapalı / açık, kilitli | Değiştirilemez (`E_LOCKED_KEY`) | [Güvenlik](SECURITY.md) |
+
+BrainAtlas'ı tamamen durdurmak için `brainatlas uninstall` çalıştırın (kasa korunur).
+
+### Komutlar
+
+| Komut | Amaç | Yazar mı? |
+|---|---|---|
+| `brainatlas wiki query\|read\|index\|list\|status\|lint` | Kabuktan salt okunur Wiki araçları; MCP okuma araçlarıyla aynı sonuç | hayır |
+| `brainatlas maintain [--repo DIR]` | Eski, kırık, yetim ve büyük sayfaları raporlar | hayır (`--queue` hariç) |
+| `brainatlas compact --page wiki/<sayfa>.md --plan\|--apply` | Uzun sayfanın eski tarihli bölümlerini satır kaybetmeden `wiki/archive/` altına taşır | yalnızca `--apply` |
+| `brainatlas usage [--days N]` | İçeriksiz hook metriklerini özetler | hayır |
+| `brainatlas doctor`, `status` | Kurulum sağlığını denetler | hayır |
+
+Rehberler: [Wiki CLI](docs/user/wiki-cli.md), [Bakım raporu](docs/user/maintain.md), [Compact](docs/user/compact.md), [Kullanım](docs/user/usage.md).
+
 ## Hızlı başlangıç
 
 ### Çevrimiçi

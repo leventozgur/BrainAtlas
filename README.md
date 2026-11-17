@@ -31,6 +31,35 @@ Semantic retrieval is experimental, opt-in, uses local Ollama, and is off by def
 
 Adapters can create or modify agent configuration. Inspect the plan and trust review, then confirm the agent loads the MCP server and instructions. See [Agent setup](docs/user/agents.md).
 
+## Features and how to turn them on or off
+
+Settings live in the BrainAtlas configuration file (`~/Library/Application Support/BrainAtlas/config.json` on macOS; other paths are in the [config contract](docs/contracts/config.md)). Read and change them with `brainatlas config get [KEY]` and `brainatlas config set KEY VALUE [--plan]`; `--plan` previews the change without writing it.
+
+| Feature | Default | Turn on / off | Details |
+|---|---|---|---|
+| Prompt hook injection | on (`hooks.mode normal`) | `brainatlas config set hooks.mode economic` injects only for question-like prompts or `/sb`, `@sb`; `manual` injects only for `/sb` or `@sb` and also turns off the session-start recap; `normal` restores it | [Agent setup](docs/user/agents.md) |
+| Progressive disclosure | off (`hooks.disclosure` absent = `full`) | Set `"disclosure": "progressive"` under `hooks` in the config file. In this release `config set` does not accept this key yet. Remove the key to turn it off | [Retrieval](docs/user/retrieval.md) |
+| Semantic retrieval (Full, experimental) | off | `brainatlas config set semantic.enabled true` / `false`; needs local Ollama | [Semantic retrieval](docs/user/semantic.md) |
+| Search scope | `wiki/` when present; root navigation pages excluded | Add `"exclude": ["drafts/**"]` under `retrieval` in the config file (`config set` does not accept this key yet); `[]` excludes nothing; remove the key for the default | [Retrieval](docs/user/retrieval.md) |
+| MCP write tools | on | `brainatlas config set readOnly true` leaves only the read tools; `false` restores writes | [Contracts](docs/contracts/) |
+| Shell instead of MCP and hooks | off (default channel is MCP) | `brainatlas init --channel cli`; to switch an existing install run `brainatlas uninstall` first | [CLI channel](docs/user/cli-channel.md) |
+| Folder or Git sync (Full, experimental) | off | Configured with `sync.transport`; see the guide before enabling | [Sync](docs/user/sync.md) |
+| Telemetry and secret filter | off / on, locked | Cannot be changed (`E_LOCKED_KEY`) | [Security](SECURITY.md) |
+
+To stop BrainAtlas completely, run `brainatlas uninstall` (the vault is kept).
+
+### Commands
+
+| Command | Purpose | Writes? |
+|---|---|---|
+| `brainatlas wiki query\|read\|index\|list\|status\|lint` | Read-only Wiki tools from the shell; same results as the MCP read tools | no |
+| `brainatlas maintain [--repo DIR]` | Report stale, broken, orphan and oversized pages | no (unless `--queue`) |
+| `brainatlas compact --page wiki/<page>.md --plan\|--apply` | Move older dated sections of a long page into `wiki/archive/` without losing lines | `--apply` only |
+| `brainatlas usage [--days N]` | Summarize content-free hook metrics | no |
+| `brainatlas doctor`, `status` | Check installation health | no |
+
+Guides: [Wiki CLI](docs/user/wiki-cli.md), [Maintenance report](docs/user/maintain.md), [Compact](docs/user/compact.md), [Usage](docs/user/usage.md).
+
 ## Quickstart
 
 ### Online
@@ -78,5 +107,10 @@ This is a high-level comparison of project types, not a feature benchmark. Verif
 - [OKF-inspired metadata](docs/user/okf.md)
 - [Sync behavior](docs/user/sync.md)
 - [Maintenance report](docs/user/maintain.md)
+- [Read-only Wiki CLI (`brainatlas wiki`)](docs/user/wiki-cli.md)
+- [CLI channel (instructions instead of MCP and hooks)](docs/user/cli-channel.md)
+- [Compact long pages](docs/user/compact.md)
+- [Usage summary and feedback](docs/user/usage.md)
+- [Semantic retrieval (experimental)](docs/user/semantic.md)
 - [Troubleshooting](docs/user/troubleshooting.md)
 - [Demo recording script](docs/user/demo-gif-script.md)
