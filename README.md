@@ -33,14 +33,14 @@ Adapters can create or modify agent configuration. Inspect the plan and trust re
 
 ## Features and how to turn them on or off
 
-Settings live in the BrainAtlas configuration file (`~/Library/Application Support/BrainAtlas/config.json` on macOS; other paths are in the [config contract](docs/contracts/config.md)). Read and change them with `brainatlas config get [KEY]` and `brainatlas config set KEY VALUE [--plan]`; `--plan` previews the change without writing it.
+Settings live in the BrainAtlas configuration file (`~/Library/Application Support/BrainAtlas/config.json` on macOS; other paths are in the [config contract](docs/contracts/config.md)). Read and change them with `brainatlas config get [KEY]`, `brainatlas config set KEY VALUE [--plan]` and `brainatlas config unset KEY [--plan]`; `--plan` previews the change without writing it.
 
 | Feature | Default | Turn on / off | Details |
 |---|---|---|---|
 | Prompt hook injection | on (`hooks.mode normal`) | `brainatlas config set hooks.mode economic` injects only for question-like prompts or `/sb`, `@sb`; `manual` injects only for `/sb` or `@sb` and also turns off the session-start recap; `normal` restores it | [Agent setup](docs/user/agents.md) |
-| Progressive disclosure | off (`hooks.disclosure` absent = `full`) | Set `"disclosure": "progressive"` under `hooks` in the config file. In this release `config set` does not accept this key yet. Remove the key to turn it off | [Retrieval](docs/user/retrieval.md) |
+| Progressive disclosure | off (`hooks.disclosure` absent = `full`) | `brainatlas config set hooks.disclosure progressive`; `brainatlas config unset hooks.disclosure` restores `full` | [Retrieval](docs/user/retrieval.md) |
 | Semantic retrieval (Full, experimental) | off | `brainatlas config set semantic.enabled true` / `false`; needs local Ollama | [Semantic retrieval](docs/user/semantic.md) |
-| Search scope | `wiki/` when present; root navigation pages excluded | Add `"exclude": ["drafts/**"]` under `retrieval` in the config file (`config set` does not accept this key yet); `[]` excludes nothing; remove the key for the default | [Retrieval](docs/user/retrieval.md) |
+| Search scope | `wiki/` when present; root navigation pages excluded | `brainatlas config set retrieval.exclude '["drafts/**"]'`; `[]` excludes nothing; `brainatlas config unset retrieval.exclude` restores the default | [Retrieval](docs/user/retrieval.md) |
 | MCP write tools | on | `brainatlas config set readOnly true` leaves only the read tools; `false` restores writes | [Contracts](docs/contracts/) |
 | Shell instead of MCP and hooks | off (default channel is MCP) | `brainatlas init --channel cli`; to switch an existing install run `brainatlas uninstall` first | [CLI channel](docs/user/cli-channel.md) |
 | Folder or Git sync (Full, experimental) | off | Configured with `sync.transport`; see the guide before enabling | [Sync](docs/user/sync.md) |

@@ -42,6 +42,31 @@ export const SEMANTIC_DEFAULTS = Object.freeze({ enabled: false, baseUrl: 'http:
 const clone = (value) => structuredClone(value);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const pathName = (path) => path || '$';
+const isObjectSchema = (schema) => Boolean(schema) && (schema.type === 'object' || (Array.isArray(schema.type) && schema.type.includes('object')));
+const RESERVED_KEY_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+const hasReservedSegment = (keys) => keys.some((key) => RESERVED_KEY_SEGMENTS.has(key));
+
+/**
+ * Walks CONFIG_SCHEMA for a dotted key. Returns one entry per segment, or null when a segment is
+ * not defined at that level. An object-typed node without `properties` (for example `sync.options`)
+ * accepts free-form keys; those entries carry `schema:null`.
+ * @param {string[]} keys @returns {Array<{schema:object|null}>|null}
+ */
+function resolveConfigKey(keys) {
+  const entries = []; let node = CONFIG_SCHEMA; let freeForm = false;
+  for (const key of keys) {
+    if (!freeForm) {
+      if (node && typeof node === 'object' && node.properties) {
+        if (!has(node.properties, key)) return null;
+        node = node.properties[key]; entries.push({ schema: node }); continue;
+      }
+      if (!isObjectSchema(node)) return null;
+      freeForm = true;
+    }
+    entries.push({ schema: null });
+  }
+  return entries;
+}
 function error(path, code, message) { return { path: pathName(path), code, message }; }
 
 /** Small dependency-free validator for the schema keywords used by CONFIG_SCHEMA. */
@@ -160,11 +185,41 @@ export function setConfigValue(cfg, dottedKey, value) {
   if (PROFILES[cfg.profile].lockedKeys.includes(dottedKey) && value !== lockedValue) throw new BrainAtlasError('E_LOCKED_KEY', `Configuration key ${dottedKey} is locked for this profile.`);
   if (dottedKey === 'safety.secretFilter' && value === false) throw new BrainAtlasError('E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.');
   const keys = dottedKey.split('.');
-  if (keys.some((key) => !key) || keys.length > 2) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
-  const out = clone(cfg); if (keys[0] === 'semantic' && keys.length === 2) out.semantic = { ...SEMANTIC_DEFAULTS, ...out.semantic }; let target = out;
-  for (const key of keys.slice(0, -1)) { if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`); target = target[key]; }
-  if (!has(target, keys.at(-1))) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
+  if (keys.some((key) => !key) || hasReservedSegment(keys)) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
+  const entries = resolveConfigKey(keys);
+  if (!entries) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
+  const out = clone(cfg); if (keys[0] === 'semantic') out.semantic = { ...SEMANTIC_DEFAULTS, ...out.semantic }; let target = out;
+  for (let index = 0; index < keys.length - 1; index += 1) {
+    const key = keys[index];
+    if (!has(target, key) || target[key] === undefined) {
+      if (!isObjectSchema(entries[index].schema)) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
+      target[key] = {};
+    }
+    if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
+    target = target[key];
+  }
   target[keys.at(-1)] = clone(value);
+  const result = validateConfig(out);
+  if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
+  return out;
+}
+
+/** @param {Config} cfg @param {string} dottedKey @returns {Config} */
+export function unsetConfigValue(cfg, dottedKey) {
+  if (!cfg || !has(PROFILES, cfg.profile) || typeof dottedKey !== 'string' || !dottedKey) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
+  const keys = dottedKey.split('.');
+  if (keys.some((key) => !key) || hasReservedSegment(keys)) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
+  if (PROFILES[cfg.profile].lockedKeys.includes(dottedKey)) throw new BrainAtlasError('E_LOCKED_KEY', `Configuration key ${dottedKey} is locked for this profile.`);
+  const entries = resolveConfigKey(keys);
+  if (!entries) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
+  const required = keys.length === 1 ? CONFIG_SCHEMA.required : entries.at(-2)?.schema?.required;
+  if (Array.isArray(required) && required.includes(keys.at(-1))) throw new BrainAtlasError('E_CONFIG_KEY', `Configuration key ${dottedKey} is required.`);
+  const out = clone(cfg); let target = out;
+  for (const key of keys.slice(0, -1)) {
+    if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) return out;
+    target = target[key];
+  }
+  if (has(target, keys.at(-1))) delete target[keys.at(-1)];
   const result = validateConfig(out);
   if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
   return out;

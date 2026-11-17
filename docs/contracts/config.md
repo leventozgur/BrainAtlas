@@ -20,6 +20,8 @@ export function loadConfig(options);
 export function saveConfig(cfg, options);
 /** @param {Config} cfg @param {string} dottedKey @param {unknown} value @returns {Config} */
 export function setConfigValue(cfg, dottedKey, value);
+/** @param {Config} cfg @param {string} dottedKey @returns {Config} */
+export function unsetConfigValue(cfg, dottedKey);
 /** @param {unknown} obj @param {{backupDir:string,now?:Date}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
 export function migrateConfig(obj, options);
 /** @param {{platform?:string,env:Record<string,string|undefined>}} options @returns {ResolvedPaths} */
@@ -38,7 +40,7 @@ Path mapping: macOS uses `~/Library/Application Support/BrainAtlas/{releases/<v>
 
 ## Output and errors
 
-Validation returns `{ok,errors}`. Load, save, and migration are asynchronous; save is atomic. `setConfigValue` raises `BrainAtlasError` with `code:'E_LOCKED_KEY'` for a profile-locked key. Invalid config reports path-specific error codes without echoing values.
+Validation returns `{ok,errors}`. Load, save, and migration are asynchronous; save is atomic. `setConfigValue` raises `BrainAtlasError` with `code:'E_LOCKED_KEY'` for a profile-locked key and `code:'E_CONFIG_KEY'` for an unknown or malformed key. Invalid config reports path-specific error codes without echoing values.
 
 ## Example
 
@@ -57,7 +59,11 @@ All listed functions are exported by `packages/core/src/config/index.mjs` and `p
 
 ## Optional retrieval exclusions (BA-29)
 
-`retrieval.exclude` is an optional array of non-empty glob patterns relative to the search root (`<vault>/wiki` when present, otherwise the vault root). Absolute paths, drive letters, backslashes and `..` segments are refused with `E_PATH_INVALID`. When the key is absent the default list of `searchScope` applies; an array replaces the default and `[]` gives every page. The key is not written by `defaultConfig`, so existing configuration files stay byte-identical.
+`retrieval.exclude` is an optional array of non-empty glob patterns relative to the search root (`<vault>/wiki` when present, otherwise the vault root). Absolute paths, drive letters, backslashes and `..` segments are refused with `E_PATH_INVALID`. When the key is absent the default list of `searchScope` applies; an array replaces the default and `[]` gives every page. The key is not written by `defaultConfig`, so existing configuration files stay byte-identical. `brainatlas config set retrieval.exclude '["drafts/**"]'` writes it and `brainatlas config unset retrieval.exclude` removes it again.
+
+## Optional key writes
+
+`setConfigValue` accepts a dotted key when every segment resolves through `CONFIG_SCHEMA.properties`. A missing parent that the schema defines as an object is created, the value is set, and the whole configuration is validated afterwards. A segment that the schema does not define at that level fails with `E_CONFIG_KEY` without changing anything; `sync.options.*` stays free-form, so any key below it is accepted and missing object parents are created the same way. `unsetConfigValue` removes only a known key that is not listed in its parent's `required`: required or unknown keys fail with `E_CONFIG_KEY`, an absent optional key is an idempotent no-op, and profile-locked keys (`telemetry`, `safety.secretFilter`) fail with `E_LOCKED_KEY`. A free-form `sync.options.*` key is removed when present and is a no-op when absent. Key segments named `__proto__`, `constructor` or `prototype` are refused with `E_CONFIG_KEY`. Both functions return a new configuration and never write; the CLI saves through the same tracked path as any other configuration change.
 
 ## Optional semantic configuration
 

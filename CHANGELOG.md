@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `brainatlas config set` now writes optional keys that the config schema defines but the current file omits (for example `hooks.disclosure` and `retrieval.exclude`), and the new `brainatlas config unset KEY [--plan]` removes a known optional key; unknown, required and locked keys keep failing with `E_CONFIG_KEY`/`E_LOCKED_KEY`.
+
 ## 0.1.0-rc.12 — 2026-11-17
 
 Shell access for machines that cannot register MCP servers or hooks. The default install (MCP + hooks) is unchanged.

@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline/promises';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as core from '@brainatlas/core';
-import { defaultConfig, loadConfig, saveConfig, setConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, redact, vaultId, scanPath, scanText, fingerprintSafetyFinding } from '@brainatlas/core';
+import { defaultConfig, loadConfig, saveConfig, setConfigValue, unsetConfigValue, resolvePaths, validateConfig, readModuleManifest, discoverModules, resolveModuleOrder, activate as activateModule, redact, vaultId, scanPath, scanText, fingerprintSafetyFinding } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from './archive.mjs';
 import { managePath, recordManagedWrite, recordCreatedDirectories, missingDirectories, removeCreatedDirectories, readInstallManifest, resolveManagedPath, snapshotPath, uninstallManagedFiles } from './install-manifest.mjs';
 import { adoptPlan, migrateVault } from './migrate.mjs';
@@ -283,20 +283,6 @@ async function saveTrackedConfig(cfg, paths, env = process.env) {
 }
 
 function shellQuote(value) { return `'${String(value).replaceAll("'", "'\\''")}'`; }
-
-function setCliConfigValue(cfg, dottedKey, value) {
-  const keys = dottedKey.split('.');
-  if (keys.length <= 2) return setConfigValue(cfg, dottedKey, value);
-  const updated = structuredClone(cfg); let target = updated;
-  for (const key of keys.slice(0, -1)) {
-    if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) throw error('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
-    target = target[key];
-  }
-  target[keys.at(-1)] = structuredClone(value);
-  const validation = validateConfig(updated);
-  if (!validation.ok) throw error('E_CONFIG_INVALID', 'Configuration is invalid.', validation.errors);
-  return updated;
-}
 
 function normalizeSafetyPath(input) {
   if (typeof input !== 'string' || !input || input.startsWith('/') || /^[A-Za-z]:[\\/]/.test(input) || input.includes('\0')) {
@@ -645,7 +631,7 @@ const helpDescriptions = Object.freeze({
 });
 const helpUsages = Object.freeze({
   init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--channel mcp|cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
-  config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', safety: 'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
+  config: 'brainatlas config get [KEY] | set KEY VALUE [--plan] | unset KEY [--plan]', safety: 'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
   migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]', compact: 'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]', usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful', wiki: 'brainatlas wiki query <text> [--limit N] [--compact] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]', help: 'brainatlas --help | brainatlas help [COMMAND]'
@@ -1002,7 +988,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
       if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
       const raw = args.shift(); if (raw === undefined || raw.startsWith('--')) throw error('E_ARGUMENT', 'Missing configuration value.');
       let parsed; try { parsed = JSON.parse(raw); } catch { parsed = raw; }
-      const updated = setCliConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env);
+      const updated = setConfigValue(cfg, key, parsed); if (!plan) await saveTrackedConfig(updated, paths, env);
       let credentialUrl = false;
       if (key === 'sync.options.remote' && typeof parsed === 'string' && /^https:\/\//i.test(parsed)) {
         try { const remote = new URL(parsed); credentialUrl = Boolean(remote.username || remote.password); } catch {}
@@ -1010,6 +996,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
       const warnings = credentialUrl ? ['Remote URL contains embedded credentials; use a credential helper instead.'] : [];
       if (warnings.length) console.error(warnings[0]);
       output({ action: 'config set', key, ...(warnings.length ? { warnings } : {}) }); return;
+    }
+    if (action === 'unset') {
+      if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key)) throw error('E_CONFIG_KEY', 'Invalid configuration key.');
+      const updated = unsetConfigValue(cfg, key);
+      if (!plan && JSON.stringify(updated) !== JSON.stringify(cfg)) await saveTrackedConfig(updated, paths, env);
+      output({ action: 'config unset', key }); return;
     }
     throw error('E_ARGUMENT', 'Configuration action is invalid.');
   }
