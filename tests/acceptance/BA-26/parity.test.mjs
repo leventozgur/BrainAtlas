@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // BA-26 blind acceptance, hypothesis 4: for content that triggers no new rule, and for a vault with no sensitive
 // fields, scanText, redact, search and hook output are identical to main (def482f). The main checkout is only read
-// and imported; nothing is written there. Temporary vaults live under tests/acceptance/BA-26/.work.
-import test from 'node:test';
+// and imported; nothing is written there. Temporary vaults live under a per-run directory in the OS temp directory.
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mainRoot } from './support.mjs';
@@ -13,7 +14,8 @@ import { fixtures } from './gen.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MAIN = mainRoot();
 const WT = path.resolve(HERE, '../../..');
-const WORK = path.join(HERE, '.work');
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'ba26-'));
+after(() => fs.rmSync(WORK, { recursive: true, force: true }));
 const load = async (root) => ({
   safety: await import(pathToFileURL(path.join(root, 'packages/core/src/safety/index.mjs')).href),
   retrieval: await import(pathToFileURL(path.join(root, 'packages/core/src/retrieval/index.mjs')).href),

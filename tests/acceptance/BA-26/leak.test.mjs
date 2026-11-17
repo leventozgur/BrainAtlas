@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // BA-26 blind acceptance, hypothesis 3: restricted pages (sensitivity personal, inject never) never reach hook output,
 // are never marked as shown, and stay findable by wiki_query (stdio MCP) and by the core search.
-// Hermetic: temporary vaults live under tests/acceptance/BA-26/.work and are removed afterwards. No network.
-import test from 'node:test';
+// Hermetic: temporary vaults live under a per-run directory in the OS temp directory and are removed afterwards.
+// No network.
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -12,7 +14,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../../..');
-const WORK = path.join(HERE, '.work');
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'ba26-'));
+after(() => fs.rmSync(WORK, { recursive: true, force: true }));
 const { runHook } = await import(pathToFileURL(path.join(ROOT, 'packages/hooks/src/index.mjs')).href);
 const { createSearcher } = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/retrieval/index.mjs')).href);
 const { defaultConfig } = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/config/index.mjs')).href);

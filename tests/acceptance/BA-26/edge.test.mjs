@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // BA-26 blind acceptance, edge cases. Expected values come from the brief and the rule definitions, not from a
-// previous run. Values are built at run time; the hook and MCP are driven black-box. Temporary vaults live under
-// tests/acceptance/BA-26/.work and are removed afterwards. No network.
-import test from 'node:test';
+// previous run. Values are built at run time; the hook and MCP are driven black-box. Temporary vaults live under a
+// per-run directory in the OS temp directory and are removed afterwards. No network.
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mainRoot } from './support.mjs';
@@ -15,7 +16,8 @@ import { fixtures } from './gen.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MAIN = mainRoot();
 const ROOT = path.resolve(HERE, '../../..');
-const WORK = path.join(HERE, '.work');
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'ba26-'));
+after(() => fs.rmSync(WORK, { recursive: true, force: true }));
 const safety = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/safety/index.mjs')).href);
 const wtRules = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/safety/rules.mjs')).href);
 const mainRules = await import(pathToFileURL(path.join(MAIN, 'packages/core/src/safety/rules.mjs')).href);

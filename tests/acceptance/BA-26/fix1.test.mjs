@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // BA-26 blind acceptance, re-test after fix1 (commit d0dfea3): query/fragment/matrix assignments and İ/ı key folding.
 // Expected values come from the fix's stated intent and the brief, not from a product run. Values are built at run
-// time. Temporary vaults live under tests/acceptance/BA-26/.work and are removed afterwards. No network.
-import test from 'node:test';
+// time. Temporary vaults live under a per-run directory in the OS temp directory and are removed afterwards.
+// No network.
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mainRoot } from './support.mjs';
@@ -12,7 +14,8 @@ import { mainRoot } from './support.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MAIN = mainRoot();
 const ROOT = path.resolve(HERE, '../../..');
-const WORK = path.join(HERE, '.work');
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'ba26-'));
+after(() => fs.rmSync(WORK, { recursive: true, force: true }));
 const safety = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/safety/index.mjs')).href);
 const mainSafety = await import(pathToFileURL(path.join(MAIN, 'packages/core/src/safety/index.mjs')).href);
 const { runHook } = await import(pathToFileURL(path.join(ROOT, 'packages/hooks/src/index.mjs')).href);
