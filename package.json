@@ -21,6 +21,7 @@
     "test": "node scripts/run-tests.mjs",
     "guard": "node scripts/guard.mjs",
     "build:release": "node release/build-release.mjs",
+    "release:verify": "node scripts/release-verify.mjs",
     "eval": "node eval/run-eval.mjs --json"
   },
   "repository": {

@@ -14,6 +14,10 @@ npm run guard
 
 Do not use `npm install` to update the lockfile as part of an unrelated change. Network access may be unavailable in the development environment; if dependencies are missing, report that rather than changing dependency policy.
 
+## Verify before publishing
+
+Run `npm run release:verify -- --dir <folder>` on a built release folder before publishing.
+
 ## Change guidelines
 
 - Treat `docs/contracts/*.md` as API contracts. Do not change a signature or contract without an explicit proposal and review.

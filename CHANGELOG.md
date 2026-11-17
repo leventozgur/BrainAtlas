@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added `npm run release:verify -- --dir <folder>` (`scripts/release-verify.mjs`) to check a built release folder's required files, checksums, allowed signers copy, signature, distribution contents and version, and to run a clean install with `brainatlas doctor`.
 - `brainatlas config set` now writes optional keys that the config schema defines but the current file omits (for example `hooks.disclosure` and `retrieval.exclude`), and the new `brainatlas config unset KEY [--plan]` removes a known optional key; unknown, required and locked keys keep failing with `E_CONFIG_KEY`/`E_LOCKED_KEY`.
 
 ## 0.1.0-rc.12 — 2026-11-17
