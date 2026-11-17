@@ -32,15 +32,30 @@ test('core stale() gives the expected flags for each expiry form', () => {
 
 test('semantic hybrid reports the same stale flag as the core search for every case', async () => {
   const pages = Object.entries(cases).map(([name, frontmatter]) => ({
-    path: `${name}.md`, title: name, aliases: [], keywords: [], headings: [], body: `# ${name}\nshared marker words`, frontmatter
+    path: `${name}.md`,
+    title: name,
+    aliases: [],
+    keywords: [],
+    headings: [],
+    body: `# ${name}\nshared marker words`,
+    frontmatter,
   }));
-  const entries = pages.map(page => ({ path: page.path, vector: [1, 0], text: page.body, headingPath: page.title }));
+  const entries = pages.map((page) => ({ path: page.path, vector: [1, 0], text: page.body, headingPath: page.title }));
   const provider = { fingerprint: 'fixed', embedQuery: async () => [1, 0] };
   const index = buildIndex(pages, { now });
-  const core = new Map(search(index, 'marker', { limit: 20, asOf: now }).results.map(row => [row.path, row.stale]));
-  const hybrid = await searchHybrid({ query: 'marker', pages, entries, provider, asOf: now, mode: 'rrf', limit: 20, lexicalIndex: index });
+  const core = new Map(search(index, 'marker', { limit: 20, asOf: now }).results.map((row) => [row.path, row.stale]));
+  const hybrid = await searchHybrid({
+    query: 'marker',
+    pages,
+    entries,
+    provider,
+    asOf: now,
+    mode: 'rrf',
+    limit: 20,
+    lexicalIndex: index,
+  });
   assert.ok(hybrid.length > 0);
   for (const item of hybrid) assert.equal(item.stale, core.get(item.path), item.path);
-  assert.equal(hybrid.find(item => item.path === 'pastDate.md').stale, true);
-  assert.equal(hybrid.find(item => item.path === 'durationFuture.md').stale, false);
+  assert.equal(hybrid.find((item) => item.path === 'pastDate.md').stale, true);
+  assert.equal(hybrid.find((item) => item.path === 'durationFuture.md').stale, false);
 });

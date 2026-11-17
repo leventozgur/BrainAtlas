@@ -31,12 +31,12 @@ const DEFAULT_SIZES = [500, 2000];
 const DIMS = 8;
 const DEFAULT_EDITS = 20;
 
-const stats = (values) => ({p50: percentile(values, 0.5), p95: percentile(values, 0.95), count: values.length});
+const stats = (values) => ({ p50: percentile(values, 0.5), p95: percentile(values, 0.95), count: values.length });
 
 async function timed(fn) {
   const start = performance.now();
   const value = await fn();
-  return {value, ms: Math.max(0, performance.now() - start)};
+  return { value, ms: Math.max(0, performance.now() - start) };
 }
 
 /**
@@ -46,8 +46,16 @@ async function timed(fn) {
  * Timing values vary between runs; the synthetic content and queries do not.
  * @param {{sizes?:number[],seed?:number,queryCount?:number,hookCount?:number,editCount?:number,now?:Date}} options
  */
-export async function runScaleBench({sizes = DEFAULT_SIZES, seed = 1, queryCount = MIN_QUERIES, hookCount = MIN_PROMPTS, editCount = DEFAULT_EDITS, now = new Date(DEFAULT_NOW)} = {}) {
-  if (!Array.isArray(sizes) || !sizes.length || sizes.some((n) => !Number.isInteger(n) || n < 1 || n > 50000)) throw new Error('Invalid sizes');
+export async function runScaleBench({
+  sizes = DEFAULT_SIZES,
+  seed = 1,
+  queryCount = MIN_QUERIES,
+  hookCount = MIN_PROMPTS,
+  editCount = DEFAULT_EDITS,
+  now = new Date(DEFAULT_NOW),
+} = {}) {
+  if (!Array.isArray(sizes) || !sizes.length || sizes.some((n) => !Number.isInteger(n) || n < 1 || n > 50000))
+    throw new Error('Invalid sizes');
   if (!Number.isInteger(editCount) || editCount < 1 || editCount > 10000) throw new Error('Invalid edit count');
   const queries = Math.max(MIN_QUERIES, queryCount);
   const prompts = Math.max(MIN_PROMPTS, hookCount);
@@ -60,36 +68,45 @@ export async function runScaleBench({sizes = DEFAULT_SIZES, seed = 1, queryCount
       const hookStateDir = join(root, 'hook-state');
       mkdirSync(vaultDir);
       mkdirSync(hookStateDir);
-      const {queries: queryList} = writeSyntheticCorpus(vaultDir, {pages: n, seed, queryCount: queries});
+      const { queries: queryList } = writeSyntheticCorpus(vaultDir, { pages: n, seed, queryCount: queries });
       const vaultPath = resolve(vaultDir);
 
-      const buildIndexMs = (await timed(() => buildIndex(loadPages(vaultPath), {now}))).ms;
-      const cold = await timed(() => createSearcher({vaultDir: vaultPath, stateDir, now}));
-      const warm = await timed(() => createSearcher({vaultDir: vaultPath, stateDir, now}));
+      const buildIndexMs = (await timed(() => buildIndex(loadPages(vaultPath), { now }))).ms;
+      const cold = await timed(() => createSearcher({ vaultDir: vaultPath, stateDir, now }));
+      const warm = await timed(() => createSearcher({ vaultDir: vaultPath, stateDir, now }));
 
       const searchTimes = [];
       for (const query of queryList) {
-        const {ms} = await timed(() => warm.value.search(query, {limit: 5, asOf: now}));
+        const { ms } = await timed(() => warm.value.search(query, { limit: 5, asOf: now }));
         searchTimes.push(ms);
       }
 
-      const hookConfig = {vault: {path: vaultPath}, stateDir: hookStateDir, hooks: {mode: 'normal', deadlineMs: 4700}, retrieval: {abstainThreshold: 0}};
+      const hookConfig = {
+        vault: { path: vaultPath },
+        stateDir: hookStateDir,
+        hooks: { mode: 'normal', deadlineMs: 4700 },
+        retrieval: { abstainThreshold: 0 },
+      };
       const hookTimes = [];
       for (let i = 0; i < prompts; i++) {
-        const stdin = JSON.stringify({session_id: `scale-${n}-${i}`, prompt: queryList[i % queryList.length]});
-        const {ms} = await timed(() => runHook({client: 'claude', event: 'prompt', stdin, env: {}, config: hookConfig, now}));
+        const stdin = JSON.stringify({ session_id: `scale-${n}-${i}`, prompt: queryList[i % queryList.length] });
+        const { ms } = await timed(() =>
+          runHook({ client: 'claude', event: 'prompt', stdin, env: {}, config: hookConfig, now })
+        );
         hookTimes.push(ms);
       }
 
       // Hybrid overhead: fake provider with fixed vectors, one chunk per page; loadPages runs per query like the MCP path.
       const vectors = fixedVectors(seed, n, DIMS);
       const relPaths = loadPages(vaultPath).map((page) => page.path);
-      const entries = relPaths.map((path, i) => ({path, vector: vectors[i], text: path, headingPath: ''}));
+      const entries = relPaths.map((path, i) => ({ path, vector: vectors[i], text: path, headingPath: '' }));
       const queryVector = fixedVectors(seed + 1, 1, DIMS)[0];
-      const provider = {fingerprint: 'scale-bench', embedQuery: async () => queryVector};
+      const provider = { fingerprint: 'scale-bench', embedQuery: async () => queryVector };
       const hybridTimes = [];
       for (const query of queryList) {
-        const {ms} = await timed(() => searchHybrid({query, pages: loadPages(vaultPath), entries, provider, limit: 5, asOf: now}));
+        const { ms } = await timed(() =>
+          searchHybrid({ query, pages: loadPages(vaultPath), entries, provider, limit: 5, asOf: now })
+        );
         hybridTimes.push(ms);
       }
 
@@ -97,9 +114,9 @@ export async function runScaleBench({sizes = DEFAULT_SIZES, seed = 1, queryCount
       const editTimes = [];
       for (let i = 0; i < editCount; i++) {
         appendFileSync(join(vaultPath, relPaths[i % relPaths.length]), `\nEdit round ${i} marker.\n`);
-        const {ms} = await timed(async () => {
+        const { ms } = await timed(async () => {
           warm.value.refreshIfChanged();
-          return warm.value.search(queryList[i % queryList.length], {limit: 5, asOf: now});
+          return warm.value.search(queryList[i % queryList.length], { limit: 5, asOf: now });
         });
         editTimes.push(ms);
       }
@@ -115,16 +132,17 @@ export async function runScaleBench({sizes = DEFAULT_SIZES, seed = 1, queryCount
         refreshAfterEditMs: stats(editTimes),
       });
     } finally {
-      rmSync(root, {recursive: true, force: true});
+      rmSync(root, { recursive: true, force: true });
     }
   }
-  return {seed, sizes: results};
+  return { seed, sizes: results };
 }
 
 function parseArgs(args) {
-  const options = {sizes: DEFAULT_SIZES};
+  const options = { sizes: DEFAULT_SIZES };
   for (let i = 0; i < args.length; i++) {
-    if (args[i] !== '--sizes' || i + 1 >= args.length || args[i + 1].startsWith('--')) throw new Error('Invalid arguments');
+    if (args[i] !== '--sizes' || i + 1 >= args.length || args[i + 1].startsWith('--'))
+      throw new Error('Invalid arguments');
     const parts = args[++i].split(',');
     if (!parts.every((part) => /^\d+$/u.test(part))) throw new Error('Invalid sizes');
     options.sizes = parts.map(Number);

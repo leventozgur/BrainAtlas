@@ -5,7 +5,15 @@ import { buildIndex } from '../../packages/core/src/retrieval/index.mjs';
 import { searchHybrid } from '../../modules/semantic/src/hybrid.mjs';
 
 const now = new Date('2025-01-01T00:00:00Z');
-const page = (name, title, body, frontmatter = {}) => ({ path: name, title, aliases: [], keywords: [], headings: [], body, frontmatter });
+const page = (name, title, body, frontmatter = {}) => ({
+  path: name,
+  title,
+  aliases: [],
+  keywords: [],
+  headings: [],
+  body,
+  frontmatter,
+});
 const pages = [
   page('a.md', 'Backup', '# Backup\nbackup routine for the vault', { generated: '2024-01-01', stale_after: 'P7D' }),
   page('b.md', 'Restore', '# Restore\nrestore the backup archive'),
@@ -34,8 +42,18 @@ test('searchHybrid with a supplied lexical index returns the same results as bui
 
 test('searchHybrid uses the supplied lexical index and leaves the default path unchanged', async () => {
   const other = buildIndex([page('z.md', 'Zebra', '# Zebra\nzebra only here')], { now });
-  const fromOther = await searchHybrid({ query: 'backup', pages, entries: [], provider, asOf: now, lexicalIndex: other });
-  assert.deepEqual(fromOther.map((item) => item.path), []);
+  const fromOther = await searchHybrid({
+    query: 'backup',
+    pages,
+    entries: [],
+    provider,
+    asOf: now,
+    lexicalIndex: other,
+  });
+  assert.deepEqual(
+    fromOther.map((item) => item.path),
+    []
+  );
   const fallback = await searchHybrid({ query: 'backup', pages, entries: [], provider, asOf: now });
   assert.ok(fallback.map((item) => item.path).includes('a.md'));
 });

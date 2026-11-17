@@ -12,7 +12,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 test('runCommand terminates a timed out child and blocks network commands offline', async () => {
   const started = Date.now();
-  const result = await runCommand(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], { cwd: ROOT, env: cleanEnv(), timeoutMs: 50 });
+  const result = await runCommand(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], {
+    cwd: ROOT,
+    env: cleanEnv(),
+    timeoutMs: 50,
+  });
   assert.equal(result.code, 124);
   assert.ok(Date.now() - started < 3000);
 });

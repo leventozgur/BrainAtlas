@@ -6,8 +6,18 @@ import { join } from 'node:path';
 import { ROOT, runNode, tempDir, removeDir } from './helpers.mjs';
 
 const DEFAULT_KEYS = [
-  'abstainAccuracy', 'abstainThreshold', 'byCategory', 'falsePositives', 'indexBuildMs', 'latencyMs',
-  'mrrAt10', 'n', 'ndcgAt10', 'precisionAt5', 'recallAt5', 'trToEnRecallAt5',
+  'abstainAccuracy',
+  'abstainThreshold',
+  'byCategory',
+  'falsePositives',
+  'indexBuildMs',
+  'latencyMs',
+  'mrrAt10',
+  'n',
+  'ndcgAt10',
+  'precisionAt5',
+  'recallAt5',
+  'trToEnRecallAt5',
 ].sort();
 const EXTENDED_KEYS = ['requireAllCases', 'requireAllRate', 'sectionCases', 'sectionHitRate'];
 const TIMING = new Set(['latencyMs', 'indexBuildMs']);
@@ -23,7 +33,20 @@ const SANDBOX = tempDir('compat-sandbox');
 process.on('exit', () => removeDir(SANDBOX));
 
 function runAt(root, dataset, extra = []) {
-  const res = runNode([join(root, 'eval', 'run-eval.mjs'), '--corpus', join(root, dataset.corpus), '--cases', join(root, dataset.cases), '--now', '2026-11-10T00:00:00Z', '--json', ...extra], { cwd: root, env: { TMPDIR: SANDBOX, HOME: SANDBOX } });
+  const res = runNode(
+    [
+      join(root, 'eval', 'run-eval.mjs'),
+      '--corpus',
+      join(root, dataset.corpus),
+      '--cases',
+      join(root, dataset.cases),
+      '--now',
+      '2026-11-10T00:00:00Z',
+      '--json',
+      ...extra,
+    ],
+    { cwd: root, env: { TMPDIR: SANDBOX, HOME: SANDBOX } }
+  );
   assert.equal(res.status, 0, `${root} ${dataset.name}: ${res.stderr}`);
   return JSON.parse(res.stdout);
 }
@@ -60,7 +83,20 @@ test('--extended on a new set reports the labelled counts (current-state 11 expe
 test('run-eval --extended is accepted as a flag and does not consume a value', () => {
   const dir = tempDir('compat-args');
   try {
-    const res = runNode([join(ROOT, 'eval', 'run-eval.mjs'), '--corpus', join(ROOT, 'eval/corpus'), '--cases', join(ROOT, 'eval/dev/cases.json'), '--extended', '--repeat', '1', '--json'], { env: { TMPDIR: dir } });
+    const res = runNode(
+      [
+        join(ROOT, 'eval', 'run-eval.mjs'),
+        '--corpus',
+        join(ROOT, 'eval/corpus'),
+        '--cases',
+        join(ROOT, 'eval/dev/cases.json'),
+        '--extended',
+        '--repeat',
+        '1',
+        '--json',
+      ],
+      { env: { TMPDIR: dir } }
+    );
     assert.equal(res.status, 0, res.stderr);
     assert.ok('sectionHitRate' in JSON.parse(res.stdout));
   } finally {

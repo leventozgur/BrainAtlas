@@ -35,7 +35,12 @@ function markdownNames(dir, prefix = '') {
 }
 function pageText(r, seq) {
   const pick = () => WORDS[Math.floor(r() * WORDS.length)];
-  const frontmatter = r() < 0.2 ? '---\nstatus: superseded\n---\n' : r() < 0.3 ? `---\ntitle: T${Math.floor(r() * 9)}\nstale_after: P1D\ngenerated: 2020-01-01\n---\n` : '';
+  const frontmatter =
+    r() < 0.2
+      ? '---\nstatus: superseded\n---\n'
+      : r() < 0.3
+        ? `---\ntitle: T${Math.floor(r() * 9)}\nstale_after: P1D\ngenerated: 2020-01-01\n---\n`
+        : '';
   // Padding grows with every write, so each rewrite changes the file size and the fingerprint never depends on timestamp resolution.
   return `${frontmatter}# ${pick()} heading\n${pick()} ${pick()} body ${Math.floor(r() * 1000)} ${'x'.repeat(seq)}\n`;
 }
@@ -52,7 +57,8 @@ function applyRandomOperation(r, vault, seq) {
   } else if (op < 0.82) {
     fs.rmSync(path.join(vault, choose()));
   } else {
-    const from = choose(), to = `${r() < 0.5 ? 'sub/' : ''}r${Math.floor(r() * 12)}.md`;
+    const from = choose(),
+      to = `${r() < 0.5 ? 'sub/' : ''}r${Math.floor(r() * 12)}.md`;
     if (!fs.existsSync(path.join(vault, to))) {
       fs.mkdirSync(path.dirname(path.join(vault, to)), { recursive: true });
       fs.renameSync(path.join(vault, from), path.join(vault, to));
@@ -65,12 +71,18 @@ function assertMatchesFreshBuild(searcher, vault, label) {
   assert.deepEqual(plain(snap.index), plain(expected), `${label}: index`);
   assert.deepEqual(plain(snap.pages), plain(loadPages(vault)), `${label}: pages`);
   for (const word of [...WORDS, 'heading', 'body', 'missing']) {
-    assert.deepEqual(plain(searcher.search(word, { limit: 20 })), plain(search(expected, word, { limit: 20 })), `${label}: search ${word}`);
+    assert.deepEqual(
+      plain(searcher.search(word, { limit: 20 })),
+      plain(search(expected, word, { limit: 20 })),
+      `${label}: search ${word}`
+    );
   }
 }
 
 test('incremental searcher matches a fresh build after 60 random external edits', async (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   const r = rng(7);
   for (let i = 0; i < 4; i++) fs.writeFileSync(path.join(vault, `seed${i}.md`), pageText(r, i));
@@ -89,7 +101,9 @@ test('incremental searcher matches a fresh build after 60 random external edits'
 });
 
 test('refreshIfChanged reports changes only and reads no page contents when unchanged', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha body');
   const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
@@ -106,21 +120,28 @@ test('refreshIfChanged reports changes only and reads no page contents when unch
 });
 
 test('an external deletion and rename are visible after refreshIfChanged', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'old.md'), '# Quokka\nquokka body');
   const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
   assert.equal(searcher.search('quokka').results.length, 1);
   fs.renameSync(path.join(vault, 'old.md'), path.join(vault, 'new.md'));
   assert.equal(searcher.refreshIfChanged(), true);
-  assert.deepEqual(searcher.search('quokka').results.map((r) => r.path), ['new.md']);
+  assert.deepEqual(
+    searcher.search('quokka').results.map((r) => r.path),
+    ['new.md']
+  );
   fs.rmSync(path.join(vault, 'new.md'));
   assert.equal(searcher.refreshIfChanged(), true);
   assert.equal(searcher.search('quokka').results.length, 0);
 });
 
 test('invalid, foreign-schema or forged caches are rebuilt safely and never written into the vault', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha body');
   const cache = path.join(state, 'retrieval-index.json');
@@ -143,21 +164,30 @@ test('invalid, foreign-schema or forged caches are rebuilt safely and never writ
 });
 
 test('symbolic links to pages or directories are neither indexed nor tracked', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state'), outside = path.join(dir, 'outside');
-  fs.mkdirSync(vault); fs.mkdirSync(outside);
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state'),
+    outside = path.join(dir, 'outside');
+  fs.mkdirSync(vault);
+  fs.mkdirSync(outside);
   fs.writeFileSync(path.join(outside, 'secret.md'), '# Outside\nzanzibar secret');
   fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha body');
   fs.symlinkSync(path.join(outside, 'secret.md'), path.join(vault, 'link.md'));
   fs.symlinkSync(outside, path.join(vault, 'linkdir'));
   const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
-  assert.deepEqual(searcher.snapshot().pages.map((p) => p.path), ['a.md']);
+  assert.deepEqual(
+    searcher.snapshot().pages.map((p) => p.path),
+    ['a.md']
+  );
   assert.equal(searcher.search('zanzibar').results.length, 0);
   fs.writeFileSync(path.join(outside, 'secret.md'), '# Outside\nzanzibar secret changed and longer');
   assert.equal(searcher.refreshIfChanged(), false);
 });
 
 test('the persisted cache lives only under the state directory', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha body');
   const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
@@ -168,7 +198,9 @@ test('the persisted cache lives only under the state directory', (t) => {
 });
 
 test('flat on-disk postings with out-of-range ids, bad widths or non-numeric counts are rebuilt', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha body');
   const cache = path.join(state, 'retrieval-index.json');
@@ -190,7 +222,9 @@ test('flat on-disk postings with out-of-range ids, bad widths or non-numeric cou
 });
 
 test('structurally invalid but key-matching caches are rebuilt (fix1 regression table)', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'a.md'), '---\ntitle: Alpha\n---\n# Alpha\nalpha bravo alpha');
   fs.writeFileSync(path.join(vault, 'b.md'), '# Bravo\nbravo charlie');
@@ -198,21 +232,66 @@ test('structurally invalid but key-matching caches are rebuilt (fix1 regression 
   createSearcher({ vaultDir: vault, stateDir: state, now });
   const good = JSON.parse(fs.readFileSync(cache, 'utf8'));
   const fresh = plain(buildIndex(loadPages(vault), { now }));
-  const termOf = (word) => Object.keys(good.index.postings).find((k) => k === word) ?? Object.keys(good.index.postings)[0];
+  const termOf = (word) =>
+    Object.keys(good.index.postings).find((k) => k === word) ?? Object.keys(good.index.postings)[0];
   const cases = {
-    'ghost page not on disk': (d) => { d.index.docs.push({ page: { path: 'ghost.md', title: 'Ghost', aliases: [], keywords: [], headings: [], body: 'ghost', frontmatter: {} }, lengths: [0, 0, 0, 1] }); },
-    'duplicate page path': (d) => { d.index.docs.push(structuredClone(d.index.docs[0])); },
-    'non-increasing posting ids': (d) => { const k = termOf(); const a = d.index.postings[k]; if (a.length >= 10) { const x = a.slice(0, 5); d.index.postings[k] = [...a.slice(5, 10), ...x]; } else d.index.postings[k] = [...a, ...a]; },
-    'repeated posting id': (d) => { const k = termOf(); d.index.postings[k] = [...d.index.postings[k], ...d.index.postings[k].slice(0, 5)]; },
-    'count larger than field length': (d) => { const k = termOf(); d.index.postings[k][1] = d.index.docs[d.index.postings[k][0]].lengths[0] + 1; },
-    'count 1e308': (d) => { d.index.postings[termOf()][1] = 1e308; },
-    'negative count': (d) => { d.index.postings[termOf()][2] = -1; },
-    'negative field length': (d) => { d.index.docs[0].lengths[1] = -3; },
-    'average inconsistent with lengths': (d) => { d.index.averages[0] = d.index.averages[0] + 1; },
-    'body not a string': (d) => { d.index.docs[0].page.body = 42; },
-    'headings not a string array': (d) => { d.index.docs[0].page.headings = [1]; },
-    'frontmatter is an array': (d) => { d.index.docs[0].page.frontmatter = []; },
-    'superseded page inside the cache': (d) => { d.index.docs[0].page.frontmatter = { status: 'superseded' }; },
+    'ghost page not on disk': (d) => {
+      d.index.docs.push({
+        page: {
+          path: 'ghost.md',
+          title: 'Ghost',
+          aliases: [],
+          keywords: [],
+          headings: [],
+          body: 'ghost',
+          frontmatter: {},
+        },
+        lengths: [0, 0, 0, 1],
+      });
+    },
+    'duplicate page path': (d) => {
+      d.index.docs.push(structuredClone(d.index.docs[0]));
+    },
+    'non-increasing posting ids': (d) => {
+      const k = termOf();
+      const a = d.index.postings[k];
+      if (a.length >= 10) {
+        const x = a.slice(0, 5);
+        d.index.postings[k] = [...a.slice(5, 10), ...x];
+      } else d.index.postings[k] = [...a, ...a];
+    },
+    'repeated posting id': (d) => {
+      const k = termOf();
+      d.index.postings[k] = [...d.index.postings[k], ...d.index.postings[k].slice(0, 5)];
+    },
+    'count larger than field length': (d) => {
+      const k = termOf();
+      d.index.postings[k][1] = d.index.docs[d.index.postings[k][0]].lengths[0] + 1;
+    },
+    'count 1e308': (d) => {
+      d.index.postings[termOf()][1] = 1e308;
+    },
+    'negative count': (d) => {
+      d.index.postings[termOf()][2] = -1;
+    },
+    'negative field length': (d) => {
+      d.index.docs[0].lengths[1] = -3;
+    },
+    'average inconsistent with lengths': (d) => {
+      d.index.averages[0] = d.index.averages[0] + 1;
+    },
+    'body not a string': (d) => {
+      d.index.docs[0].page.body = 42;
+    },
+    'headings not a string array': (d) => {
+      d.index.docs[0].page.headings = [1];
+    },
+    'frontmatter is an array': (d) => {
+      d.index.docs[0].page.frontmatter = [];
+    },
+    'superseded page inside the cache': (d) => {
+      d.index.docs[0].page.frontmatter = { status: 'superseded' };
+    },
   };
   for (const [name, mutate] of Object.entries(cases)) {
     const data = structuredClone(good);
@@ -220,12 +299,18 @@ test('structurally invalid but key-matching caches are rebuilt (fix1 regression 
     fs.writeFileSync(cache, JSON.stringify(data));
     const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
     assert.deepEqual(plain(searcher.snapshot().index), fresh, name);
-    assert.deepEqual(plain(searcher.search('alpha bravo', { abstainThreshold: 0 })), plain(search(fresh, 'alpha bravo', { abstainThreshold: 0 })), `${name}: results`);
+    assert.deepEqual(
+      plain(searcher.search('alpha bravo', { abstainThreshold: 0 })),
+      plain(search(fresh, 'alpha bravo', { abstainThreshold: 0 })),
+      `${name}: results`
+    );
   }
 });
 
 test('fix2: non-object roots and postings, and a page missing from both docs and skipped, are rebuilt', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha bravo');
   fs.writeFileSync(path.join(vault, 'b.md'), '---\nstatus: superseded\n---\n# Old\nalpha old');
@@ -235,11 +320,27 @@ test('fix2: non-object roots and postings, and a page missing from both docs and
   const fresh = plain(buildIndex(loadPages(vault), { now }));
   const variants = {
     'root is an array': () => [],
-    'index is an array': (d) => { d.index = []; return d; },
-    'postings is an array': (d) => { d.index.postings = []; return d; },
-    'missing indexed page (not in skipped)': (d) => { d.index.docs.splice(0, 1); d.index.averages = [0, 0, 0, 0]; return d; },
-    'skipped list drops the superseded page': (d) => { d.skipped = []; return d; },
-    'skipped entry duplicates an indexed page': (d) => { d.skipped = ['a.md']; return d; },
+    'index is an array': (d) => {
+      d.index = [];
+      return d;
+    },
+    'postings is an array': (d) => {
+      d.index.postings = [];
+      return d;
+    },
+    'missing indexed page (not in skipped)': (d) => {
+      d.index.docs.splice(0, 1);
+      d.index.averages = [0, 0, 0, 0];
+      return d;
+    },
+    'skipped list drops the superseded page': (d) => {
+      d.skipped = [];
+      return d;
+    },
+    'skipped entry duplicates an indexed page': (d) => {
+      d.skipped = ['a.md'];
+      return d;
+    },
   };
   for (const [name, mutate] of Object.entries(variants)) {
     const data = mutate(structuredClone(good));
@@ -250,7 +351,9 @@ test('fix2: non-object roots and postings, and a page missing from both docs and
 });
 
 test('fix2: snapshot after an outside add on a cache hit describes one vault state (pages and index agree)', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'a.md'), '# Alpha\nalpha bravo');
   createSearcher({ vaultDir: vault, stateDir: state, now });

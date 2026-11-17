@@ -29,12 +29,17 @@ async function fixture(t) {
   await writeFile(configFile, JSON.stringify(config));
   const start = async (name) => {
     const transport = new StdioClientTransport({
-      command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-      env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe'
+      command: process.execPath,
+      args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+      cwd: root,
+      env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+      stderr: 'pipe',
     });
     const client = new Client({ name, version: '1.0.0' });
     await client.connect(transport);
-    t.after(async () => { await client.close(); });
+    t.after(async () => {
+      await client.close();
+    });
     return client;
   };
   return { home, wiki, a: await start('ba25-a'), b: await start('ba25-b') };
@@ -42,7 +47,11 @@ async function fixture(t) {
 
 async function call(client, name, args = {}) {
   const result = await client.callTool({ name, arguments: args });
-  return { isError: result.isError === true, text: result.content[0].text, data: result.isError ? undefined : JSON.parse(result.content[0].text) };
+  return {
+    isError: result.isError === true,
+    text: result.content[0].text,
+    data: result.isError ? undefined : JSON.parse(result.content[0].text),
+  };
 }
 
 async function ok(client, name, args = {}) {
@@ -71,6 +80,10 @@ test('a fresh lock held by a live process makes writers wait, then refuse with E
   assert.equal(result.isError, true);
   assert.ok(result.text.startsWith('E_BUSY:'), result.text);
   assert.ok(waited >= 4000 && waited < 15_000, `bounded wait expected, got ${waited} ms`);
-  await assert.rejects(readFile(resolve(wiki, 'blocked.md'), 'utf8'), { code: 'ENOENT' }, 'nothing is written while busy');
+  await assert.rejects(
+    readFile(resolve(wiki, 'blocked.md'), 'utf8'),
+    { code: 'ENOENT' },
+    'nothing is written while busy'
+  );
   assert.equal(JSON.parse(await readFile(resolve(wiki, LOCK), 'utf8')).token, 'held', 'a live lock is not taken over');
 });

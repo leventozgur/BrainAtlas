@@ -21,18 +21,28 @@ async function fixture(t, { index, indexEol = '\n', withIndex = true } = {}) {
   await mkdir(resolve(vault, 'wiki/concepts'), { recursive: true });
   await writeFile(resolve(vault, 'wiki/log.md'), '# Wiki log\n');
   await writeFile(resolve(vault, 'wiki/entities/sample-01.md'), page('Sample One'));
-  await writeFile(resolve(vault, 'wiki/entities/new-page.md'), page('New Page', 'summary: "Yeni özet"\ntags:\n  - yeni\n'));
+  await writeFile(
+    resolve(vault, 'wiki/entities/new-page.md'),
+    page('New Page', 'summary: "Yeni özet"\ntags:\n  - yeni\n')
+  );
   await writeFile(resolve(vault, 'wiki/concepts/alpha.md'), page('Alpha [v2] (taslak)', 'description: "Açıklama"\n'));
   if (withIndex) await writeFile(resolve(vault, 'wiki/index.md'), index.replace(/\n/g, indexEol));
   const config = defaultConfig('lite');
   config.vault.path = vault;
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba14-index-test', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   return { vault, client, indexPath: resolve(vault, 'wiki/index.md') };
 }
 
@@ -60,7 +70,7 @@ const handEdited = [
   '## Özel Bölüm',
   '',
   'Metin.',
-  ''
+  '',
 ].join('\n');
 
 // Expected result: stale entry removed; new entities page inserted after the last entities entry;
@@ -85,7 +95,7 @@ const handEditedExpected = [
   '## concepts',
   '',
   '- [Alpha \\[v2\\] \\(taslak\\)](concepts/alpha.md) — Açıklama',
-  ''
+  '',
 ].join('\n');
 
 test('wiki_update_index keeps a hand-edited index byte-identical except for entry lines', async (t) => {
@@ -142,10 +152,14 @@ test('wiki_update_index places pages under their folder heading across many cate
     '',
     '## entities',
     '',
-    '- [Sample One](entities/sample-01.md)'
+    '- [Sample One](entities/sample-01.md)',
   ].join('\n');
   const f = await fixture(t, { index });
-  for (const [dir, name] of [['summaries', 's-1'], ['queries', 'q-1'], ['sources', 'src-1']]) {
+  for (const [dir, name] of [
+    ['summaries', 's-1'],
+    ['queries', 'q-1'],
+    ['sources', 'src-1'],
+  ]) {
     await mkdir(resolve(f.vault, 'wiki', dir), { recursive: true });
     await writeFile(resolve(f.vault, 'wiki', dir, `${name}.md`), page(`Title ${name}`));
   }
@@ -155,7 +169,11 @@ test('wiki_update_index places pages under their folder heading across many cate
   let current = '';
   for (const line of lines) {
     const heading = line.match(/^## (.+)$/);
-    if (heading) { current = heading[1]; section[current] = []; continue; }
+    if (heading) {
+      current = heading[1];
+      section[current] = [];
+      continue;
+    }
     const entry = line.match(/^- \[.*\]\((.+?)\)/);
     if (entry && current) section[current].push(entry[1]);
   }
@@ -164,7 +182,10 @@ test('wiki_update_index places pages under their folder heading across many cate
   assert.deepEqual(section.entities, ['entities/sample-01.md', 'entities/new-page.md']);
   assert.deepEqual(section.summaries, ['summaries/s-1.md']);
   assert.deepEqual(section.concepts, ['concepts/alpha.md']);
-  assert.equal(lines.some((line) => line.includes('gone-src')), false);
+  assert.equal(
+    lines.some((line) => line.includes('gone-src')),
+    false
+  );
   assert.ok(lines.includes('Bu bölümde henüz giriş yok.'));
   // The input had no trailing newline; the file keeps that style.
   assert.equal((await readFile(f.indexPath, 'utf8')).endsWith('\n'), false);

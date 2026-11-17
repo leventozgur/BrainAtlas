@@ -17,7 +17,7 @@ const MIXED_PAGES = {
   'concepts/kavram.md': page('Kavram'),
   'entities/deep/nested/n.md': page('İç içe'),
   'root-note.md': page('Kapalı not'),
-  'entities/yok-dd.md': page('Elle eklenmemiş')
+  'entities/yok-dd.md': page('Elle eklenmemiş'),
 };
 const MIXED_INDEX = [
   '# Wiki Index',
@@ -39,7 +39,7 @@ const MIXED_INDEX = [
   '## concepts',
   '',
   '- [Kavram](concepts/kavram.md#ozet) — çapa',
-  ''
+  '',
 ].join('\n');
 
 test('mixed vault: coverage is the rounded share of pages named by an escaped, angle-bracket, anchored, query or nested entry; fenced and stale entries do not count', async (t) => {
@@ -52,10 +52,16 @@ test('mixed vault: coverage is the rounded share of pages named by an escaped, a
 });
 
 test('fresh index with unbalanced and nested parenthesis names: coverage is 100 after wiki_update_index', async (t) => {
-  const f = await startServer(t, { files: { 'a)b.md': page('Kapanmamış'), 'a(b)(c).md': page('İki çift'), 'entities/x(1).md': page('Bir') } });
+  const f = await startServer(t, {
+    files: { 'a)b.md': page('Kapanmamış'), 'a(b)(c).md': page('İki çift'), 'entities/x(1).md': page('Bir') },
+  });
   okJson(await call(f.client, 'wiki_update_index', {}));
   const text = (await readIndex(f)).toString('utf8');
-  assert.deepEqual([...linkedPages(text)].sort(), ['a(b)(c).md', 'a)b.md', 'entities/x(1).md'], 'the independent reader finds every page');
+  assert.deepEqual(
+    [...linkedPages(text)].sort(),
+    ['a(b)(c).md', 'a)b.md', 'entities/x(1).md'],
+    'the independent reader finds every page'
+  );
   assert.equal(okJson(await call(f.client, 'wiki_status', {})).indexCoveragePct, 100);
 });
 
@@ -75,17 +81,21 @@ test('no pages and no index: coverage is 100', async (t) => {
 });
 
 test('no pages but an index that lists missing pages: coverage is still 100 (there are no pages to cover)', async (t) => {
-  const f = await startServer(t, { files: { 'index.md': '# Wiki Index\n\n## entities\n\n- [Yok](entities/yok.md)\n' } });
+  const f = await startServer(t, {
+    files: { 'index.md': '# Wiki Index\n\n## entities\n\n- [Yok](entities/yok.md)\n' },
+  });
   const status = okJson(await call(f.client, 'wiki_status', {}));
   assert.equal(status.pageCount, 0);
   assert.equal(status.indexCoveragePct, 100);
 });
 
 test('wiki/ symlinked outside the vault: wiki_status answers as an empty Wiki and returns no outside title, path or index content', async (t) => {
-  const f = await startServer(t, { wikiLink: {
-    'index.md': '# Wiki Index\n\n## entities\n\n- [Dış](entities/dis.md)\n',
-    'entities/dis.md': page('DIS-SAYFA-ISARETI')
-  } });
+  const f = await startServer(t, {
+    wikiLink: {
+      'index.md': '# Wiki Index\n\n## entities\n\n- [Dış](entities/dis.md)\n',
+      'entities/dis.md': page('DIS-SAYFA-ISARETI'),
+    },
+  });
   const r = await call(f.client, 'wiki_status', {});
   const status = okJson(r);
   const text = textOf(r);
@@ -94,8 +104,14 @@ test('wiki/ symlinked outside the vault: wiki_status answers as an empty Wiki an
   assert.equal(status.okfErrorCount, 0);
   assert.equal(status.indexAgeMs, null, 'the outside index is not stat-ed for its age');
   assert.equal(typeof status.readOnly, 'boolean');
-  assert.ok(!text.includes('DIS-SAYFA-ISARETI') && !text.includes('dis.md'), 'no outside page title or path is returned');
-  assert.ok(!text.includes('outside-wiki') && !text.includes(f.dir), 'no outside directory or temporary path is returned');
+  assert.ok(
+    !text.includes('DIS-SAYFA-ISARETI') && !text.includes('dis.md'),
+    'no outside page title or path is returned'
+  );
+  assert.ok(
+    !text.includes('outside-wiki') && !text.includes(f.dir),
+    'no outside directory or temporary path is returned'
+  );
 });
 
 // Contract (docs/contracts/mcp-tools.md, wiki_status): "100 when there are no pages". The escaped view is documented as

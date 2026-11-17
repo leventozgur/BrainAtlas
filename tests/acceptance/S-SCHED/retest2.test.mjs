@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { commands } from '../../../modules/sync-engine/src/index.mjs';
 
 for (const platform of ['darwin', 'linux']) {
-  test(`${platform}: failed scheduler stop preserves ownership and supports retry`, async t => {
+  test(`${platform}: failed scheduler stop preserves ownership and supports retry`, async (t) => {
     const root = await mkdtemp(join(tmpdir(), 'sched-stop-'));
     t.after(() => rm(root, { recursive: true, force: true }));
     const home = join(root, 'home');
@@ -24,7 +24,7 @@ for (const platform of ['darwin', 'linux']) {
     };
     const run = (...args) => commands.sync(['schedule', ...args], ctx);
     const installed = await run('install');
-    const before = await Promise.all(installed.files.map(file => readFile(file)));
+    const before = await Promise.all(installed.files.map((file) => readFile(file)));
     failStop = true;
     await assert.rejects(run('remove'), { code: 'E_SCHEDULER_COMMAND' });
     for (let i = 0; i < installed.files.length; i++) assert.deepEqual(await readFile(installed.files[i]), before[i]);
@@ -35,4 +35,3 @@ for (const platform of ['darwin', 'linux']) {
     assert.equal(calls.filter(([, args]) => args.includes(platform === 'darwin' ? 'bootout' : 'disable')).length, 2);
   });
 }
-

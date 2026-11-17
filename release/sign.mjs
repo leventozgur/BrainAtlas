@@ -8,6 +8,11 @@ export function signRelease(key, checksums) {
   return `${checksums}.sig`;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  try { if (process.argv.length !== 4) throw new Error('Usage: sign.mjs <key> <SHA256SUMS>'); signRelease(process.argv[2], process.argv[3]); }
-  catch { console.error('E_SIGNATURE: Could not sign checksums.'); process.exitCode = 1; }
+  try {
+    if (process.argv.length !== 4) throw new Error('Usage: sign.mjs <key> <SHA256SUMS>');
+    signRelease(process.argv[2], process.argv[3]);
+  } catch {
+    console.error('E_SIGNATURE: Could not sign checksums.');
+    process.exitCode = 1;
+  }
 }

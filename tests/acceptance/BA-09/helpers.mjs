@@ -24,7 +24,11 @@ export async function loadMain() {
   const tree = path.join(dir, 'tree');
   fs.mkdirSync(tree);
   try {
-    execFileSync('git', ['-C', repoRoot, 'archive', '--format=tar', '-o', tarFile, MAIN_COMMIT, 'package.json', 'packages/core/src'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    execFileSync(
+      'git',
+      ['-C', repoRoot, 'archive', '--format=tar', '-o', tarFile, MAIN_COMMIT, 'package.json', 'packages/core/src'],
+      { stdio: ['ignore', 'ignore', 'pipe'] }
+    );
     execFileSync('tar', ['-xf', tarFile, '-C', tree], { stdio: ['ignore', 'ignore', 'pipe'] });
     fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(tree, 'node_modules'), 'dir');
     const retrieval = await import(pathToFileURL(path.join(tree, 'packages/core/src/retrieval/index.mjs')).href);
@@ -55,7 +59,12 @@ export function removeDir(dir) {
 }
 
 /** Provenance record block (list item form) with overrides; each value is raw YAML text. */
-export function record({ date = '"2026-11-01"', evidence = '"review note"', scope = '"production-like"', source = '"raw/a-evidence.md"' } = {}) {
+export function record({
+  date = '"2026-11-01"',
+  evidence = '"review note"',
+  scope = '"production-like"',
+  source = '"raw/a-evidence.md"',
+} = {}) {
   return `verified:\n  - date: ${date}\n    evidence: ${evidence}\n    scope: ${scope}\n    source: ${source}\n`;
 }
 

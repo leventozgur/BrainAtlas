@@ -8,81 +8,183 @@ import { defaultConfig, saveConfig } from '../../../packages/core/src/config/ind
 import { commands } from '../../../modules/semantic/src/index.mjs';
 
 async function fixture(t, overrides = {}) {
-  const root = await mkdtemp(join(tmpdir(), 'semantic-setup-')); t.after(() => rm(root, { recursive: true, force: true }));
-  const vault = join(root, 'vault'); await mkdir(join(vault, 'wiki'), { recursive: true }); await writeFile(join(vault, 'wiki', 'page.md'), '# Topic\nUseful content');
-  const config = defaultConfig('full'); config.vault.path = vault; config.semantic.dims = 2; config.retrieval.budgetChars = 4321;
-  const paths = { stateDir: join(root, 'state'), configFile: join(root, 'config', 'config.json') }; await saveConfig(config, { paths });
-  const calls = []; const execs = [];
-  const ctx = { config, paths, env: { HOME: root, PATH: join(root, 'bin') }, isTTY: false, platform: 'linux', totalmem: () => 8 * 1024 ** 3,
-    access: async path => { if (!path.endsWith('/ollama')) throw new Error(); },
-    execFile: async (...args) => { execs.push(args); }, progress: () => {},
-    fetchImpl: async (url, options) => { calls.push([new URL(url).pathname, options.method]);
+  const root = await mkdtemp(join(tmpdir(), 'semantic-setup-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const vault = join(root, 'vault');
+  await mkdir(join(vault, 'wiki'), { recursive: true });
+  await writeFile(join(vault, 'wiki', 'page.md'), '# Topic\nUseful content');
+  const config = defaultConfig('full');
+  config.vault.path = vault;
+  config.semantic.dims = 2;
+  config.retrieval.budgetChars = 4321;
+  const paths = { stateDir: join(root, 'state'), configFile: join(root, 'config', 'config.json') };
+  await saveConfig(config, { paths });
+  const calls = [];
+  const execs = [];
+  const ctx = {
+    config,
+    paths,
+    env: { HOME: root, PATH: join(root, 'bin') },
+    isTTY: false,
+    platform: 'linux',
+    totalmem: () => 8 * 1024 ** 3,
+    access: async (path) => {
+      if (!path.endsWith('/ollama')) throw new Error();
+    },
+    execFile: async (...args) => {
+      execs.push(args);
+    },
+    progress: () => {},
+    fetchImpl: async (url, options) => {
+      calls.push([new URL(url).pathname, options.method]);
       if (url.endsWith('/api/version')) return { ok: true, json: async () => ({ version: '1' }) };
-      if (url.endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [{ name: config.semantic.model }] }) };
-      if (url.endsWith('/api/pull')) return { ok: true, body: (async function* () { yield Buffer.from('{"status":"success"}\n'); })() };
-      if (url.endsWith('/api/embed')) { const body = JSON.parse(options.body); return { ok: true, json: async () => ({ embeddings: body.input.map(() => [1, 0]) }) }; }
-      throw new Error(); }, ...overrides };
+      if (url.endsWith('/api/tags'))
+        return { ok: true, json: async () => ({ models: [{ name: config.semantic.model }] }) };
+      if (url.endsWith('/api/pull'))
+        return {
+          ok: true,
+          body: (async function* () {
+            yield Buffer.from('{"status":"success"}\n');
+          })(),
+        };
+      if (url.endsWith('/api/embed')) {
+        const body = JSON.parse(options.body);
+        return { ok: true, json: async () => ({ embeddings: body.input.map(() => [1, 0]) }) };
+      }
+      throw new Error();
+    },
+    ...overrides,
+  };
   return { root, config, paths, ctx, calls, execs, before: await readFile(paths.configFile, 'utf8') };
 }
-const run = async (ctx, args = ['--yes']) => { const result = await commands.semanticSetup([...args, '--json'], ctx); return { ...result, report: JSON.parse(result.output) }; };
-test('setup enables last, preserves config and is idempotent', async t => {
-  const f = await fixture(t); const first = await run(f.ctx); assert.equal(first.exitCode, 0);
-  const cfg = JSON.parse(await readFile(f.paths.configFile)); assert.equal(cfg.semantic.enabled, true); assert.equal(cfg.retrieval.budgetChars, 4321);
-  const indexBefore = await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8'); f.ctx.config = cfg;
-  const second = await run(f.ctx); assert.equal(second.report.steps.index.status, 'skipped'); assert.equal(second.report.steps.config.status, 'skipped');
+const run = async (ctx, args = ['--yes']) => {
+  const result = await commands.semanticSetup([...args, '--json'], ctx);
+  return { ...result, report: JSON.parse(result.output) };
+};
+test('setup enables last, preserves config and is idempotent', async (t) => {
+  const f = await fixture(t);
+  const first = await run(f.ctx);
+  assert.equal(first.exitCode, 0);
+  const cfg = JSON.parse(await readFile(f.paths.configFile));
+  assert.equal(cfg.semantic.enabled, true);
+  assert.equal(cfg.retrieval.budgetChars, 4321);
+  const indexBefore = await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8');
+  f.ctx.config = cfg;
+  const second = await run(f.ctx);
+  assert.equal(second.report.steps.index.status, 'skipped');
+  assert.equal(second.report.steps.config.status, 'skipped');
   assert.equal(await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8'), indexBefore);
   assert.ok(f.execs.every(([, args]) => JSON.stringify(args) === '["--version"]'));
 });
-test('dry and noninteractive runs use only GET and do not write', async t => {
-  for (const args of [[], ['--dry-run'], ['--dry-run', '--yes']]) { const f = await fixture(t); const result = await run(f.ctx, args); assert.equal(result.report.dryRun, true); assert.deepEqual(f.calls, [['/api/version', 'GET'], ['/api/tags', 'GET']]); assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before); await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.json'))); }
-});
-test('failure paths preserve config and provide next action', async t => {
-  for (const failure of ['ollama', 'server', 'model', 'index', 'probe']) {
-    const f = await fixture(t); const fetch = f.ctx.fetchImpl; let embeds = 0;
-    if (failure === 'ollama') f.ctx.access = async () => { throw new Error(); };
-    else f.ctx.fetchImpl = async (url, options) => {
-      if (failure === 'server' && url.endsWith('/api/version')) throw new Error();
-      if (failure === 'model' && url.endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [] }) };
-      if (failure === 'model' && url.endsWith('/api/pull')) throw new Error();
-      if (url.endsWith('/api/embed') && (++embeds === (failure === 'index' ? 1 : failure === 'probe' ? 2 : 999))) throw new Error();
-      return fetch(url, options);
-    };
-    const result = await run(f.ctx); assert.equal(result.exitCode, 2, failure); assert.equal(result.report.steps[failure].status, 'action-needed'); assert.ok(result.report.next); assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
+test('dry and noninteractive runs use only GET and do not write', async (t) => {
+  for (const args of [[], ['--dry-run'], ['--dry-run', '--yes']]) {
+    const f = await fixture(t);
+    const result = await run(f.ctx, args);
+    assert.equal(result.report.dryRun, true);
+    assert.deepEqual(f.calls, [
+      ['/api/version', 'GET'],
+      ['/api/tags', 'GET'],
+    ]);
+    assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
+    await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.json')));
   }
 });
-test('model pull and mode use configured values', async t => {
-  const f = await fixture(t); const fetch = f.ctx.fetchImpl; let pull;
-  f.ctx.fetchImpl = async (url, options) => { if (url.endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [] }) }; if (url.endsWith('/api/pull')) pull = JSON.parse(options.body); return fetch(url, options); };
-  const result = await run(f.ctx, ['--yes', '--mode', 'rrf']); assert.equal(result.exitCode, 0); assert.equal(pull.model, f.config.semantic.model); assert.equal(JSON.parse(await readFile(f.paths.configFile)).semantic.mode, 'rrf');
+test('failure paths preserve config and provide next action', async (t) => {
+  for (const failure of ['ollama', 'server', 'model', 'index', 'probe']) {
+    const f = await fixture(t);
+    const fetch = f.ctx.fetchImpl;
+    let embeds = 0;
+    if (failure === 'ollama')
+      f.ctx.access = async () => {
+        throw new Error();
+      };
+    else
+      f.ctx.fetchImpl = async (url, options) => {
+        if (failure === 'server' && url.endsWith('/api/version')) throw new Error();
+        if (failure === 'model' && url.endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [] }) };
+        if (failure === 'model' && url.endsWith('/api/pull')) throw new Error();
+        if (url.endsWith('/api/embed') && ++embeds === (failure === 'index' ? 1 : failure === 'probe' ? 2 : 999))
+          throw new Error();
+        return fetch(url, options);
+      };
+    const result = await run(f.ctx);
+    assert.equal(result.exitCode, 2, failure);
+    assert.equal(result.report.steps[failure].status, 'action-needed');
+    assert.ok(result.report.next);
+    assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
+  }
 });
-test('remote and credential URLs are rejected without network', async t => {
-  for (const baseUrl of ['https://example.com', 'http://user:pass@127.0.0.1']) { const f = await fixture(t); f.ctx.config.semantic.baseUrl = baseUrl; await assert.rejects(run(f.ctx), { code: 'E_SEMANTIC_PROVIDER' }); assert.equal(f.calls.length, 0); assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before); }
+test('model pull and mode use configured values', async (t) => {
+  const f = await fixture(t);
+  const fetch = f.ctx.fetchImpl;
+  let pull;
+  f.ctx.fetchImpl = async (url, options) => {
+    if (url.endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [] }) };
+    if (url.endsWith('/api/pull')) pull = JSON.parse(options.body);
+    return fetch(url, options);
+  };
+  const result = await run(f.ctx, ['--yes', '--mode', 'rrf']);
+  assert.equal(result.exitCode, 0);
+  assert.equal(pull.model, f.config.semantic.model);
+  assert.equal(JSON.parse(await readFile(f.paths.configFile)).semantic.mode, 'rrf');
 });
-test('interactive consent is required and declining changes nothing', async t => {
+test('remote and credential URLs are rejected without network', async (t) => {
+  for (const baseUrl of ['https://example.com', 'http://user:pass@127.0.0.1']) {
+    const f = await fixture(t);
+    f.ctx.config.semantic.baseUrl = baseUrl;
+    await assert.rejects(run(f.ctx), { code: 'E_SEMANTIC_PROVIDER' });
+    assert.equal(f.calls.length, 0);
+    assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
+  }
+});
+test('interactive consent is required and declining changes nothing', async (t) => {
   const f = await fixture(t, { isTTY: true, prompt: async () => false });
-  const result = await run(f.ctx, []); assert.equal(result.exitCode, 2); assert.equal(result.report.steps.index.status, 'action-needed');
-  assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before); assert.ok(f.calls.every(([, method]) => method === 'GET'));
-});
-test('preflight failures and low-resource warnings are safe', async t => {
-  const f = await fixture(t, { totalmem: () => 1, statfs: async () => ({ bavail: 1, bsize: 1 }) });
-  const result = await run(f.ctx, ['--dry-run']); assert.match(result.report.steps.preflight.reason, /6 GB/); assert.match(result.report.steps.preflight.reason, /1 GB/);
-  const g = await fixture(t); await rm(join(g.config.vault.path, 'wiki'), { recursive: true }); const missing = await run(g.ctx);
-  assert.equal(missing.report.steps.preflight.status, 'action-needed'); assert.equal(await readFile(g.paths.configFile, 'utf8'), g.before); assert.equal(g.calls.length, 0);
-});
-test('slow indexing asks once after ETA and retains progress when declined', async t => {
-  const f = await fixture(t, { isTTY: true });
-  for (let i = 0; i < 4; i++) await writeFile(join(f.config.vault.path, 'wiki', `${i}.md`), `# Page ${i}\nContent ${i}`);
-  f.config.semantic.indexBatchSize = 1;
-  let clock = 0, prompts = 0; const messages = []; const fetch = f.ctx.fetchImpl;
-  f.ctx.now = () => clock; f.ctx.prompt = async () => ++prompts === 1; f.ctx.progress = message => messages.push(message);
-  f.ctx.fetchImpl = async (url, options) => { const result = await fetch(url, options); if (url.endsWith('/api/embed')) clock += 2000000; return result; };
   const result = await run(f.ctx, []);
-  assert.equal(result.report.steps.index.status, 'action-needed'); assert.equal(prompts, 2);
-  assert.match(messages.join(' '), /more than an hour/); assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
-  const partial = JSON.parse(await readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json'), 'utf8')); assert.equal(Object.keys(partial.vectors).length, 1);
+  assert.equal(result.exitCode, 2);
+  assert.equal(result.report.steps.index.status, 'action-needed');
+  assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
+  assert.ok(f.calls.every(([, method]) => method === 'GET'));
 });
-test('dry run reports pending chunks without writes', async t => {
-  const f = await fixture(t); const result = await run(f.ctx, ['--dry-run']);
+test('preflight failures and low-resource warnings are safe', async (t) => {
+  const f = await fixture(t, { totalmem: () => 1, statfs: async () => ({ bavail: 1, bsize: 1 }) });
+  const result = await run(f.ctx, ['--dry-run']);
+  assert.match(result.report.steps.preflight.reason, /6 GB/);
+  assert.match(result.report.steps.preflight.reason, /1 GB/);
+  const g = await fixture(t);
+  await rm(join(g.config.vault.path, 'wiki'), { recursive: true });
+  const missing = await run(g.ctx);
+  assert.equal(missing.report.steps.preflight.status, 'action-needed');
+  assert.equal(await readFile(g.paths.configFile, 'utf8'), g.before);
+  assert.equal(g.calls.length, 0);
+});
+test('slow indexing asks once after ETA and retains progress when declined', async (t) => {
+  const f = await fixture(t, { isTTY: true });
+  for (let i = 0; i < 4; i++)
+    await writeFile(join(f.config.vault.path, 'wiki', `${i}.md`), `# Page ${i}\nContent ${i}`);
+  f.config.semantic.indexBatchSize = 1;
+  let clock = 0,
+    prompts = 0;
+  const messages = [];
+  const fetch = f.ctx.fetchImpl;
+  f.ctx.now = () => clock;
+  f.ctx.prompt = async () => ++prompts === 1;
+  f.ctx.progress = (message) => messages.push(message);
+  f.ctx.fetchImpl = async (url, options) => {
+    const result = await fetch(url, options);
+    if (url.endsWith('/api/embed')) clock += 2000000;
+    return result;
+  };
+  const result = await run(f.ctx, []);
+  assert.equal(result.report.steps.index.status, 'action-needed');
+  assert.equal(prompts, 2);
+  assert.match(messages.join(' '), /more than an hour/);
+  assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
+  const partial = JSON.parse(await readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json'), 'utf8'));
+  assert.equal(Object.keys(partial.vectors).length, 1);
+});
+test('dry run reports pending chunks without writes', async (t) => {
+  const f = await fixture(t);
+  const result = await run(f.ctx, ['--dry-run']);
   assert.match(result.report.steps.index.reason, /1 chunks; duration depends on hardware/);
   await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json')));
 });
@@ -90,79 +192,131 @@ test('dry run reports pending chunks without writes', async t => {
 // Records every stderr chunk and every prompt in order; restores stderr when finished.
 async function withStderr(events, work) {
   const original = process.stderr.write;
-  process.stderr.write = (chunk, ...rest) => { events.push({ type: 'stderr', text: String(chunk) }); rest.find(item => typeof item === 'function')?.(); return true; };
-  try { return await work(); } finally { process.stderr.write = original; }
+  process.stderr.write = (chunk, ...rest) => {
+    events.push({ type: 'stderr', text: String(chunk) });
+    rest.find((item) => typeof item === 'function')?.();
+    return true;
+  };
+  try {
+    return await work();
+  } finally {
+    process.stderr.write = original;
+  }
 }
 // An unterminated carriage-return progress line may only be followed by another update of itself or by a newline;
 // anything else (ETA notice, prompt, step output) would continue on the same terminal line, and the last chunk must close it.
 function assertProgressLineTerminated(events) {
-  const isOpen = event => event.type === 'stderr' && event.text.startsWith('\r') && !event.text.includes('\n');
+  const isOpen = (event) => event.type === 'stderr' && event.text.startsWith('\r') && !event.text.includes('\n');
   events.forEach((event, i) => {
     if (!isOpen(event)) return;
     const next = events[i + 1];
-    assert.ok(next && next.type === 'stderr' && (next.text === '\n' || isOpen(next)), `chunk ${i} (${JSON.stringify(event.text)}) is followed by ${JSON.stringify(next)}`);
+    assert.ok(
+      next && next.type === 'stderr' && (next.text === '\n' || isOpen(next)),
+      `chunk ${i} (${JSON.stringify(event.text)}) is followed by ${JSON.stringify(next)}`
+    );
   });
 }
 async function slowTtyFixture(t, prompt) {
   const f = await fixture(t, { isTTY: true });
-  for (let i = 0; i < 4; i++) await writeFile(join(f.config.vault.path, 'wiki', `${i}.md`), `# Page ${i}\nContent ${i}`);
+  for (let i = 0; i < 4; i++)
+    await writeFile(join(f.config.vault.path, 'wiki', `${i}.md`), `# Page ${i}\nContent ${i}`);
   f.config.semantic.indexBatchSize = 1;
-  let clock = 1_700_000_000_000; const fetch = f.ctx.fetchImpl; delete f.ctx.progress;
-  f.ctx.now = () => clock; f.ctx.prompt = prompt;
-  f.ctx.fetchImpl = async (url, options) => { const result = await fetch(url, options); if (url.endsWith('/api/embed')) clock += 400000; return result; };
+  let clock = 1_700_000_000_000;
+  const fetch = f.ctx.fetchImpl;
+  delete f.ctx.progress;
+  f.ctx.now = () => clock;
+  f.ctx.prompt = prompt;
+  f.ctx.fetchImpl = async (url, options) => {
+    const result = await fetch(url, options);
+    if (url.endsWith('/api/embed')) clock += 400000;
+    return result;
+  };
   return f;
 }
-test('TTY progress line is terminated before the ETA notice and the continue prompt', async t => {
+test('TTY progress line is terminated before the ETA notice and the continue prompt', async (t) => {
   const events = [];
-  const f = await slowTtyFixture(t, async question => { events.push({ type: 'prompt', text: question }); return true; });
+  const f = await slowTtyFixture(t, async (question) => {
+    events.push({ type: 'prompt', text: question });
+    return true;
+  });
   const result = await withStderr(events, () => run(f.ctx, []));
   assert.equal(result.exitCode, 0);
-  assert.ok(events.some(event => event.type === 'stderr' && event.text.startsWith('\rIndex:')), 'progress was drawn with carriage returns');
-  const notice = events.findIndex(event => event.type === 'stderr' && /Estimated remaining time/u.test(event.text));
-  const prompt = events.findIndex(event => event.type === 'prompt' && /Continue indexing/u.test(event.text));
+  assert.ok(
+    events.some((event) => event.type === 'stderr' && event.text.startsWith('\rIndex:')),
+    'progress was drawn with carriage returns'
+  );
+  const notice = events.findIndex((event) => event.type === 'stderr' && /Estimated remaining time/u.test(event.text));
+  const prompt = events.findIndex((event) => event.type === 'prompt' && /Continue indexing/u.test(event.text));
   assert.ok(notice > 0 && prompt > notice);
   assert.equal(events[notice - 1].text, '\n', 'newline closes the progress line before the ETA notice');
   assert.equal(events[notice].text.includes('\r'), false);
   assertProgressLineTerminated(events);
 });
-test('TTY progress line is terminated when indexing is declined or fails', async t => {
+test('TTY progress line is terminated when indexing is declined or fails', async (t) => {
   const declined = [];
-  const f = await slowTtyFixture(t, async question => { declined.push({ type: 'prompt', text: question }); return !/Continue indexing/u.test(question); });
+  const f = await slowTtyFixture(t, async (question) => {
+    declined.push({ type: 'prompt', text: question });
+    return !/Continue indexing/u.test(question);
+  });
   const result = await withStderr(declined, () => run(f.ctx, []));
   assert.equal(result.report.steps.index.status, 'action-needed');
   assertProgressLineTerminated(declined);
   const failed = [];
-  const g = await slowTtyFixture(t, async () => true); const fetch = g.ctx.fetchImpl; let embeds = 0;
-  g.ctx.fetchImpl = async (url, options) => { if (url.endsWith('/api/embed') && ++embeds === 3) throw new Error(); return fetch(url, options); };
+  const g = await slowTtyFixture(t, async () => true);
+  const fetch = g.ctx.fetchImpl;
+  let embeds = 0;
+  g.ctx.fetchImpl = async (url, options) => {
+    if (url.endsWith('/api/embed') && ++embeds === 3) throw new Error();
+    return fetch(url, options);
+  };
   const failure = await withStderr(failed, () => run(g.ctx, ['--yes']));
   assert.equal(failure.report.steps.index.status, 'action-needed');
-  assert.ok(failed.some(event => event.text.startsWith('\rIndex:')));
+  assert.ok(failed.some((event) => event.text.startsWith('\rIndex:')));
   assert.equal(failed.at(-1).text, '\n', 'the last stderr chunk ends the open progress line');
   assertProgressLineTerminated(failed);
 });
-test('TTY progress line is terminated after a successful index and output stays unchanged without TTY', async t => {
+test('TTY progress line is terminated after a successful index and output stays unchanged without TTY', async (t) => {
   const events = [];
   const f = await slowTtyFixture(t, async () => true);
   assert.equal((await withStderr(events, () => run(f.ctx, ['--yes']))).exitCode, 0);
-  assert.equal(events.at(-1).text, '\n'); assertProgressLineTerminated(events);
+  assert.equal(events.at(-1).text, '\n');
+  assertProgressLineTerminated(events);
   const plain = [];
-  const g = await fixture(t); delete g.ctx.progress;
+  const g = await fixture(t);
+  delete g.ctx.progress;
   assert.equal((await withStderr(plain, () => run(g.ctx, ['--yes']))).exitCode, 0);
-  assert.ok(plain.every(event => !event.text.includes('\r') && event.text !== '\n'), 'non-TTY output has no carriage returns or bare newlines');
+  assert.ok(
+    plain.every((event) => !event.text.includes('\r') && event.text !== '\n'),
+    'non-TTY output has no carriage returns or bare newlines'
+  );
 });
-test('another running indexing operation is reported as action-needed without leaking details', async t => {
+test('another running indexing operation is reported as action-needed without leaking details', async (t) => {
   for (const args of [['--yes'], ['--yes', '--mode', 'rrf']]) {
-    const f = await fixture(t); const dir = join(f.paths.stateDir, 'semantic'); await mkdir(dir, { recursive: true });
-    const lock = join(dir, 'index.lock'); const content = JSON.stringify({ pid: process.pid, startedAt: Date.now() }); await writeFile(lock, content);
+    const f = await fixture(t);
+    const dir = join(f.paths.stateDir, 'semantic');
+    await mkdir(dir, { recursive: true });
+    const lock = join(dir, 'index.lock');
+    const content = JSON.stringify({ pid: process.pid, startedAt: Date.now() });
+    await writeFile(lock, content);
     const result = await run(f.ctx, args);
-    assert.equal(result.exitCode, 2); assert.equal(result.report.steps.index.status, 'action-needed');
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.report.steps.index.status, 'action-needed');
     assert.equal(result.report.steps.index.reason, 'Another indexing operation is running.');
     assert.equal(result.report.next, `brainatlas semanticSetup --yes${args.includes('--mode') ? ' --mode rrf' : ''}`);
-    assert.doesNotMatch(result.output, new RegExp(`${process.pid}|index\\.lock|${f.root.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}`, 'u'), 'no pid or path in the output');
-    assert.equal(result.report.steps.probe.status, 'skipped'); assert.equal(result.report.steps.config.status, 'skipped');
-    assert.ok(f.calls.every(([path]) => path !== '/api/embed'), 'nothing was embedded');
+    assert.doesNotMatch(
+      result.output,
+      new RegExp(`${process.pid}|index\\.lock|${f.root.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}`, 'u'),
+      'no pid or path in the output'
+    );
+    assert.equal(result.report.steps.probe.status, 'skipped');
+    assert.equal(result.report.steps.config.status, 'skipped');
+    assert.ok(
+      f.calls.every(([path]) => path !== '/api/embed'),
+      'nothing was embedded'
+    );
     assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before, 'config unchanged');
     assert.equal(await readFile(lock, 'utf8'), content, 'foreign lock preserved');
-    const text = await commands.semanticSetup(args, f.ctx); assert.match(text.output, /^index: action-needed — Another indexing operation is running\.$/mu);
+    const text = await commands.semanticSetup(args, f.ctx);
+    assert.match(text.output, /^index: action-needed — Another indexing operation is running\.$/mu);
   }
 });

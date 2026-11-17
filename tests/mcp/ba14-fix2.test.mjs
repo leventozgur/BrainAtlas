@@ -27,8 +27,13 @@ async function fixture(t, files) {
   config.vault.path = vault;
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba14-fix2-test', version: '1.0.0' });
   await client.connect(transport);
   t.after(() => client.close());
@@ -41,7 +46,8 @@ async function update(client) {
 }
 
 test('fenced code blocks: a stale-looking entry inside a fence is neither removed nor counted, a fenced heading is not a heading', async (t) => {
-  const index = '# Wiki Index\n\n## entities\n\n```\n- [Kod](entities/silinmis.md) — örnek\n```\n\n- [A](entities/a.md)\n';
+  const index =
+    '# Wiki Index\n\n## entities\n\n```\n- [Kod](entities/silinmis.md) — örnek\n```\n\n- [A](entities/a.md)\n';
   const f = await fixture(t, { 'entities/a.md': page('A'), 'index.md': index });
   assert.deepEqual(await update(f.client), { indexed: 1, added: 0, removed: 0 });
   assert.equal(await readFile(resolve(f.wiki, 'index.md'), 'utf8'), index);
@@ -74,7 +80,11 @@ test('a page at the Wiki root is listed under the Pages category', async (t) => 
 
 test('parentheses in a page path: escaped form written, balanced unescaped form read as linked, second run adds nothing', async (t) => {
   const index = '# Wiki Index\n\n## entities\n\n- [C](entities/c(d).md) — elle\n';
-  const f = await fixture(t, { 'entities/a(b).md': page('Parantezli'), 'entities/c(d).md': page('C'), 'index.md': index });
+  const f = await fixture(t, {
+    'entities/a(b).md': page('Parantezli'),
+    'entities/c(d).md': page('C'),
+    'index.md': index,
+  });
   assert.deepEqual(await update(f.client), { indexed: 2, added: 1, removed: 0 });
   const out = await readFile(resolve(f.wiki, 'index.md'), 'utf8');
   assert.ok(out.includes('- [Parantezli](entities/a\\(b\\).md)'), out);

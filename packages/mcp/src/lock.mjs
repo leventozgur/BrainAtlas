@@ -28,8 +28,12 @@ function parseLock(text) {
 
 /** `kill(pid, 0)` probes existence only; EPERM means the process exists under another user. */
 function pidAlive(pid) {
-  try { process.kill(pid, 0); return true; }
-  catch (error) { return error?.code === 'EPERM'; }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
 }
 
 /**
@@ -50,8 +54,11 @@ async function reclaimIfStale(path, staleMs) {
   }
   if (!dead && Date.now() - recorded <= staleMs) return false;
   const aside = `${path}.${randomUUID()}.stale`;
-  try { await rename(path, aside); }
-  catch (error) { return error?.code === 'ENOENT'; }
+  try {
+    await rename(path, aside);
+  } catch (error) {
+    return error?.code === 'ENOENT';
+  }
   const moved = await readFile(aside, 'utf8').catch(() => null);
   if (moved !== text) {
     // A fresh lock took the place of the stale one between the read and the rename: put it back if the path is free.
@@ -99,7 +106,9 @@ export async function releaseLock(path, token) {
   try {
     const text = await readFile(path, 'utf8');
     if (parseLock(text).token === token) await unlink(path);
-  } catch { /* already gone or taken over; nothing of ours is left to remove */ }
+  } catch {
+    /* already gone or taken over; nothing of ours is left to remove */
+  }
 }
 
 /** Runs `work` while holding the lock at `path`; the lock is released even when `work` throws. */

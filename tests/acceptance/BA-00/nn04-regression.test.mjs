@@ -8,20 +8,34 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { CORPUS_BA, DEV } from './helpers.mjs';
 
-const walk = (dir) => readdirSync(dir).flatMap((name) => {
-  const p = join(dir, name);
-  return statSync(p).isDirectory() ? walk(p) : [p];
-});
-const pages = walk(CORPUS_BA).filter((f) => f.endsWith('.md')).map((f) => readFileSync(f, 'utf8').toLowerCase());
+const walk = (dir) =>
+  readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name);
+    return statSync(p).isDirectory() ? walk(p) : [p];
+  });
+const pages = walk(CORPUS_BA)
+  .filter((f) => f.endsWith('.md'))
+  .map((f) => readFileSync(f, 'utf8').toLowerCase());
 const corpusText = pages.join('\n');
 const orchardPages = pages.filter((p) => p.includes('orchard'));
 const nn04 = JSON.parse(readFileSync(join(DEV, 'near-negative-cases.json'), 'utf8')).find((c) => c.id === 'nn-04');
 
 // Answer terms for the asked quantity (concurrent connections per client).
 const ANSWER_TERMS = [
-  'concurrent', 'concurrency', 'max connections', 'maximum connections', 'connection limit', 'connection cap',
-  'connections per', 'simultaneous connections', 'open connections', 'held open', 'hold open', 'keep-alive',
-  'persistent connection', 'socket',
+  'concurrent',
+  'concurrency',
+  'max connections',
+  'maximum connections',
+  'connection limit',
+  'connection cap',
+  'connections per',
+  'simultaneous connections',
+  'open connections',
+  'held open',
+  'hold open',
+  'keep-alive',
+  'persistent connection',
+  'socket',
 ];
 // Connection wording that would answer the Orchard-specific premise. Checked on Orchard pages only, because the
 // unrelated database connection pool in ops/incident-2026-02-cache-stampede.md is not an Orchard API statement.

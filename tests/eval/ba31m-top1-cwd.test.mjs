@@ -6,7 +6,22 @@ import assert from 'node:assert/strict';
 import { summarizeHookRecords } from '../../eval/lib/hook-records.mjs';
 
 const close = (a, b, msg = '') => assert.ok(Math.abs(a - b) < 1e-9, `${msg} expected ${b}, got ${a}`);
-const rec = (over) => ({ category: 'c', kind: 'knowledge', cwd: null, abstain: false, relevant: [], excluded: [], injected: [], chars: 0, durationMs: 1, meta: [], poisoned: false, sectionHit: null, sectionSource: null, ...over });
+const rec = (over) => ({
+  category: 'c',
+  kind: 'knowledge',
+  cwd: null,
+  abstain: false,
+  relevant: [],
+  excluded: [],
+  injected: [],
+  chars: 0,
+  durationMs: 1,
+  meta: [],
+  poisoned: false,
+  sectionHit: null,
+  sectionSource: null,
+  ...over,
+});
 
 // R1: cwd a, answerable, first block relevant; excluded page injected second only.
 // R2: cwd b, answerable, first block is the excluded (other project) page.
@@ -29,7 +44,15 @@ test('BA-31m top-level top1 rates: relevant 2 of 4 answerable; excluded 1 of 3 c
 
 test('BA-31m withCwd: only cases with a cwd (R1, R2, R4), same group shape plus the top-1 rates', () => {
   const w = summarizeHookRecords(TOY).withCwd;
-  assert.deepEqual(Object.keys(w).sort(), ['falseInjectionRate', 'injectionRate', 'missRate', 'n', 'precision', 'top1ExcludedRate', 'top1RelevantRate']);
+  assert.deepEqual(Object.keys(w).sort(), [
+    'falseInjectionRate',
+    'injectionRate',
+    'missRate',
+    'n',
+    'precision',
+    'top1ExcludedRate',
+    'top1RelevantRate',
+  ]);
   assert.equal(w.n, 3);
   close(w.injectionRate, 2 / 3, 'injectionRate: R1, R2 inject');
   close(w.missRate, 2 / 3, 'missRate: answerable R1, R2, R4; R1 hits');

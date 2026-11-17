@@ -2,7 +2,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import { BrainAtlasError, atomicWriteFile, runCommand as coreRunCommand } from '../../../packages/core/src/util/index.mjs';
+import {
+  BrainAtlasError,
+  atomicWriteFile,
+  runCommand as coreRunCommand,
+} from '../../../packages/core/src/util/index.mjs';
 import { mergeCanonicalPath } from '../../sync-engine/src/merge.mjs';
 import { ConflictError, SyncTransportError, validateTransportPath } from '../../sync-engine/src/transport.mjs';
 import { resolveHostId } from '../../sync-engine/src/host-id.mjs';
@@ -22,10 +26,17 @@ function transportPath(path) {
 
 function errorCodeFrom(stderr, code) {
   const message = String(stderr ?? '').toLowerCase();
-  if (/host key verification failed|remote host identification has changed|no .* host key is known|host key .* not found/.test(message)) return 'E_AUTH';
-  if (/authentication failed|permission denied|could not read username|access denied|publickey/.test(message)) return 'E_AUTH';
+  if (
+    /host key verification failed|remote host identification has changed|no .* host key is known|host key .* not found/.test(
+      message
+    )
+  )
+    return 'E_AUTH';
+  if (/authentication failed|permission denied|could not read username|access denied|publickey/.test(message))
+    return 'E_AUTH';
   if (/quota|no space left/.test(message)) return 'E_QUOTA';
-  if (/non-fast-forward|fetch first|not possible to fast-forward|would be overwritten/.test(message)) return 'E_CONFLICT';
+  if (/non-fast-forward|fetch first|not possible to fast-forward|would be overwritten/.test(message))
+    return 'E_CONFLICT';
   if (code === 'E_OFFLINE') return 'E_OFFLINE';
   return 'E_NETWORK';
 }
@@ -55,7 +66,9 @@ function redactRemote(value) {
       url.hash = '';
       return url.toString().replace(/%5Bredacted%5D/gi, '[redacted]');
     }
-  } catch { /* Keep malformed values from being echoed verbatim below. */ }
+  } catch {
+    /* Keep malformed values from being echoed verbatim below. */
+  }
   const safe = value
     .replace(/^((?:https?|ssh|git):\/\/)[^/?#]*@/i, '$1[redacted]@')
     .replace(/^([^/@:\s]+)@([^/:]+):/, '[redacted]@$2:')
@@ -67,9 +80,13 @@ function redactRemote(value) {
 function hasEmbeddedHttpsCredentials(value) {
   try {
     const url = new URL(value);
-    return /^https?:$/.test(url.protocol)
-      && (Boolean(url.username || url.password) || /(?:token|auth|password|secret|key)/i.test(url.search));
-  } catch { return false; }
+    return (
+      /^https?:$/.test(url.protocol) &&
+      (Boolean(url.username || url.password) || /(?:token|auth|password|secret|key)/i.test(url.search))
+    );
+  } catch {
+    return false;
+  }
 }
 
 function conflictCopyPath(path, host, timestamp, index = 0) {
@@ -82,12 +99,18 @@ function conflictCopyPath(path, host, timestamp, index = 0) {
 }
 
 function isoStamp(date) {
-  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  return date
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z');
 }
 
 function strictUtf8(bytes) {
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
-  catch { return null; }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -95,8 +118,21 @@ function strictUtf8(bytes) {
  * opens or modifies the vault's Git metadata.
  * @param {{stateDir?:string,remote?:string,branch?:string,authorName?:string,authorEmail?:string,env?:Record<string,string|undefined>,config?:object,hostId?:string,runCommand?:Function,now?:()=>Date,atomicWriter?:Function}} options
  */
-export function createGitTransport({ stateDir, remote, branch = 'main', authorName, authorEmail, env = process.env, config = {}, hostId: legacyHostId, runCommand = coreRunCommand, now = () => new Date(), atomicWriter = atomicWriteFile } = {}) {
-  if (typeof stateDir !== 'string' || !stateDir) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Git transport state is incomplete.');
+export function createGitTransport({
+  stateDir,
+  remote,
+  branch = 'main',
+  authorName,
+  authorEmail,
+  env = process.env,
+  config = {},
+  hostId: legacyHostId,
+  runCommand = coreRunCommand,
+  now = () => new Date(),
+  atomicWriter = atomicWriteFile,
+} = {}) {
+  if (typeof stateDir !== 'string' || !stateDir)
+    throw new BrainAtlasError('E_MODULE_CONTEXT', 'Git transport state is incomplete.');
   if (typeof runCommand !== 'function') throw new BrainAtlasError('E_ARGUMENT', 'Git command runner is invalid.');
   const syncDir = join(resolve(stateDir), 'sync');
   const repoDir = join(syncDir, 'git');
@@ -108,13 +144,17 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     hostId = await hostIdResolution;
     return hostId;
   }
-  function commitName() { return typeof authorName === 'string' && authorName.trim() ? authorName.trim() : `BrainAtlas Sync (${hostId})`; }
-  const commitEmail = typeof authorEmail === 'string' && authorEmail.trim() ? authorEmail.trim() : 'sync@brainatlas.invalid';
+  function commitName() {
+    return typeof authorName === 'string' && authorName.trim() ? authorName.trim() : `BrainAtlas Sync (${hostId})`;
+  }
+  const commitEmail =
+    typeof authorEmail === 'string' && authorEmail.trim() ? authorEmail.trim() : 'sync@brainatlas.invalid';
   let ready = false;
   let initialization;
 
   function configuredRemote() {
-    if (typeof remote !== 'string' || !remote.trim()) throw new BrainAtlasError('E_NOT_FOUND', 'Git remote is not configured.');
+    if (typeof remote !== 'string' || !remote.trim())
+      throw new BrainAtlasError('E_NOT_FOUND', 'Git remote is not configured.');
     return remote.trim();
   }
 
@@ -168,7 +208,9 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       assertOnline();
       await ensureDirectory(syncDir);
       const validBranch = await runCommand('git', gitArgs(['check-ref-format', '--branch', branch]), {
-        cwd: syncDir, env: commandEnv(), timeoutMs: COMMAND_TIMEOUT_MS,
+        cwd: syncDir,
+        env: commandEnv(),
+        timeoutMs: COMMAND_TIMEOUT_MS,
       }).catch(() => ({ code: 1 }));
       if (validBranch.code !== 0) throw new BrainAtlasError('E_ARGUMENT', 'Configured Git branch is invalid.');
       let exists = false;
@@ -176,11 +218,15 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
         const info = await lstat(repoDir);
         if (!info.isDirectory() || info.isSymbolicLink()) throw new SyncTransportError('E_INVALID_PATH');
         exists = true;
-      } catch (error) { if (!missing(error)) throw error; }
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
 
       if (!exists) {
         const result = await runCommand('git', gitArgs(['clone', '--', configuredRemote(), repoDir]), {
-          cwd: syncDir, env: commandEnv(), timeoutMs: COMMAND_TIMEOUT_MS,
+          cwd: syncDir,
+          env: commandEnv(),
+          timeoutMs: COMMAND_TIMEOUT_MS,
         }).catch((cause) => {
           if (cause?.code === 'E_OFFLINE') throw cause;
           throw new SyncTransportError(errorCodeFrom(cause?.message, cause?.code));
@@ -192,7 +238,8 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       }
 
       const top = await execute(['rev-parse', '--show-toplevel'], { allowFailure: true });
-      if (top.code !== 0 || await realpath(top.stdout.trim()) !== await realpath(repoDir)) throw new SyncTransportError('E_DEGRADED');
+      if (top.code !== 0 || (await realpath(top.stdout.trim())) !== (await realpath(repoDir)))
+        throw new SyncTransportError('E_DEGRADED');
       const url = await execute(['remote', 'get-url', 'origin'], { allowFailure: true });
       if (url.code !== 0) throw new SyncTransportError('E_DEGRADED');
       if (url.stdout.trim() !== configuredRemote()) {
@@ -209,16 +256,25 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       if (!defaultBranch) {
         const refs = await execute(['ls-remote', '--heads', 'origin'], { allowFailure: true });
         if (refs.code !== 0) throw new SyncTransportError(errorCodeFrom(refs.stderr, refs.code));
-        const branches = refs.stdout.split('\n').map((line) => line.match(/\trefs\/heads\/([^\s]+)$/)?.[1]).filter(Boolean);
+        const branches = refs.stdout
+          .split('\n')
+          .map((line) => line.match(/\trefs\/heads\/([^\s]+)$/)?.[1])
+          .filter(Boolean);
         remoteHasBranch = branches.includes(branch);
         if (branches.length === 1 && remoteHasBranch) defaultBranch = branch;
-        else if (branches.length) throw new BrainAtlasError('E_DEGRADED', 'Git remote has branches but no matching default branch configured.');
+        else if (branches.length)
+          throw new BrainAtlasError('E_DEGRADED', 'Git remote has branches but no matching default branch configured.');
       }
       if (defaultBranch && defaultBranch !== branch) {
-        throw new BrainAtlasError('E_DEGRADED', 'Git remote default branch does not match configured sync.options.branch.');
+        throw new BrainAtlasError(
+          'E_DEGRADED',
+          'Git remote default branch does not match configured sync.options.branch.'
+        );
       }
       if (!localHead && remoteHasBranch) {
-        const fetched = await execute(['fetch', 'origin', `refs/heads/${branch}:refs/remotes/origin/${branch}`], { allowFailure: true });
+        const fetched = await execute(['fetch', 'origin', `refs/heads/${branch}:refs/remotes/origin/${branch}`], {
+          allowFailure: true,
+        });
         if (fetched.code !== 0) throw new SyncTransportError(errorCodeFrom(fetched.stderr, fetched.code));
         const checkedOut = await execute(['checkout', '--track', `origin/${branch}`], { allowFailure: true });
         if (checkedOut.code !== 0) throw new SyncTransportError('E_DEGRADED');
@@ -230,8 +286,11 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       }
       ready = true;
     })();
-    try { await initialization; }
-    finally { initialization = undefined; }
+    try {
+      await initialization;
+    } finally {
+      initialization = undefined;
+    }
   }
 
   async function head() {
@@ -240,12 +299,14 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   }
 
   async function upstream() {
-    const result = await execute(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], { allowFailure: true });
+    const result = await execute(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], {
+      allowFailure: true,
+    });
     return result.code === 0 ? result.stdout.trim() : null;
   }
 
   async function hasUnpushedCommits() {
-    if (!await head()) return false;
+    if (!(await head())) return false;
     const tracked = await upstream();
     if (!tracked) return true;
     const result = await execute(['rev-list', '--count', `${tracked}..HEAD`], { allowFailure: true });
@@ -263,8 +324,8 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   }
 
   async function gitPull() {
-    if (!await head()) return false;
-    if (!await upstream()) return false;
+    if (!(await head())) return false;
+    if (!(await upstream())) return false;
     const result = await execute(['pull', '--rebase'], { allowFailure: true });
     if (result.code === 0) return false;
     if (await pullFailure()) return true;
@@ -272,7 +333,9 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   }
 
   async function changedPaths(base, localHead) {
-    const result = await execute(['diff', '--no-renames', '--name-only', '-z', base, localHead], { allowFailure: true });
+    const result = await execute(['diff', '--no-renames', '--name-only', '-z', base, localHead], {
+      allowFailure: true,
+    });
     if (result.code !== 0) throw new SyncTransportError('E_DEGRADED');
     return [...new Set(result.stdout.split('\0').filter(Boolean))].map(transportPath).sort();
   }
@@ -294,7 +357,9 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     try {
       const info = await lstat(target);
       if (!info.isFile() || info.isSymbolicLink()) throw new SyncTransportError('E_INVALID_PATH');
-    } catch (error) { if (!missing(error)) throw error; }
+    } catch (error) {
+      if (!missing(error)) throw error;
+    }
     const from = relative(repoDir, resolve(target));
     if (from === '..' || from.startsWith(`..${sep}`) || from === '') throw new SyncTransportError('E_INVALID_PATH');
     return target;
@@ -329,14 +394,20 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       try {
         const info = await lstat(current);
         if (!info.isDirectory() || info.isSymbolicLink()) return null;
-      } catch (error) { if (missing(error)) return null; throw error; }
+      } catch (error) {
+        if (missing(error)) return null;
+        throw error;
+      }
     }
     const target = join(current, parts.at(-1));
     try {
       const info = await lstat(target);
       if (!info.isFile() || info.isSymbolicLink()) return null;
       return await readFile(target);
-    } catch (error) { if (missing(error)) return null; throw error; }
+    } catch (error) {
+      if (missing(error)) return null;
+      throw error;
+    }
   }
 
   async function listFiles(directory = repoDir, prefix = '') {
@@ -345,7 +416,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     for (const entry of entries) {
       if (entry.name === '.git') continue;
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) rows.push(...await listFiles(join(directory, entry.name), relativePath));
+      if (entry.isDirectory()) rows.push(...(await listFiles(join(directory, entry.name), relativePath)));
       else if (entry.isFile()) rows.push(relativePath);
     }
     return rows;
@@ -361,7 +432,9 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   }
 
   async function pushOnce() {
-    const result = await execute(['push', '--set-upstream', 'origin', `HEAD:refs/heads/${branch}`], { allowFailure: true });
+    const result = await execute(['push', '--set-upstream', 'origin', `HEAD:refs/heads/${branch}`], {
+      allowFailure: true,
+    });
     return result;
   }
 
@@ -395,16 +468,24 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       snapshots.push(await addSnapshot(localHead));
       snapshots.push(await addSnapshot(remoteHead));
       for (const path of paths) {
-        const [baseBytes, localBytes, remoteBytes] = await Promise.all(snapshots.map((snapshot) => readSnapshotObject(snapshot, path)));
-        const remoteChanged = (baseBytes === null) !== (remoteBytes === null)
-          || (baseBytes && remoteBytes && !baseBytes.equals(remoteBytes));
+        const [baseBytes, localBytes, remoteBytes] = await Promise.all(
+          snapshots.map((snapshot) => readSnapshotObject(snapshot, path))
+        );
+        const remoteChanged =
+          (baseBytes === null) !== (remoteBytes === null) ||
+          (baseBytes && remoteBytes && !baseBytes.equals(remoteBytes));
         let content = localBytes;
         let conflictContent = null;
         if (remoteChanged && remoteBytes && localBytes && !localBytes.equals(remoteBytes)) {
           const baseText = baseBytes === null ? '' : strictUtf8(baseBytes);
           const localText = strictUtf8(localBytes);
           const remoteText = strictUtf8(remoteBytes);
-          if ((path === 'wiki/index.md' || path === 'wiki/log.md') && baseText !== null && localText !== null && remoteText !== null) {
+          if (
+            (path === 'wiki/index.md' || path === 'wiki/log.md') &&
+            baseText !== null &&
+            localText !== null &&
+            remoteText !== null
+          ) {
             const merged = mergeCanonicalPath(path, baseText, localText, remoteText);
             if (!merged.conflicts.length && merged.content !== null) content = Buffer.from(merged.content);
             else conflictContent = remoteBytes;
@@ -436,7 +517,10 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
         let copyPath;
         for (let index = 0; index < 100; index += 1) {
           const candidate = conflictCopyPath(plan.path, hostId, stamp, index);
-          if (!(await readObject(candidate))) { copyPath = candidate; break; }
+          if (!(await readObject(candidate))) {
+            copyPath = candidate;
+            break;
+          }
         }
         if (!copyPath) throw new SyncTransportError('E_DEGRADED');
         await writeObject(copyPath, plan.conflictContent);
@@ -449,15 +533,19 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     await ensureReady();
     assertOnline();
     const resolved = await gitPull();
-    if (resolved || await hasUnpushedCommits()) await pushWithRetries();
+    if (resolved || (await hasUnpushedCommits())) await pushWithRetries();
   }
 
   async function commitAndPush(message = 'sync: update objects') {
     await ensureReady();
-    const cleanMessage = typeof message === 'string' && message.trim()
-      // eslint-disable-next-line no-control-regex -- control characters are stripped from transport paths and commit messages on purpose
-      ? message.replace(/[\r\n\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 160)
-      : 'sync: update objects';
+    const cleanMessage =
+      typeof message === 'string' && message.trim()
+        ? message
+            // eslint-disable-next-line no-control-regex -- control characters are stripped from transport paths and commit messages on purpose
+            .replace(/[\r\n\u0000-\u001f\u007f]+/g, ' ')
+            .trim()
+            .slice(0, 160)
+        : 'sync: update objects';
     await stageAndCommit(cleanMessage);
     await pushWithRetries();
   }
@@ -469,11 +557,16 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       if (prefix) transportPath(prefix.endsWith('/') ? prefix.slice(0, -1) : prefix);
       await pull();
       const paths = await listFiles();
-      return Promise.all(paths.filter((path) => path.startsWith(prefix)).sort().map(async (path) => {
-        transportPath(path);
-        const bytes = await readObject(path);
-        return bytes ? { path, rev: sha256(bytes), size: bytes.byteLength } : null;
-      })).then((rows) => rows.filter(Boolean));
+      return Promise.all(
+        paths
+          .filter((path) => path.startsWith(prefix))
+          .sort()
+          .map(async (path) => {
+            transportPath(path);
+            const bytes = await readObject(path);
+            return bytes ? { path, rev: sha256(bytes), size: bytes.byteLength } : null;
+          })
+      ).then((rows) => rows.filter(Boolean));
     },
     async get(path) {
       transportPath(path);
@@ -485,7 +578,8 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     async put(path, bytes, options = {}) {
       transportPath(path);
       if (!(bytes instanceof Uint8Array)) throw new TypeError('Transport bytes must be a Uint8Array.');
-      if (!options || typeof options !== 'object' || Array.isArray(options)) throw new BrainAtlasError('E_ARGUMENT', 'Git put options are invalid.');
+      if (!options || typeof options !== 'object' || Array.isArray(options))
+        throw new BrainAtlasError('E_ARGUMENT', 'Git put options are invalid.');
       await ensureReady();
       if (options.ifAbsent === true && options.ifRev !== undefined) throw new ConflictError();
       const current = await readObject(path);
@@ -503,7 +597,8 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     /** @param {string} path @param {{ifRev?:string}} [options] */
     async delete(path, options = {}) {
       transportPath(path);
-      if (!options || typeof options !== 'object' || Array.isArray(options)) throw new BrainAtlasError('E_ARGUMENT', 'Git delete options are invalid.');
+      if (!options || typeof options !== 'object' || Array.isArray(options))
+        throw new BrainAtlasError('E_ARGUMENT', 'Git delete options are invalid.');
       await ensureReady();
       const current = await readObject(path);
       if (!current) throw new SyncTransportError('E_NOT_FOUND');
@@ -517,12 +612,21 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
     async status() {
       const hostId = await getHostId();
       if (!ready) {
-        try { await lstat(repoDir); }
-        catch (error) {
-          if (missing(error)) return {
-            mode: 'git', hostId, initialized: false, remote: redactRemote(configuredRemote()), branch,
-            ahead: 0, behind: 0, clean: true, lastSuccessfulSync: await lastSuccessfulSync(),
-          };
+        try {
+          await lstat(repoDir);
+        } catch (error) {
+          if (missing(error))
+            return {
+              mode: 'git',
+              hostId,
+              initialized: false,
+              remote: redactRemote(configuredRemote()),
+              branch,
+              ahead: 0,
+              behind: 0,
+              clean: true,
+              lastSuccessfulSync: await lastSuccessfulSync(),
+            };
           throw error;
         }
       }
@@ -530,15 +634,28 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       const status = await execute(['status', '--porcelain=v1', '--untracked-files=all']);
       const headId = await head();
       const currentBranch = await execute(['symbolic-ref', '--quiet', '--short', 'HEAD'], { allowFailure: true });
-      let ahead = 0, behind = 0;
+      let ahead = 0,
+        behind = 0;
       if (headId) {
-        const counts = await execute(['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'], { allowFailure: true });
-        if (counts.code === 0) [ahead, behind] = counts.stdout.trim().split(/\s+/).map((value) => Number(value) || 0);
+        const counts = await execute(['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'], {
+          allowFailure: true,
+        });
+        if (counts.code === 0)
+          [ahead, behind] = counts.stdout
+            .trim()
+            .split(/\s+/)
+            .map((value) => Number(value) || 0);
       }
       return {
-        mode: 'git', hostId, initialized: true, remote: redactRemote(configuredRemote()),
+        mode: 'git',
+        hostId,
+        initialized: true,
+        remote: redactRemote(configuredRemote()),
         branch: currentBranch.code === 0 ? currentBranch.stdout.trim() : null,
-        clean: status.stdout.length === 0, ahead, behind, lastSuccessfulSync: await lastSuccessfulSync(),
+        clean: status.stdout.length === 0,
+        ahead,
+        behind,
+        lastSuccessfulSync: await lastSuccessfulSync(),
       };
     },
   });
@@ -546,7 +663,9 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   async function lastSuccessfulSync() {
     try {
       const manifest = JSON.parse(await readFile(join(stateDir, 'sync', 'last-synced-manifest.json'), 'utf8'));
-      return typeof manifest?.generatedAt === 'string' && Number.isFinite(Date.parse(manifest.generatedAt)) ? manifest.generatedAt : null;
+      return typeof manifest?.generatedAt === 'string' && Number.isFinite(Date.parse(manifest.generatedAt))
+        ? manifest.generatedAt
+        : null;
     } catch (error) {
       if (missing(error)) return null;
       throw new SyncTransportError('E_STATE_INVALID');
@@ -562,7 +681,9 @@ export async function activate(ctx) {
   if (ctx.transport) return;
   const options = ctx.config.sync?.options ?? {};
   if (hasEmbeddedHttpsCredentials(options.remote)) {
-    ctx.logger?.warn?.('HTTPS Git remote contains embedded credentials; use a credential helper instead.', { code: 'W_REMOTE_CREDENTIALS' });
+    ctx.logger?.warn?.('HTTPS Git remote contains embedded credentials; use a credential helper instead.', {
+      code: 'W_REMOTE_CREDENTIALS',
+    });
   }
   ctx.transport = createGitTransport({
     stateDir: ctx.paths.stateDir,
@@ -577,7 +698,8 @@ export async function activate(ctx) {
 
 function gitStatusCommand(args, ctx) {
   const values = Array.isArray(args) ? args : [];
-  if (values.some((value) => value !== '--json')) throw new BrainAtlasError('E_ARGUMENT', 'Use sync git status [--json].');
+  if (values.some((value) => value !== '--json'))
+    throw new BrainAtlasError('E_ARGUMENT', 'Use sync git status [--json].');
   if (ctx?.config?.sync?.transport !== 'git' || typeof ctx.transport?.status !== 'function') {
     throw new BrainAtlasError('E_MODULE_CONTEXT', 'Git sync status is unavailable.');
   }

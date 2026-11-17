@@ -12,42 +12,52 @@ const FIX = join(HERE, 'fixtures');
 const DEMO_SRC = resolve(HERE, '../../../demo-vault');
 const N = (s) => String(s).normalize('NFC');
 const sha = (s) => createHash('sha256').update(s).digest('hex');
-const hexN = (seed, n) => { let s = ''; for (let i = 0; s.length < n; i++) s += sha(`${seed}#${i}`); return s.slice(0, n); };
+const hexN = (seed, n) => {
+  let s = '';
+  for (let i = 0; s.length < n; i++) s += sha(`${seed}#${i}`);
+  return s.slice(0, n);
+};
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 const COMMIT = /^[0-9a-f]{7,64}$/iu;
 const WORD = '[\\p{L}\\p{N}_]';
-const stripCommit = (ref) => { const at = ref.lastIndexOf('@'); return at > 0 && COMMIT.test(ref.slice(at + 1)) ? ref.slice(0, at) : ref; };
-const containsWord = (text, name) => new RegExp(`(?<!${WORD})${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?!${WORD})`, 'u').test(text);
+const stripCommit = (ref) => {
+  const at = ref.lastIndexOf('@');
+  return at > 0 && COMMIT.test(ref.slice(at + 1)) ? ref.slice(0, at) : ref;
+};
+const containsWord = (text, name) =>
+  new RegExp(`(?<!${WORD})${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?!${WORD})`, 'u').test(text);
 
 // ---- Fake repository: path -> exported symbols (text is generated from these; old names never appear in it).
-const REPO = new Map(Object.entries({
-  'services/billing/invoice.ts': ['createInvoice', 'calcTax', 'issueCredit'],
-  'services/billing/tax_rules.ts': ['calcVatRate', 'applyDiscount2'],
-  'services/billing/ledger01.ts': ['postEntry', 'reconcileBatch'],
-  'services/billing/refund/service.ts': ['refundPayment', 'settleRefund'],
-  'services/auth/session.py': ['issue_token', 'validate_token', 'end_session'],
-  'services/auth/policy.py': ['evaluate_policy'],
-  'services/search/indexer.go': ['FlushQueue', 'buildIndexAsync'],
-  'services/search/query.go': ['ParseQuery', 'RankResults'],
-  'services/notify/mailer.ts': ['sendReceipt', 'renderTemplate'],
-  'services/notify/sms.ts': ['sendSms'],
-  'ops/runbooks/restore.sh': [],
-  'ops/runbooks/rotate_keys.sh': ['rotate_keys'],
-  'ops/deploy/k8s.yaml': [],
-  'ops/deploy/helm/values.yaml': [],
-  'docs/decisions/0001-queue.md': [],
-  'docs/decisions/0002-cache.md': [],
-  'docs/ödeme/akış-notları.md': [],
-  'docs/ops/şifreleme_notu.md': [],
-  'lib/util/strings.ts': ['slugify', 'collapseSpaces'],
-  'lib/util/clock.ts': ['nowUtc'],
-  'lib/config/loader.ts': ['loadConfig', 'mergeEnv'],
-  'cmd/server/main.go': ['startServer'],
-  'cmd/worker/main.go': ['runWorker'],
-  'pkg/v2/retry_policy.go': ['BackoffDelay', 'maxAttempts'],
-  'src/Modül/ÖzelDosya.ts': ['kayıtGüncelle'],
-  'tests/fixtures/sample.json': [],
-}).map(([k, v]) => [N(k), v.map(N)]));
+const REPO = new Map(
+  Object.entries({
+    'services/billing/invoice.ts': ['createInvoice', 'calcTax', 'issueCredit'],
+    'services/billing/tax_rules.ts': ['calcVatRate', 'applyDiscount2'],
+    'services/billing/ledger01.ts': ['postEntry', 'reconcileBatch'],
+    'services/billing/refund/service.ts': ['refundPayment', 'settleRefund'],
+    'services/auth/session.py': ['issue_token', 'validate_token', 'end_session'],
+    'services/auth/policy.py': ['evaluate_policy'],
+    'services/search/indexer.go': ['FlushQueue', 'buildIndexAsync'],
+    'services/search/query.go': ['ParseQuery', 'RankResults'],
+    'services/notify/mailer.ts': ['sendReceipt', 'renderTemplate'],
+    'services/notify/sms.ts': ['sendSms'],
+    'ops/runbooks/restore.sh': [],
+    'ops/runbooks/rotate_keys.sh': ['rotate_keys'],
+    'ops/deploy/k8s.yaml': [],
+    'ops/deploy/helm/values.yaml': [],
+    'docs/decisions/0001-queue.md': [],
+    'docs/decisions/0002-cache.md': [],
+    'docs/ödeme/akış-notları.md': [],
+    'docs/ops/şifreleme_notu.md': [],
+    'lib/util/strings.ts': ['slugify', 'collapseSpaces'],
+    'lib/util/clock.ts': ['nowUtc'],
+    'lib/config/loader.ts': ['loadConfig', 'mergeEnv'],
+    'cmd/server/main.go': ['startServer'],
+    'cmd/worker/main.go': ['runWorker'],
+    'pkg/v2/retry_policy.go': ['BackoffDelay', 'maxAttempts'],
+    'src/Modül/ÖzelDosya.ts': ['kayıtGüncelle'],
+    'tests/fixtures/sample.json': [],
+  }).map(([k, v]) => [N(k), v.map(N)])
+);
 const SYMLINK_IN_REPO = ['lib/legacy-link.ts', 'util/strings.ts']; // link path, relative target (inside lib/)
 
 function repoBody(path, symbols) {
@@ -167,7 +177,10 @@ const BROKEN = [
   ['symbol-removed', 'sym-str', 'services/billing/tax_rules.ts', 'applyDiscount'],
   ['symbol-removed', 'sym-str', 'lib/config/loader.ts', 'readLegacyEnv'],
 ].map((row) => {
-  if (row[1] === 'source') { const raw = N(row[2]); return { category: row[0], form: 'source', raw, path: stripCommit(raw) }; }
+  if (row[1] === 'source') {
+    const raw = N(row[2]);
+    return { category: row[0], form: 'source', raw, path: stripCommit(raw) };
+  }
   return { category: row[0], form: row[1], path: N(row[2]), name: N(row[3]) };
 });
 
@@ -180,10 +193,26 @@ const EDGE_SOURCES = [
   { raw: '/services/billing/invoice.ts', expect: 'src-rejected', note: 'absolute path' },
   { raw: 'services\\billing\\invoice.ts', expect: 'src-rejected', note: 'backslash' },
   { raw: 'services/billing/invoice.ts/', expect: 'src-rejected', note: 'trailing slash' },
-  { raw: 'services/billing/invoice.ts@main', expect: K_MISSING('services/billing/invoice.ts@main'), note: 'branch suffix is part of the path' },
-  { raw: 'services/billing/invoice.ts@abcdef', expect: K_MISSING('services/billing/invoice.ts@abcdef'), note: '6 hex digits is not a commit' },
-  { raw: 'services/billing/invoice.ts@xyz1234', expect: K_MISSING('services/billing/invoice.ts@xyz1234'), note: 'non-hex suffix' },
-  { raw: `services/billing/invoice.ts@${hexN('too-long', 65)}`, expect: K_MISSING(`services/billing/invoice.ts@${hexN('too-long', 65)}`), note: '65 hex digits is not a commit' },
+  {
+    raw: 'services/billing/invoice.ts@main',
+    expect: K_MISSING('services/billing/invoice.ts@main'),
+    note: 'branch suffix is part of the path',
+  },
+  {
+    raw: 'services/billing/invoice.ts@abcdef',
+    expect: K_MISSING('services/billing/invoice.ts@abcdef'),
+    note: '6 hex digits is not a commit',
+  },
+  {
+    raw: 'services/billing/invoice.ts@xyz1234',
+    expect: K_MISSING('services/billing/invoice.ts@xyz1234'),
+    note: 'non-hex suffix',
+  },
+  {
+    raw: `services/billing/invoice.ts@${hexN('too-long', 65)}`,
+    expect: K_MISSING(`services/billing/invoice.ts@${hexN('too-long', 65)}`),
+    note: '65 hex digits is not a commit',
+  },
   { raw: '', expect: 'src-rejected', note: 'empty repo path (entry is "repo:")' },
   { raw: 'lib/util/strings.ts@', expect: K_MISSING('lib/util/strings.ts@'), note: 'empty suffix' },
 ];
@@ -193,7 +222,10 @@ const TOPICS = ['billing', 'auth', 'search', 'notify', 'ops', 'docs', 'lib', 'cm
 const DIRS = ['runbooks', 'decisions', 'services', 'runbooks', 'decisions', 'services'];
 const TYPE_OF_DIR = { runbooks: 'summary', decisions: 'concept', services: 'entity' };
 const topicOf = (p) => {
-  if (p.startsWith('services/')) { const seg = p.split('/')[1]; return seg === 'legacy' ? 'notify' : seg; }
+  if (p.startsWith('services/')) {
+    const seg = p.split('/')[1];
+    return seg === 'legacy' ? 'notify' : seg;
+  }
   const seg = p.split('/')[0];
   return seg === 'tests' ? 'lib' : seg;
 };
@@ -203,19 +235,30 @@ const pageSources = new Map(); // page rel -> yaml lines
 const pageSymbols = new Map();
 const pageType = new Map();
 const pageTitle = new Map();
-const addLine = (map, rel, line) => { if (!map.has(rel)) map.set(rel, []); map.get(rel).push(line); };
-const registerPage = (rel, type, title) => { pageType.set(rel, type); pageTitle.set(rel, title); if (!pageSources.has(rel)) pageSources.set(rel, []); if (!pageSymbols.has(rel)) pageSymbols.set(rel, []); };
+const addLine = (map, rel, line) => {
+  if (!map.has(rel)) map.set(rel, []);
+  map.get(rel).push(line);
+};
+const registerPage = (rel, type, title) => {
+  pageType.set(rel, type);
+  pageTitle.set(rel, title);
+  if (!pageSources.has(rel)) pageSources.set(rel, []);
+  if (!pageSymbols.has(rel)) pageSymbols.set(rel, []);
+};
 
-for (const t of TOPICS) for (let k = 0; k < 6; k++) {
-  const dir = DIRS[k];
-  registerPage(`wiki/${dir}/${t}-${k}.md`, TYPE_OF_DIR[dir], `${t} ${k} ${dir.slice(0, -1)}`);
-}
+for (const t of TOPICS)
+  for (let k = 0; k < 6; k++) {
+    const dir = DIRS[k];
+    registerPage(`wiki/${dir}/${t}-${k}.md`, TYPE_OF_DIR[dir], `${t} ${k} ${dir.slice(0, -1)}`);
+  }
 for (let i = 1; i <= 4; i++) registerPage(`wiki/concepts/concept-0${i}.md`, 'concept', `Concept ${i}`);
 
 const expectedOf = (it) => {
   if (it.form === 'source') return REPO.has(it.path) ? null : K_MISSING(it.path);
   if (!REPO.has(it.path)) return K_MISSING(it.path);
-  return (REPO.get(it.path).includes(it.name) && containsWord(repoBody(it.path, REPO.get(it.path)), it.name)) ? null : `sym-missing:${it.path}#${it.name}`;
+  return REPO.get(it.path).includes(it.name) && containsWord(repoBody(it.path, REPO.get(it.path)), it.name)
+    ? null
+    : `sym-missing:${it.path}#${it.name}`;
 };
 const counters = new Map(TOPICS.map((t) => [t, 0]));
 const place = (it) => {
@@ -226,12 +269,23 @@ const place = (it) => {
   return `wiki/${DIRS[k]}/${t}-${k}.md`;
 };
 const yamlFor = (it) => {
-  if (it.form === 'source') return q(`repo:${it.raw ?? (it.path + (it.commit ? `@${it.commit}` : ''))}`);
+  if (it.form === 'source') return q(`repo:${it.raw ?? it.path + (it.commit ? `@${it.commit}` : '')}`);
   if (it.form === 'sym-str') return q(`${it.path}#${it.name}`);
   return `{path: ${q(it.path)}, name: ${q(it.name)}}`;
 };
 const addItem = (it, group, category, page, expect) => {
-  const rec = { id: '', group, category, page, form: it.form, path: it.path, name: it.name ?? null, raw: it.form === 'source' ? (it.raw ?? `${it.path}${it.commit ? `@${it.commit}` : ''}`) : null, expect, yaml: yamlFor(it) };
+  const rec = {
+    id: '',
+    group,
+    category,
+    page,
+    form: it.form,
+    path: it.path,
+    name: it.name ?? null,
+    raw: it.form === 'source' ? (it.raw ?? `${it.path}${it.commit ? `@${it.commit}` : ''}`) : null,
+    expect,
+    yaml: yamlFor(it),
+  };
   ITEMS.push(rec);
   addLine(it.form === 'source' ? pageSources : pageSymbols, page, `  - ${rec.yaml}`);
   return rec;
@@ -274,37 +328,168 @@ for (const e of EDGE_SOURCES) {
   const page = 'wiki/services/edge-sources.md';
   const yaml = q(`repo:${e.raw}`); // quoted for every entry: an unquoted "repo:" is read as a YAML mapping, not a string
   addLine(pageSources, page, `  - ${yaml}`);
-  ITEMS.push({ id: `E${String(++eIdx).padStart(2, '0')}`, group: 'edge', category: e.note, page, form: 'source', path: e.raw, name: null, raw: e.raw, expect: e.expect, yaml });
+  ITEMS.push({
+    id: `E${String(++eIdx).padStart(2, '0')}`,
+    group: 'edge',
+    category: e.note,
+    page,
+    form: 'source',
+    path: e.raw,
+    name: null,
+    raw: e.raw,
+    expect: e.expect,
+    yaml,
+  });
 }
 addLine(pageSources, 'wiki/services/edge-sources.md', `  - 'raw/demo-source.md'`);
-ITEMS.push({ id: `E${String(++eIdx).padStart(2, '0')}`, group: 'edge', category: 'non-repo entry is ignored', page: 'wiki/services/edge-sources.md', form: 'source', path: 'raw/demo-source.md', name: null, raw: 'raw/demo-source.md', expect: null, yaml: q('raw/demo-source.md') });
+ITEMS.push({
+  id: `E${String(++eIdx).padStart(2, '0')}`,
+  group: 'edge',
+  category: 'non-repo entry is ignored',
+  page: 'wiki/services/edge-sources.md',
+  form: 'source',
+  path: 'raw/demo-source.md',
+  name: null,
+  raw: 'raw/demo-source.md',
+  expect: null,
+  yaml: q('raw/demo-source.md'),
+});
 
 const EDGE_SYMBOLS = [
-  { form: 'sym-obj', path: 'lib/legacy-link.ts', name: 'slugify', expect: K_MISSING('lib/legacy-link.ts'), note: 'symlink used as symbol file' },
+  {
+    form: 'sym-obj',
+    path: 'lib/legacy-link.ts',
+    name: 'slugify',
+    expect: K_MISSING('lib/legacy-link.ts'),
+    note: 'symlink used as symbol file',
+  },
   { form: 'sym-obj', path: '../x.ts', name: 'a', expect: 'src-rejected', note: 'parent segment in symbol path' },
-  { form: 'sym-obj', path: 'services/notify/mailer.ts', name: 'sendLegacyBody', expect: null, note: 'plain-text mention in a comment counts as present' },
-  { form: 'sym-str', path: 'services/billing/tax_rules.ts', name: 'calcVat', expect: 'sym-missing:services/billing/tax_rules.ts#calcVat', note: 'prefix of a longer word is not a match' },
-  { form: 'sym-obj', path: 'lib/util/strings.ts', name: 'slugify ', expect: null, note: 'name is trimmed before the lookup' },
+  {
+    form: 'sym-obj',
+    path: 'services/notify/mailer.ts',
+    name: 'sendLegacyBody',
+    expect: null,
+    note: 'plain-text mention in a comment counts as present',
+  },
+  {
+    form: 'sym-str',
+    path: 'services/billing/tax_rules.ts',
+    name: 'calcVat',
+    expect: 'sym-missing:services/billing/tax_rules.ts#calcVat',
+    note: 'prefix of a longer word is not a match',
+  },
+  {
+    form: 'sym-obj',
+    path: 'lib/util/strings.ts',
+    name: 'slugify ',
+    expect: null,
+    note: 'name is trimmed before the lookup',
+  },
 ];
 for (const e of EDGE_SYMBOLS) {
-  const rec = { id: `E${String(++eIdx).padStart(2, '0')}`, group: 'edge', category: e.note, page: 'wiki/runbooks/edge-symbols.md', form: e.form, path: e.path, name: e.name, raw: null, expect: e.expect, yaml: e.form === 'sym-str' ? q(`${e.path}#${e.name}`) : `{path: ${q(e.path)}, name: ${q(e.name)}}` };
+  const rec = {
+    id: `E${String(++eIdx).padStart(2, '0')}`,
+    group: 'edge',
+    category: e.note,
+    page: 'wiki/runbooks/edge-symbols.md',
+    form: e.form,
+    path: e.path,
+    name: e.name,
+    raw: null,
+    expect: e.expect,
+    yaml: e.form === 'sym-str' ? q(`${e.path}#${e.name}`) : `{path: ${q(e.path)}, name: ${q(e.name)}}`,
+  };
   ITEMS.push(rec);
   addLine(pageSymbols, rec.page, `  - ${rec.yaml}`);
 }
 const MALFORMED = [
-  '42', 'null', `{path: ${q('lib/util/strings.ts')}}`, `{name: ${q('slugify')}}`, q('lib/util/strings.ts#'), q('nohash'), '[]',
-  `{path: ${q('lib/util/strings.ts')}, name: "a\\nb"}`, `{path: ${q('lib/util/strings.ts')}, name: ${q('x'.repeat(201))}}`, `{path: '', name: ${q('slugify')}}`,
+  '42',
+  'null',
+  `{path: ${q('lib/util/strings.ts')}}`,
+  `{name: ${q('slugify')}}`,
+  q('lib/util/strings.ts#'),
+  q('nohash'),
+  '[]',
+  `{path: ${q('lib/util/strings.ts')}, name: "a\\nb"}`,
+  `{path: ${q('lib/util/strings.ts')}, name: ${q('x'.repeat(201))}}`,
+  `{path: '', name: ${q('slugify')}}`,
 ];
 MALFORMED.forEach((yaml, i) => {
-  const rec = { id: `M${String(i + 1).padStart(2, '0')}`, group: 'edge', category: 'malformed symbol entry is ignored', page: 'wiki/runbooks/edge-malformed.md', form: 'malformed', path: null, name: null, raw: null, expect: null, yaml };
+  const rec = {
+    id: `M${String(i + 1).padStart(2, '0')}`,
+    group: 'edge',
+    category: 'malformed symbol entry is ignored',
+    page: 'wiki/runbooks/edge-malformed.md',
+    form: 'malformed',
+    path: null,
+    name: null,
+    raw: null,
+    expect: null,
+    yaml,
+  };
   ITEMS.push(rec);
   addLine(pageSymbols, rec.page, `  - ${yaml}`);
 });
-ITEMS.push({ id: 'N01', group: 'edge', category: 'non-array sources is ignored', page: 'wiki/services/edge-nonarray.md', form: 'malformed', path: null, name: null, raw: null, expect: null, yaml: q('repo:services/billing/invoice.ts') });
-ITEMS.push({ id: 'N02', group: 'edge', category: 'non-array symbols is ignored', page: 'wiki/services/edge-nonarray.md', form: 'malformed', path: null, name: null, raw: null, expect: null, yaml: q('lib/util/strings.ts#slugify') });
-ITEMS.push({ id: 'D01', group: 'edge', category: 'one missing file reported once per page', page: 'wiki/services/edge-dedupe.md', form: 'source', path: 'services/legacy/gone.ts', name: null, raw: 'services/legacy/gone.ts', expect: K_MISSING('services/legacy/gone.ts'), yaml: q('repo:services/legacy/gone.ts') });
-ITEMS.push({ id: 'D02', group: 'edge', category: 'same missing file as symbol, reported once per page', page: 'wiki/services/edge-dedupe.md', form: 'sym-obj', path: 'services/legacy/gone.ts', name: 'a', raw: null, expect: null, yaml: `{path: ${q('services/legacy/gone.ts')}, name: 'a'}` });
-ITEMS.push({ id: 'W01', group: 'edge', category: 'dot segment is normalized, valid', page: 'wiki/services/edge-valid.md', form: 'source', path: 'lib/util/strings.ts', name: null, raw: './lib/util/strings.ts', expect: null, yaml: q('repo:./lib/util/strings.ts') });
+ITEMS.push({
+  id: 'N01',
+  group: 'edge',
+  category: 'non-array sources is ignored',
+  page: 'wiki/services/edge-nonarray.md',
+  form: 'malformed',
+  path: null,
+  name: null,
+  raw: null,
+  expect: null,
+  yaml: q('repo:services/billing/invoice.ts'),
+});
+ITEMS.push({
+  id: 'N02',
+  group: 'edge',
+  category: 'non-array symbols is ignored',
+  page: 'wiki/services/edge-nonarray.md',
+  form: 'malformed',
+  path: null,
+  name: null,
+  raw: null,
+  expect: null,
+  yaml: q('lib/util/strings.ts#slugify'),
+});
+ITEMS.push({
+  id: 'D01',
+  group: 'edge',
+  category: 'one missing file reported once per page',
+  page: 'wiki/services/edge-dedupe.md',
+  form: 'source',
+  path: 'services/legacy/gone.ts',
+  name: null,
+  raw: 'services/legacy/gone.ts',
+  expect: K_MISSING('services/legacy/gone.ts'),
+  yaml: q('repo:services/legacy/gone.ts'),
+});
+ITEMS.push({
+  id: 'D02',
+  group: 'edge',
+  category: 'same missing file as symbol, reported once per page',
+  page: 'wiki/services/edge-dedupe.md',
+  form: 'sym-obj',
+  path: 'services/legacy/gone.ts',
+  name: 'a',
+  raw: null,
+  expect: null,
+  yaml: `{path: ${q('services/legacy/gone.ts')}, name: 'a'}`,
+});
+ITEMS.push({
+  id: 'W01',
+  group: 'edge',
+  category: 'dot segment is normalized, valid',
+  page: 'wiki/services/edge-valid.md',
+  form: 'source',
+  path: 'lib/util/strings.ts',
+  name: null,
+  raw: './lib/util/strings.ts',
+  expect: null,
+  yaml: q('repo:./lib/util/strings.ts'),
+});
 // Items with explicit page placement are reflected in the page builders below.
 addLine(pageSources, 'wiki/services/edge-nonarray.md', 'NONARRAY_SOURCES');
 addLine(pageSymbols, 'wiki/services/edge-nonarray.md', 'NONARRAY_SYMBOLS');
@@ -329,24 +514,47 @@ function pageText(rel) {
   }
   lines.push('verified: []', `stale_after: '2099-12-31'`);
   if (type === 'entity' || type === 'concept') lines.push('aliases: []', 'keywords: []');
-  lines.push('---', '', `# ${title}`, '', `Synthetic fixture page (BA-42). VAULTBODY_${hexN(rel, 10).toUpperCase()}_SECRET`, '');
+  lines.push(
+    '---',
+    '',
+    `# ${title}`,
+    '',
+    `Synthetic fixture page (BA-42). VAULTBODY_${hexN(rel, 10).toUpperCase()}_SECRET`,
+    ''
+  );
   return lines.join('\n');
 }
 const CONCEPT_EXTRA = [];
 
 const CONCEPTS = [1, 2, 3, 4].map((i) => `wiki/concepts/concept-0${i}.md`);
-const EDGE_PAGES = ['wiki/services/edge-sources.md', 'wiki/runbooks/edge-symbols.md', 'wiki/runbooks/edge-malformed.md', 'wiki/services/edge-nonarray.md', 'wiki/services/edge-dedupe.md', 'wiki/services/edge-valid.md'];
+const EDGE_PAGES = [
+  'wiki/services/edge-sources.md',
+  'wiki/runbooks/edge-symbols.md',
+  'wiki/runbooks/edge-malformed.md',
+  'wiki/services/edge-nonarray.md',
+  'wiki/services/edge-dedupe.md',
+  'wiki/services/edge-valid.md',
+];
 const CONTENT = [...pageType.keys()].sort();
-void CONCEPTS; void EDGE_PAGES; void CONCEPT_EXTRA;
+void CONCEPTS;
+void EDGE_PAGES;
+void CONCEPT_EXTRA;
 
 function indexText(pages) {
-  const sections = [['Runbooks', 'runbooks'], ['Decisions', 'decisions'], ['Services', 'services'], ['Concepts', 'concepts'], ['Summaries', 'summaries']];
+  const sections = [
+    ['Runbooks', 'runbooks'],
+    ['Decisions', 'decisions'],
+    ['Services', 'services'],
+    ['Concepts', 'concepts'],
+    ['Summaries', 'summaries'],
+  ];
   const lines = ['# Wiki index', ''];
   for (const [heading, dir] of sections) {
     const entries = pages.filter((p) => p.startsWith(`wiki/${dir}/`));
     if (!entries.length) continue;
     lines.push(`## ${heading}`, '');
-    for (const p of entries) lines.push(`- [${pageTitle.get(p) ?? p.split('/').pop().replace(/\.md$/, '')}](${p.slice('wiki/'.length)})`);
+    for (const p of entries)
+      lines.push(`- [${pageTitle.get(p) ?? p.split('/').pop().replace(/\.md$/, '')}](${p.slice('wiki/'.length)})`);
     lines.push('');
   }
   return lines.join('\n');
@@ -355,24 +563,103 @@ function indexText(pages) {
 // ---- vault-edge: baseline defects (no repo needed), plus repo references for the --repo run.
 function edgeVault() {
   const page = (rel, body, fm = []) => [rel, ['---', ...fm, '---', '', body, ''].join('\n')];
-  const base = (type, status, extra = []) => [`type: ${type}`, `generated: '2026-11-01T00:00:00Z'`, `status: ${status}`, 'sources: []', 'verified: []', `stale_after: '2099-12-31'`, ...extra];
+  const base = (type, status, extra = []) => [
+    `type: ${type}`,
+    `generated: '2026-11-01T00:00:00Z'`,
+    `status: ${status}`,
+    'sources: []',
+    'verified: []',
+    `stale_after: '2099-12-31'`,
+    ...extra,
+  ];
   const files = [
     page('wiki/concepts/bad-yaml.md', '# Bad yaml', ['type: concept', 'key: [unclosed']),
-    page('wiki/decisions/loop-a.md', 'Loop A.', [...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/loop-b.md'"]), 'aliases: []', 'keywords: []']),
-    page('wiki/decisions/loop-b.md', 'Loop B.', [...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/loop-a.md'"]), 'aliases: []', 'keywords: []']),
-    page('wiki/decisions/gone.md', 'Gone.', [...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/missing.md'"]), 'aliases: []', 'keywords: []']),
-    page('wiki/decisions/chain-1.md', 'Chain 1.', [...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/chain-2.md'"]), 'aliases: []', 'keywords: []']),
-    page('wiki/decisions/chain-2.md', 'Chain 2.', [...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/chain-3.md'"]), 'aliases: []', 'keywords: []']),
+    page('wiki/decisions/loop-a.md', 'Loop A.', [
+      ...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/loop-b.md'"]),
+      'aliases: []',
+      'keywords: []',
+    ]),
+    page('wiki/decisions/loop-b.md', 'Loop B.', [
+      ...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/loop-a.md'"]),
+      'aliases: []',
+      'keywords: []',
+    ]),
+    page('wiki/decisions/gone.md', 'Gone.', [
+      ...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/missing.md'"]),
+      'aliases: []',
+      'keywords: []',
+    ]),
+    page('wiki/decisions/chain-1.md', 'Chain 1.', [
+      ...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/chain-2.md'"]),
+      'aliases: []',
+      'keywords: []',
+    ]),
+    page('wiki/decisions/chain-2.md', 'Chain 2.', [
+      ...base('concept', 'superseded', ["superseded_by: 'wiki/decisions/chain-3.md'"]),
+      'aliases: []',
+      'keywords: []',
+    ]),
     page('wiki/decisions/chain-3.md', 'Chain 3.', [...base('concept', 'proposed'), 'aliases: []', 'keywords: []']),
-    page('wiki/runbooks/broken-links.md', 'See [[nonexistent-page]] and [x](missing-page.md) and [[unlisted]].', [...base('summary', 'proposed')]),
-    page('wiki/services/oversized.md', 'lorem ipsum '.repeat(1550), [...base('entity', 'proposed'), 'aliases: []', 'keywords: []']),
-    page('wiki/services/orphan.md', 'Nobody links here.', [...base('entity', 'proposed'), 'aliases: []', 'keywords: []']),
-    page('wiki/concepts/stale.md', 'Old review.', ['type: concept', `generated: '2026-11-01T00:00:00Z'`, 'status: proposed', 'sources: []', 'verified: []', `stale_after: '2020-01-01'`, 'aliases: []', 'keywords: []']),
-    page('wiki/concepts/unlisted.md', 'Linked but not indexed.', [...base('concept', 'proposed'), 'aliases: []', 'keywords: []']),
-    page('wiki/summaries/updates.md', ['## Update 2026-02-01', 'a', '## Update 2026-02-02', 'b', '## Update 2026-02-03', 'c', '## Update 2026-02-04', 'd', '## Update 2026-02-05', 'e', '## Update 2026-02-06', 'f'].join('\n'), [...base('summary', 'proposed')]),
-    page('wiki/services/with-repo.md', 'Repo references for the --repo run.', [...base('entity', 'proposed', []).filter((l) => !l.startsWith('sources:')), 'sources:', "  - 'repo:services/billing/invoice.ts@a1b2c3d'", "  - 'repo:services/gone.ts'", 'aliases: []', 'keywords: []', 'symbols:', "  - {path: 'services/billing/invoice.ts', name: 'calcTax'}"]),
+    page('wiki/runbooks/broken-links.md', 'See [[nonexistent-page]] and [x](missing-page.md) and [[unlisted]].', [
+      ...base('summary', 'proposed'),
+    ]),
+    page('wiki/services/oversized.md', 'lorem ipsum '.repeat(1550), [
+      ...base('entity', 'proposed'),
+      'aliases: []',
+      'keywords: []',
+    ]),
+    page('wiki/services/orphan.md', 'Nobody links here.', [
+      ...base('entity', 'proposed'),
+      'aliases: []',
+      'keywords: []',
+    ]),
+    page('wiki/concepts/stale.md', 'Old review.', [
+      'type: concept',
+      `generated: '2026-11-01T00:00:00Z'`,
+      'status: proposed',
+      'sources: []',
+      'verified: []',
+      `stale_after: '2020-01-01'`,
+      'aliases: []',
+      'keywords: []',
+    ]),
+    page('wiki/concepts/unlisted.md', 'Linked but not indexed.', [
+      ...base('concept', 'proposed'),
+      'aliases: []',
+      'keywords: []',
+    ]),
+    page(
+      'wiki/summaries/updates.md',
+      [
+        '## Update 2026-02-01',
+        'a',
+        '## Update 2026-02-02',
+        'b',
+        '## Update 2026-02-03',
+        'c',
+        '## Update 2026-02-04',
+        'd',
+        '## Update 2026-02-05',
+        'e',
+        '## Update 2026-02-06',
+        'f',
+      ].join('\n'),
+      [...base('summary', 'proposed')]
+    ),
+    page('wiki/services/with-repo.md', 'Repo references for the --repo run.', [
+      ...base('entity', 'proposed', []).filter((l) => !l.startsWith('sources:')),
+      'sources:',
+      "  - 'repo:services/billing/invoice.ts@a1b2c3d'",
+      "  - 'repo:services/gone.ts'",
+      'aliases: []',
+      'keywords: []',
+      'symbols:',
+      "  - {path: 'services/billing/invoice.ts', name: 'calcTax'}",
+    ]),
   ];
-  const indexed = files.map(([rel]) => rel).filter((rel) => !['wiki/services/orphan.md', 'wiki/concepts/unlisted.md'].includes(rel));
+  const indexed = files
+    .map(([rel]) => rel)
+    .filter((rel) => !['wiki/services/orphan.md', 'wiki/concepts/unlisted.md'].includes(rel));
   const index = indexText(indexed.map((r) => r)) + '\n- [Ghost](concepts/ghost.md)\n';
   return { files, index };
 }
@@ -410,7 +697,11 @@ async function main() {
   await writeTree(join(FIX, 'vault-edge'), [...edge.files, ['wiki/index.md', edge.index]]);
 
   // Labels: expected multiset per page (what a correct tool reports), written before any product run.
-  const labels = { version: 'ba42-labels-1', note: 'ground truth from the generator plan; keys: src-missing:<path>, sym-missing:<path>#<name>, src-rejected', items: ITEMS.map((r) => ({ ...r })) };
+  const labels = {
+    version: 'ba42-labels-1',
+    note: 'ground truth from the generator plan; keys: src-missing:<path>, sym-missing:<path>#<name>, src-rejected',
+    items: ITEMS.map((r) => ({ ...r })),
+  };
   await writeFile(join(FIX, 'labels.json'), JSON.stringify(labels, null, 2) + '\n', 'utf8');
 
   // Manifest: sha256 of every fixture entry (regular files and symlink targets), excluding itself.
@@ -428,9 +719,27 @@ async function main() {
   }
   await walk(FIX);
   const digest = sha(JSON.stringify(entries));
-  await writeFile(join(FIX, 'MANIFEST.json'), JSON.stringify({ version: 'ba42-manifest-1', digest, entries }, null, 2) + '\n', 'utf8');
+  await writeFile(
+    join(FIX, 'MANIFEST.json'),
+    JSON.stringify({ version: 'ba42-manifest-1', digest, entries }, null, 2) + '\n',
+    'utf8'
+  );
 
-  const counts = ITEMS.reduce((acc, r) => { acc[r.group] = (acc[r.group] ?? 0) + 1; return acc; }, {});
-  console.log(JSON.stringify({ contentPages: CONTENT.length, repoRegularFiles: REPO.size, symlinks: 1, items: counts, broken: BROKEN.length, validSources: VALID_SOURCES.length, validSymbols: VALID_SYMBOLS.length, digest }));
+  const counts = ITEMS.reduce((acc, r) => {
+    acc[r.group] = (acc[r.group] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log(
+    JSON.stringify({
+      contentPages: CONTENT.length,
+      repoRegularFiles: REPO.size,
+      symlinks: 1,
+      items: counts,
+      broken: BROKEN.length,
+      validSources: VALID_SOURCES.length,
+      validSymbols: VALID_SYMBOLS.length,
+      digest,
+    })
+  );
 }
 await main();

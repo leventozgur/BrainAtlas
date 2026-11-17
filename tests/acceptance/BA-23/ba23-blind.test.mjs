@@ -41,7 +41,8 @@ const CASES = {
   'circular.md': '---\na: &x\n  b: *x\n---\n# Circ\nBROKENTOKEN_CIRC',
   'crlf-bad.md': '---\r\ntitle: [x\r\n---\r\n# Crlf\r\nBROKENTOKEN_CRLF',
   'tab-indent.md': '---\ntitle: x\n\tbad: y\n---\n# Tab\nBROKENTOKEN_TAB',
-  'date-roll.md': '---\ntitle: DateRoll\nstatus: confirmed\nverified:\n  - date: 2026-02-30\n    evidence: x\n    scope: y\n    source: z\n---\n# DateRoll\nDATEROLLTOKEN',
+  'date-roll.md':
+    '---\ntitle: DateRoll\nstatus: confirmed\nverified:\n  - date: 2026-02-30\n    evidence: x\n    scope: y\n    source: z\n---\n# DateRoll\nDATEROLLTOKEN',
   'tag-error.md': '---\ntitle: !!int foo\n---\n# Tag\nTAGTOKEN',
   'empty-fm.md': '---\n---\n# Empty\nEMPTYTOKEN',
   'bom-crlf-ok.md': '﻿---\r\ntitle: BC\r\n---\r\n# BC\r\nBOMCRLFTOKEN',
@@ -68,7 +69,12 @@ async function writeTree(root, files) {
 async function mainVerdict(t, rel, content) {
   const dir = await workdir(t);
   await writeTree(dir, { [rel]: content });
-  try { main.loadPages(dir); return null; } catch (error) { return error.code; }
+  try {
+    main.loadPages(dir);
+    return null;
+  } catch (error) {
+    return error.code;
+  }
 }
 
 // MCP indexes <vault>/wiki, so its fixtures live under wiki/.
@@ -77,7 +83,10 @@ const underWiki = (files) => Object.fromEntries(Object.entries(files).map(([k, v
 // ---------- Criterion 1: skip set equals what main's loadPages throws on ----------
 
 test('BA-23 c1: skipped set is exactly the pages main loadPages rejects, and the rest match main', async (t) => {
-  const vault = await writeTree(await workdir(t), { 'good.md': '---\ntitle: Good\n---\n# Good\nGOODTOKEN', 'notes.txt': '---\nx: [\n---\n' });
+  const vault = await writeTree(await workdir(t), {
+    'good.md': '---\ntitle: Good\n---\n# Good\nGOODTOKEN',
+    'notes.txt': '---\nx: [\n---\n',
+  });
   await writeTree(vault, CASES);
   const expectedSkipped = [];
   for (const [rel, content] of Object.entries(CASES)) if (await mainVerdict(t, rel, content)) expectedSkipped.push(rel);
@@ -87,22 +96,36 @@ test('BA-23 c1: skipped set is exactly the pages main loadPages rejects, and the
   const { pages, skipped } = dev.loadPagesDetailed(vault);
   assert.deepEqual([...skipped].sort(), expectedSkipped);
   // The loadPages contract is unchanged: it still throws on this vault.
-  assert.throws(() => dev.loadPages(vault), (e) => e.code === 'E_INVALID_INPUT');
+  assert.throws(
+    () => dev.loadPages(vault),
+    (e) => e.code === 'E_INVALID_INPUT'
+  );
   // Readable pages are identical to main's loadPages over the same readable set.
   const clean = await workdir(t);
-  await writeTree(clean, Object.fromEntries(Object.entries({ ...CASES, 'good.md': '---\ntitle: Good\n---\n# Good\nGOODTOKEN' }).filter(([rel]) => !expectedSkipped.includes(rel))));
+  await writeTree(
+    clean,
+    Object.fromEntries(
+      Object.entries({ ...CASES, 'good.md': '---\ntitle: Good\n---\n# Good\nGOODTOKEN' }).filter(
+        ([rel]) => !expectedSkipped.includes(rel)
+      )
+    )
+  );
   assert.deepEqual(pages, main.loadPages(clean));
 });
 
 // ---------- Criterion 1 + 5: searcher results on a broken vault equal main on the same vault with those pages deleted ----------
 
 const GOOD = {
-  'good-alpha.md': '---\ntitle: Alpha Notes\nstatus: confirmed\nkeywords: [freshness]\nverified:\n  - date: 2026-10-01\n    evidence: test run\n    scope: alpha\n    source: wiki/sources/alpha.md\n---\n# Alpha Notes\n## Current state\nGOODALPHA retrieval cache freshness evidence. See [[good-beta]].\n',
-  'good-beta.md': '# Beta\nGOODBETA abstain threshold tuning notes. Links to [[good-alpha]] and [the gamma](sub/good-gamma.md).\n',
+  'good-alpha.md':
+    '---\ntitle: Alpha Notes\nstatus: confirmed\nkeywords: [freshness]\nverified:\n  - date: 2026-10-01\n    evidence: test run\n    scope: alpha\n    source: wiki/sources/alpha.md\n---\n# Alpha Notes\n## Current state\nGOODALPHA retrieval cache freshness evidence. See [[good-beta]].\n',
+  'good-beta.md':
+    '# Beta\nGOODBETA abstain threshold tuning notes. Links to [[good-alpha]] and [the gamma](sub/good-gamma.md).\n',
   'sub/good-gamma.md': '---\ntitle: Gamma\naliases: [gam]\n---\n# Gamma\nGOODGAMMA snapshot pages index consistency.\n',
-  'good-old.md': '---\nstatus: superseded\nsuperseded_by: good-alpha.md\n---\n# Old\nGOODOLD replaced text about retrieval.\n',
+  'good-old.md':
+    '---\nstatus: superseded\nsuperseded_by: good-alpha.md\n---\n# Old\nGOODOLD replaced text about retrieval.\n',
   'good-proposed.md': '---\nstatus: proposed\n---\n# Proposal\nGOODPROPOSAL weak trust candidate on retrieval.\n',
-  'good-dated.md': '# Log\n## 2026-01-01 Update\nOLDDATED retrieval note.\n## 2026-10-02 Update\nNEWDATED retrieval note.\n',
+  'good-dated.md':
+    '# Log\n## 2026-01-01 Update\nOLDDATED retrieval note.\n## 2026-10-02 Update\nNEWDATED retrieval note.\n',
 };
 const BROKEN = {
   'broken-yaml.md': '---\ntitle: [unclosed\n---\n# Broken\nBROKENTOKEN_ONE retrieval cache',
@@ -110,8 +133,20 @@ const BROKEN = {
   'sub/broken-bom.md': '﻿---\nstatus: [x\n---\n# BrokenBom\nBROKENTOKEN_THREE',
   'broken-tab.md': '---\ntitle: x\n\tbad: y\n---\n# BrokenTab\nBROKENTOKEN_FOUR',
 };
-const QUERIES = ['GOODALPHA', 'retrieval cache freshness', 'abstain threshold', 'snapshot pages', 'gam gamma', 'weak trust candidate',
-  'replaced text', 'NEWDATED retrieval', 'BROKENTOKEN_ONE', 'BROKENTOKEN_THREE retrieval', 'links good alpha', 'identifier-free nonsense zzqx'];
+const QUERIES = [
+  'GOODALPHA',
+  'retrieval cache freshness',
+  'abstain threshold',
+  'snapshot pages',
+  'gam gamma',
+  'weak trust candidate',
+  'replaced text',
+  'NEWDATED retrieval',
+  'BROKENTOKEN_ONE',
+  'BROKENTOKEN_THREE retrieval',
+  'links good alpha',
+  'identifier-free nonsense zzqx',
+];
 
 test('BA-23 c1+c5: search on a broken vault equals main search on the same vault without the broken pages', async (t) => {
   const broken = await writeTree(await workdir(t), { ...GOOD, ...BROKEN });
@@ -166,7 +201,17 @@ test('BA-23 c5: demo-vault search and cache bytes match main', async (t) => {
   const d = dev.createSearcher({ vaultDir: vault, stateDir: devState, now: NOW });
   const m = main.createSearcher({ vaultDir: vault, stateDir: mainState, now: NOW });
   // BA-41 (2026-11-15, PM): cache format changed deliberately (per-file records, new schema tag); byte parity with main dropped, result parity below kept.
-  for (const q of ['vault backup', 'evidence', 'current state', 'retrieval', 'decision', 'what is the wiki index', 'E_WIDGET_TIMEOUT', 'stale', 'superseded']) {
+  for (const q of [
+    'vault backup',
+    'evidence',
+    'current state',
+    'retrieval',
+    'decision',
+    'what is the wiki index',
+    'E_WIDGET_TIMEOUT',
+    'stale',
+    'superseded',
+  ]) {
     assert.deepEqual(d.search(q, { limit: 5 }), m.search(q, { limit: 5 }), q);
   }
 });
@@ -174,12 +219,18 @@ test('BA-23 c5: demo-vault search and cache bytes match main', async (t) => {
 // ---------- Criterion 3: fix is picked up on refreshIfChanged; re-break is skipped again; no permanent skip ----------
 
 test('BA-23 c3: fixing a broken page is picked up by refreshIfChanged, re-breaking it skips it again', async (t) => {
-  const vault = await writeTree(await workdir(t), { ...GOOD, 'fixable.md': '---\ntitle: [x\n---\n# Fixable\nBROKENFIX' });
+  const vault = await writeTree(await workdir(t), {
+    ...GOOD,
+    'fixable.md': '---\ntitle: [x\n---\n# Fixable\nBROKENFIX',
+  });
   const stateDir = join(await workdir(t), 'state');
   const s = dev.createSearcher({ vaultDir: vault, stateDir, now: NOW });
   assert.equal(s.search('FIXEDTOKENXYZ', { limit: 5 }).results.length, 0);
   assert.equal(s.refreshIfChanged(), false);
-  await writeFile(join(vault, 'fixable.md'), '---\ntitle: Fixable\n---\n# Fixable\nFIXEDTOKENXYZ now readable and longer than before.\n');
+  await writeFile(
+    join(vault, 'fixable.md'),
+    '---\ntitle: Fixable\n---\n# Fixable\nFIXEDTOKENXYZ now readable and longer than before.\n'
+  );
   assert.equal(s.refreshIfChanged(), true);
   const hit = s.search('FIXEDTOKENXYZ', { limit: 5 });
   assert.equal(hit.results[0]?.path, 'fixable.md');
@@ -225,7 +276,11 @@ test('BA-23 c2: hook process on a broken vault answers with healthy pages and ex
   const vault = await writeTree(await workdir(t), { ...GOOD, ...BROKEN });
   const env = await envFor(t, vault);
   const r = spawnSync(process.execPath, [join(DEV, 'packages/hooks/bin/brainatlas-hook.mjs'), 'claude', 'prompt'], {
-    input: JSON.stringify({ session_id: 'ba23-blind', prompt: 'GOODALPHA retrieval cache freshness?' }), env, encoding: 'utf8', timeout: 20000, cwd: DEV,
+    input: JSON.stringify({ session_id: 'ba23-blind', prompt: 'GOODALPHA retrieval cache freshness?' }),
+    env,
+    encoding: 'utf8',
+    timeout: 20000,
+    cwd: DEV,
   });
   assert.equal(r.status, 0, r.stderr);
   assert.ok(!/BROKENTOKEN/.test(r.stdout), 'broken content must not leak');
@@ -237,24 +292,50 @@ test('BA-23 c2: hook process on the clean vault equals main hook behaviour (no b
   const vault = await writeTree(await workdir(t), GOOD);
   const env = await envFor(t, vault);
   const input = JSON.stringify({ session_id: 'ba23-parity', prompt: 'GOODALPHA retrieval cache freshness?' });
-  const devOut = spawnSync(process.execPath, [join(DEV, 'packages/hooks/bin/brainatlas-hook.mjs'), 'claude', 'prompt'], { input, env, encoding: 'utf8', timeout: 20000, cwd: DEV });
+  const devOut = spawnSync(
+    process.execPath,
+    [join(DEV, 'packages/hooks/bin/brainatlas-hook.mjs'), 'claude', 'prompt'],
+    { input, env, encoding: 'utf8', timeout: 20000, cwd: DEV }
+  );
   const mainEnv = await envFor(t, vault);
-  const mainOut = spawnSync(process.execPath, [join(MAIN, 'packages/hooks/bin/brainatlas-hook.mjs'), 'claude', 'prompt'], { input, env: mainEnv, encoding: 'utf8', timeout: 20000, cwd: MAIN });
+  const mainOut = spawnSync(
+    process.execPath,
+    [join(MAIN, 'packages/hooks/bin/brainatlas-hook.mjs'), 'claude', 'prompt'],
+    { input, env: mainEnv, encoding: 'utf8', timeout: 20000, cwd: MAIN }
+  );
   assert.equal(devOut.status, mainOut.status);
   assert.equal(devOut.stdout, mainOut.stdout);
   assert.match(devOut.stdout, /GOODALPHA/, 'hook must actually answer, not return an empty result');
 });
 
 async function mcpWikiQuery(binDir, env, query) {
-  const transport = new StdioClientTransport({ command: process.execPath, args: [join(binDir, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: binDir,
-    env, stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [join(binDir, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: binDir,
+    env,
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba23-blind', version: '1.0.0' });
   try {
     await client.connect(transport);
     const result = await client.callTool({ name: 'wiki_query', arguments: { query, limit: 5 } });
     const text = result.content.find((item) => item.type === 'text')?.text ?? '';
-    return { isError: result.isError === true, text, payload: (() => { try { return JSON.parse(text); } catch { return text; } })() };
-  } finally { await client.close().catch(() => {}); await transport.close().catch(() => {}); }
+    return {
+      isError: result.isError === true,
+      text,
+      payload: (() => {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      })(),
+    };
+  } finally {
+    await client.close().catch(() => {});
+    await transport.close().catch(() => {});
+  }
 }
 
 test('BA-23 c2: MCP wiki_query on a broken vault succeeds and returns healthy pages only', async (t) => {
@@ -292,14 +373,27 @@ test('BA-23 c2: MCP wiki_query on a broken vault equals main MCP on the same vau
 // ---------- Criterion 4: maintain --json ----------
 
 function maintain(vault, home) {
-  const r = spawnSync(process.execPath, [join(DEV, 'packages/cli/bin/brainatlas.mjs'), 'maintain', '--json', '--vault', vault], {
-    env: { HOME: home, PATH: process.env.PATH ?? '' }, encoding: 'utf8', timeout: 30000, cwd: DEV,
-  });
+  const r = spawnSync(
+    process.execPath,
+    [join(DEV, 'packages/cli/bin/brainatlas.mjs'), 'maintain', '--json', '--vault', vault],
+    {
+      env: { HOME: home, PATH: process.env.PATH ?? '' },
+      encoding: 'utf8',
+      timeout: 30000,
+      cwd: DEV,
+    }
+  );
   return r;
 }
 
 test('BA-23 c4: maintain --json reports invalid-frontmatter by relative path, without content or parser text', async (t) => {
-  const vault = await writeTree(await workdir(t), { 'wiki/index.md': '# Index\n', 'wiki/log.md': '# Log\n', 'wiki/good-alpha.md': GOOD['good-alpha.md'], 'wiki/bad-yaml.md': BROKEN['broken-yaml.md'], 'wiki/sub/broken-bom.md': BROKEN['sub/broken-bom.md'] });
+  const vault = await writeTree(await workdir(t), {
+    'wiki/index.md': '# Index\n',
+    'wiki/log.md': '# Log\n',
+    'wiki/good-alpha.md': GOOD['good-alpha.md'],
+    'wiki/bad-yaml.md': BROKEN['broken-yaml.md'],
+    'wiki/sub/broken-bom.md': BROKEN['sub/broken-bom.md'],
+  });
   const r = maintain(vault, await workdir(t));
   assert.equal(r.status, 0, r.stderr);
   const report = JSON.parse(r.stdout);
@@ -308,31 +402,51 @@ test('BA-23 c4: maintain --json reports invalid-frontmatter by relative path, wi
   for (const f of inv) assert.deepEqual(Object.keys(f).sort(), ['detail', 'kind', 'path']);
   assert.ok(!r.stdout.includes('BROKENTOKEN'), 'page body must not appear');
   // Parser wording must not appear in any detail (file names such as bad-yaml.md are allowed in paths only).
-  for (const f of report.findings) assert.ok(!/yaml|unclosed|duplicate|map keys|nested|flow|alias|tab/i.test(f.detail), `parser text in detail: ${f.detail}`);
+  for (const f of report.findings)
+    assert.ok(
+      !/yaml|unclosed|duplicate|map keys|nested|flow|alias|tab/i.test(f.detail),
+      `parser text in detail: ${f.detail}`
+    );
   assert.equal(Object.keys(report.counts).length, 8);
   assert.ok(!Object.hasOwn(report.counts, 'invalid-frontmatter'));
 });
 
 test('BA-23 c4: clean vault has zero invalid-frontmatter and maintain output matches main (durationMs aside)', async (t) => {
-  const vault = await writeTree(await workdir(t), { 'wiki/index.md': '# Index\n', 'wiki/log.md': '# Log\n', ...Object.fromEntries(Object.entries(GOOD).map(([k, v]) => [`wiki/${k}`, v])) });
+  const vault = await writeTree(await workdir(t), {
+    'wiki/index.md': '# Index\n',
+    'wiki/log.md': '# Log\n',
+    ...Object.fromEntries(Object.entries(GOOD).map(([k, v]) => [`wiki/${k}`, v])),
+  });
   const home = await workdir(t);
   const d = maintain(vault, home);
   assert.equal(d.status, 0, d.stderr);
   const dr = JSON.parse(d.stdout);
   assert.equal(dr.findings.filter((f) => f.kind === 'invalid-frontmatter').length, 0);
-  const m = spawnSync(process.execPath, [join(MAIN, 'packages/cli/bin/brainatlas.mjs'), 'maintain', '--json', '--vault', vault], {
-    env: { HOME: await workdir(t), PATH: process.env.PATH ?? '' }, encoding: 'utf8', timeout: 30000, cwd: MAIN,
-  });
+  const m = spawnSync(
+    process.execPath,
+    [join(MAIN, 'packages/cli/bin/brainatlas.mjs'), 'maintain', '--json', '--vault', vault],
+    {
+      env: { HOME: await workdir(t), PATH: process.env.PATH ?? '' },
+      encoding: 'utf8',
+      timeout: 30000,
+      cwd: MAIN,
+    }
+  );
   assert.equal(m.status, 0, m.stderr);
   const mr = JSON.parse(m.stdout);
-  delete dr.durationMs; delete mr.durationMs;
+  delete dr.durationMs;
+  delete mr.durationMs;
   assert.deepEqual(dr, mr);
 });
 
 // ---------- Criterion 6: security boundaries unchanged ----------
 
 test('BA-23 c6: symlinks out of the vault (files and directories) are neither indexed nor reported as skipped', async (t) => {
-  const outside = await writeTree(await workdir(t), { 'secret.md': '# Secret\nSYMLINKTOKEN', 'bad.md': '---\ntitle: [x\n---\nOUTSIDEBAD', 'dir/bad2.md': '---\nx: [\n---\nOUTSIDEBAD2' });
+  const outside = await writeTree(await workdir(t), {
+    'secret.md': '# Secret\nSYMLINKTOKEN',
+    'bad.md': '---\ntitle: [x\n---\nOUTSIDEBAD',
+    'dir/bad2.md': '---\nx: [\n---\nOUTSIDEBAD2',
+  });
   const vault = await writeTree(await workdir(t), { ...GOOD });
   await symlink(join(outside, 'secret.md'), join(vault, 'link-secret.md'));
   await symlink(join(outside, 'bad.md'), join(vault, 'link-bad.md'));
@@ -350,27 +464,53 @@ test('BA-23 c6: symlinks out of the vault (files and directories) are neither in
 
 test('BA-23 c6: unsafe page paths are still dropped by buildIndex (same as main)', () => {
   const page = (path, body) => ({ path, title: 'T', aliases: [], keywords: [], headings: [], body, frontmatter: {} });
-  const pages = [page('ok.md', 'UNSAFEPARITY alpha'), page('../escape.md', 'UNSAFEPARITY escape'), page('/abs.md', 'UNSAFEPARITY abs'), page('a\\b.md', 'UNSAFEPARITY bs')];
+  const pages = [
+    page('ok.md', 'UNSAFEPARITY alpha'),
+    page('../escape.md', 'UNSAFEPARITY escape'),
+    page('/abs.md', 'UNSAFEPARITY abs'),
+    page('a\\b.md', 'UNSAFEPARITY bs'),
+  ];
   const d = dev.search(dev.buildIndex(pages, { now: NOW }), 'UNSAFEPARITY', { limit: 10 });
   const m = main.search(main.buildIndex(pages, { now: NOW }), 'UNSAFEPARITY', { limit: 10 });
   assert.deepEqual(d, m);
-  assert.deepEqual(d.results.map((r) => r.path), ['ok.md']);
+  assert.deepEqual(
+    d.results.map((r) => r.path),
+    ['ok.md']
+  );
 });
 
 // ---------- Criterion 3 for MCP: a fixed page appears on the next query without restarting the server ----------
 
 test('BA-23 c3: MCP picks up a fixed page on a later wiki_query', async (t) => {
-  const vault = await writeTree(await workdir(t), underWiki({ ...GOOD, 'fixme.md': '---\ntitle: [x\n---\n# Fix\nMCPFIXTOKEN' }));
+  const vault = await writeTree(
+    await workdir(t),
+    underWiki({ ...GOOD, 'fixme.md': '---\ntitle: [x\n---\n# Fix\nMCPFIXTOKEN' })
+  );
   const env = await envFor(t, vault);
-  const transport = new StdioClientTransport({ command: process.execPath, args: [join(DEV, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: DEV, env, stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [join(DEV, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: DEV,
+    env,
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba23-blind', version: '1.0.0' });
-  t.after(async () => { await client.close().catch(() => {}); await transport.close().catch(() => {}); });
+  t.after(async () => {
+    await client.close().catch(() => {});
+    await transport.close().catch(() => {});
+  });
   await client.connect(transport);
-  const q = (query) => client.callTool({ name: 'wiki_query', arguments: { query, limit: 5 } }).then((r) => ({ isError: r.isError === true, text: r.content.find((c) => c.type === 'text')?.text ?? '' }));
+  const q = (query) =>
+    client
+      .callTool({ name: 'wiki_query', arguments: { query, limit: 5 } })
+      .then((r) => ({ isError: r.isError === true, text: r.content.find((c) => c.type === 'text')?.text ?? '' }));
   const first = await q('MCPFIXTOKEN');
   assert.equal(first.isError, false, first.text);
   assert.ok(!first.text.includes('fixme.md'));
-  await writeFile(join(vault, 'wiki/fixme.md'), '---\ntitle: Fix\n---\n# Fix\nMCPFIXTOKEN is now readable and longer.\n');
+  await writeFile(
+    join(vault, 'wiki/fixme.md'),
+    '---\ntitle: Fix\n---\n# Fix\nMCPFIXTOKEN is now readable and longer.\n'
+  );
   const second = await q('MCPFIXTOKEN');
   assert.equal(second.isError, false, second.text);
   assert.ok(second.text.includes('fixme.md'), second.text);

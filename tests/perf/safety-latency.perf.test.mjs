@@ -7,7 +7,7 @@ import { performance } from 'node:perf_hooks';
 import { scanText, redact } from '../../packages/core/src/safety/index.mjs';
 
 test('one megabyte and adversarial input remain bounded', () => {
-  const inputs = ['ordinary words '.repeat(70000), 'a'.repeat(1024 * 1024), ('a='.repeat(350000))];
+  const inputs = ['ordinary words '.repeat(70000), 'a'.repeat(1024 * 1024), 'a='.repeat(350000)];
   for (const text of inputs) {
     const start = performance.now();
     scanText(text);
@@ -17,8 +17,16 @@ test('one megabyte and adversarial input remain bounded', () => {
 
 test('BA-26 patterns stay bounded on long adversarial runs (secret and output paths)', () => {
   // Generous bound: the check is against super-linear backtracking, not a benchmark.
-  const inputs = ['a_'.repeat(50000), 'ado_'.repeat(20000), 'a@' + 'a.'.repeat(20000), 'sv=2021-06-08'.repeat(5000),
-    'Authorization: Bearer '.repeat(3000), 'AccountKey='.repeat(8000), 'TR12'.repeat(10000), 'AKIA'.repeat(20000)];
+  const inputs = [
+    'a_'.repeat(50000),
+    'ado_'.repeat(20000),
+    'a@' + 'a.'.repeat(20000),
+    'sv=2021-06-08'.repeat(5000),
+    'Authorization: Bearer '.repeat(3000),
+    'AccountKey='.repeat(8000),
+    'TR12'.repeat(10000),
+    'AKIA'.repeat(20000),
+  ];
   for (const text of inputs) {
     const start = performance.now();
     scanText(text);

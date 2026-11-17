@@ -67,7 +67,9 @@ const NEGATIVES = [
 ];
 
 test('fix1 positives: query, fragment, matrix and İ/ı-folded keys are findings with the expected rule', () => {
-  const misses = POSITIVES.filter(([text, rule]) => !ids(text).has(rule)).map(([t, r]) => `${r} <- ${t.slice(0, 50)} got=[${rules(t)}]`);
+  const misses = POSITIVES.filter(([text, rule]) => !ids(text).has(rule)).map(
+    ([t, r]) => `${r} <- ${t.slice(0, 50)} got=[${rules(t)}]`
+  );
   assert.deepEqual(misses, []);
 });
 
@@ -80,18 +82,39 @@ test('fix1 hook: query, fragment, matrix and Turkish upper-case secrets never re
   fs.mkdirSync(WORK, { recursive: true });
   const root = fs.mkdtempSync(path.join(WORK, 'fix1-hook-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const vault = path.join(root, 'vault'), home = path.join(root, 'home'), state = path.join(root, 'state');
-  fs.mkdirSync(path.join(vault, 'wiki'), { recursive: true }); fs.mkdirSync(home); fs.mkdirSync(state);
-  const leaks = [], shown = [];
+  const vault = path.join(root, 'vault'),
+    home = path.join(root, 'home'),
+    state = path.join(root, 'state');
+  fs.mkdirSync(path.join(vault, 'wiki'), { recursive: true });
+  fs.mkdirSync(home);
+  fs.mkdirSync(state);
+  const leaks = [],
+    shown = [];
   for (const [i, [text]] of POSITIVES.entries()) {
     // Each page carries a unique keyword so its own prompt retrieves it.
-    fs.writeFileSync(path.join(vault, 'wiki', `f${i}.md`), `---\ntitle: Bağlantı ${i}\nstatus: confirmed\n---\nfix1kw${i} ${text}\n`);
+    fs.writeFileSync(
+      path.join(vault, 'wiki', `f${i}.md`),
+      `---\ntitle: Bağlantı ${i}\nstatus: confirmed\n---\nfix1kw${i} ${text}\n`
+    );
   }
   for (const [i, [text]] of POSITIVES.entries()) {
     const secret = text.match(new RegExp(V.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '|' + HE))?.[0];
-    const res = await runHook({ client: 'claude', event: 'prompt', stdin: JSON.stringify({ session_id: `fix1-${i}`, prompt: `fix1kw${i}` }), env: { HOME: home },
-      config: { vault: { path: vault }, stateDir: state, hooks: { mode: 'normal', deadlineMs: 4700 }, retrieval: { abstainThreshold: 0 } }, now: NOW });
-    const out = res.stdout.includes('additionalContext') ? JSON.parse(res.stdout).hookSpecificOutput.additionalContext : '';
+    const res = await runHook({
+      client: 'claude',
+      event: 'prompt',
+      stdin: JSON.stringify({ session_id: `fix1-${i}`, prompt: `fix1kw${i}` }),
+      env: { HOME: home },
+      config: {
+        vault: { path: vault },
+        stateDir: state,
+        hooks: { mode: 'normal', deadlineMs: 4700 },
+        retrieval: { abstainThreshold: 0 },
+      },
+      now: NOW,
+    });
+    const out = res.stdout.includes('additionalContext')
+      ? JSON.parse(res.stdout).hookSpecificOutput.additionalContext
+      : '';
     if (out.includes(`Bağlantı ${i}`)) shown.push(i);
     if (secret && out.includes(secret)) leaks.push(`${i}: ${secret.slice(0, 4)}...`);
   }
@@ -128,7 +151,8 @@ test('fix1 false positives: query-shaped clean set (120 URLs) yields no finding 
 test('fix1 vs main: the query pass adds no finding on query-shaped clean content that main does not report', () => {
   const extra = [];
   for (const x of QCLEAN_ITEMS) {
-    const mine = safety.scanText(x).length, theirs = mainSafety.scanText(x).length;
+    const mine = safety.scanText(x).length,
+      theirs = mainSafety.scanText(x).length;
     if (mine > theirs) extra.push(`${x.slice(0, 60)} wt=${mine} main=${theirs}`);
   }
   assert.deepEqual(extra, []);

@@ -11,8 +11,11 @@ export function markdownChunks(markdown, sourcePath, { maxWords = 180 } = {}) {
   const lines = markdown.replace(/\r\n?/gu, '\n').split('\n');
   const fmEnd = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
   const content = lines.slice(fmEnd >= 0 ? fmEnd + 1 : 0);
-  const title = content.find((line) => /^#\s+/u.test(line))?.replace(/^#\s+/u, '').trim()
-    || sourcePath.split('/').at(-1).replace(/\.md$/iu, '');
+  const title =
+    content
+      .find((line) => /^#\s+/u.test(line))
+      ?.replace(/^#\s+/u, '')
+      .trim() || sourcePath.split('/').at(-1).replace(/\.md$/iu, '');
   const sections = [];
   const stack = [];
   let body = [];

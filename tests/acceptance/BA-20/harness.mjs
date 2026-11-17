@@ -12,9 +12,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 export const TARGET = process.env.BA20_TARGET === 'main' ? 'main' : 'worktree';
-export const SERVER_ROOT = TARGET === 'main'
-  ? resolve(process.env.BA20_MAIN_ROOT || join(ROOT, '..', '..', 'BrainAtlas'))
-  : ROOT;
+export const SERVER_ROOT =
+  TARGET === 'main' ? resolve(process.env.BA20_MAIN_ROOT || join(ROOT, '..', '..', 'BrainAtlas')) : ROOT;
 
 const { defaultConfig } = await import(pathToFileURL(join(SERVER_ROOT, 'packages/core/src/config/index.mjs')).href);
 
@@ -43,23 +42,38 @@ export async function startServer(t, { files = {} } = {}) {
     args: [join(SERVER_ROOT, 'packages/mcp/bin/brainatlas-mcp.mjs')],
     cwd: SERVER_ROOT,
     env: {
-      HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'),
-      BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH || ''
+      HOME: home,
+      XDG_CONFIG_HOME: join(home, 'config'),
+      XDG_DATA_HOME: join(home, 'data'),
+      XDG_STATE_HOME: join(home, 'state'),
+      BRAINATLAS_CONFIG: configFile,
+      BRAINATLAS_VAULT: vault,
+      PATH: process.env.PATH || '',
     },
-    stderr: 'pipe'
+    stderr: 'pipe',
   });
   let stderr = '';
-  transport.stderr.on('data', (chunk) => { stderr += chunk; });
+  transport.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
   const client = new Client({ name: 'ba20-blind-acceptance', version: '1.0.0' });
   t.after(async () => {
-    try { await client.close(); } finally { await rm(dir, { recursive: true, force: true }); }
+    try {
+      await client.close();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
   await client.connect(transport);
   return { dir, home, vault, wiki, client, stderr: () => stderr };
 }
 
 export const call = (client, name, args = {}) => client.callTool({ name, arguments: args });
-export const textOf = (r) => (r.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n');
+export const textOf = (r) =>
+  (r.content || [])
+    .filter((x) => x.type === 'text')
+    .map((x) => x.text)
+    .join('\n');
 export function okJson(r) {
   assert.notEqual(r.isError, true, `unexpected refusal: ${textOf(r)}`);
   return JSON.parse(textOf(r));

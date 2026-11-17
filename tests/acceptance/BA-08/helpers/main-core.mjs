@@ -22,7 +22,11 @@ export async function loadMainRetrieval() {
   const tree = path.join(dir, 'tree');
   fs.mkdirSync(tree);
   try {
-    execFileSync('git', ['-C', repoRoot, 'archive', '--format=tar', '-o', tarFile, MAIN_COMMIT, 'package.json', 'packages/core/src'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    execFileSync(
+      'git',
+      ['-C', repoRoot, 'archive', '--format=tar', '-o', tarFile, MAIN_COMMIT, 'package.json', 'packages/core/src'],
+      { stdio: ['ignore', 'ignore', 'pipe'] }
+    );
     execFileSync('tar', ['-xf', tarFile, '-C', tree], { stdio: ['ignore', 'ignore', 'pipe'] });
     // Bare imports (yaml) resolve through the worktree's installed dependencies; no copy of them is made.
     fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(tree, 'node_modules'), 'dir');

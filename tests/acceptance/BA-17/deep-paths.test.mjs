@@ -7,14 +7,11 @@ import assert from 'node:assert/strict';
 import { loadRetrieval, page, NOW } from './support.mjs';
 
 const { buildIndex, search } = await loadRetrieval();
-const run = (index, query, options = {}) => search(index, query, { limit: 10, abstainThreshold: 0, asOf: NOW, ...options });
+const run = (index, query, options = {}) =>
+  search(index, query, { limit: 10, abstainThreshold: 0, asOf: NOW, ...options });
 
 // Each variant: the last components of the path (the basename may itself hold `.`, `-` and `_`).
-const leaves = [
-  ['handler-x-13.mjs'],
-  ['build-2.1', 'report.v2.json'],
-  ['a_b.c-d.mjs'],
-];
+const leaves = [['handler-x-13.mjs'], ['build-2.1', 'report.v2.json'], ['a_b.c-d.mjs']];
 
 function makePaths(depth) {
   return leaves.map((tail) => {
@@ -25,7 +22,9 @@ function makePaths(depth) {
 
 for (const depth of [13, 16, 20, 40]) {
   const paths = makePaths(depth);
-  const pages = paths.map((p, i) => page(`deep/${depth}-${i}.md`, `Reference: ${p} is the file under test.`, { title: `Deep ${depth} ${i}` }));
+  const pages = paths.map((p, i) =>
+    page(`deep/${depth}-${i}.md`, `Reference: ${p} is the file under test.`, { title: `Deep ${depth} ${i}` })
+  );
   pages.push(page('deep/decoy.md', 'Plain prose about gardens, rivers and bread.', { title: 'Decoy' }));
   const index = buildIndex(pages, { now: NOW });
 
@@ -46,7 +45,10 @@ for (const depth of [13, 16, 20, 40]) {
           const r = run(index, query);
           assert.notEqual(r.reason, 'identifier-not-found', `${depth} ${query}`);
           assert.equal(r.abstained, false, `${depth} ${query}`);
-          assert.ok(r.results.some(x => x.path === `deep/${depth}-${i}.md`), `${depth} "${query}" must return deep/${depth}-${i}.md`);
+          assert.ok(
+            r.results.some((x) => x.path === `deep/${depth}-${i}.md`),
+            `${depth} "${query}" must return deep/${depth}-${i}.md`
+          );
         }
       }
     });
@@ -70,7 +72,11 @@ for (const depth of [13, 16, 20, 40]) {
   });
 
   test(`${depth} components: a long question with one unknown deep suffix still ranks normally (share of identifier units below 0.2)`, () => {
-    const r = run(index, 'Could you explain in detail how the retry flow of the widget pipeline changed, and what dir99/handler-x-13.mjs does today?', { abstainThreshold: 0 });
+    const r = run(
+      index,
+      'Could you explain in detail how the retry flow of the widget pipeline changed, and what dir99/handler-x-13.mjs does today?',
+      { abstainThreshold: 0 }
+    );
     assert.notEqual(r.reason, 'identifier-not-found', 'long natural question with unknown identifier must not abstain');
   });
 }

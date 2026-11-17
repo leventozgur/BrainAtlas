@@ -11,7 +11,7 @@ import { cleanEnv } from './clean-env.mjs';
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-test('CLI finds adapters under a space-containing install path and redacts plan secrets', async t => {
+test('CLI finds adapters under a space-containing install path and redacts plan secrets', async (t) => {
   const temp = await mkdtemp(join(tmpdir(), 'ba cli space-'));
   t.after(() => rm(temp, { recursive: true, force: true }));
   const install = join(temp, 'installed release');
@@ -33,12 +33,19 @@ test('CLI finds adapters under a space-containing install path and redacts plan 
     XDG_DATA_HOME: join(home, '.local', 'share'),
     XDG_STATE_HOME: join(home, '.local', 'state'),
     BRAINATLAS_PLATFORM: 'linux',
-    BRAINATLAS_OFFLINE: '1'
+    BRAINATLAS_OFFLINE: '1',
   });
   const cli = join(install, 'packages/cli/bin/brainatlas.mjs');
-  const result = spawnSync(process.execPath, [cli, 'init', '--yes', '--vault', join(home, 'vault'), '--agents', 'claude-code', '--plan', '--json'], {
-    cwd: temp, env, encoding: 'utf8', shell: false
-  });
+  const result = spawnSync(
+    process.execPath,
+    [cli, 'init', '--yes', '--vault', join(home, 'vault'), '--agents', 'claude-code', '--plan', '--json'],
+    {
+      cwd: temp,
+      env,
+      encoding: 'utf8',
+      shell: false,
+    }
+  );
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
   assert.deepEqual(report.warnings, []);

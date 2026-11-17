@@ -33,12 +33,17 @@ async function fixture(t, files) {
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
   const transport = new StdioClientTransport({
-    command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe'
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
   });
   const client = new Client({ name: 'ba20-unreadable-test', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   return { wiki, client };
 }
 
@@ -49,7 +54,11 @@ test('BA20-UNREADABLE1: an unreadable page is listed with the no-title fallback;
   assert.deepEqual(JSON.parse(first.content[0].text), { indexed: 2, added: 2, removed: 0 });
   const text = await readFile(resolve(f.wiki, 'index.md'), 'utf8');
   assert.ok(text.includes('- [Tamam](entities/ok.md)\n'), 'the readable page is indexed with its title');
-  assert.equal(text.split('\n').filter((line) => line.includes('entities/bad.md')).length, 1, 'the unreadable page has one entry line');
+  assert.equal(
+    text.split('\n').filter((line) => line.includes('entities/bad.md')).length,
+    1,
+    'the unreadable page has one entry line'
+  );
   for (let run = 2; run <= 3; run++) {
     const again = await f.client.callTool({ name: 'wiki_update_index', arguments: {} });
     assert.notEqual(again.isError, true, again.content?.[0]?.text);

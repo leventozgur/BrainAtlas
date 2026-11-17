@@ -7,9 +7,10 @@ import assert from 'node:assert/strict';
 import { page, run, indexOf, NOW } from './helpers.mjs';
 import { search } from '../../../packages/core/src/retrieval/index.mjs';
 
-const old = (relPath, next, body = 'legacy quota is 10 per day') => page(relPath, `# Quota\n${body}\n`, { status: 'superseded', superseded_by: next });
+const old = (relPath, next, body = 'legacy quota is 10 per day') =>
+  page(relPath, `# Quota\n${body}\n`, { status: 'superseded', superseded_by: next });
 const current = (relPath, body = 'quota is 50 per day') => page(relPath, `# Quota\n${body}\n`, { status: 'confirmed' });
-const paths = (r) => r.results.map(x => x.path);
+const paths = (r) => r.results.map((x) => x.path);
 
 test('a superseded page never appears in results, even for an exact query on its own text', () => {
   const pages = [old('a.md', 'b.md'), current('b.md')];
@@ -20,11 +21,14 @@ test('a superseded page never appears in results, even for an exact query on its
 test('the replacement carries supersedes with the superseded page, and ranking is unchanged', () => {
   const pages = [old('a.md', 'b.md'), current('b.md')];
   const r = run(pages, 'quota per day');
-  const b = r.results.find(x => x.path === 'b.md');
+  const b = r.results.find((x) => x.path === 'b.md');
   assert.deepEqual(b.supersedes, ['a.md']);
   // Compared with the same vault minus the superseded page: identical paths, scores, abstain state.
   const without = run([current('b.md')], 'quota per day');
-  assert.deepEqual(r.results.map(({ path, score }) => ({ path, score })), without.results.map(({ path, score }) => ({ path, score })));
+  assert.deepEqual(
+    r.results.map(({ path, score }) => ({ path, score })),
+    without.results.map(({ path, score }) => ({ path, score }))
+  );
   assert.equal(r.abstained, without.abstained);
 });
 

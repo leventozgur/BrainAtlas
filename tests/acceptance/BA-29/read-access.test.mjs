@@ -15,8 +15,14 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const CAND = resolve(here, '..', '..', '..');
 const dirs = [];
-process.on('exit', () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
-const tmp = (p) => { const d = mkdtempSync(join(tmpdir(), `ba29-read-${p}-`)); dirs.push(d); return d; };
+process.on('exit', () => {
+  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+});
+const tmp = (p) => {
+  const d = mkdtempSync(join(tmpdir(), `ba29-read-${p}-`));
+  dirs.push(d);
+  return d;
+};
 
 const FILES = {
   'wiki/index.md': '---\ntitle: Index\nstatus: active\n---\n# Index\n\n- [[alpha]] zyqorvex gateway entry\n',
@@ -24,7 +30,8 @@ const FILES = {
   'wiki/AGENTS.md': '# Agent policy for zyqorvex\n\nwiki-local policy text.\n',
   'wiki/CLAUDE.md': '# Project memory zyqorvex\n\nwiki-local memory text.\n',
   'wiki/GEMINI.md': '# Gemini zyqorvex\n\nwiki-local gemini text.\n',
-  'wiki/alpha.md': '---\ntitle: Zyqorvex gateway\nstatus: confirmed\n---\n# Zyqorvex gateway\n\n## Timeouts\nThe zyqorvex gateway applies a thirty second timeout.\n',
+  'wiki/alpha.md':
+    '---\ntitle: Zyqorvex gateway\nstatus: confirmed\n---\n# Zyqorvex gateway\n\n## Timeouts\nThe zyqorvex gateway applies a thirty second timeout.\n',
   'wiki/sub/index.md': '# Nested index\n\nzyqorvex nested navigation page, not a root page.\n',
   'planning/p.md': '# Plan\n\nzyqorvex plan outside the wiki.\n',
   'AGENTS.md': '# Root agents\n\nzyqorvex root policy outside the wiki.\n',
@@ -42,16 +49,21 @@ function vault(files = FILES) {
 async function load(root) {
   return import(pathToFileURL(join(root, 'packages/mcp/src/index.mjs')).href);
 }
-const cfgOf = (root) => import(pathToFileURL(join(root, 'packages/core/src/config/index.mjs')).href).then((C) => {
-  const config = C.defaultConfig('lite');
-  config.retrieval = { budgetChars: 4000, abstainThreshold: 0.35 };
-  return config;
-});
+const cfgOf = (root) =>
+  import(pathToFileURL(join(root, 'packages/core/src/config/index.mjs')).href).then((C) => {
+    const config = C.defaultConfig('lite');
+    config.retrieval = { budgetChars: 4000, abstainThreshold: 0.35 };
+    return config;
+  });
 
 async function session(mcp, root, v) {
   const config = await cfgOf(root);
   config.vault.path = v;
-  const server = mcp.createServer({ config, paths: { vaultDir: v, stateDir: tmp('state') }, env: { HOME: tmp('home') } });
+  const server = mcp.createServer({
+    config,
+    paths: { vaultDir: v, stateDir: tmp('state') },
+    env: { HOME: tmp('home') },
+  });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'ba29-read', version: '1' });
   await Promise.all([server.connect(st), client.connect(ct)]);
@@ -59,10 +71,20 @@ async function session(mcp, root, v) {
     const r = await client.callTool({ name, arguments: args });
     let text = r.content?.[0]?.text ?? null;
     // indexAgeMs is the wall-clock age of wiki/index.md (differs between any two runs); every other field is compared.
-    if (name === 'wiki_status' && text) { const status = JSON.parse(text); delete status.indexAgeMs; text = JSON.stringify(status); }
+    if (name === 'wiki_status' && text) {
+      const status = JSON.parse(text);
+      delete status.indexAgeMs;
+      text = JSON.stringify(status);
+    }
     return { isError: r.isError === true, text };
   };
-  return { call, close: async () => { await client.close(); await server.close(); } };
+  return {
+    call,
+    close: async () => {
+      await client.close();
+      await server.close();
+    },
+  };
 }
 
 test('read access 4b: the excluded pages are readable on the candidate, with content', async () => {

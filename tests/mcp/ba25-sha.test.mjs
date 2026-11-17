@@ -32,18 +32,27 @@ async function fixture(t, { readOnly = false } = {}) {
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
   const transport = new StdioClientTransport({
-    command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe'
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
   });
   const client = new Client({ name: 'ba25-sha-test', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   return { wiki, client, page: resolve(wiki, 'concepts/shared.md'), log: resolve(wiki, 'log.md') };
 }
 
 async function call(client, name, args = {}) {
   const result = await client.callTool({ name, arguments: args });
-  return { isError: result.isError === true, text: result.content[0].text, data: result.isError ? undefined : JSON.parse(result.content[0].text) };
+  return {
+    isError: result.isError === true,
+    text: result.content[0].text,
+    data: result.isError ? undefined : JSON.parse(result.content[0].text),
+  };
 }
 
 async function ok(client, name, args = {}) {
@@ -73,7 +82,11 @@ test('wiki_read_page hashes the whole file even when the content is truncated', 
 test('wiki_update_page with a matching expectedSha256 writes and returns the new hash', async (t) => {
   const { client, page } = await fixture(t);
   const next = '---\ntitle: Shared\n---\nBeta body.\n';
-  const result = await ok(client, 'wiki_update_page', { path: 'concepts/shared.md', content: next, expectedSha256: sha(PAGE) });
+  const result = await ok(client, 'wiki_update_page', {
+    path: 'concepts/shared.md',
+    content: next,
+    expectedSha256: sha(PAGE),
+  });
   assert.equal(result.updated, true);
   assert.equal(result.sha256, sha(next));
   assert.equal(await readFile(page, 'utf8'), next);
@@ -82,7 +95,11 @@ test('wiki_update_page with a matching expectedSha256 writes and returns the new
 test('wiki_update_page with a stale expectedSha256 is refused and changes neither the page nor the log', async (t) => {
   const { client, page, log } = await fixture(t);
   const logBefore = await readFile(log, 'utf8');
-  const result = await call(client, 'wiki_update_page', { path: 'concepts/shared.md', content: '---\ntitle: Shared\n---\nChanged body.\n', expectedSha256: sha('other') });
+  const result = await call(client, 'wiki_update_page', {
+    path: 'concepts/shared.md',
+    content: '---\ntitle: Shared\n---\nChanged body.\n',
+    expectedSha256: sha('other'),
+  });
   assert.equal(result.isError, true);
   assert.ok(result.text.startsWith('E_CONFLICT:'), result.text);
   assert.ok(!result.text.includes('Changed') && !result.text.includes(sha(PAGE)), 'no content or hash echo');
@@ -93,11 +110,19 @@ test('wiki_update_page with a stale expectedSha256 is refused and changes neithe
 test('wiki_write_page with a matching expectedSha256 writes; a stale one is refused', async (t) => {
   const { client, page, log } = await fixture(t);
   const next = '---\ntitle: Shared\n---\nGamma.\n';
-  const written = await ok(client, 'wiki_write_page', { path: 'concepts/shared.md', content: next, expectedSha256: sha(PAGE) });
+  const written = await ok(client, 'wiki_write_page', {
+    path: 'concepts/shared.md',
+    content: next,
+    expectedSha256: sha(PAGE),
+  });
   assert.equal(written.written, true);
   assert.equal(written.sha256, sha(next));
   const logBefore = await readFile(log, 'utf8');
-  const refused = await call(client, 'wiki_write_page', { path: 'concepts/shared.md', content: PAGE, expectedSha256: sha(PAGE) });
+  const refused = await call(client, 'wiki_write_page', {
+    path: 'concepts/shared.md',
+    content: PAGE,
+    expectedSha256: sha(PAGE),
+  });
   assert.equal(refused.isError, true);
   assert.ok(refused.text.startsWith('E_CONFLICT:'), refused.text);
   assert.equal(await readFile(page, 'utf8'), next);
@@ -106,16 +131,28 @@ test('wiki_write_page with a matching expectedSha256 writes; a stale one is refu
 
 test('a missing page with an expectedSha256 is E_CONFLICT for both write tools and creates nothing', async (t) => {
   const { wiki, client } = await fixture(t);
-  const upd = await call(client, 'wiki_update_page', { path: 'concepts/missing.md', content: PAGE, expectedSha256: sha(PAGE) });
+  const upd = await call(client, 'wiki_update_page', {
+    path: 'concepts/missing.md',
+    content: PAGE,
+    expectedSha256: sha(PAGE),
+  });
   assert.ok(upd.isError && upd.text.startsWith('E_CONFLICT:'), upd.text);
-  const wr = await call(client, 'wiki_write_page', { path: 'concepts/missing.md', content: PAGE, expectedSha256: sha(PAGE) });
+  const wr = await call(client, 'wiki_write_page', {
+    path: 'concepts/missing.md',
+    content: PAGE,
+    expectedSha256: sha(PAGE),
+  });
   assert.ok(wr.isError && wr.text.startsWith('E_CONFLICT:'), wr.text);
   await assert.rejects(readFile(resolve(wiki, 'concepts/missing.md'), 'utf8'), { code: 'ENOENT' });
 });
 
 test('an expectedSha256 that is not a SHA-256 hex digest is refused as invalid input', async (t) => {
   const { client, page } = await fixture(t);
-  const result = await call(client, 'wiki_update_page', { path: 'concepts/shared.md', content: PAGE, expectedSha256: 'abc' });
+  const result = await call(client, 'wiki_update_page', {
+    path: 'concepts/shared.md',
+    content: PAGE,
+    expectedSha256: 'abc',
+  });
   assert.equal(result.isError, true);
   assert.equal(await readFile(page, 'utf8'), PAGE);
 });
@@ -132,7 +169,13 @@ test('calls without expectedSha256 keep the previous behaviour, including overwr
 test('readOnly mode still offers no write tool, and wiki_read_page still returns the hash', async (t) => {
   const { client } = await fixture(t, { readOnly: true });
   const names = (await client.listTools()).tools.map((tool) => tool.name);
-  for (const name of ['wiki_write_page', 'wiki_update_page', 'wiki_create_entity', 'wiki_create_concept', 'wiki_update_index']) {
+  for (const name of [
+    'wiki_write_page',
+    'wiki_update_page',
+    'wiki_create_entity',
+    'wiki_create_concept',
+    'wiki_update_index',
+  ]) {
     assert.ok(!names.includes(name), `${name} must not be offered in readOnly mode`);
   }
   const read = await ok(client, 'wiki_read_page', { path: 'concepts/shared.md' });

@@ -15,11 +15,14 @@ const BODY = 'zephyr quorum ledger reconciliation notes.';
 const VERIFIED = `status: confirmed\n${record({})}`;
 
 function setup(prefix) {
-  const vault = makeVault({
-    'v.md': page({ fm: VERIFIED, body: BODY }),
-    'w.md': page({ fm: 'status: proposed\n', body: BODY }),
-    'n.md': page({ body: BODY }),
-  }, `ba09-${prefix}-vault-`);
+  const vault = makeVault(
+    {
+      'v.md': page({ fm: VERIFIED, body: BODY }),
+      'w.md': page({ fm: 'status: proposed\n', body: BODY }),
+      'n.md': page({ body: BODY }),
+    },
+    `ba09-${prefix}-vault-`
+  );
   const state = makeVault({}, `ba09-${prefix}-state-`);
   dirs.push(vault, state);
   const cache = path.join(state, 'retrieval-index.json');
@@ -27,7 +30,8 @@ function setup(prefix) {
   return { vault, state, cache, searcher };
 }
 const answer = (s) => s.search(QUERY, { limit: 10, abstainThreshold: 0, asOf: NOW });
-const trustFromCache = (cache) => Object.fromEntries(JSON.parse(fs.readFileSync(cache, 'utf8')).index.docs.map((d) => [d.page.path, d.trust]));
+const trustFromCache = (cache) =>
+  Object.fromEntries(JSON.parse(fs.readFileSync(cache, 'utf8')).index.docs.map((d) => [d.page.path, d.trust]));
 const docFor = (data, file) => data.index.docs.find((d) => d.page.path === file);
 
 test('a cold build stores the trust class of every document in the cache', () => {
@@ -50,7 +54,20 @@ test('a cache with a wrong class is rejected, rebuilt once, and answers like a c
 });
 
 test('a cache whose class is missing or not one of the three values is rejected and rebuilt', () => {
-  for (const [label, mutate] of [['missing', (d) => { delete d.trust; }], ['unknown', (d) => { d.trust = 'trusted'; }]]) {
+  for (const [label, mutate] of [
+    [
+      'missing',
+      (d) => {
+        delete d.trust;
+      },
+    ],
+    [
+      'unknown',
+      (d) => {
+        d.trust = 'trusted';
+      },
+    ],
+  ]) {
     const { cache, searcher } = setup(`bad-${label}`);
     const cold = answer(searcher());
     const data = JSON.parse(fs.readFileSync(cache, 'utf8'));

@@ -4,7 +4,13 @@ import { DropboxError } from './errors.mjs';
 
 const API_BASE = 'https://api.dropboxapi.com/2';
 const CONTENT_BASE = 'https://content.dropboxapi.com/2';
-const safeJson = async (response) => { try { return await response.json(); } catch { return null; } };
+const safeJson = async (response) => {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
 const retryAfter = (response) => {
   const value = response.headers?.get?.('retry-after');
   if (value === null || value === undefined) return undefined;
@@ -13,8 +19,13 @@ const retryAfter = (response) => {
 };
 
 function validateRoot(value) {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.includes('\\') || value.includes('\0')
-      || value.split('/').some((part, index) => index > 0 && (!part || part === '.' || part === '..'))) {
+  if (
+    typeof value !== 'string' ||
+    !value.startsWith('/') ||
+    value.includes('\\') ||
+    value.includes('\0') ||
+    value.split('/').some((part, index) => index > 0 && (!part || part === '.' || part === '..'))
+  ) {
     throw new DropboxError('E_INVALID_PATH');
   }
   return value === '/' ? '' : value.replace(/\/$/, '');
@@ -22,13 +33,21 @@ function validateRoot(value) {
 
 function apiError(response, body, { allowMissing = false } = {}) {
   if (response.status === 401) return new DropboxError('E_AUTH');
-  if (response.status === 429 || body?.error?.['.tag'] === 'too_many_requests' || body?.error_summary?.startsWith?.('too_many_requests')) {
+  if (
+    response.status === 429 ||
+    body?.error?.['.tag'] === 'too_many_requests' ||
+    body?.error_summary?.startsWith?.('too_many_requests')
+  ) {
     return new DropboxError('E_QUOTA', retryAfter(response));
   }
   if (response.status === 409) {
     const tag = body?.error?.['.tag'];
     const pathTag = body?.error?.path?.['.tag'] ?? body?.error?.path_lookup?.['.tag'];
-    if (allowMissing && (tag === 'not_found' || pathTag === 'not_found' || body?.error_summary?.startsWith?.('path/not_found'))) return null;
+    if (
+      allowMissing &&
+      (tag === 'not_found' || pathTag === 'not_found' || body?.error_summary?.startsWith?.('path/not_found'))
+    )
+      return null;
     return new DropboxError('E_CONFLICT');
   }
   return new DropboxError('E_NETWORK');
@@ -41,12 +60,23 @@ function normalizeListedPath(path, root) {
   if (root && !path.toLowerCase().startsWith(prefix.toLowerCase())) return null;
   const relative = root ? path.slice(root.length + 1) : path.slice(1);
   if (!relative) return null;
-  try { validateTransportPath(relative); } catch { return null; }
+  try {
+    validateTransportPath(relative);
+  } catch {
+    return null;
+  }
   return relative;
 }
 
 /** Build a Dropbox API v2 object transport. The injected fetch is used for every request. @param {{fetch?:Function,getAccessToken?:Function,root?:string,apiBase?:string,contentBase?:string,hostId?:string}} [options] */
-export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, getAccessToken, root = '/BrainAtlas', apiBase = API_BASE, contentBase = CONTENT_BASE, hostId } = {}) {
+export function createDropboxTransport({
+  fetch: fetchImpl = globalThis.fetch,
+  getAccessToken,
+  root = '/BrainAtlas',
+  apiBase = API_BASE,
+  contentBase = CONTENT_BASE,
+  hostId,
+} = {}) {
   if (typeof fetchImpl !== 'function' || typeof getAccessToken !== 'function') throw new DropboxError('E_AUTH');
   const normalizedRoot = validateRoot(root);
   const api = String(apiBase).replace(/\/$/, '');
@@ -68,8 +98,11 @@ export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, ge
       headers['content-type'] = 'application/json';
       body = JSON.stringify(args ?? {});
     }
-    try { return await fetchImpl(url, { method: 'POST', headers, body }); }
-    catch { throw new DropboxError('E_NETWORK'); }
+    try {
+      return await fetchImpl(url, { method: 'POST', headers, body });
+    } catch {
+      throw new DropboxError('E_NETWORK');
+    }
   }
 
   async function ensureParentFolders(relativePath, token) {
@@ -82,7 +115,9 @@ export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, ge
       folders.push(path);
     }
     for (const folder of folders) {
-      const response = await send(`${api}/files/create_folder_v2`, token, { args: { path: folder, autorename: false } });
+      const response = await send(`${api}/files/create_folder_v2`, token, {
+        args: { path: folder, autorename: false },
+      });
       if (response.ok) continue;
       const body = await safeJson(response);
       const error = apiError(response, body);
@@ -98,7 +133,9 @@ export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, ge
       if (prefix) validateTransportPath(prefix.endsWith('/') ? prefix.slice(0, -1) : prefix);
       const token = await getAccessToken();
       const found = [];
-      let response = await send(`${api}/files/list_folder`, token, { args: { path: normalizedRoot || '', recursive: true, include_deleted: false } });
+      let response = await send(`${api}/files/list_folder`, token, {
+        args: { path: normalizedRoot || '', recursive: true, include_deleted: false },
+      });
       let body = await safeJson(response);
       if (!response.ok) {
         const error = apiError(response, body, { allowMissing: true });
@@ -109,12 +146,14 @@ export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, ge
       while (true) {
         if (!Array.isArray(body?.entries)) throw new DropboxError('E_NETWORK');
         for (const entry of body.entries) {
-          if (entry?.['.tag'] !== 'file' || typeof entry.rev !== 'string' || !Number.isSafeInteger(entry.size)) continue;
+          if (entry?.['.tag'] !== 'file' || typeof entry.rev !== 'string' || !Number.isSafeInteger(entry.size))
+            continue;
           const path = normalizeListedPath(entry.path_display ?? entry.path_lower, normalizedRoot);
           if (path !== null && path.startsWith(prefix)) found.push({ path, rev: entry.rev, size: entry.size });
         }
         if (body.has_more !== true) break;
-        if (typeof body.cursor !== 'string' || !body.cursor || cursors.has(body.cursor)) throw new DropboxError('E_NETWORK');
+        if (typeof body.cursor !== 'string' || !body.cursor || cursors.has(body.cursor))
+          throw new DropboxError('E_NETWORK');
         cursors.add(body.cursor);
         response = await send(`${api}/files/list_folder/continue`, token, { args: { cursor: body.cursor } });
         body = await safeJson(response);
@@ -125,7 +164,10 @@ export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, ge
     async get(path) {
       validateTransportPath(path);
       const token = await getAccessToken();
-      const response = await send(`${content}/files/download`, token, { args: { path: remotePath(path) }, contentType: true });
+      const response = await send(`${content}/files/download`, token, {
+        args: { path: remotePath(path) },
+        contentType: true,
+      });
       if (!response.ok) {
         const body = await safeJson(response);
         const error = apiError(response, body, { allowMissing: true });
@@ -133,21 +175,31 @@ export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, ge
         throw error;
       }
       let metadata;
-      try { metadata = JSON.parse(response.headers.get('Dropbox-API-Result') ?? 'null'); } catch { throw new DropboxError('E_NETWORK'); }
+      try {
+        metadata = JSON.parse(response.headers.get('Dropbox-API-Result') ?? 'null');
+      } catch {
+        throw new DropboxError('E_NETWORK');
+      }
       if (typeof metadata?.rev !== 'string') throw new DropboxError('E_NETWORK');
-      try { return { bytes: new Uint8Array(await response.arrayBuffer()), rev: metadata.rev }; }
-      catch { throw new DropboxError('E_NETWORK'); }
+      try {
+        return { bytes: new Uint8Array(await response.arrayBuffer()), rev: metadata.rev };
+      } catch {
+        throw new DropboxError('E_NETWORK');
+      }
     },
     async put(path, bytes, options = {}) {
       validateTransportPath(path);
       if (!(bytes instanceof Uint8Array)) throw new TypeError('Dropbox object bytes must be a Uint8Array.');
-      if (options.ifRev !== undefined && (typeof options.ifRev !== 'string' || !options.ifRev)) throw new DropboxError('E_CONFLICT');
+      if (options.ifRev !== undefined && (typeof options.ifRev !== 'string' || !options.ifRev))
+        throw new DropboxError('E_CONFLICT');
       if (options.ifAbsent === true && options.ifRev !== undefined) throw new DropboxError('E_CONFLICT');
       const token = await getAccessToken();
       await ensureParentFolders(path, token);
       const mode = options.ifRev !== undefined ? { '.tag': 'update', update: options.ifRev } : { '.tag': 'add' };
       const response = await send(`${content}/files/upload`, token, {
-        args: { path: remotePath(path), mode, autorename: false }, bytes, contentType: true,
+        args: { path: remotePath(path), mode, autorename: false },
+        bytes,
+        contentType: true,
       });
       const body = await safeJson(response);
       if (!response.ok) throw apiError(response, body);
@@ -158,7 +210,9 @@ export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, ge
       validateTransportPath(path);
       if (typeof options.ifRev !== 'string' || !options.ifRev) throw new DropboxError('E_CONFLICT');
       const token = await getAccessToken();
-      const response = await send(`${api}/files/delete_v2`, token, { args: { path: remotePath(path), parent_rev: options.ifRev } });
+      const response = await send(`${api}/files/delete_v2`, token, {
+        args: { path: remotePath(path), parent_rev: options.ifRev },
+      });
       const body = await safeJson(response);
       if (!response.ok) throw apiError(response, body);
     },

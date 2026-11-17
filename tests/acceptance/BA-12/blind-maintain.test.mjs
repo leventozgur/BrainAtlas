@@ -5,13 +5,31 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  AMBIGUOUS, CLEAN_PATHS, COMPANIONS, KINDS, MARKER, SEEDS,
-  buildLargeVault, buildSeededVault, contentPageCount, score,
+  AMBIGUOUS,
+  CLEAN_PATHS,
+  COMPANIONS,
+  KINDS,
+  MARKER,
+  SEEDS,
+  buildLargeVault,
+  buildSeededVault,
+  contentPageCount,
+  score,
 } from './fixture.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -25,7 +43,9 @@ function tempDir(label) {
   created.push(dir);
   return dir;
 }
-process.on('exit', () => { for (const dir of created) rmSync(dir, { recursive: true, force: true }); });
+process.on('exit', () => {
+  for (const dir of created) rmSync(dir, { recursive: true, force: true });
+});
 
 function cli(args, home, cwd = home) {
   const result = spawnSync(process.execPath, ['--import', PRELOAD, CLI, ...args], {
@@ -60,11 +80,22 @@ function parseOnlyJson(stdout) {
   return JSON.parse(stdout); // throws if stdout holds more than one JSON value or any extra text
 }
 
-const FM = (type, { status = 'proposed', generated = '"2026-10-01"', stale = '"2999-12-31"', superseded } = {}) => [
-  '---', `type: ${type}`, `generated: ${generated}`, `status: ${status}`, 'sources:', '  - raw/synthetic-source.md',
-  'verified: []', `stale_after: ${stale}`, 'aliases: []', 'keywords: []',
-  ...(superseded === undefined ? [] : [`superseded_by: ${superseded}`]), '---', '',
-].join('\n');
+const FM = (type, { status = 'proposed', generated = '"2026-10-01"', stale = '"2999-12-31"', superseded } = {}) =>
+  [
+    '---',
+    `type: ${type}`,
+    `generated: ${generated}`,
+    `status: ${status}`,
+    'sources:',
+    '  - raw/synthetic-source.md',
+    'verified: []',
+    `stale_after: ${stale}`,
+    'aliases: []',
+    'keywords: []',
+    ...(superseded === undefined ? [] : [`superseded_by: ${superseded}`]),
+    '---',
+    '',
+  ].join('\n');
 
 // Seeded defect vault: the scored measurement.
 const seedRoot = tempDir('seed');
@@ -74,9 +105,9 @@ const seedRun = maintain(['--json', '--vault', seedRoot], seedHome);
 const seedOut = seedRun.status === 0 ? parseOnlyJson(seedRun.stdout) : null;
 const seedScore = seedOut ? score(seedOut.findings) : null;
 const detection = seedScore ? seedScore.detected / seedScore.seeds : 0;
-const falsePositiveRate = seedScore && seedOut.findings.length ? seedScore.falsePositives.length / seedOut.findings.length : 1;
-const strictFalsePositiveRate = seedScore && seedOut.findings.length
-  ? seedScore.strictFp / seedOut.findings.length : 1;
+const falsePositiveRate =
+  seedScore && seedOut.findings.length ? seedScore.falsePositives.length / seedOut.findings.length : 1;
+const strictFalsePositiveRate = seedScore && seedOut.findings.length ? seedScore.strictFp / seedOut.findings.length : 1;
 
 test('BA-12 fixture: at least 3 seeds per defect kind and a balanced seed list', () => {
   for (const kind of KINDS) {
@@ -92,7 +123,11 @@ test('BA-12 seeded vault: CLI exits 0 with one JSON object and nothing on stderr
   assert.ok(seedOut && seedOut.ok === true);
   assert.deepEqual(Object.keys(seedOut).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages']);
   for (const kind of KINDS) {
-    assert.equal(seedOut.counts[kind], seedOut.findings.filter((f) => f.kind === kind).length, `counts match findings for ${kind}`);
+    assert.equal(
+      seedOut.counts[kind],
+      seedOut.findings.filter((f) => f.kind === kind).length,
+      `counts match findings for ${kind}`
+    );
   }
   assert.deepEqual(Object.keys(seedOut.counts).sort(), [...KINDS].sort());
   assert.equal(seedOut.pages, contentPageCount(), 'pages counts content pages only (index and log excluded)');
@@ -110,7 +145,9 @@ test('BA-12 pre-registered gate: detection >= 0.90 and false-positive rate <= 0.
     `companion findings (orphan implies index-missing) ${seedScore.companionsSeen.length}`,
     `ambiguous hard case reported as index-missing ${seedScore.ambiguousSeen.length}`,
     `missed seeds: ${seedScore.missed.join(', ') || 'none'}`,
-    '| kind | seeds | found | false positives |', '| --- | --- | --- | --- |', ...rows,
+    '| kind | seeds | found | false positives |',
+    '| --- | --- | --- | --- |',
+    ...rows,
   ];
   for (const line of lines) t.diagnostic(line);
   assert.ok(detection >= 0.9, `detection ${detection}`);
@@ -125,13 +162,22 @@ test('BA-12 hard negatives: clean pages and code, URL, anchor and alias cases pr
   for (const path of CLEAN_PATHS) {
     assert.equal(seedOut.findings.filter((f) => f.path === path).length, 0, `unexpected finding on ${path}`);
   }
-  const hubNegatives = ['no-fence-target', 'no-inline-target', 'gone-in-fence', 'example.com', 'raw/file.pdf', 'outside-vault'];
+  const hubNegatives = [
+    'no-fence-target',
+    'no-inline-target',
+    'gone-in-fence',
+    'example.com',
+    'raw/file.pdf',
+    'outside-vault',
+  ];
   for (const f of seedOut.findings) {
-    for (const word of hubNegatives) assert.ok(!JSON.stringify(f).includes(word), `hard negative leaked into ${JSON.stringify(f)}`);
+    for (const word of hubNegatives)
+      assert.ok(!JSON.stringify(f).includes(word), `hard negative leaked into ${JSON.stringify(f)}`);
   }
   const indexStale = seedOut.findings.filter((f) => f.kind === 'index-stale');
   assert.equal(indexStale.length, 3, 'only the three seeded stale index entries');
-  for (const f of indexStale) assert.ok(/zz-(removed|old-name|gone)/.test(f.detail), `unexpected index-stale ${f.detail}`);
+  for (const f of indexStale)
+    assert.ok(/zz-(removed|old-name|gone)/.test(f.detail), `unexpected index-stale ${f.detail}`);
 });
 
 test('BA-12 hard negative: a page linked from another page but missing from the index is not an orphan', () => {
@@ -150,7 +196,10 @@ test('BA-12 clean vault: no defects gives zero findings', () => {
   mkdirSync(join(root, 'wiki', 'concepts'), { recursive: true });
   mkdirSync(join(root, 'wiki', 'entities'), { recursive: true });
   writeFileSync(join(root, 'wiki', 'index.md'), '# Wiki index\n\n- [A](concepts/a.md)\n- [B](entities/b.md)\n');
-  writeFileSync(join(root, 'wiki', 'concepts', 'a.md'), `${FM('concept')}# A\n\nLinks [[b]] and [b](../entities/b.md).\n`);
+  writeFileSync(
+    join(root, 'wiki', 'concepts', 'a.md'),
+    `${FM('concept')}# A\n\nLinks [[b]] and [b](../entities/b.md).\n`
+  );
   writeFileSync(join(root, 'wiki', 'entities', 'b.md'), `${FM('entity')}# B\n\nBack to [[a]].\n`);
   const run = maintain(['--json', '--vault', root], home);
   assert.equal(run.status, 0, run.stderr);
@@ -255,7 +304,10 @@ test('BA-12 symlinked wiki/ folder is skipped', () => {
   assert.equal(run.status, 0, run.stderr);
   const out = parseOnlyJson(run.stdout);
   assert.equal(out.pages, 0);
-  assert.ok(!run.stdout.includes('page.md') && !run.stdout.includes('zz-x-target'), 'content behind a symlinked wiki/ was scanned');
+  assert.ok(
+    !run.stdout.includes('page.md') && !run.stdout.includes('zz-x-target'),
+    'content behind a symlinked wiki/ was scanned'
+  );
 });
 
 test('BA-12 no leakage: page body words and absolute local paths never appear in output', () => {

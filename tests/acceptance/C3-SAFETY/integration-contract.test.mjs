@@ -26,7 +26,10 @@ async function assertNoSecretBytes(root, secrets) {
     if (entry.isDirectory()) await assertNoSecretBytes(path, secrets);
     else if (entry.isFile()) {
       const contents = await readFile(path);
-      assert.ok(secrets.every((secret) => !contents.includes(Buffer.from(secret))), 'persisted a synthetic credential');
+      assert.ok(
+        secrets.every((secret) => !contents.includes(Buffer.from(secret))),
+        'persisted a synthetic credential'
+      );
     } else {
       assert.fail('checkpoint created an unexpected filesystem entry');
     }
@@ -129,9 +132,16 @@ function assertProbeSafe(operation, sample, root) {
   const child = runIsolatedProbe(operation, sample, root);
   assert.ok(child.status === 0 && !child.error, `${operation} isolated probe failed`);
   const captured = `${child.stdout}\n${child.stderr}`;
-  assert.ok(sample.secrets.every((secret) => !captured.includes(secret)), `${operation} leaked synthetic content to process output`);
+  assert.ok(
+    sample.secrets.every((secret) => !captured.includes(secret)),
+    `${operation} leaked synthetic content to process output`
+  );
   let result;
-  try { result = JSON.parse(child.stdout); } catch { assert.fail(`${operation} produced unexpected output (contents suppressed)`); }
+  try {
+    result = JSON.parse(child.stdout);
+  } catch {
+    assert.fail(`${operation} produced unexpected output (contents suppressed)`);
+  }
   assert.ok(!result.leak, `${operation} leaked synthetic content through result or logs`);
   return result.outcome;
 }

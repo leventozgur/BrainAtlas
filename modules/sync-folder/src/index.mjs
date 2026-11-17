@@ -7,23 +7,26 @@ import { SyncTransportError, ConflictError, validateTransportPath } from '../../
 import { resolveHostId } from '../../sync-engine/src/host-id.mjs';
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
-const ignoredName = (name) => name.endsWith('.icloud') || name.startsWith('~$') || name.endsWith('.tmp') || name.startsWith('.syncthing.');
-const extensionOf = (name) => name.toLowerCase().endsWith('.md') ? '.md' : '';
+const ignoredName = (name) =>
+  name.endsWith('.icloud') || name.startsWith('~$') || name.endsWith('.tmp') || name.startsWith('.syncthing.');
+const extensionOf = (name) => (name.toLowerCase().endsWith('.md') ? '.md' : '');
 
 /** Recognize provider-generated sibling copies without treating ordinary files as conflicts. */
 export function isFolderConflictCopy(path) {
   const name = basename(path);
   const extension = extensionOf(name);
   const stem = extension ? name.slice(0, -extension.length) : name;
-  return / \d+$/.test(stem)
-    || / \(conflicted copy(?: [^)]*)?\)$/i.test(stem)
-    || / \([^)]*çakışan kopya[^)]*\)$/i.test(stem)
-    || / \(\d+\)$/.test(stem)
+  return (
+    / \d+$/.test(stem) ||
+    / \(conflicted copy(?: [^)]*)?\)$/i.test(stem) ||
+    / \([^)]*çakışan kopya[^)]*\)$/i.test(stem) ||
+    / \(\d+\)$/.test(stem) ||
     // OneDrive appends the device name after the final dash. Require an
     // uppercase/digit host token of at least three characters so ordinary
     // kebab-case names (for example, "meeting-notes") are not conflicts.
-    || /-[A-Z0-9]{3,}$/.test(stem)
-    || /\.sync-conflict-\d{8}-\d{6}-[A-Z0-9]{7}$/i.test(stem);
+    /-[A-Z0-9]{3,}$/.test(stem) ||
+    /\.sync-conflict-\d{8}-\d{6}-[A-Z0-9]{7}$/i.test(stem)
+  );
 }
 
 function within(base, candidate) {
@@ -50,7 +53,13 @@ async function canonicalCandidate(path) {
 }
 
 async function validateRoot(path, vaultPath) {
-  if (typeof path !== 'string' || !isAbsolute(path) || path.includes('\0') || typeof vaultPath !== 'string' || !isAbsolute(vaultPath)) {
+  if (
+    typeof path !== 'string' ||
+    !isAbsolute(path) ||
+    path.includes('\0') ||
+    typeof vaultPath !== 'string' ||
+    !isAbsolute(vaultPath)
+  ) {
     throw new SyncTransportError('E_INVALID_PATH');
   }
   const [root, vault] = await Promise.all([canonicalCandidate(path), canonicalCandidate(vaultPath)]);
@@ -60,7 +69,9 @@ async function validateRoot(path, vaultPath) {
   return root;
 }
 
-function revision(bytes, mtimeMs) { return `${sha256(bytes)}:${mtimeMs}`; }
+function revision(bytes, mtimeMs) {
+  return `${sha256(bytes)}:${mtimeMs}`;
+}
 
 function validatePrefix(prefix) {
   if (prefix === '') return;
@@ -93,19 +104,32 @@ async function ensureNoSymlinkPath(root, path, { includeLeaf = true } = {}) {
 
 async function scanFiles(root, current = root, rows = []) {
   let entries;
-  try { entries = await readdir(current, { withFileTypes: true }); }
-  catch (error) { if (error?.code === 'ENOENT') return rows; throw error; }
+  try {
+    entries = await readdir(current, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return rows;
+    throw error;
+  }
   for (const entry of entries) {
     if (ignoredName(entry.name) || entry.isSymbolicLink()) continue;
     const absolute = join(current, entry.name);
     if (entry.isDirectory()) await scanFiles(root, absolute, rows);
     else if (entry.isFile()) {
       const path = relative(root, absolute).split(sep).join('/');
-      try { validateTransportPath(path); } catch { continue; }
+      try {
+        validateTransportPath(path);
+      } catch {
+        continue;
+      }
       const info = await lstat(absolute);
       if (!info.isFile() || info.isSymbolicLink()) continue;
       const bytes = await readFile(absolute);
-      rows.push({ path, rev: revision(bytes, info.mtimeMs), size: bytes.byteLength, conflict: isFolderConflictCopy(path) });
+      rows.push({
+        path,
+        rev: revision(bytes, info.mtimeMs),
+        size: bytes.byteLength,
+        conflict: isFolderConflictCopy(path),
+      });
     }
   }
   return rows;
@@ -118,7 +142,8 @@ async function scanFiles(root, current = root, rows = []) {
  * @param {{path?:string,vaultPath?:string,hostId?:string,atomicWriter?:Function}} options
  */
 export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = atomicWriteFile } = {}) {
-  if (typeof path !== 'string' || typeof vaultPath !== 'string') throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder transport paths are incomplete.');
+  if (typeof path !== 'string' || typeof vaultPath !== 'string')
+    throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder transport paths are incomplete.');
   const initialization = validateRoot(path, vaultPath).then(async (validated) => {
     await mkdir(validated, { recursive: true });
     const info = await lstat(validated);
@@ -158,7 +183,8 @@ export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = 
     get: getObject,
     async put(path, bytes, options = {}) {
       if (!(bytes instanceof Uint8Array)) throw new TypeError('Transport bytes must be a Uint8Array.');
-      if (options.ifRev !== undefined && (typeof options.ifRev !== 'string' || !options.ifRev)) throw new ConflictError();
+      if (options.ifRev !== undefined && (typeof options.ifRev !== 'string' || !options.ifRev))
+        throw new ConflictError();
       if (options.ifAbsent === true && options.ifRev !== undefined) throw new ConflictError();
       const base = await readyRoot();
       const target = safeTarget(base, path);
@@ -168,10 +194,17 @@ export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = 
           const [currentBytes, info] = await Promise.all([readFile(target), lstat(target)]);
           if (!info.isFile() || info.isSymbolicLink()) throw new SyncTransportError('E_INVALID_PATH');
           return { rev: revision(currentBytes, info.mtimeMs) };
-        } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
+        } catch (error) {
+          if (error?.code === 'ENOENT') return null;
+          throw error;
+        }
       })();
-      if ((options.ifAbsent && current) || (options.ifRev !== undefined && (!current || current.rev !== options.ifRev))
-          || (options.ifAbsent !== true && options.ifRev === undefined && current)) throw new ConflictError();
+      if (
+        (options.ifAbsent && current) ||
+        (options.ifRev !== undefined && (!current || current.rev !== options.ifRev)) ||
+        (options.ifAbsent !== true && options.ifRev === undefined && current)
+      )
+        throw new ConflictError();
       await mkdir(dirname(target), { recursive: true });
       await ensureNoSymlinkPath(base, path, { includeLeaf: false });
       // Recheck immediately before replacement; filesystem sync clients do not provide atomic CAS.
@@ -180,10 +213,17 @@ export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = 
           const [currentBytes, info] = await Promise.all([readFile(target), lstat(target)]);
           if (!info.isFile() || info.isSymbolicLink()) throw new SyncTransportError('E_INVALID_PATH');
           return { rev: revision(currentBytes, info.mtimeMs) };
-        } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
+        } catch (error) {
+          if (error?.code === 'ENOENT') return null;
+          throw error;
+        }
       })();
-      if ((options.ifAbsent && beforeWrite) || (options.ifRev !== undefined && (!beforeWrite || beforeWrite.rev !== options.ifRev))
-          || (options.ifAbsent !== true && options.ifRev === undefined && beforeWrite)) throw new ConflictError();
+      if (
+        (options.ifAbsent && beforeWrite) ||
+        (options.ifRev !== undefined && (!beforeWrite || beforeWrite.rev !== options.ifRev)) ||
+        (options.ifAbsent !== true && options.ifRev === undefined && beforeWrite)
+      )
+        throw new ConflictError();
       await atomicWriter(target, bytes, { tempPrefix: '.brainatlas-tmp-' });
       const stored = await getObject(path);
       if (!stored) throw new SyncTransportError('E_DEGRADED');
@@ -198,7 +238,10 @@ export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = 
       try {
         const [bytes, info] = await Promise.all([readFile(target), lstat(target)]);
         current = { rev: revision(bytes, info.mtimeMs) };
-      } catch (error) { if (error?.code === 'ENOENT') throw new SyncTransportError('E_NOT_FOUND'); throw error; }
+      } catch (error) {
+        if (error?.code === 'ENOENT') throw new SyncTransportError('E_NOT_FOUND');
+        throw error;
+      }
       if (current.rev !== options.ifRev) throw new ConflictError();
       await unlink(target);
     },
@@ -206,18 +249,31 @@ export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = 
     async status() {
       const rows = await listObjects();
       const conflicts = rows.filter((row) => row.conflict).map(({ path }) => path);
-      return { status: 'degraded', code: 'E_DEGRADED', ...(typeof hostId === 'string' ? { hostId } : {}), cas: false, conflictCount: conflicts.length, conflicts };
+      return {
+        status: 'degraded',
+        code: 'E_DEGRADED',
+        ...(typeof hostId === 'string' ? { hostId } : {}),
+        cas: false,
+        conflictCount: conflicts.length,
+        conflicts,
+      };
     },
   });
 }
 
 /** Attach the local-folder transport only when selected in configuration. */
 export async function activate(ctx) {
-  if (!ctx || typeof ctx !== 'object' || !ctx.config || !ctx.paths) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder module context is incomplete.');
+  if (!ctx || typeof ctx !== 'object' || !ctx.config || !ctx.paths)
+    throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder module context is incomplete.');
   if (ctx.config.sync?.transport !== 'folder' || ctx.transport) return;
-  if (typeof ctx.paths.stateDir !== 'string') throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder module state is incomplete.');
+  if (typeof ctx.paths.stateDir !== 'string')
+    throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder module state is incomplete.');
   const hostId = await resolveHostId({ stateDir: ctx.paths.stateDir, env: ctx.env ?? process.env, config: ctx.config });
-  ctx.transport = createFolderTransport({ path: ctx.config.sync?.options?.path, vaultPath: ctx.config.vault?.path, hostId });
+  ctx.transport = createFolderTransport({
+    path: ctx.config.sync?.options?.path,
+    vaultPath: ctx.config.vault?.path,
+    hostId,
+  });
 }
 
 export const commands = Object.freeze({});

@@ -17,7 +17,7 @@ async function setup() {
     scope: 'global',
     nodePath: '/home/you/node',
     shimPath: '/home/you/bin/brainatlas',
-    now: new Date('2026-01-02T03:04:05.000Z')
+    now: new Date('2026-01-02T03:04:05.000Z'),
   };
   return { root, home, ctx };
 }
@@ -64,7 +64,7 @@ function realisticConfig() {
     '[array.of.tables.metadata]',
     'source = "synthetic"',
     ...Array.from({ length: 125 }, (_, index) => `# synthetic padding line ${String(index + 1).padStart(3, '0')}`),
-    ''
+    '',
   ].join('\n');
 }
 
@@ -80,7 +80,7 @@ test('Codex accepts real-world TOML structures and restores every original byte 
     await writeFile(hooksPath, hooks);
 
     const planned = adapter.plan(ctx);
-    assert.ok(planned.changes.some(change => change.file === configPath));
+    assert.ok(planned.changes.some((change) => change.file === configPath));
     await adapter.apply(planned, ctx);
     const applied = await readFile(configPath, 'utf8');
     assert.ok(applied.startsWith(config));
@@ -102,7 +102,7 @@ for (const [name, invalid] of [
   ['unterminated array', 'args = [\n  "first",\n'],
   ['unterminated string', 'prompt_note = """still open\n'],
   ['duplicate table', '[tool]\nvalue = 1\n[tool]\nother = 2\n'],
-  ['invalid quoted header', '[projects."unfinished]\nvalue = 1\n']
+  ['invalid quoted header', '[projects."unfinished]\nvalue = 1\n'],
 ]) {
   test(`Codex refuses ${name} without writing any file`, async () => {
     const { root, home, ctx } = await setup();

@@ -12,14 +12,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ba27-grep-'));
-  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const corpus = path.join(dir, 'corpus');
-  fs.mkdirSync(path.join(corpus, 'sub'), {recursive: true});
+  fs.mkdirSync(path.join(corpus, 'sub'), { recursive: true });
   fs.writeFileSync(path.join(corpus, 'alpha.md'), '# Alpha\nzebra quartz ember\nzebra again\n');
   fs.writeFileSync(path.join(corpus, 'beta.md'), '# Beta\nzebra only once\n');
   fs.writeFileSync(path.join(corpus, 'gamma.md'), '# Gamma\nquartz quartz\nember\n');
   fs.writeFileSync(path.join(corpus, 'sub', 'delta.md'), '# Delta\nunrelated cedar river\n');
-  return {dir, corpus};
+  return { dir, corpus };
 }
 
 test('query terms are folded for Turkish and drop stop words; no stemming', () => {
@@ -44,13 +44,16 @@ test('ranking: distinct matched terms first, then matching-line total, then path
 test('metrics: recallAt5 and mrrAt10 follow the BM25 definitions; currentFirstRate covers current-state cases only', (t) => {
   const f = fixture(t);
   const casesFile = path.join(f.dir, 'cases.json');
-  fs.writeFileSync(casesFile, JSON.stringify([
-    {id: 'a', query: 'zebra quartz ember', relevant: ['alpha.md']},
-    {id: 'b', query: 'zebra only', relevant: ['beta.md'], category: 'current-state'},
-    {id: 'c', query: 'cedar river', relevant: [], abstain: true},
-    {id: 'd', query: 'quartz', relevant: ['beta.md']},
-  ]));
-  const result = runGrepBaseline({corpusDir: f.corpus, casesFile});
+  fs.writeFileSync(
+    casesFile,
+    JSON.stringify([
+      { id: 'a', query: 'zebra quartz ember', relevant: ['alpha.md'] },
+      { id: 'b', query: 'zebra only', relevant: ['beta.md'], category: 'current-state' },
+      { id: 'c', query: 'cedar river', relevant: [], abstain: true },
+      { id: 'd', query: 'quartz', relevant: ['beta.md'] },
+    ])
+  );
+  const result = runGrepBaseline({ corpusDir: f.corpus, casesFile });
   assert.equal(result.n, 4);
   assert.equal(result.currentCases, 1);
   // Answerable: a, b, d. a ranks alpha first (rr 1). b ranks beta first (rr 1, current-state hit). d matches alpha and gamma
@@ -63,27 +66,33 @@ test('metrics: recallAt5 and mrrAt10 follow the BM25 definitions; currentFirstRa
 test('a case file with no current-state cases reports a null currentFirstRate', (t) => {
   const f = fixture(t);
   const casesFile = path.join(f.dir, 'plain.json');
-  fs.writeFileSync(casesFile, JSON.stringify([{id: 'a', query: 'ember', relevant: ['alpha.md']}]));
-  assert.equal(runGrepBaseline({corpusDir: f.corpus, casesFile}).currentFirstRate, null);
+  fs.writeFileSync(casesFile, JSON.stringify([{ id: 'a', query: 'ember', relevant: ['alpha.md'] }]));
+  assert.equal(runGrepBaseline({ corpusDir: f.corpus, casesFile }).currentFirstRate, null);
 });
 
 test('rg mode gives the same ordering as the JS path when rg is installed (local cross-check, skipped otherwise)', (t) => {
-  const probe = spawnSync('rg', ['--version'], {encoding: 'utf8'});
+  const probe = spawnSync('rg', ['--version'], { encoding: 'utf8' });
   if (probe.status !== 0) return t.skip('rg not installed');
   const f = fixture(t);
   for (const query of ['zebra quartz ember', 'zebra', 'cedar river', 'quartz ember']) {
-    assert.deepEqual(grepRanking(f.corpus, query, {rg: true}), grepRanking(f.corpus, query), query);
+    assert.deepEqual(grepRanking(f.corpus, query, { rg: true }), grepRanking(f.corpus, query), query);
   }
 });
 
 test('CLI prints one JSON line and rejects missing arguments', (t) => {
   const f = fixture(t);
   const casesFile = path.join(f.dir, 'cli.json');
-  fs.writeFileSync(casesFile, JSON.stringify([{id: 'a', query: 'zebra', relevant: ['alpha.md']}]));
-  const cli = spawnSync(process.execPath, [path.join(root, 'eval/grep-baseline.mjs'), '--corpus', f.corpus, '--cases', casesFile], {encoding: 'utf8'});
+  fs.writeFileSync(casesFile, JSON.stringify([{ id: 'a', query: 'zebra', relevant: ['alpha.md'] }]));
+  const cli = spawnSync(
+    process.execPath,
+    [path.join(root, 'eval/grep-baseline.mjs'), '--corpus', f.corpus, '--cases', casesFile],
+    { encoding: 'utf8' }
+  );
   assert.equal(cli.status, 0, cli.stderr);
   assert.equal(JSON.parse(cli.stdout).n, 1);
-  const bad = spawnSync(process.execPath, [path.join(root, 'eval/grep-baseline.mjs'), '--corpus', f.corpus], {encoding: 'utf8'});
+  const bad = spawnSync(process.execPath, [path.join(root, 'eval/grep-baseline.mjs'), '--corpus', f.corpus], {
+    encoding: 'utf8',
+  });
   assert.equal(bad.status, 1);
   assert.equal(bad.stderr.trim(), 'Grep baseline failed');
 });
@@ -91,13 +100,16 @@ test('CLI prints one JSON line and rejects missing arguments', (t) => {
 test('unanswerable cases: unansweredReturnedRate counts cases where a term matches; abstainAccuracy is its complement', (t) => {
   const f = fixture(t);
   const casesFile = path.join(f.dir, 'abstain.json');
-  fs.writeFileSync(casesFile, JSON.stringify([
-    {id: 'u1', query: 'cedar', relevant: [], abstain: true},          // matches delta.md
-    {id: 'u2', query: 'xylophone', relevant: [], abstain: true},      // no term matches
-    {id: 'u3', query: 'zebra', relevant: [], abstain: true},          // matches
-    {id: 'a1', query: 'ember', relevant: ['alpha.md']},
-  ]));
-  const r = runGrepBaseline({corpusDir: f.corpus, casesFile});
+  fs.writeFileSync(
+    casesFile,
+    JSON.stringify([
+      { id: 'u1', query: 'cedar', relevant: [], abstain: true }, // matches delta.md
+      { id: 'u2', query: 'xylophone', relevant: [], abstain: true }, // no term matches
+      { id: 'u3', query: 'zebra', relevant: [], abstain: true }, // matches
+      { id: 'a1', query: 'ember', relevant: ['alpha.md'] },
+    ])
+  );
+  const r = runGrepBaseline({ corpusDir: f.corpus, casesFile });
   assert.equal(r.abstainN, 3);
   assert.ok(Math.abs(r.unansweredReturnedRate - 2 / 3) < 1e-12, `rate ${r.unansweredReturnedRate}`);
   assert.ok(Math.abs(r.abstainAccuracy - 1 / 3) < 1e-12);

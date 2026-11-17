@@ -2,7 +2,28 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-const SYLLABLES = ['ka', 'lo', 'mi', 'ren', 'tu', 'sa', 'vel', 'dor', 'qua', 'fin', 'bro', 'zel', 'nim', 'hap', 'ose', 'tri', 'gul', 'ash', 'wen', 'pax'];
+const SYLLABLES = [
+  'ka',
+  'lo',
+  'mi',
+  'ren',
+  'tu',
+  'sa',
+  'vel',
+  'dor',
+  'qua',
+  'fin',
+  'bro',
+  'zel',
+  'nim',
+  'hap',
+  'ose',
+  'tri',
+  'gul',
+  'ash',
+  'wen',
+  'pax',
+];
 
 /**
  * Seeded PRNG (mulberry32). The same seed always yields the same sequence.
@@ -12,7 +33,7 @@ const SYLLABLES = ['ka', 'lo', 'mi', 'ren', 'tu', 'sa', 'vel', 'dor', 'qua', 'fi
 export function createRng(seed) {
   let state = seed >>> 0;
   return () => {
-    state = (state + 0x6D2B79F5) >>> 0;
+    state = (state + 0x6d2b79f5) >>> 0;
     let t = state;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
@@ -34,7 +55,7 @@ function makeWord(rng) {
  * @param {{pages:number,seed?:number,wordsPerPage?:number,queryCount?:number}} options
  * @returns {{paths:string[],queries:string[]}} page paths and queries drawn from page vocabulary
  */
-export function writeSyntheticCorpus(dir, {pages, seed = 1, wordsPerPage = 120, queryCount = 30}) {
+export function writeSyntheticCorpus(dir, { pages, seed = 1, wordsPerPage = 120, queryCount = 30 }) {
   if (!Number.isInteger(pages) || pages < 1 || pages > 50000) throw new Error('Invalid page count');
   const rng = createRng(seed);
   const pageWords = [];
@@ -44,10 +65,12 @@ export function writeSyntheticCorpus(dir, {pages, seed = 1, wordsPerPage = 120, 
     const words = [];
     for (let w = 0; w < wordsPerPage; w++) words.push(makeWord(rng));
     const title = `${words[0]} ${words[1]} notes`;
-    const sections = [0, 1, 2].map((s) => `## ${words[3 + s * 5]} ${words[4 + s * 5]}\n${words.slice(10 + s * 30, 40 + s * 30).join(' ')}`).join('\n\n');
+    const sections = [0, 1, 2]
+      .map((s) => `## ${words[3 + s * 5]} ${words[4 + s * 5]}\n${words.slice(10 + s * 30, 40 + s * 30).join(' ')}`)
+      .join('\n\n');
     const body = `# ${title}\n\n${sections}\n`;
     const full = join(dir, relPath);
-    mkdirSync(dirname(full), {recursive: true});
+    mkdirSync(dirname(full), { recursive: true });
     writeFileSync(full, `---\ntitle: ${title}\nstatus: active\ngenerated: "2026-01-01"\n---\n${body}`, 'utf8');
     paths.push(relPath);
     pageWords.push(words);
@@ -59,7 +82,7 @@ export function writeSyntheticCorpus(dir, {pages, seed = 1, wordsPerPage = 120, 
     const second = words[10 + Math.floor(rng() * 20)];
     queries.push(`${first} ${second}`);
   }
-  return {paths, queries};
+  return { paths, queries };
 }
 
 /**
@@ -71,5 +94,5 @@ export function writeSyntheticCorpus(dir, {pages, seed = 1, wordsPerPage = 120, 
  */
 export function fixedVectors(seed, count, dims) {
   const rng = createRng(seed);
-  return Array.from({length: count}, () => Array.from({length: dims}, () => rng() * 2 - 1));
+  return Array.from({ length: count }, () => Array.from({ length: dims }, () => rng() * 2 - 1));
 }

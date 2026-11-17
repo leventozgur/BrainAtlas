@@ -6,7 +6,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { readText, makeFixture, openClient, call, textOf, isErr, okJson, page, metric, WT, sha256 } from './harness.mjs';
+import {
+  readText,
+  makeFixture,
+  openClient,
+  call,
+  textOf,
+  isErr,
+  okJson,
+  page,
+  metric,
+  WT,
+  sha256,
+} from './harness.mjs';
 
 const ROUNDS = 50;
 const PAGE = 'concepts/ba25-cas.md';
@@ -27,14 +39,26 @@ async function racePage(t, root) {
   const a = await openClient(t, root, f, 'proc-a');
   const b = await openClient(t, root, f, 'proc-b');
   await call(a.client, 'wiki_write_page', { path: PAGE, content: page('BA25 CAS', 'Base.') });
-  const stats = { rounds: ROUNDS, successes: 0, conflicts: 0, otherErrors: [], lostUpdates: 0, badWinner: 0,
-    conflictLeaks: 0, logEntriesForFailed: 0, perRoundSuccessHistogram: {} };
+  const stats = {
+    rounds: ROUNDS,
+    successes: 0,
+    conflicts: 0,
+    otherErrors: [],
+    lostUpdates: 0,
+    badWinner: 0,
+    conflictLeaks: 0,
+    logEntriesForFailed: 0,
+    perRoundSuccessHistogram: {},
+  };
   for (let r = 0; r < ROUNDS; r++) {
     await call(a.client, 'wiki_write_page', { path: PAGE, content: page('BA25 CAS', `Base ${r}.`) });
     const sha = await readShaFromProcess(a.client, f, root);
     assert.equal(await readShaFromProcess(b.client, f, root), sha, 'both processes read the same hash');
-    const logBefore = (await readText(f.logFile)).split('\n').filter((line) => line.includes('update-page') && line.includes('ba25-cas')).length;
-    const markerA = `Writer one round ${r}.`, markerB = `Writer two round ${r}.`;
+    const logBefore = (await readText(f.logFile))
+      .split('\n')
+      .filter((line) => line.includes('update-page') && line.includes('ba25-cas')).length;
+    const markerA = `Writer one round ${r}.`,
+      markerB = `Writer two round ${r}.`;
     const [x, y] = await Promise.all([
       call(a.client, 'wiki_update_page', { path: PAGE, content: page('BA25 CAS', markerA), expectedSha256: sha }),
       call(b.client, 'wiki_update_page', { path: PAGE, content: page('BA25 CAS', markerB), expectedSha256: sha }),
@@ -44,7 +68,10 @@ async function racePage(t, root) {
     const successes = [];
     let conflicts = 0;
     results.forEach((res, i) => {
-      if (!res.isError) { successes.push(markers[i]); return; }
+      if (!res.isError) {
+        successes.push(markers[i]);
+        return;
+      }
       if (isErr(res, 'E_CONFLICT')) {
         conflicts++;
         const text = textOf(res);
@@ -60,8 +87,11 @@ async function racePage(t, root) {
     if (successes.length === 1 && !final.includes(successes[0])) stats.badWinner++;
     // A successful write whose content is not in the final file is a lost update.
     for (const s of successes) if (!final.includes(s)) stats.lostUpdates++;
-    const logAfter = (await readText(f.logFile)).split('\n').filter((line) => line.includes('update-page') && line.includes('ba25-cas')).length;
-    if (logAfter - logBefore !== successes.length) stats.logEntriesForFailed += Math.abs((logAfter - logBefore) - successes.length);
+    const logAfter = (await readText(f.logFile))
+      .split('\n')
+      .filter((line) => line.includes('update-page') && line.includes('ba25-cas')).length;
+    if (logAfter - logBefore !== successes.length)
+      stats.logEntriesForFailed += Math.abs(logAfter - logBefore - successes.length);
   }
   return stats;
 }

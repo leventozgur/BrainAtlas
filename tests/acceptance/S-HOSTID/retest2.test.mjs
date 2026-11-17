@@ -16,7 +16,13 @@ test('legacy identity remains below env and config and agrees with git status', 
     [{}, config, 'config-id'],
     [{}, {}, 'legacy-id'],
   ]) {
-    const options = { stateDir: join(root, expected), remote: join(root, 'remote'), env, config: cfg, hostId: 'legacy-id' };
+    const options = {
+      stateDir: join(root, expected),
+      remote: join(root, 'remote'),
+      env,
+      config: cfg,
+      hostId: 'legacy-id',
+    };
     assert.equal(await resolveHostId(options), expected);
     assert.equal((await createGitTransport(options).status()).hostId, expected);
     await assert.rejects(stat(join(options.stateDir, 'sync', 'host-id')), { code: 'ENOENT' });
@@ -26,7 +32,8 @@ test('legacy identity remains below env and config and agrees with git status', 
 test('a hard-linked identity is rejected even when its contents and mode are valid', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'hostid-retest2-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const dir = join(root, 'state', 'sync'), outside = join(root, 'outside');
+  const dir = join(root, 'state', 'sync'),
+    outside = join(root, 'outside');
   await mkdir(dir, { recursive: true });
   await writeFile(outside, 'valid-id\n', { mode: 0o600 });
   await link(outside, join(dir, 'host-id'));

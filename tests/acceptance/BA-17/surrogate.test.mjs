@@ -35,7 +35,11 @@ test('single-result snippets: every budget 1..400 gives no lone surrogate, a fit
       const r = q(index, 'alpha', { limit: 1, budgetChars: b });
       assert.equal(r.abstained, false, `case ${i} budget ${b} must not abstain`);
       const s = r.results[0].snippet;
-      assert.equal(LONE_SURROGATE.test(s), false, `case ${i} budget ${b}: lone surrogate in ${JSON.stringify(s.slice(-4))}`);
+      assert.equal(
+        LONE_SURROGATE.test(s),
+        false,
+        `case ${i} budget ${b}: lone surrogate in ${JSON.stringify(s.slice(-4))}`
+      );
       assert.ok(s.length <= b, `case ${i} budget ${b}: length ${s.length} exceeds budget`);
       if (full.length <= b) {
         assert.equal(s, full, `case ${i} budget ${b}: fitting snippet must be whole`);
@@ -62,8 +66,17 @@ test('multi-result budgets: snippets together never exceed the budget and none h
     assert.ok(total <= b, `budget ${b}: total ${total}`);
     for (const x of r.results) assert.equal(LONE_SURROGATE.test(x.snippet), false, `budget ${b}: ${x.path}`);
     // A result cut by the budget is either ellipsised or, once the budget is spent, empty; without a cut the flag is false.
-    if (!r.truncated) assert.equal(r.results.some(x => x.snippet.endsWith(ELL)), false, `budget ${b}: no ellipsis without truncation`);
-    else assert.ok(r.results.some(x => x.snippet.endsWith(ELL) || x.snippet === ''), `budget ${b}: truncated flag needs a cut`);
+    if (!r.truncated)
+      assert.equal(
+        r.results.some((x) => x.snippet.endsWith(ELL)),
+        false,
+        `budget ${b}: no ellipsis without truncation`
+      );
+    else
+      assert.ok(
+        r.results.some((x) => x.snippet.endsWith(ELL) || x.snippet === ''),
+        `budget ${b}: truncated flag needs a cut`
+      );
   }
 });
 
@@ -80,7 +93,10 @@ test('property: random mixed emoji, astral, ZWJ, flag, combining and Turkish tex
       const s = q(index, 'alpha', { limit: 1, budgetChars: b }).results[0].snippet;
       assert.equal(LONE_SURROGATE.test(s), false, `random case ${n} budget ${b}`);
       assert.ok(s.length <= b, `random case ${n} budget ${b}`);
-      assert.ok(full.startsWith(s.endsWith(ELL) && s.length < full.length ? s.slice(0, -1) : s), `random case ${n} budget ${b}: prefix`);
+      assert.ok(
+        full.startsWith(s.endsWith(ELL) && s.length < full.length ? s.slice(0, -1) : s),
+        `random case ${n} budget ${b}: prefix`
+      );
     }
   }
 });

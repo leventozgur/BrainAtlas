@@ -4,9 +4,14 @@
 // personal-data literal is stored in this file. Synthetic values only; checksums are computed here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scanText, redact, fingerprintSafetyFinding, isSafetyFindingAllowed } from '../../packages/core/src/safety/index.mjs';
+import {
+  scanText,
+  redact,
+  fingerprintSafetyFinding,
+  isSafetyFindingAllowed,
+} from '../../packages/core/src/safety/index.mjs';
 
-const ids = text => scanText(text).map(finding => finding.ruleId);
+const ids = (text) => scanText(text).map((finding) => finding.ruleId);
 const hasRule = (text, id) => ids(text).includes(id);
 
 // Base64-looking material with mixed case, digits, '+', '/' and padding; never a real key.
@@ -16,9 +21,10 @@ const SIG = ['Qm9', 'ydGVz', 'dC1z', 'aWc', 'MTIz', 'NDU2', 'Nzg5'].join('');
 // Turkish national-id check digits (10th and 11th digit) for nine chosen leading digits.
 function tckn(first9) {
   const d = [...first9].map(Number);
-  const odd = d[0] + d[2] + d[4] + d[6] + d[8], even = d[1] + d[3] + d[5] + d[7];
-  const d10 = (((odd * 7) - even) % 10 + 10) % 10;
-  const d11 = ([...d, d10].reduce((a, b) => a + b, 0)) % 10;
+  const odd = d[0] + d[2] + d[4] + d[6] + d[8],
+    even = d[1] + d[3] + d[5] + d[7];
+  const d10 = (((odd * 7 - even) % 10) + 10) % 10;
+  const d11 = [...d, d10].reduce((a, b) => a + b, 0) % 10;
   return `${first9}${d10}${d11}`;
 }
 // ISO 13616 check digits for a TR IBAN with the given 22-digit BBAN.
@@ -31,13 +37,31 @@ function trIban(bban, check = null) {
 }
 
 test('Azure storage and Service Bus connection strings are secret findings', () => {
-  assert.ok(hasRule(`DefaultEndpointsProtocol=https;AccountName=demo;AccountKey=${B64};EndpointSuffix=core`, 'azure-storage-key'));
-  assert.ok(hasRule(`Endpoint=sb://demo.servicebus.example/;SharedAccessKeyName=ops;SharedAccessKey=${B64}`, 'azure-storage-key'));
-  assert.ok(hasRule(`https://demo.blob.example/c?SharedAccessSignature=sv=2021-06-08&ss=b&sig=${SIG}%3D`, 'azure-sas-token'));
+  assert.ok(
+    hasRule(
+      `DefaultEndpointsProtocol=https;AccountName=demo;AccountKey=${B64};EndpointSuffix=core`,
+      'azure-storage-key'
+    )
+  );
+  assert.ok(
+    hasRule(
+      `Endpoint=sb://demo.servicebus.example/;SharedAccessKeyName=ops;SharedAccessKey=${B64}`,
+      'azure-storage-key'
+    )
+  );
+  assert.ok(
+    hasRule(`https://demo.blob.example/c?SharedAccessSignature=sv=2021-06-08&ss=b&sig=${SIG}%3D`, 'azure-sas-token')
+  );
   assert.ok(hasRule(`SharedAccessSignature=sv=2021-06-08&se=2030-01-01&sr=b&sig=${SIG}`, 'azure-sas-token'));
   // Placeholders and key names without values stay quiet.
-  for (const text of ['AccountKey=<key>', 'AccountKey=${AZURE_KEY}', 'SharedAccessKeyName=ops', 'AccountKey=' + 'x'.repeat(88),
-    'SharedAccessSignature=sv=2021-06-08&sig=<signature>', 'AccountKey=short']) {
+  for (const text of [
+    'AccountKey=<key>',
+    'AccountKey=${AZURE_KEY}',
+    'SharedAccessKeyName=ops',
+    'AccountKey=' + 'x'.repeat(88),
+    'SharedAccessSignature=sv=2021-06-08&sig=<signature>',
+    'AccountKey=short',
+  ]) {
     assert.equal(hasRule(text, 'azure-storage-key') || hasRule(text, 'azure-sas-token'), false, text);
   }
 });
@@ -46,8 +70,14 @@ test('Authorization Bearer tokens need realistic length and a digit; placeholder
   const token = ['a1B2c3D4', 'e5F6g7H8', 'i9J0kL1m', 'N2o3P4q5'].join('');
   assert.ok(hasRule(`curl -H "Authorization: Bearer ${token}" https://api.example.test`, 'bearer-token'));
   assert.ok(hasRule(`authorization: bearer ${token}`, 'bearer-token'));
-  for (const text of ['Authorization: Bearer ${TOKEN}', 'Authorization: Bearer <token>', 'Authorization: Bearer ACCESS_TOKEN_VALUE',
-    'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1', 'Bearer ' + token, 'Authorization: Basic ' + token]) {
+  for (const text of [
+    'Authorization: Bearer ${TOKEN}',
+    'Authorization: Bearer <token>',
+    'Authorization: Bearer ACCESS_TOKEN_VALUE',
+    'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1',
+    'Bearer ' + token,
+    'Authorization: Basic ' + token,
+  ]) {
     assert.equal(hasRule(text, 'bearer-token'), false, text);
   }
 });
@@ -55,7 +85,8 @@ test('Authorization Bearer tokens need realistic length and a digit; placeholder
 test('GitLab personal access tokens are exactly glpat- plus 20 characters', () => {
   const token = ['gl', 'pat-', 'aB3dE5fG', '7hJ9kL1m', 'N2pQ'].join('');
   assert.ok(hasRule(`token = "${token}"`, 'gitlab-pat'));
-  const short = token.slice(0, -1), suffixed = token + '-';
+  const short = token.slice(0, -1),
+    suffixed = token + '-';
   for (const text of [short, 'glpat-${GITLAB_TOKEN}', 'glpat-' + 'x'.repeat(20), suffixed]) {
     assert.equal(hasRule(text, 'gitlab-pat'), false, text);
   }
@@ -80,8 +111,14 @@ test('Turkish assignment keys sifre, şifre and parola are explicit secret keys'
   assert.ok(hasRule(`db_parola: ${value}`, 'secret-assignment'));
   assert.ok(hasRule(`parola: "${value}"`, 'secret-assignment'));
   assert.ok(hasRule(`db_sifre: "${value}"`, 'secret-assignment'));
-  for (const text of ['şifre: "<şifre>"', 'parola: ${PAROLA}', 'şifre: changeme', 'sifreleme_yontemi: "AES256"', 'sifre_kurali: "uzun"',
-    'kullanici: "ayse"']) {
+  for (const text of [
+    'şifre: "<şifre>"',
+    'parola: ${PAROLA}',
+    'şifre: changeme',
+    'sifreleme_yontemi: "AES256"',
+    'sifre_kurali: "uzun"',
+    'kullanici: "ayse"',
+  ]) {
     assert.equal(hasRule(text, 'secret-assignment'), false, text);
   }
 });
@@ -89,7 +126,7 @@ test('Turkish assignment keys sifre, şifre and parola are explicit secret keys'
 test('TCKN is a personal finding only when the official check digits agree', () => {
   const valid = tckn('123456789');
   assert.equal(valid.length, 11);
-  assert.equal(scanText(`kimlik ${valid} kayıt`).find(f => f.ruleId === 'tckn')?.kind, 'personal');
+  assert.equal(scanText(`kimlik ${valid} kayıt`).find((f) => f.ruleId === 'tckn')?.kind, 'personal');
   const bad = `${valid.slice(0, 10)}${(Number(valid[10]) + 1) % 10}`;
   assert.equal(hasRule(`kimlik ${bad}`, 'tckn'), false);
   assert.equal(hasRule(`id 0${valid.slice(1)}`, 'tckn'), false, 'leading zero is not a TCKN');
@@ -100,7 +137,7 @@ test('TCKN is a personal finding only when the official check digits agree', () 
 test('TR IBAN is a personal finding only with ISO 13616 mod-97 agreement, spaced or not', () => {
   const bban = '1234567890123456789012';
   const iban = trIban(bban);
-  assert.equal(scanText(`hesap ${iban}`).find(f => f.ruleId === 'tr-iban')?.kind, 'personal');
+  assert.equal(scanText(`hesap ${iban}`).find((f) => f.ruleId === 'tr-iban')?.kind, 'personal');
   const spaced = iban.replace(/(.{4})/g, '$1 ').trim();
   assert.ok(hasRule(`hesap ${spaced}`, 'tr-iban'));
   const wrongCheck = trIban(bban, String((Number(iban.slice(2, 4)) + 1) % 100).padStart(2, '0'));
@@ -118,7 +155,7 @@ test('TCKN and IBAN findings are redacted in output and reported by scanText (wr
 
 test('fingerprints accept personal findings the same way as content findings', () => {
   const text = `kimlik ${tckn('123456789')}`;
-  const finding = scanText(text).find(f => f.ruleId === 'tckn');
+  const finding = scanText(text).find((f) => f.ruleId === 'tckn');
   const fingerprint = fingerprintSafetyFinding('wiki/concepts/id.md', text, finding);
   assert.equal(isSafetyFindingAllowed('wiki/concepts/id.md', text, finding, [fingerprint]), true);
 });
@@ -128,7 +165,12 @@ test('contact data (e-mail, TR phone) is redacted only when the output option is
   const phone = '+90 ' + '5' + '32 000 00 00';
   const local = '0' + '5' + '32' + '0000000';
   const text = `iletisim ${mail} veya ${phone} ya da ${local}`;
-  assert.deepEqual(scanText(text).map(f => f.ruleId).filter(id => ['email', 'tr-phone'].includes(id)), []);
+  assert.deepEqual(
+    scanText(text)
+      .map((f) => f.ruleId)
+      .filter((id) => ['email', 'tr-phone'].includes(id)),
+    []
+  );
   const out = redact(text, { personal: true });
   assert.ok(!out.includes(mail) && !out.includes('532 000'), out);
   assert.match(out, /\[REDACTED:email\]/);
@@ -137,8 +179,17 @@ test('contact data (e-mail, TR phone) is redacted only when the output option is
 });
 
 test('contact redaction leaves versions, dates, ids and hashes alone', () => {
-  const text = ['v0.1.0-rc.10', '2026-11-12', '20261112', '1234567890', '20261112123', 'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2',
-    '123e4567-e89b-12d3-a456-426614174000', 'pkg@1.2.3', 'npm install @scope/pkg'].join(' ');
+  const text = [
+    'v0.1.0-rc.10',
+    '2026-11-12',
+    '20261112',
+    '1234567890',
+    '20261112123',
+    'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2',
+    '123e4567-e89b-12d3-a456-426614174000',
+    'pkg@1.2.3',
+    'npm install @scope/pkg',
+  ].join(' ');
   assert.equal(redact(text, { personal: true }), text);
 });
 
@@ -151,16 +202,33 @@ test('fix1: a Turkish secret in a URL query string is a finding; the scheme does
   assert.ok(hasRule(`${host}#password=${value}`, 'secret-assignment'), 'fragment password');
   assert.ok(hasRule(`${host};sifre=${value}`, 'secret-assignment'), 'matrix parameter');
   assert.ok(hasRule(`${host}?password=${value}`, 'secret-assignment'), 'query password');
-  assert.ok(hasRule(`${host}?token=${value}`, 'high-entropy-assignment') || hasRule(`${host}?token=${value}`, 'secret-assignment'), 'query token');
+  assert.ok(
+    hasRule(`${host}?token=${value}`, 'high-entropy-assignment') ||
+      hasRule(`${host}?token=${value}`, 'secret-assignment'),
+    'query token'
+  );
   // The URL user:password form keeps its own rule.
   assert.ok(hasRule(`https://ali:${value}@ornek.example/`, 'connection-credentials'));
 });
 
 test('fix1: query parameters that only look secret-like are not findings', () => {
   const host = ['https://ornek', '.example/liste'].join('');
-  for (const tail of ['?token_count=5', '?page=2', '?password_policy=strict', '?max_tokens=700', '?sifreleme_yontemi=AES256',
-    '?sifre=<sifre>', '?password=${DB_PASSWORD}', '?token=', '?sort=name&order=asc']) {
-    assert.equal(hasRule(host + tail, 'secret-assignment') || hasRule(host + tail, 'high-entropy-assignment'), false, tail);
+  for (const tail of [
+    '?token_count=5',
+    '?page=2',
+    '?password_policy=strict',
+    '?max_tokens=700',
+    '?sifreleme_yontemi=AES256',
+    '?sifre=<sifre>',
+    '?password=${DB_PASSWORD}',
+    '?token=',
+    '?sort=name&order=asc',
+  ]) {
+    assert.equal(
+      hasRule(host + tail, 'secret-assignment') || hasRule(host + tail, 'high-entropy-assignment'),
+      false,
+      tail
+    );
   }
 });
 

@@ -10,14 +10,22 @@ import { commands } from '../../../modules/sync-engine/src/index.mjs';
 import { main } from '../../../packages/cli/src/index.mjs';
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const stopWord = platform => (platform === 'darwin' ? 'bootout' : 'disable');
+const stopWord = (platform) => (platform === 'darwin' ? 'bootout' : 'disable');
 
 async function setup(t, platform, behave) {
   const root = await mkdtemp(join(tmpdir(), 's-sched3-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const home = join(root, 'home');
   await mkdir(home, { recursive: true });
-  const env = { HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), BRAINATLAS_PLATFORM: platform, UID: '4242', PATH: process.env.PATH || '/usr/bin:/bin' };
+  const env = {
+    HOME: home,
+    XDG_CONFIG_HOME: join(home, 'config'),
+    XDG_DATA_HOME: join(home, 'data'),
+    XDG_STATE_HOME: join(home, 'state'),
+    BRAINATLAS_PLATFORM: platform,
+    UID: '4242',
+    PATH: process.env.PATH || '/usr/bin:/bin',
+  };
   const paths = resolvePaths({ platform, env });
   const calls = [];
   const state = { stop: { code: 0 } };
@@ -31,11 +39,11 @@ async function setup(t, platform, behave) {
   };
   return { root, home, env, paths, calls, state, ctx: { config: defaultConfig('full'), paths, env, runCommand } };
 }
-const snap = async files => Promise.all(files.map(f => readFile(f)));
-const absent = p => assert.rejects(lstat(p), { code: 'ENOENT' });
+const snap = async (files) => Promise.all(files.map((f) => readFile(f)));
+const absent = (p) => assert.rejects(lstat(p), { code: 'ENOENT' });
 
 for (const platform of ['darwin', 'linux']) {
-  test(`${platform}: stop failure (nonzero) keeps files, manifest, and retry succeeds`, async t => {
+  test(`${platform}: stop failure (nonzero) keeps files, manifest, and retry succeeds`, async (t) => {
     const f = await setup(t, platform);
     const run = (...a) => commands.sync(['schedule', ...a], f.ctx);
     const inst = await run('install');
@@ -53,7 +61,7 @@ for (const platform of ['darwin', 'linux']) {
     await absent(manifest);
   });
 
-  test(`${platform}: stop runner throwing is E_SCHEDULER_COMMAND and preserves state`, async t => {
+  test(`${platform}: stop runner throwing is E_SCHEDULER_COMMAND and preserves state`, async (t) => {
     const f = await setup(t, platform);
     const run = (...a) => commands.sync(['schedule', ...a], f.ctx);
     const inst = await run('install');
@@ -63,22 +71,29 @@ for (const platform of ['darwin', 'linux']) {
     assert.equal((await run('status')).status, 'installed');
   });
 
-  test(`${platform}: failure error does not leak stderr content`, async t => {
+  test(`${platform}: failure error does not leak stderr content`, async (t) => {
     const f = await setup(t, platform);
     const run = (...a) => commands.sync(['schedule', ...a], f.ctx);
     await run('install');
     const secret = ['tok', 'en-', 'ABC123xyz'].join('');
     f.state.stop = { code: 1, stderr: `fatal ${secret}`, stdout: secret };
-    const err = await run('remove').catch(e => e);
+    const err = await run('remove').catch((e) => e);
     assert.equal(err.code, 'E_SCHEDULER_COMMAND');
     assert.ok(!JSON.stringify({ m: err.message, c: err.code, d: err.details }).includes(secret));
   });
 
-  const notLoaded = platform === 'darwin'
-    ? [{ code: 3, stderr: '' }, { code: 113, stderr: 'Could not find service "org.brainatlas.sync" in domain' }]
-    : [{ code: 5, stderr: 'Failed to disable unit: Unit file brainatlas-sync.timer does not exist.' }, { code: 1, stderr: 'Unit brainatlas-sync.timer not loaded.' }];
+  const notLoaded =
+    platform === 'darwin'
+      ? [
+          { code: 3, stderr: '' },
+          { code: 113, stderr: 'Could not find service "org.brainatlas.sync" in domain' },
+        ]
+      : [
+          { code: 5, stderr: 'Failed to disable unit: Unit file brainatlas-sync.timer does not exist.' },
+          { code: 1, stderr: 'Unit brainatlas-sync.timer not loaded.' },
+        ];
   for (const [i, res] of notLoaded.entries()) {
-    test(`${platform}: "not loaded" variant ${i} counts as success and removes files`, async t => {
+    test(`${platform}: "not loaded" variant ${i} counts as success and removes files`, async (t) => {
       const f = await setup(t, platform);
       const run = (...a) => commands.sync(['schedule', ...a], f.ctx);
       const inst = await run('install');
@@ -92,14 +107,14 @@ for (const platform of ['darwin', 'linux']) {
     });
   }
 
-  test(`${platform}: remove with nothing installed never calls the stop command`, async t => {
+  test(`${platform}: remove with nothing installed never calls the stop command`, async (t) => {
     const f = await setup(t, platform);
     const r = await commands.sync(['schedule', 'remove'], f.ctx);
     assert.deepEqual(r.removed, []);
-    assert.equal(f.calls.filter(c => c.args.includes(stopWord(platform))).length, 0);
+    assert.equal(f.calls.filter((c) => c.args.includes(stopWord(platform))).length, 0);
   });
 
-  test(`${platform}: unrelated nonzero exit with unrecognized text is NOT treated as already stopped`, async t => {
+  test(`${platform}: unrelated nonzero exit with unrecognized text is NOT treated as already stopped`, async (t) => {
     const f = await setup(t, platform);
     const run = (...a) => commands.sync(['schedule', ...a], f.ctx);
     const inst = await run('install');
@@ -108,7 +123,7 @@ for (const platform of ['darwin', 'linux']) {
     for (const file of inst.files) assert.ok((await lstat(file)).isFile());
   });
 
-  test(`${platform}: user-modified managed file is preserved on remove (not owned bytes)`, async t => {
+  test(`${platform}: user-modified managed file is preserved on remove (not owned bytes)`, async (t) => {
     const f = await setup(t, platform);
     const run = (...a) => commands.sync(['schedule', ...a], f.ctx);
     const inst = await run('install');
@@ -118,7 +133,7 @@ for (const platform of ['darwin', 'linux']) {
     assert.equal(await readFile(inst.files[0], 'utf8'), 'user edit\n');
   });
 
-  test(`${platform}: --plan install/remove write nothing and run nothing`, async t => {
+  test(`${platform}: --plan install/remove write nothing and run nothing`, async (t) => {
     const f = await setup(t, platform);
     await commands.sync(['schedule', 'install', '--plan', '--interval', '5'], f.ctx);
     await commands.sync(['schedule', 'remove', '--plan'], f.ctx);
@@ -126,19 +141,26 @@ for (const platform of ['darwin', 'linux']) {
     await absent(join(f.paths.stateDir, 'sync'));
   });
 
-  test(`${platform}: interval boundaries and bad input`, async t => {
+  test(`${platform}: interval boundaries and bad input`, async (t) => {
     const f = await setup(t, platform);
     for (const bad of ['0', '1441', '-1', '1.5', 'abc', '']) {
-      await assert.rejects(commands.sync(['schedule', 'install', '--interval', bad, '--plan'], f.ctx), undefined, `interval ${bad}`);
+      await assert.rejects(
+        commands.sync(['schedule', 'install', '--interval', bad, '--plan'], f.ctx),
+        undefined,
+        `interval ${bad}`
+      );
     }
     await assert.rejects(commands.sync(['schedule', 'status', '--interval', '5'], f.ctx));
     await assert.rejects(commands.sync(['schedule', 'bogus'], f.ctx));
     assert.equal((await commands.sync(['schedule', 'install', '--interval', '1', '--plan'], f.ctx)).intervalMin, 1);
-    assert.equal((await commands.sync(['schedule', 'install', '--interval', '1440', '--plan'], f.ctx)).intervalMin, 1440);
+    assert.equal(
+      (await commands.sync(['schedule', 'install', '--interval', '1440', '--plan'], f.ctx)).intervalMin,
+      1440
+    );
   });
 }
 
-test('CLI uninstall with failing scheduler stop aborts, keeps scheduler files; retry succeeds', async t => {
+test('CLI uninstall with failing scheduler stop aborts, keeps scheduler files; retry succeeds', async (t) => {
   const platform = 'linux';
   const f = await setup(t, platform);
   const releaseDir = join(f.paths.releasesDir, 'sched-fixture');
@@ -156,11 +178,20 @@ test('CLI uninstall with failing scheduler stop aborts, keeps scheduler files; r
   config.modules = ['sync-engine'];
   config.vault.path = join(f.home, 'vault');
   await writeFile(f.paths.configFile, `${JSON.stringify(config, null, 2)}\n`);
-  await writeFile(f.paths.installManifest, `${JSON.stringify({ schemaVersion: 1, files: [], createdDirectories: [] })}\n`);
+  await writeFile(
+    f.paths.installManifest,
+    `${JSON.stringify({ schemaVersion: 1, files: [], createdDirectories: [] })}\n`
+  );
   await mkdir(config.vault.path, { recursive: true });
-  const invoke = async args => {
-    const lines = []; const orig = console.log; console.log = v => lines.push(v);
-    try { await main(args, f.env, { runCommand: f.ctx.runCommand }); } finally { console.log = orig; }
+  const invoke = async (args) => {
+    const lines = [];
+    const orig = console.log;
+    console.log = (v) => lines.push(v);
+    try {
+      await main(args, f.env, { runCommand: f.ctx.runCommand });
+    } finally {
+      console.log = orig;
+    }
     return JSON.parse(lines.at(-1));
   };
   await invoke(['sync', 'schedule', 'install', '--json']);
@@ -177,7 +208,7 @@ test('CLI uninstall with failing scheduler stop aborts, keeps scheduler files; r
   await absent(timer);
 });
 
-test('path escape: scheduler dir symlinked outside HOME is rejected without opt-in and nothing written outside', async t => {
+test('path escape: scheduler dir symlinked outside HOME is rejected without opt-in and nothing written outside', async (t) => {
   const f = await setup(t, 'linux');
   const outside = join(f.root, 'outside');
   await mkdir(outside, { recursive: true });
@@ -189,14 +220,14 @@ test('path escape: scheduler dir symlinked outside HOME is rejected without opt-
   assert.equal(f.calls.length, 0);
 });
 
-test('path escape: ../ in XDG_CONFIG_HOME resolving outside HOME is rejected', async t => {
+test('path escape: ../ in XDG_CONFIG_HOME resolving outside HOME is rejected', async (t) => {
   const f = await setup(t, 'linux');
   f.env.XDG_CONFIG_HOME = join(f.home, '..', 'escaped-cfg');
   await assert.rejects(commands.sync(['schedule', 'install'], f.ctx), { code: 'E_PATH_ESCAPE' });
   await absent(join(f.root, 'escaped-cfg'));
 });
 
-test('unowned pre-existing unit file is not overwritten', async t => {
+test('unowned pre-existing unit file is not overwritten', async (t) => {
   const f = await setup(t, 'linux');
   const dir = join(f.env.XDG_CONFIG_HOME, 'systemd', 'user');
   await mkdir(dir, { recursive: true });

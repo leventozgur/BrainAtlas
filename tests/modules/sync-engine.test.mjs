@@ -5,11 +5,23 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fingerprintSafetyFinding, scanPath, scanText } from '../../packages/core/src/safety/index.mjs';
-import { createMemoryTransport, createSyncEngine, mergeIndexThreeWay, mergeLogThreeWay, planScheduler, planSchedulerUninstall, activate, commands } from '../../modules/sync-engine/src/index.mjs';
+import {
+  createMemoryTransport,
+  createSyncEngine,
+  mergeIndexThreeWay,
+  mergeLogThreeWay,
+  planScheduler,
+  planSchedulerUninstall,
+  activate,
+  commands,
+} from '../../modules/sync-engine/src/index.mjs';
 import { inventoryVault } from '../../modules/sync-engine/src/scope.mjs';
 import { createFolderTransport } from '../../modules/sync-folder/src/index.mjs';
 
-async function fixture(t, { config = { sync: { options: {} } }, transport = createMemoryTransport(), initial = {} } = {}) {
+async function fixture(
+  t,
+  { config = { sync: { options: {} } }, transport = createMemoryTransport(), initial = {} } = {}
+) {
   const root = await mkdtemp(join(tmpdir(), 'sync-engine-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const host = async (name) => {
@@ -21,7 +33,18 @@ async function fixture(t, { config = { sync: { options: {} } }, transport = crea
       await mkdir(join(target, '..'), { recursive: true });
       await writeFile(target, content);
     }
-    return { vaultPath, stateDir, engine: createSyncEngine({ vaultPath, stateDir, config, transport, env: { BRAINATLAS_HOST_ID: name }, now: () => new Date('2026-11-08T10:11:12.000Z') }) };
+    return {
+      vaultPath,
+      stateDir,
+      engine: createSyncEngine({
+        vaultPath,
+        stateDir,
+        config,
+        transport,
+        env: { BRAINATLAS_HOST_ID: name },
+        now: () => new Date('2026-11-08T10:11:12.000Z'),
+      }),
+    };
   };
   return { root, host, transport };
 }
@@ -55,7 +78,8 @@ test('memory transport enforces relative paths, defensive bytes and compare-and-
 
 test('two fake hosts create, pull, modify and compare manifest v3 without content differences', async (t) => {
   const fx = await fixture(t);
-  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const a = await fx.host('host-a'),
+    b = await fx.host('host-b');
   await put(a, 'wiki/entities/alpha.md', '# Alpha\nfirst version\n');
   const created = await a.engine.run();
   assert.equal(created.status, 'SYNCED');
@@ -78,7 +102,8 @@ test('two fake hosts create, pull, modify and compare manifest v3 without conten
 
 test('an untouched init scaffold pulls unbased remote bytes without conflict, merge, or push', async (t) => {
   const fx = await fixture(t);
-  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const a = await fx.host('host-a'),
+    b = await fx.host('host-b');
   const templates = await initSeedTemplates();
   for (const [path, bytes] of templates) await put(b, path, bytes);
   const remoteContent = new Map([
@@ -99,15 +124,18 @@ test('an untouched init scaffold pulls unbased remote bytes without conflict, me
   assert.equal(result.merged, 0);
   assert.equal(result.pushed, 0);
   assert.deepEqual(result.conflicts, []);
-  for (const [path, expected] of remoteContent) assert.deepEqual(await readFile(join(b.vaultPath, path)), expected, path);
+  for (const [path, expected] of remoteContent)
+    assert.deepEqual(await readFile(join(b.vaultPath, path)), expected, path);
   assert.deepEqual(await fx.transport.list(''), remoteBefore);
-  for (const row of remoteBefore) assert.deepEqual(Buffer.from((await fx.transport.get(row.path)).bytes), remoteContent.get(row.path), row.path);
+  for (const row of remoteBefore)
+    assert.deepEqual(Buffer.from((await fx.transport.get(row.path)).bytes), remoteContent.get(row.path), row.path);
   assert.deepEqual(await a.engine.checkPeer(b.stateDir), { status: 'PASS', differences: [] });
 });
 
 test('a changed init template keeps unbased divergence conflict behavior', async (t) => {
   const fx = await fixture(t);
-  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const a = await fx.host('host-a'),
+    b = await fx.host('host-b');
   const templates = await initSeedTemplates();
   const remote = Buffer.from('# Shared policy\n\nRemote policy content.\n');
   await put(a, 'AGENTS.md', remote);
@@ -125,9 +153,11 @@ test('a changed init template keeps unbased divergence conflict behavior', async
 
 test('concurrent edits retain local canonical data and write a host tagged conflict copy', async (t) => {
   const fx = await fixture(t);
-  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const a = await fx.host('host-a'),
+    b = await fx.host('host-b');
   await put(a, 'wiki/entities/page.md', 'base\n');
-  await a.engine.run(); await b.engine.run();
+  await a.engine.run();
+  await b.engine.run();
   await put(a, 'wiki/entities/page.md', 'edit from a\n');
   await put(b, 'wiki/entities/page.md', 'edit from b\n');
   await a.engine.run();
@@ -145,16 +175,25 @@ test('concurrent edits retain local canonical data and write a host tagged confl
 
 test('local deletes stay queued until approval and approved tombstones reach the peer', async (t) => {
   const fx = await fixture(t);
-  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const a = await fx.host('host-a'),
+    b = await fx.host('host-b');
   await put(a, 'wiki/entities/remove.md', 'shared\n');
-  await a.engine.run(); await b.engine.run();
+  await a.engine.run();
+  await b.engine.run();
   await rm(join(a.vaultPath, 'wiki/entities/remove.md'));
   const queued = await a.engine.run();
   assert.equal(queued.status, 'PENDING');
   assert.equal(queued.pendingDeletes, 1);
   assert.ok(await fx.transport.get('wiki/entities/remove.md'));
-  const context = { config: { vault: { path: a.vaultPath }, sync: { options: {} } }, paths: { stateDir: a.stateDir }, transport: fx.transport, env: { BRAINATLAS_HOST_ID: 'host-a' } };
-  assert.deepEqual(await commands.approve(context, { paths: ['wiki/entities/remove.md'] }), { approved: ['wiki/entities/remove.md'] });
+  const context = {
+    config: { vault: { path: a.vaultPath }, sync: { options: {} } },
+    paths: { stateDir: a.stateDir },
+    transport: fx.transport,
+    env: { BRAINATLAS_HOST_ID: 'host-a' },
+  };
+  assert.deepEqual(await commands.approve(context, { paths: ['wiki/entities/remove.md'] }), {
+    approved: ['wiki/entities/remove.md'],
+  });
   assert.equal(await fx.transport.get('wiki/entities/remove.md'), null);
   await b.engine.run();
   await assert.rejects(readFile(join(b.vaultPath, 'wiki/entities/remove.md')), { code: 'ENOENT' });
@@ -163,10 +202,12 @@ test('local deletes stay queued until approval and approved tombstones reach the
 
 test('remote delete requests appear on the peer and peer approval removes both copies', async (t) => {
   const fx = await fixture(t);
-  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const a = await fx.host('host-a'),
+    b = await fx.host('host-b');
   const path = 'wiki/entities/peer-remove.md';
   await put(a, path, 'shared\n');
-  await a.engine.run(); await b.engine.run();
+  await a.engine.run();
+  await b.engine.run();
   await rm(join(a.vaultPath, path));
 
   const requested = await a.engine.run();
@@ -180,7 +221,12 @@ test('remote delete requests appear on the peer and peer approval removes both c
   assert.equal((await b.engine.status()).pendingDeleteCount, 1);
   assert.deepEqual((await b.engine.status()).pendingDeletionPaths, [path]);
   assert.equal(await readFile(join(b.vaultPath, path), 'utf8'), 'shared\n');
-  const context = { config: { vault: { path: b.vaultPath }, sync: { options: {} } }, paths: { stateDir: b.stateDir }, transport: fx.transport, env: { BRAINATLAS_HOST_ID: 'host-b' } };
+  const context = {
+    config: { vault: { path: b.vaultPath }, sync: { options: {} } },
+    paths: { stateDir: b.stateDir },
+    transport: fx.transport,
+    env: { BRAINATLAS_HOST_ID: 'host-b' },
+  };
   assert.deepEqual(await commands.approve(context, ['--all']), { approved: [path] });
 
   assert.equal(await fx.transport.get(path), null);
@@ -194,18 +240,29 @@ test('secret path and content refusals expose only path and ruleId and do not up
   const logs = [];
   const root = await mkdtemp(join(tmpdir(), 'sync-engine-secret-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const vaultPath = join(root, 'vault'), stateDir = join(root, 'state');
+  const vaultPath = join(root, 'vault'),
+    stateDir = join(root, 'state');
   await mkdir(join(vaultPath, 'wiki/entities'), { recursive: true });
   await writeFile(join(vaultPath, 'wiki/entities/leak.md'), 'api_key: "Z9kLm2Pq8R4tWx7V3cN"\n');
   await writeFile(join(vaultPath, '.env'), 'NOT_A_REAL_VALUE=placeholder\n');
   await writeFile(join(vaultPath, 'wiki/entities/local.md'), '---\nsync: local\n---\nprivate\n');
   const transport = createMemoryTransport();
-  const engine = createSyncEngine({ vaultPath, stateDir, config: { sync: { options: { include: ['**/*'] } } }, transport, logger: { info: (...args) => logs.push(args) } });
+  const engine = createSyncEngine({
+    vaultPath,
+    stateDir,
+    config: { sync: { options: { include: ['**/*'] } } },
+    transport,
+    logger: { info: (...args) => logs.push(args) },
+  });
   const result = await engine.run();
   assert.equal(result.status, 'PENDING');
-  assert.deepEqual(result.refused.sort((a, b) => a.path.localeCompare(b.path)), [
-    { path: '.env', ruleId: 'denied-path' }, { path: 'wiki/entities/leak.md', ruleId: 'high-entropy-assignment' },
-  ]);
+  assert.deepEqual(
+    result.refused.sort((a, b) => a.path.localeCompare(b.path)),
+    [
+      { path: '.env', ruleId: 'denied-path' },
+      { path: 'wiki/entities/leak.md', ruleId: 'high-entropy-assignment' },
+    ]
+  );
   assert.equal(await transport.get('.env'), null);
   assert.equal(await transport.get('wiki/entities/leak.md'), null);
   assert.equal(await transport.get('wiki/entities/local.md'), null);
@@ -216,14 +273,15 @@ test('secret path and content refusals expose only path and ruleId and do not up
 test('sync inventory suppresses only exact fingerprinted findings and keeps content filtering active', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'sync-engine-allow-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const vaultPath = join(root, 'vault'), stateDir = join(root, 'state');
+  const vaultPath = join(root, 'vault'),
+    stateDir = join(root, 'state');
   await mkdir(join(vaultPath, 'wiki/entities'), { recursive: true });
   const path = 'wiki/entities/approved.md';
   const original = 'A note\nsecret: "S-ALLOW-original-29QaWsEdRfTg"\n';
   await writeFile(join(vaultPath, path), original);
   await writeFile(join(vaultPath, '.env'), 'MODE=example\n');
   const config = { safety: { allow: [] }, sync: { options: { include: ['**/*'] } } };
-  const originalFinding = scanText(original).find(finding => finding.ruleId === 'secret-assignment');
+  const originalFinding = scanText(original).find((finding) => finding.ruleId === 'secret-assignment');
   const contentFingerprint = fingerprintSafetyFinding(path, original, originalFinding);
   const envFinding = scanPath('.env')[0];
   config.safety.allow.push(contentFingerprint, fingerprintSafetyFinding('.env', '', envFinding));
@@ -231,18 +289,21 @@ test('sync inventory suppresses only exact fingerprinted findings and keeps cont
   const approved = await inventoryVault({ vaultPath, stateDir, config });
   assert.equal(approved.files.has(path), true);
   assert.equal(approved.files.has('.env'), true);
-  assert.equal(approved.refused.some(row => row.path === path || row.path === '.env'), false);
+  assert.equal(
+    approved.refused.some((row) => row.path === path || row.path === '.env'),
+    false
+  );
 
   const changed = `${original}secret: "S-ALLOW-added-83LmNpQrStUv"\n`;
   await writeFile(join(vaultPath, path), changed);
   const changedInventory = await inventoryVault({ vaultPath, stateDir, config });
   assert.equal(changedInventory.files.has(path), false);
-  assert.ok(changedInventory.refused.some(row => row.path === path && row.ruleId === 'secret-assignment'));
+  assert.ok(changedInventory.refused.some((row) => row.path === path && row.ruleId === 'secret-assignment'));
 
-  config.safety.allow = config.safety.allow.filter(row => row.path !== path);
+  config.safety.allow = config.safety.allow.filter((row) => row.path !== path);
   const revokedInventory = await inventoryVault({ vaultPath, stateDir, config });
   assert.equal(revokedInventory.files.has(path), false);
-  assert.ok(revokedInventory.refused.some(row => row.path === path && row.ruleId === 'secret-assignment'));
+  assert.ok(revokedInventory.refused.some((row) => row.path === path && row.ruleId === 'secret-assignment'));
 });
 
 test('sync inventory always excludes legacy and retrieval cache paths, even with a catch-all include', async (t) => {
@@ -256,36 +317,64 @@ test('sync inventory always excludes legacy and retrieval cache paths, even with
     ['retrieval-index.json', '{"cache":true}'],
     ['semantic/index.json', '{"cache":true}'],
     ['wiki/semantic/page.md', '# Cached semantic artifact'],
-    ['wiki/entities/kept.md', '# Kept evidence']
-  ]) await put({ vaultPath }, path, content);
+    ['wiki/entities/kept.md', '# Kept evidence'],
+  ])
+    await put({ vaultPath }, path, content);
 
   const inventory = await inventoryVault({ vaultPath, config: { sync: { options: { include: ['**/*'] } } } });
   assert.deepEqual([...inventory.files.keys()], ['wiki/entities/kept.md']);
   for (const path of [
-    '.brainatlas-state/retrieval-index.json', '.brainatlas-state/nested/legacy.md',
-    'retrieval-index.json', 'semantic/index.json', 'wiki/semantic/page.md'
-  ]) assert.ok(inventory.excluded.has(path), `${path} should be excluded`);
+    '.brainatlas-state/retrieval-index.json',
+    '.brainatlas-state/nested/legacy.md',
+    'retrieval-index.json',
+    'semantic/index.json',
+    'wiki/semantic/page.md',
+  ])
+    assert.ok(inventory.excluded.has(path), `${path} should be excluded`);
 });
 
 test('index entries and append-only log entries merge independently from a shared base', async (t) => {
   const fx = await fixture(t);
-  const a = await fx.host('host-a'), b = await fx.host('host-b');
+  const a = await fx.host('host-a'),
+    b = await fx.host('host-b');
   await put(a, 'wiki/index.md', '# Wiki index\n\n## Notes\n\n- [Base](wiki/entities/base.md) — base\n');
   await put(a, 'wiki/log.md', '# Wiki log\n\n<!-- Append-only change history. -->\n');
-  await a.engine.run(); await b.engine.run();
-  await put(a, 'wiki/index.md', '# Wiki index\n\n## Notes\n\n- [Base](wiki/entities/base.md) — base\n- [From A](wiki/entities/a.md) — added #a\n');
-  await put(a, 'wiki/log.md', '# Wiki log\n\n<!-- Append-only change history. -->\n\n- [2026-11-08T10:00:00Z] change from a\n');
-  await put(b, 'wiki/index.md', '# Wiki index\n\n## Notes\n\n- [Base](wiki/entities/base.md) — base\n- [From B](wiki/entities/b.md) — added #b\n');
-  await put(b, 'wiki/log.md', '# Wiki log\n\n<!-- Append-only change history. -->\n\n- [2026-11-08T10:01:00Z] change from b\n');
+  await a.engine.run();
+  await b.engine.run();
+  await put(
+    a,
+    'wiki/index.md',
+    '# Wiki index\n\n## Notes\n\n- [Base](wiki/entities/base.md) — base\n- [From A](wiki/entities/a.md) — added #a\n'
+  );
+  await put(
+    a,
+    'wiki/log.md',
+    '# Wiki log\n\n<!-- Append-only change history. -->\n\n- [2026-11-08T10:00:00Z] change from a\n'
+  );
+  await put(
+    b,
+    'wiki/index.md',
+    '# Wiki index\n\n## Notes\n\n- [Base](wiki/entities/base.md) — base\n- [From B](wiki/entities/b.md) — added #b\n'
+  );
+  await put(
+    b,
+    'wiki/log.md',
+    '# Wiki log\n\n<!-- Append-only change history. -->\n\n- [2026-11-08T10:01:00Z] change from b\n'
+  );
   await a.engine.run();
   const result = await b.engine.run();
   assert.equal(result.status, 'SYNCED');
   assert.equal(result.merged, 2);
   const index = await readFile(join(b.vaultPath, 'wiki/index.md'), 'utf8');
-  assert.match(index, /From A/); assert.match(index, /From B/);
+  assert.match(index, /From A/);
+  assert.match(index, /From B/);
   const log = await readFile(join(b.vaultPath, 'wiki/log.md'), 'utf8');
-  assert.match(log, /change from a/); assert.match(log, /change from b/);
-  assert.equal(mergeIndexThreeWay('# I\n', '# I\n\n## A\n\n- [x](x.md)\n', '# I\n\n## A\n\n- [y](y.md)\n').conflicts.length, 0);
+  assert.match(log, /change from a/);
+  assert.match(log, /change from b/);
+  assert.equal(
+    mergeIndexThreeWay('# I\n', '# I\n\n## A\n\n- [x](x.md)\n', '# I\n\n## A\n\n- [y](y.md)\n').conflicts.length,
+    0
+  );
   assert.equal(mergeLogThreeWay('# L\n', '# L\n\n- [a] one\n', '# L\n\n- [b] two\n').conflicts.length, 0);
 
   const indexBase = '# Wiki Index\n\n## Notes\n\n- [Base](wiki/base.md) — original\n';
@@ -308,7 +397,8 @@ test('interrupted put is journaled and resumes idempotently', async (t) => {
   const transport = createMemoryTransport({ failures: [{ type: 'interruption', operation: 'put', after: 1 }] });
   const fx = await fixture(t, { transport });
   const a = await fx.host('host-a');
-  await put(a, 'wiki/entities/a.md', 'a\n'); await put(a, 'wiki/entities/b.md', 'b\n');
+  await put(a, 'wiki/entities/a.md', 'a\n');
+  await put(a, 'wiki/entities/b.md', 'b\n');
   await assert.rejects(a.engine.run(), { code: 'E_INTERRUPTED' });
   const journal = JSON.parse(await readFile(a.engine.journalPath, 'utf8'));
   assert.equal(journal.phase, 'interrupted');
@@ -323,13 +413,22 @@ test('interrupted put is journaled and resumes idempotently', async (t) => {
 
 test('scope globs, peer check, scheduler plans and module commands expose the specified surface', async (t) => {
   const fx = await fixture(t);
-  const a = await fx.host('host-a'), b = await fx.host('host-b');
-  await put(a, 'wiki/a.md', 'A\n'); await a.engine.run(); await b.engine.run();
-  await put(b, 'wiki/a.md', 'drift\n'); await b.engine.run();
+  const a = await fx.host('host-a'),
+    b = await fx.host('host-b');
+  await put(a, 'wiki/a.md', 'A\n');
+  await a.engine.run();
+  await b.engine.run();
+  await put(b, 'wiki/a.md', 'drift\n');
+  await b.engine.run();
   const drift = await a.engine.checkPeer(b.stateDir);
   assert.equal(drift.status, 'DRIFT');
   assert.deepEqual(drift.differences, [{ path: 'wiki/a.md', kind: 'modified' }]);
-  const context = { config: { vault: { path: a.vaultPath }, sync: { options: {} } }, paths: { stateDir: a.stateDir }, transport: fx.transport, env: { BRAINATLAS_HOST_ID: 'host-a' } };
+  const context = {
+    config: { vault: { path: a.vaultPath }, sync: { options: {} } },
+    paths: { stateDir: a.stateDir },
+    transport: fx.transport,
+    env: { BRAINATLAS_HOST_ID: 'host-a' },
+  };
   assert.deepEqual(await commands.check(context, { peer: b.stateDir }), drift);
   assert.deepEqual(await commands.sync(['check', '--peer', b.stateDir, '--json'], context), drift);
   assert.deepEqual(await commands.pause(context), { status: 'PAUSED' });
@@ -339,24 +438,43 @@ test('scope globs, peer check, scheduler plans and module commands expose the sp
   assert.equal((await commands.run(context)).status, 'SYNCED');
   assert.equal((await commands.status(context)).status, 'SYNCED');
 
-  const macPaths = { binPath: join(fx.root, 'bin', 'brainatlas'), stateDir: join(fx.root, 'state'), launchAgentsDir: join(fx.root, 'home', 'Library', 'LaunchAgents') };
+  const macPaths = {
+    binPath: join(fx.root, 'bin', 'brainatlas'),
+    stateDir: join(fx.root, 'state'),
+    launchAgentsDir: join(fx.root, 'home', 'Library', 'LaunchAgents'),
+  };
   const mac = planScheduler({ platform: 'darwin', paths: macPaths, intervalMin: 15 });
   assert.match(mac.text, /<key>StartInterval<\/key><integer>900<\/integer>/);
   assert.match(mac.text, /<key>Label<\/key><string>org\.brainatlas\.sync<\/string>/);
   assert.deepEqual(mac.uninstall, [join(macPaths.launchAgentsDir, 'org.brainatlas.sync.plist')]);
-  const linuxPaths = { binPath: join(fx.root, 'bin', 'brainatlas'), stateDir: join(fx.root, 'state'), systemdUserDir: join(fx.root, 'home', '.config', 'systemd', 'user') };
+  const linuxPaths = {
+    binPath: join(fx.root, 'bin', 'brainatlas'),
+    stateDir: join(fx.root, 'state'),
+    systemdUserDir: join(fx.root, 'home', '.config', 'systemd', 'user'),
+  };
   const linux = planScheduler({ platform: 'linux', paths: linuxPaths, intervalMin: 20 });
   assert.match(linux.text, /OnUnitActiveSec=20min/);
   assert.equal(linux.files.length, 2);
   assert.equal(planSchedulerUninstall({ platform: 'linux', paths: linuxPaths }).files.length, 2);
-  assert.deepEqual(Object.keys(commands).sort(), ['approve', 'check', 'pause', 'resume', 'run', 'schedule', 'status', 'sync']);
+  assert.deepEqual(Object.keys(commands).sort(), [
+    'approve',
+    'check',
+    'pause',
+    'resume',
+    'run',
+    'schedule',
+    'status',
+    'sync',
+  ]);
   assert.equal(await activate({ config: {}, paths: {} }), undefined);
 });
 
 test('sync status reports folder transport degradation and its reason', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'sync-folder-status-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const vaultPath = join(root, 'vault'); const sharedPath = join(root, 'shared'); const stateDir = join(root, 'state');
+  const vaultPath = join(root, 'vault');
+  const sharedPath = join(root, 'shared');
+  const stateDir = join(root, 'state');
   await Promise.all([mkdir(vaultPath), mkdir(sharedPath)]);
   const transport = createFolderTransport({ path: sharedPath, vaultPath });
   const engine = createSyncEngine({ vaultPath, stateDir, transport, config: { sync: { options: {} } } });

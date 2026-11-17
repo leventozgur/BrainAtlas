@@ -24,6 +24,10 @@ Do not use `npm install` to update the lockfile as part of an unrelated change. 
 
 `npm run typecheck` runs `tsc -p tsconfig.json` with `allowJs`/`checkJs` and `noEmit` over `packages/`, `modules/`, `scripts/` and `release/`; there is no build step and nothing is emitted. TypeScript and `@types/node` are development-only roots in the guard and never enter a release archive. Fix type errors by improving JSDoc annotations (or a precise `/** @type {X} */ (expr)` cast) without changing runtime behaviour; `// @ts-ignore` and `// @ts-nocheck` are not used.
 
+## Formatting
+
+`npm run format` rewrites every `*.mjs`/`*.js` file with Prettier using `.prettierrc.json` (120 columns, single quotes, semicolons, ES5 trailing commas); `npm run format:check` verifies the same formatting and runs in CI after `npm run typecheck`. Prettier is a development-only root in the guard and never enters a release archive. Formatting is a whitespace-only change: do not combine it with behaviour changes, and keep SPDX headers on the first line.
+
 ## Verify before publishing
 
 Run `npm run release:verify -- --dir <folder>` on a built release folder before publishing.

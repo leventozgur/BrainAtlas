@@ -4,7 +4,12 @@ import assert from 'node:assert/strict';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { commands, createMemoryTransport, createSyncEngine, resolveHostId } from '../../../modules/sync-engine/src/index.mjs';
+import {
+  commands,
+  createMemoryTransport,
+  createSyncEngine,
+  resolveHostId,
+} from '../../../modules/sync-engine/src/index.mjs';
 
 async function testRoot(t) {
   const root = await mkdtemp(join(tmpdir(), 'sync-host-id-'));

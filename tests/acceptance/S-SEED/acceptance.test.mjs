@@ -29,14 +29,25 @@ async function fixture(t) {
   };
   await mkdir(env.HOME, { recursive: true });
   const remote = join(root, 'remote.git');
-  const initialized = await runCommand('git', ['init', '--bare', '--initial-branch=main', remote], { cwd: root, env, timeoutMs: 10_000 });
+  const initialized = await runCommand('git', ['init', '--bare', '--initial-branch=main', remote], {
+    cwd: root,
+    env,
+    timeoutMs: 10_000,
+  });
   assert.equal(initialized.code, 0, initialized.stderr);
   const remoteUrl = pathToFileURL(remote).href;
   async function host(name) {
     const home = join(root, name);
     const vaultPath = join(home, 'vault');
     const stateDir = join(home, 'state');
-    const hostEnv = { ...env, HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), BRAINATLAS_HOST_ID: name };
+    const hostEnv = {
+      ...env,
+      HOME: home,
+      XDG_CONFIG_HOME: join(home, 'config'),
+      XDG_DATA_HOME: join(home, 'data'),
+      XDG_STATE_HOME: join(home, 'state'),
+      BRAINATLAS_HOST_ID: name,
+    };
     await mkdir(home, { recursive: true });
     await initVault(vaultPath);
     const transport = createGitTransport({ stateDir, remote: remoteUrl, env: hostEnv });
@@ -44,7 +55,11 @@ async function fixture(t) {
     return { vaultPath, stateDir, engine };
   }
   async function head() {
-    const result = await runCommand('git', ['--git-dir', remote, 'rev-parse', 'HEAD'], { cwd: root, env, timeoutMs: 10_000 });
+    const result = await runCommand('git', ['--git-dir', remote, 'rev-parse', 'HEAD'], {
+      cwd: root,
+      env,
+      timeoutMs: 10_000,
+    });
     assert.equal(result.code, 0, result.stderr);
     return result.stdout.trim();
   }
@@ -62,13 +77,13 @@ async function conflictCopiesBelow(root, current = root) {
   const found = [];
   for (const entry of names) {
     const path = join(current, entry.name);
-    if (entry.isDirectory()) found.push(...await conflictCopiesBelow(root, path));
+    if (entry.isDirectory()) found.push(...(await conflictCopiesBelow(root, path)));
     else if (entry.name.includes('.conflict-')) found.push(path.slice(root.length + 1));
   }
   return found;
 }
 
-test('two initialized hosts converge from an untouched seed on an empty bare remote', async t => {
+test('two initialized hosts converge from an untouched seed on an empty bare remote', async (t) => {
   const fx = await fixture(t);
   const a = await fx.host('seed-left');
   const b = await fx.host('seed-right');
@@ -92,13 +107,14 @@ test('two initialized hosts converge from an untouched seed on an empty bare rem
   assert.equal(second.merged, 0);
   assert.equal(second.pushed, 0);
   assert.deepEqual(second.conflicts, []);
-  for (const [path, expected] of remoteContent) assert.deepEqual(await readFile(join(b.vaultPath, path)), expected, path);
+  for (const [path, expected] of remoteContent)
+    assert.deepEqual(await readFile(join(b.vaultPath, path)), expected, path);
   assert.deepEqual(await conflictCopiesBelow(b.vaultPath), []);
   assert.equal(await fx.head(), headBeforeB);
   assert.deepEqual(await a.engine.checkPeer(b.stateDir), { status: 'PASS', differences: [] });
 });
 
-test('a modified local init template still produces an unbased conflict copy', async t => {
+test('a modified local init template still produces an unbased conflict copy', async (t) => {
   const fx = await fixture(t);
   const a = await fx.host('seed-left');
   const b = await fx.host('seed-right');
@@ -110,8 +126,14 @@ test('a modified local init template still produces an unbased conflict copy', a
 
   const result = await b.engine.run();
   assert.equal(result.status, 'CONFLICT');
-  assert.deepEqual(result.conflicts.map(({ path, kind }) => ({ path, kind })), [{ path: 'AGENTS.md', kind: 'unbased-divergence' }]);
+  assert.deepEqual(
+    result.conflicts.map(({ path, kind }) => ({ path, kind })),
+    [{ path: 'AGENTS.md', kind: 'unbased-divergence' }]
+  );
   assert.deepEqual(await readFile(join(b.vaultPath, result.conflicts[0].conflictCopy)), remote);
-  assert.deepEqual(await readFile(join(b.vaultPath, 'AGENTS.md')), Buffer.concat([template, Buffer.from('\nLocal customization.\n')]));
+  assert.deepEqual(
+    await readFile(join(b.vaultPath, 'AGENTS.md')),
+    Buffer.concat([template, Buffer.from('\nLocal customization.\n')])
+  );
   assert.equal((await conflictCopiesBelow(b.vaultPath)).length, 1);
 });

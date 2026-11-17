@@ -11,8 +11,9 @@ import { formatMaintenance, runMaintenance } from '../../packages/cli/src/mainta
 import { cleanEnv } from './clean-env.mjs';
 
 const NOW = new Date('2026-11-11T00:00:00Z');
-const page = (title, body = 'zephyr body text') => `---\ntype: concept\ngenerated: "2026-11-01"\nstatus: confirmed\nsources: []\nverified: []\nstale_after: "P90D"\naliases: []\nkeywords: []\n---\n\n# ${title}\n\n${body}\n`;
-const index = (...entries) => `# Wiki Index\n\n## Pages\n\n${entries.map(e => `- [${e[0]}](${e[1]})`).join('\n')}\n`;
+const page = (title, body = 'zephyr body text') =>
+  `---\ntype: concept\ngenerated: "2026-11-01"\nstatus: confirmed\nsources: []\nverified: []\nstale_after: "P90D"\naliases: []\nkeywords: []\n---\n\n# ${title}\n\n${body}\n`;
+const index = (...entries) => `# Wiki Index\n\n## Pages\n\n${entries.map((e) => `- [${e[0]}](${e[1]})`).join('\n')}\n`;
 const BROKEN_BODY = 'SECRET-BODY-TEXT zephyr broken body.';
 // Pages that loadPages throws on: reported as invalid-frontmatter.
 const BROKEN = {
@@ -41,24 +42,26 @@ const healthy = {
   'wiki/concepts/a.md': page('A', 'Links to [[B]].'),
   'wiki/concepts/b.md': page('B', 'Back to [[A]].'),
 };
-const ofKind = (report, kind) => report.findings.filter(f => f.kind === kind);
+const ofKind = (report, kind) => report.findings.filter((f) => f.kind === kind);
 
-test('a vault with broken frontmatter does not fail maintenance, and each broken page is reported by path', async t => {
+test('a vault with broken frontmatter does not fail maintenance, and each broken page is reported by path', async (t) => {
   const dir = await vaultWith(t, { ...healthy, ...BROKEN, ...ACCEPTED });
   const report = await runMaintenance(dir, { now: NOW });
   assert.equal(report.ok, true);
-  const found = ofKind(report, 'invalid-frontmatter').map(f => f.path).sort();
+  const found = ofKind(report, 'invalid-frontmatter')
+    .map((f) => f.path)
+    .sort();
   assert.deepEqual(found, Object.keys(BROKEN).sort());
 });
 
-test('pages that loadPages accepts are not reported as invalid-frontmatter', async t => {
+test('pages that loadPages accepts are not reported as invalid-frontmatter', async (t) => {
   const dir = await vaultWith(t, { ...healthy, ...ACCEPTED });
   const report = await runMaintenance(dir, { now: NOW });
   assert.deepEqual(ofKind(report, 'invalid-frontmatter'), []);
   assert.equal(report.pages, 4);
 });
 
-test('invalid-frontmatter detail names no page content and no parser message', async t => {
+test('invalid-frontmatter detail names no page content and no parser message', async (t) => {
   const dir = await vaultWith(t, { ...healthy, ...BROKEN });
   const report = await runMaintenance(dir, { now: NOW });
   assert.equal(ofKind(report, 'invalid-frontmatter').length, 3);
@@ -69,15 +72,24 @@ test('invalid-frontmatter detail names no page content and no parser message', a
   }
 });
 
-test('a clean vault has no invalid-frontmatter findings and the same counts keys as before', async t => {
+test('a clean vault has no invalid-frontmatter findings and the same counts keys as before', async (t) => {
   const dir = await vaultWith(t, healthy);
   const report = await runMaintenance(dir, { now: NOW });
   assert.deepEqual(ofKind(report, 'invalid-frontmatter'), []);
-  assert.deepEqual(Object.keys(report.counts).sort(), ['broken-link', 'index-missing', 'index-stale', 'orphan', 'oversized', 'stale', 'superseded-broken', 'update-sprawl']);
+  assert.deepEqual(Object.keys(report.counts).sort(), [
+    'broken-link',
+    'index-missing',
+    'index-stale',
+    'orphan',
+    'oversized',
+    'stale',
+    'superseded-broken',
+    'update-sprawl',
+  ]);
   assert.deepEqual(report.findings, []);
 });
 
-test('human output lists invalid-frontmatter findings by path under their own heading', async t => {
+test('human output lists invalid-frontmatter findings by path under their own heading', async (t) => {
   const dir = await vaultWith(t, { ...healthy, ...BROKEN });
   const text = formatMaintenance(await runMaintenance(dir, { now: NOW }));
   assert.match(text, /invalid-frontmatter \(3\)/);
@@ -85,14 +97,28 @@ test('human output lists invalid-frontmatter findings by path under their own he
   assert.doesNotMatch(text, /SECRET/);
 });
 
-test('brainatlas maintain --json reports invalid-frontmatter by path and exits 0', async t => {
+test('brainatlas maintain --json reports invalid-frontmatter by path and exits 0', async (t) => {
   const dir = await vaultWith(t, { ...healthy, 'wiki/concepts/yaml.md': BROKEN['wiki/concepts/yaml.md'] });
   const home = await mkdtemp(join(tmpdir(), 'ba23-home-'));
   t.after(() => rm(home, { recursive: true, force: true }));
-  const env = cleanEnv({ HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1' });
-  const run = spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), 'maintain', '--json', '--vault', dir], { env, encoding: 'utf8', shell: false });
+  const env = cleanEnv({
+    HOME: home,
+    XDG_CONFIG_HOME: join(home, 'config'),
+    XDG_DATA_HOME: join(home, 'data'),
+    XDG_STATE_HOME: join(home, 'state'),
+    BRAINATLAS_PLATFORM: 'linux',
+    BRAINATLAS_OFFLINE: '1',
+  });
+  const run = spawnSync(
+    process.execPath,
+    [resolve('packages/cli/bin/brainatlas.mjs'), 'maintain', '--json', '--vault', dir],
+    { env, encoding: 'utf8', shell: false }
+  );
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stderr, '');
   const out = JSON.parse(run.stdout);
-  assert.deepEqual(out.findings.filter(f => f.kind === 'invalid-frontmatter').map(f => f.path), ['wiki/concepts/yaml.md']);
+  assert.deepEqual(
+    out.findings.filter((f) => f.kind === 'invalid-frontmatter').map((f) => f.path),
+    ['wiki/concepts/yaml.md']
+  );
 });

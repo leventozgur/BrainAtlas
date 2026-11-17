@@ -30,17 +30,25 @@ const SETS = [
 // Over-selecting only lowers the number of identifier-free queries that are compared, and the minimums below
 // guard against that becoming too large.
 function mayContainIdentifier(query) {
-  return query.split(/\s+/).some(raw => {
+  return query.split(/\s+/).some((raw) => {
     const t = raw.replace(/^[^\p{L}\p{N}-]+|[^\p{L}\p{N}]+$/gu, '');
-    return /^--/.test(t) || /_/.test(t) || /[/.]/.test(t) || /\d/.test(t) || /\p{Ll}\p{Lu}/u.test(t) || /^\p{Lu}{2,}/u.test(t);
+    return (
+      /^--/.test(t) ||
+      /_/.test(t) ||
+      /[/.]/.test(t) ||
+      /\d/.test(t) ||
+      /\p{Ll}\p{Lu}/u.test(t) ||
+      /^\p{Lu}{2,}/u.test(t)
+    );
   });
 }
 
 const shape = (r) => ({
-  abstained: r.abstained, reason: r.reason,
+  abstained: r.abstained,
+  reason: r.reason,
   // PM update (BA-04, 2026-11-11): BA-04 intentionally changes which section is shown (newest valid dated section);
   // ranking, scores and abstention must still match main exactly, so the section heading is no longer pinned here.
-  results: r.results.map(x => ({ path: x.path, score: x.score })),
+  results: r.results.map((x) => ({ path: x.path, score: x.score })),
 });
 
 const indexes = new Map();
@@ -52,8 +60,16 @@ function indexFor(corpus) {
 test('golden fixture covers every dev set with the same query ids as the repository files', () => {
   for (const set of SETS) {
     const cases = JSON.parse(fs.readFileSync(path.join(root, set.cases), 'utf8'));
-    assert.deepEqual(golden[set.key].map(c => c.id), cases.map(c => c.id), set.key);
-    assert.deepEqual(golden[set.key].map(c => c.query), cases.map(c => c.query), set.key);
+    assert.deepEqual(
+      golden[set.key].map((c) => c.id),
+      cases.map((c) => c.id),
+      set.key
+    );
+    assert.deepEqual(
+      golden[set.key].map((c) => c.query),
+      cases.map((c) => c.query),
+      set.key
+    );
   }
 });
 
@@ -73,13 +89,17 @@ test('identifier-free dev queries return results identical to main (path, score,
       const current = drop(shape(raw));
       const expected = drop(shape(golden[set.key][i]));
       const n = Math.min(current.results.length, expected.results.length);
-      current.results = current.results.slice(0, n); expected.results = expected.results.slice(0, n);
+      current.results = current.results.slice(0, n);
+      expected.results = expected.results.slice(0, n);
       // PM update (BA-08, 2026-11-11): link-graph expansion intentionally adds or lifts linked neighbours below the first result
       // on linked corpora (eval/corpus-ba); there the first result and abstention must still match main. Unlinked corpora keep
       // full parity.
       if (set.corpus === 'eval/corpus-ba') {
-        assert.deepEqual({ abstained: current.abstained, reason: current.reason, first: current.results[0] ?? null },
-          { abstained: expected.abstained, reason: expected.reason, first: expected.results[0] ?? null }, `${set.key}/${c.id}: ${c.query}`);
+        assert.deepEqual(
+          { abstained: current.abstained, reason: current.reason, first: current.results[0] ?? null },
+          { abstained: expected.abstained, reason: expected.reason, first: expected.results[0] ?? null },
+          `${set.key}/${c.id}: ${c.query}`
+        );
       } else assert.deepEqual(current, expected, `${set.key}/${c.id}: ${c.query}`);
     });
     report.push(`${set.key}=${compared}/${cases.length}`);
@@ -100,7 +120,10 @@ test('identifier-bearing dev queries: no query answered at rank 1 on main loses 
       const hitOn = (r) => !r.abstained && relevant.includes(r.results[0]?.path);
       const before = shape(golden[set.key][i]);
       const after = search(index, c.query, { limit: 10, abstainThreshold: 0, asOf: now });
-      if (hitOn(before)) { answered++; if (!hitOn(after)) regressions.push(`${set.key}/${c.id}`); }
+      if (hitOn(before)) {
+        answered++;
+        if (!hitOn(after)) regressions.push(`${set.key}/${c.id}`);
+      }
     });
   }
   assert.ok(answered > 0);
@@ -108,17 +131,21 @@ test('identifier-bearing dev queries: no query answered at rank 1 on main loses 
 });
 
 test('natural dev set: recall@5 and abstain accuracy equal main; mean reciprocal rank does not fall', () => {
-  const set = SETS.find(s => s.key === 'natural');
+  const set = SETS.find((s) => s.key === 'natural');
   const cases = JSON.parse(fs.readFileSync(path.join(root, set.cases), 'utf8'));
   const index = indexFor(set.corpus);
   const metrics = (results) => {
-    let recall5 = 0, mrr = 0, relevantCount = 0, abstainOk = 0, abstainCount = 0;
+    let recall5 = 0,
+      mrr = 0,
+      relevantCount = 0,
+      abstainOk = 0,
+      abstainCount = 0;
     cases.forEach((c, i) => {
       const rel = c.relevant ?? [];
       const r = results(i, c);
       if (rel.length) {
         relevantCount++;
-        const rank = r.abstained ? -1 : r.results.findIndex(x => rel.includes(x.path));
+        const rank = r.abstained ? -1 : r.results.findIndex((x) => rel.includes(x.path));
         if (rank >= 0 && rank < 5) recall5++;
         if (rank >= 0) mrr += 1 / (rank + 1);
       } else {

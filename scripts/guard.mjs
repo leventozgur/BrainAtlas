@@ -7,4 +7,4 @@ for (const c of checks) {
   console.log(`${c.ok ? 'PASS' : 'FAIL'} ${c.id}`);
   for (const f of c.findings) console.log(`${f.file}:${f.line}:${f.rule}`);
 }
-if (checks.some(c=>!c.ok)) process.exitCode=1;
+if (checks.some((c) => !c.ok)) process.exitCode = 1;

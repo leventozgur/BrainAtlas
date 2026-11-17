@@ -37,4 +37,3 @@ export function runNode(args, { env = {}, cwd = ROOT, preload = false } = {}) {
   const execArgs = preload ? ['--import', PRELOAD, ...args] : args;
   return spawnSync(process.execPath, execArgs, { cwd, env: childEnv, encoding: 'utf8' });
 }
-

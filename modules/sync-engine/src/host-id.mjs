@@ -13,7 +13,13 @@ function normalizeHostId(value) {
   if (typeof value !== 'string') throw invalidState();
   const trimmed = value.trim();
   if (!trimmed) return null;
-  const normalized = trimmed.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32).replace(/-+$/g, '');
+  const normalized = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32)
+    .replace(/-+$/g, '');
   if (!normalized) throw invalidState();
   return normalized;
 }
@@ -24,16 +30,23 @@ function isWithin(root, path) {
 }
 
 async function ensureStateRoot(path) {
-  try { await lstat(path); }
-  catch (error) {
+  try {
+    await lstat(path);
+  } catch (error) {
     if (error?.code !== 'ENOENT') throw invalidState();
-    try { await mkdir(path, { recursive: true, mode: 0o700 }); }
-    catch { throw invalidState(); }
+    try {
+      await mkdir(path, { recursive: true, mode: 0o700 });
+    } catch {
+      throw invalidState();
+    }
   }
 
   let root;
-  try { root = await realpath(path); }
-  catch { throw invalidState(); }
+  try {
+    root = await realpath(path);
+  } catch {
+    throw invalidState();
+  }
   try {
     const info = await stat(root);
     if (!info.isDirectory()) throw invalidPath();
@@ -46,29 +59,41 @@ async function ensureStateRoot(path) {
 
 async function ensureSyncDirectory(path, stateRoot) {
   let info;
-  try { info = await lstat(path); }
-  catch (error) {
+  try {
+    info = await lstat(path);
+  } catch (error) {
     if (error?.code !== 'ENOENT') throw invalidState();
-    try { await mkdir(path, { mode: 0o700 }); }
-    catch (createError) {
+    try {
+      await mkdir(path, { mode: 0o700 });
+    } catch (createError) {
       if (createError?.code !== 'EEXIST') throw invalidState();
     }
-    try { info = await lstat(path); }
-    catch { throw invalidState(); }
+    try {
+      info = await lstat(path);
+    } catch {
+      throw invalidState();
+    }
   }
 
   if (!info.isDirectory() || info.isSymbolicLink()) throw invalidPath();
   let actual;
-  try { actual = await realpath(path); }
-  catch { throw invalidState(); }
+  try {
+    actual = await realpath(path);
+  } catch {
+    throw invalidState();
+  }
   if (!isWithin(stateRoot, actual)) throw invalidPath();
   return actual;
 }
 
 async function readStoredHostId(path) {
   let info;
-  try { info = await lstat(path); }
-  catch (error) { if (error?.code === 'ENOENT') return null; throw invalidState(); }
+  try {
+    info = await lstat(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw invalidState();
+  }
   if (!info.isFile() || info.isSymbolicLink()) throw invalidPath();
   let handle;
   try {
@@ -114,10 +139,15 @@ export async function resolveHostId({ stateDir, env = {}, config = {}, hostId: l
   let handle;
   try {
     await ensureSyncDirectory(syncDir, stateRoot);
-    handle = await open(temporaryPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600);
+    handle = await open(
+      temporaryPath,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+      0o600
+    );
     const createdInfo = await handle.stat();
     const processUid = typeof process.getuid === 'function' ? process.getuid() : null;
-    if (!createdInfo.isFile() || createdInfo.nlink !== 1 || processUid === null || createdInfo.uid !== processUid) throw invalidPath();
+    if (!createdInfo.isFile() || createdInfo.nlink !== 1 || processUid === null || createdInfo.uid !== processUid)
+      throw invalidPath();
     await handle.chmod(0o600);
     await handle.writeFile(`${generated}\n`);
     await handle.sync();

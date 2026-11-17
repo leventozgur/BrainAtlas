@@ -20,7 +20,8 @@ const PRELOAD = pathToFileURL(path.join(here, 'race-preload.mjs')).href;
 function fixture(t) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ba02-race-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  const vault = path.join(home, 'vault'), wiki = path.join(vault, 'wiki');
+  const vault = path.join(home, 'vault'),
+    wiki = path.join(vault, 'wiki');
   fs.mkdirSync(wiki, { recursive: true });
   fs.writeFileSync(path.join(wiki, 'alpha.md'), '# Alpha\nalpha baseline\n');
   fs.writeFileSync(path.join(wiki, 'beta.md'), '# Beta\nbetaterm original\n');
@@ -34,13 +35,38 @@ function fixture(t) {
 }
 // race: { target, op, mode, to } arms the preload injection; omitted means a plain server.
 async function start(f, race) {
-  const env = { HOME: f.home, BRAINATLAS_CONFIG: f.configFile, BRAINATLAS_VAULT: f.vault, PATH: process.env.PATH ?? '' };
-  if (race) Object.assign(env, { NODE_OPTIONS: `--import=${PRELOAD}`, BA02_RACE_ARM: f.arm, BA02_RACE_LOG: f.log,
-    BA02_RACE_TARGET: race.target, BA02_RACE_OP: race.op, BA02_RACE_MODE: race.mode, BA02_RACE_TO: race.to ?? '' });
-  const transport = new StdioClientTransport({ command: process.execPath, args: [BIN], cwd: root, env, stderr: 'pipe' });
+  const env = {
+    HOME: f.home,
+    BRAINATLAS_CONFIG: f.configFile,
+    BRAINATLAS_VAULT: f.vault,
+    PATH: process.env.PATH ?? '',
+  };
+  if (race)
+    Object.assign(env, {
+      NODE_OPTIONS: `--import=${PRELOAD}`,
+      BA02_RACE_ARM: f.arm,
+      BA02_RACE_LOG: f.log,
+      BA02_RACE_TARGET: race.target,
+      BA02_RACE_OP: race.op,
+      BA02_RACE_MODE: race.mode,
+      BA02_RACE_TO: race.to ?? '',
+    });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [BIN],
+    cwd: root,
+    env,
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba02-race', version: '1.0.0' });
   await client.connect(transport);
-  return { client, close: async () => { await client.close().catch(() => {}); await transport.close().catch(() => {}); } };
+  return {
+    client,
+    close: async () => {
+      await client.close().catch(() => {});
+      await transport.close().catch(() => {});
+    },
+  };
 }
 async function queryRaw(c, text) {
   return c.client.callTool({ name: 'wiki_query', arguments: { query: text } });
@@ -56,7 +82,8 @@ const fired = (f) => fs.existsSync(f.log) && fs.readFileSync(f.log, 'utf8').incl
 
 test('outside delete during the freshness check: the query still answers, the next query shows the deletion', async (t) => {
   const f = fixture(t);
-  const c = await start(f, { target: 'beta.md', op: 'read', mode: 'delete' }); t.after(() => c.close());
+  const c = await start(f, { target: 'beta.md', op: 'read', mode: 'delete' });
+  t.after(() => c.close());
   assert.deepEqual(await query(c, 'betaterm'), ['beta.md']);
   fs.writeFileSync(path.join(f.wiki, 'beta.md'), '# Beta\nbetaedit replaced text\n'); // changes the fingerprint
   fs.writeFileSync(f.arm, '');
@@ -71,7 +98,8 @@ test('outside delete during the freshness check: the query still answers, the ne
 
 test('outside rename during the freshness check: the next query returns the renamed page', async (t) => {
   const f = fixture(t);
-  const c = await start(f, { target: 'beta.md', op: 'read', mode: 'rename', to: path.join(f.wiki, 'beta-moved.md') }); t.after(() => c.close());
+  const c = await start(f, { target: 'beta.md', op: 'read', mode: 'rename', to: path.join(f.wiki, 'beta-moved.md') });
+  t.after(() => c.close());
   assert.deepEqual(await query(c, 'betaterm'), ['beta.md']);
   fs.writeFileSync(path.join(f.wiki, 'beta.md'), '# Beta\nbetaedit replaced text\n');
   fs.writeFileSync(f.arm, '');
@@ -85,7 +113,8 @@ test('outside rename during the freshness check: the next query returns the rena
 
 test('outside delete between the fingerprint lstat and the rebuild: no error, deletion visible at once', async (t) => {
   const f = fixture(t);
-  const c = await start(f, { target: 'beta.md', op: 'lstat', mode: 'delete' }); t.after(() => c.close());
+  const c = await start(f, { target: 'beta.md', op: 'lstat', mode: 'delete' });
+  t.after(() => c.close());
   assert.deepEqual(await query(c, 'betaterm'), ['beta.md']);
   fs.writeFileSync(path.join(f.wiki, 'beta.md'), '# Beta\nbetaedit replaced text\n');
   fs.writeFileSync(f.arm, '');

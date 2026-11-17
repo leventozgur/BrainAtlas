@@ -17,22 +17,27 @@ const SETS = {
 };
 
 function walkMarkdown(dir, base = dir) {
-  return fs.readdirSync(dir, {withFileTypes: true}).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return walkMarkdown(full, base);
-    return entry.name.endsWith('.md') ? [path.relative(base, full).split(path.sep).join('/')] : [];
-  }).sort();
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return walkMarkdown(full, base);
+      return entry.name.endsWith('.md') ? [path.relative(base, full).split(path.sep).join('/')] : [];
+    })
+    .sort();
 }
 
 function parsePage(relPath) {
   const raw = fs.readFileSync(path.join(corpusDir, relPath), 'utf8');
   const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/u);
   assert.ok(match, `frontmatter in ${relPath}`);
-  const fields = Object.fromEntries(match[1].split('\n').map((line) => {
-    const index = line.indexOf(':');
-    return [line.slice(0, index).trim(), line.slice(index + 1).trim()];
-  }));
-  return {fields, body: match[2], words: match[2].trim().split(/\s+/u).filter(Boolean).length};
+  const fields = Object.fromEntries(
+    match[1].split('\n').map((line) => {
+      const index = line.indexOf(':');
+      return [line.slice(0, index).trim(), line.slice(index + 1).trim()];
+    })
+  );
+  return { fields, body: match[2], words: match[2].trim().split(/\s+/u).filter(Boolean).length };
 }
 
 const pages = walkMarkdown(corpusDir);
@@ -43,12 +48,16 @@ const sets = Object.fromEntries(Object.keys(SETS).map((file) => [file, loadSet(f
 test('corpus-ba has 40 to 60 pages, each 150 to 600 words, with valid frontmatter', () => {
   assert.ok(pages.length >= 40 && pages.length <= 60, `page count ${pages.length}`);
   for (const relPath of pages) {
-    const {fields, words} = parsed[relPath];
+    const { fields, words } = parsed[relPath];
     assert.ok(words >= 150 && words <= 600, `${relPath} has ${words} words`);
     assert.ok(fields.title, `${relPath} title`);
     assert.match(fields.generated, /^"\d{4}-\d{2}-\d{2}"$/u, `${relPath} generated is quoted date-only`);
     assert.ok(['active', 'superseded'].includes(fields.status.replace(/"/gu, '')), `${relPath} status`);
-    assert.doesNotMatch(parsed[relPath].body, /\/Users\/|\/home\/|https?:\/\/|@\w+\.\w+/u, `${relPath} has no real-looking identifiers`);
+    assert.doesNotMatch(
+      parsed[relPath].body,
+      /\/Users\/|\/home\/|https?:\/\/|@\w+\.\w+/u,
+      `${relPath} has no real-looking identifiers`
+    );
   }
 });
 
@@ -100,7 +109,11 @@ test('identifier set has at least 20 cases, half of them abstaining', () => {
 test('current-state set has at least 12 cases and at least 3 superseded redirects', () => {
   const cases = sets['current-state-cases.json'];
   assert.ok(cases.length >= 12);
-  const replacements = new Set(pages.filter((relPath) => parsed[relPath].fields.status === 'superseded').map((relPath) => parsed[relPath].fields.superseded_by));
+  const replacements = new Set(
+    pages
+      .filter((relPath) => parsed[relPath].fields.status === 'superseded')
+      .map((relPath) => parsed[relPath].fields.superseded_by)
+  );
   const redirects = cases.filter((item) => replacements.has(item.relevant[0]) && item.relevant.length === 1);
   assert.ok(redirects.length >= 3, `redirects ${redirects.length}`);
   for (const item of redirects) {
@@ -117,7 +130,12 @@ test('multihop set has at least 12 requireAll cases whose pages link to each oth
     assert.equal(item.requireAll, true, `${item.id} requireAll`);
     assert.ok(item.relevant.length >= 2, `${item.id} needs at least two pages`);
     for (const relPath of item.relevant) {
-      const linked = item.relevant.some((other) => other !== relPath && (parsed[relPath].body.includes(`[[${other.replace(/\.md$/u, '')}]]`) || parsed[relPath].body.includes(`(${other})`)));
+      const linked = item.relevant.some(
+        (other) =>
+          other !== relPath &&
+          (parsed[relPath].body.includes(`[[${other.replace(/\.md$/u, '')}]]`) ||
+            parsed[relPath].body.includes(`(${other})`))
+      );
       assert.ok(linked, `${item.id}: ${relPath} links to another relevant page`);
     }
   }
@@ -133,8 +151,12 @@ test('near-negative set has at least 10 cases and every case abstains', () => {
 });
 
 test('language mix is roughly even across the new sets', () => {
-  const queries = Object.values(sets).flat().map((item) => item.query);
-  const turkish = queries.filter((q) => /[çğıöşüÇĞİÖŞÜ]|\b(ne|nasıl|nedir|hangi|bir|ile|mi|mı|kim|nerede|kaç|neden)\b/u.test(q)).length;
+  const queries = Object.values(sets)
+    .flat()
+    .map((item) => item.query);
+  const turkish = queries.filter((q) =>
+    /[çğıöşüÇĞİÖŞÜ]|\b(ne|nasıl|nedir|hangi|bir|ile|mi|mı|kim|nerede|kaç|neden)\b/u.test(q)
+  ).length;
   const ratio = turkish / queries.length;
   assert.ok(ratio > 0.25 && ratio < 0.75, `turkish ratio ${ratio.toFixed(2)}`);
 });

@@ -7,7 +7,18 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { makeFixture, openClient, call, okJson, page, rawServer, filesUnder, sha256, WT, LOCK_NAME } from './harness.mjs';
+import {
+  makeFixture,
+  openClient,
+  call,
+  okJson,
+  page,
+  rawServer,
+  filesUnder,
+  sha256,
+  WT,
+  LOCK_NAME,
+} from './harness.mjs';
 
 const ITER = 12;
 const END = 'END-MARK-BA25';
@@ -21,7 +32,16 @@ test('SIGKILL during a large page write leaves old or whole new content and a re
   const oldBytes = await readFile(target);
   const oldSha = sha256(oldBytes);
   const newContent = page('Atomic', `${'a'.repeat(8 * 1024 * 1024)}\n${END}\n`);
-  const tally = { old: 0, new: 0, partial: 0, killedInTempWindow: 0, tempLeftovers: 0, lockLeftByKilledHolder: 0, recoveredAfterKill: 0, controlWhole: false };
+  const tally = {
+    old: 0,
+    new: 0,
+    partial: 0,
+    killedInTempWindow: 0,
+    tempLeftovers: 0,
+    lockLeftByKilledHolder: 0,
+    recoveredAfterKill: 0,
+    controlWhole: false,
+  };
 
   for (let i = 0; i < ITER; i++) {
     await writeFile(target, oldBytes);
@@ -29,13 +49,18 @@ test('SIGKILL during a large page write leaves old or whole new content and a re
     await srv.handshake();
     const tempsBefore = new Set((await readdir(join(f.wikiDir, 'concepts'))).filter((n) => n.endsWith('.tmp')));
     let done = false;
-    const pending = srv.callTool('wiki_write_page', { path: TARGET, content: newContent }).then(() => { done = true; });
+    const pending = srv.callTool('wiki_write_page', { path: TARGET, content: newContent }).then(() => {
+      done = true;
+    });
     // Poll the folder until the temporary file appears (write started), then kill at once.
     const deadline = Date.now() + 60_000;
     let sawTemp = false;
     while (!done && Date.now() < deadline) {
       const names = await readdir(join(f.wikiDir, 'concepts'));
-      if (names.some((n) => n.startsWith('.atomic-probe.md.') && n.endsWith('.tmp') && !tempsBefore.has(n))) { sawTemp = true; break; }
+      if (names.some((n) => n.startsWith('.atomic-probe.md.') && n.endsWith('.tmp') && !tempsBefore.has(n))) {
+        sawTemp = true;
+        break;
+      }
     }
     const inWindow = sawTemp && !done;
     srv.kill();
@@ -54,7 +79,11 @@ test('SIGKILL during a large page write leaves old or whole new content and a re
     // Leftover temporary files and the lock must never appear in listings.
     const after = await openClient(t, WT, f, `after-kill-${i}`);
     const listed = okJson(await call(after.client, 'wiki_list_pages', {})).pages;
-    assert.equal(listed.some((p) => p.endsWith('.tmp') || p.includes(LOCK_NAME)), false, 'temp and lock files are never listed');
+    assert.equal(
+      listed.some((p) => p.endsWith('.tmp') || p.includes(LOCK_NAME)),
+      false,
+      'temp and lock files are never listed'
+    );
     // The killed holder left its lock behind (if it was in the lock window): the next writer must take it over.
     const next = await call(after.client, 'wiki_write_page', { path: TARGET, content: page('Atomic', 'RECOVERED.') });
     assert.notEqual(next.isError, true, 'next process writes after the kill');

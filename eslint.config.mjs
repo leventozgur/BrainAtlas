@@ -15,8 +15,8 @@ export default [
       'templates/**',
       'release/dist/**',
       'dist-release/**',
-      '.tmp/**'
-    ]
+      '.tmp/**',
+    ],
   },
   js.configs.recommended,
   {
@@ -24,10 +24,13 @@ export default [
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      globals: { ...globals.node }
+      globals: { ...globals.node },
     },
     rules: {
-      'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none', varsIgnorePattern: '^_', ignoreRestSiblings: true }]
-    }
-  }
+      'no-unused-vars': [
+        'error',
+        { args: 'none', caughtErrors: 'none', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+    },
+  },
 ];

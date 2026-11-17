@@ -30,12 +30,18 @@ test('value >=: absolute threshold; boundary passes, just below fails', () => {
 test('<= with value and with negative delta: boundary inclusive', () => {
   const byValue = { primary: [{ metric: 'lat.p95', op: '<=', value: 300 }] };
   assert.equal(evaluateGate({ baseline: base, candidate: { lat: { p95: 300 } }, criteria: byValue }).decision, 'KEEP');
-  assert.equal(evaluateGate({ baseline: base, candidate: { lat: { p95: 300.5 } }, criteria: byValue }).decision, 'DISCARD');
+  assert.equal(
+    evaluateGate({ baseline: base, candidate: { lat: { p95: 300.5 } }, criteria: byValue }).decision,
+    'DISCARD'
+  );
   const byDelta = { primary: [{ metric: 'lat.p95', op: '<=', delta: -10 }] };
   const ok = evaluateGate({ baseline: base, candidate: { lat: { p95: 290 } }, criteria: byDelta });
   assert.equal(ok.criteria[0].threshold, 290);
   assert.equal(ok.decision, 'KEEP');
-  assert.equal(evaluateGate({ baseline: base, candidate: { lat: { p95: 291 } }, criteria: byDelta }).decision, 'DISCARD');
+  assert.equal(
+    evaluateGate({ baseline: base, candidate: { lat: { p95: 291 } }, criteria: byDelta }).decision,
+    'DISCARD'
+  );
 });
 
 test('==: exact match passes, tiny float noise passes, a visible difference fails', () => {
@@ -54,12 +60,25 @@ test('missing or non-numeric metrics FAIL and never pass silently', () => {
   const primary = (metric) => ({ primary: [{ metric, op: '>=', value: 0 }] });
   const cand = { m: { recall: 0.9 }, lat: { p95: 1 } };
   assert.equal(evaluateGate({ baseline: base, candidate: cand, criteria: primary('m.missing') }).decision, 'DISCARD');
-  assert.equal(evaluateGate({ baseline: base, candidate: { m: { recall: '0.9' } }, criteria: primary('m.recall') }).decision, 'DISCARD');
-  assert.equal(evaluateGate({ baseline: base, candidate: { m: 5 }, criteria: primary('m.recall') }).decision, 'DISCARD');
-  assert.equal(evaluateGate({ baseline: base, candidate: cand, criteria: primary('m.recall.deeper') }).decision, 'DISCARD');
+  assert.equal(
+    evaluateGate({ baseline: base, candidate: { m: { recall: '0.9' } }, criteria: primary('m.recall') }).decision,
+    'DISCARD'
+  );
+  assert.equal(
+    evaluateGate({ baseline: base, candidate: { m: 5 }, criteria: primary('m.recall') }).decision,
+    'DISCARD'
+  );
+  assert.equal(
+    evaluateGate({ baseline: base, candidate: cand, criteria: primary('m.recall.deeper') }).decision,
+    'DISCARD'
+  );
   assert.equal(evaluateGate({ baseline: base, candidate: cand, criteria: primary('constructor') }).decision, 'DISCARD');
   // delta criterion without a baseline value: threshold cannot be computed, so FAIL.
-  const noBase = evaluateGate({ baseline: {}, candidate: cand, criteria: { primary: [{ metric: 'm.recall', op: '>=', delta: -1 }] } });
+  const noBase = evaluateGate({
+    baseline: {},
+    candidate: cand,
+    criteria: { primary: [{ metric: 'm.recall', op: '>=', delta: -1 }] },
+  });
   assert.equal(noBase.decision, 'DISCARD');
   assert.equal(noBase.criteria[0].result, 'FAIL');
   // Design as implemented: a value criterion still reads the baseline document, so a missing baseline fails it.
@@ -73,8 +92,17 @@ test('guards: a failing guard discards even when every primary passes; guard gro
   };
   const res = evaluateGate({ baseline: base, candidate: { m: { recall: 0.9 }, lat: { p95: 300 } }, criteria });
   assert.equal(res.decision, 'DISCARD');
-  assert.deepEqual(res.criteria.map((c) => [c.group, c.result]), [['primary', 'PASS'], ['guard', 'FAIL']]);
-  assert.equal(evaluateGate({ baseline: base, candidate: { m: { recall: 0.9 }, lat: { p95: 200 } }, criteria }).decision, 'KEEP');
+  assert.deepEqual(
+    res.criteria.map((c) => [c.group, c.result]),
+    [
+      ['primary', 'PASS'],
+      ['guard', 'FAIL'],
+    ]
+  );
+  assert.equal(
+    evaluateGate({ baseline: base, candidate: { m: { recall: 0.9 }, lat: { p95: 200 } }, criteria }).decision,
+    'KEEP'
+  );
 });
 
 test('invalid criteria throw: empty primary, both delta and value, neither, bad op, bad metric, non-finite, array root', () => {
@@ -144,7 +172,10 @@ test('CLI exit codes: KEEP 0, DISCARD 1, invalid input 2, and text output lists 
     assert.equal(runNode([GATE, '--baseline', baseline, '--candidate', keepCand, '--criteria', badOp]).status, 2);
 
     assert.equal(runNode([GATE, '--baseline', baseline, '--candidate', keepCand]).status, 2);
-    assert.equal(runNode([GATE, '--baseline', baseline, '--candidate', keepCand, '--criteria', criteria, '--bogus', 'x']).status, 2);
+    assert.equal(
+      runNode([GATE, '--baseline', baseline, '--candidate', keepCand, '--criteria', criteria, '--bogus', 'x']).status,
+      2
+    );
   } finally {
     removeDir(dir);
   }

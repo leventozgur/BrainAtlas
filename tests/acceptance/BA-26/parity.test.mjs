@@ -38,7 +38,8 @@ const PROSE = [
 test('H4 scanText: identical findings on clean and prose content', () => {
   const diffs = [];
   for (const it of [...cleanItems.map((c) => c.text), ...PROSE]) {
-    const a = JSON.stringify(W.safety.scanText(it)), b = JSON.stringify(M.safety.scanText(it));
+    const a = JSON.stringify(W.safety.scanText(it)),
+      b = JSON.stringify(M.safety.scanText(it));
     if (a !== b) diffs.push(it.slice(0, 60));
   }
   assert.deepEqual(diffs, []);
@@ -48,7 +49,8 @@ test('H4 redact: identical output with and without the personal option on clean 
   const diffs = [];
   for (const it of [...cleanItems.map((c) => c.text), ...PROSE]) {
     for (const opts of [{}, { personal: true }]) {
-      if (W.safety.redact(it, opts) !== M.safety.redact(it, opts)) diffs.push(`${JSON.stringify(opts)} ${it.slice(0, 40)}`);
+      if (W.safety.redact(it, opts) !== M.safety.redact(it, opts))
+        diffs.push(`${JSON.stringify(opts)} ${it.slice(0, 40)}`);
     }
   }
   assert.deepEqual(diffs, []);
@@ -58,24 +60,45 @@ function makeVault(t, name, pages) {
   fs.mkdirSync(WORK, { recursive: true });
   const root = fs.mkdtempSync(path.join(WORK, `${name}-`));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const vault = path.join(root, 'vault'), home = path.join(root, 'home'), state = path.join(root, 'state');
-  fs.mkdirSync(path.join(vault, 'wiki'), { recursive: true }); fs.mkdirSync(home); fs.mkdirSync(state);
+  const vault = path.join(root, 'vault'),
+    home = path.join(root, 'home'),
+    state = path.join(root, 'state');
+  fs.mkdirSync(path.join(vault, 'wiki'), { recursive: true });
+  fs.mkdirSync(home);
+  fs.mkdirSync(state);
   for (const [p, body] of Object.entries(pages)) fs.writeFileSync(path.join(vault, 'wiki', p), body);
   return { root, vault, home, state };
 }
 const PAGES = {
-  'deploy-check.md': '---\ntitle: Deploy health check\nstatus: confirmed\n---\n# Deploy health check\nHealth check returns 200 after deploy; the log stays clean.\n',
-  'retrieval-notes.md': '---\ntitle: Retrieval notes\nstatus: proposed\n---\nRetrieval uses a lexical index with a stem filter and abstain threshold.\n',
-  'release-log.md': '---\ntitle: Release log\nstatus: confirmed\n---\n# Release log\nVersion 0.1.0-rc.10 shipped with hook budget notes and error codes E_PATH_ESCAPE.\n',
-  'ops-glossary.md': '---\ntitle: Ops glossary\nstatus: neutral\n---\nRunbook terms: canary, rollback, budget, deadline and worker.\n',
+  'deploy-check.md':
+    '---\ntitle: Deploy health check\nstatus: confirmed\n---\n# Deploy health check\nHealth check returns 200 after deploy; the log stays clean.\n',
+  'retrieval-notes.md':
+    '---\ntitle: Retrieval notes\nstatus: proposed\n---\nRetrieval uses a lexical index with a stem filter and abstain threshold.\n',
+  'release-log.md':
+    '---\ntitle: Release log\nstatus: confirmed\n---\n# Release log\nVersion 0.1.0-rc.10 shipped with hook budget notes and error codes E_PATH_ESCAPE.\n',
+  'ops-glossary.md':
+    '---\ntitle: Ops glossary\nstatus: neutral\n---\nRunbook terms: canary, rollback, budget, deadline and worker.\n',
 };
-const QUERIES = ['deploy health check', 'retrieval abstain threshold', 'release 0.1.0-rc.10', 'ops glossary rollback', 'E_PATH_ESCAPE'];
-const PROMPTS = ['How do I run the deploy health check?', 'retrieval abstain threshold nedir?', 'release notes for 0.1.0-rc.10', 'ops glossary rollback budget'];
+const QUERIES = [
+  'deploy health check',
+  'retrieval abstain threshold',
+  'release 0.1.0-rc.10',
+  'ops glossary rollback',
+  'E_PATH_ESCAPE',
+];
+const PROMPTS = [
+  'How do I run the deploy health check?',
+  'retrieval abstain threshold nedir?',
+  'release notes for 0.1.0-rc.10',
+  'ops glossary rollback budget',
+];
 
 test('H4 search: identical ranked results on a vault without sensitive fields', (t) => {
   const v = makeVault(t, 'h4s', PAGES);
-  const pagesW = W.retrieval.loadPages(v.vault), pagesM = M.retrieval.loadPages(v.vault);
-  const idxW = W.retrieval.buildIndex(pagesW, { now: NOW }), idxM = M.retrieval.buildIndex(pagesM, { now: NOW });
+  const pagesW = W.retrieval.loadPages(v.vault),
+    pagesM = M.retrieval.loadPages(v.vault);
+  const idxW = W.retrieval.buildIndex(pagesW, { now: NOW }),
+    idxM = M.retrieval.buildIndex(pagesM, { now: NOW });
   const diffs = [];
   let nonEmpty = 0;
   for (const q of QUERIES) {
@@ -89,15 +112,27 @@ test('H4 search: identical ranked results on a vault without sensitive fields', 
 });
 
 test('H4 hook: identical prompt-hook output on a vault without sensitive fields', async (t) => {
-  const vw = makeVault(t, 'h4hw', PAGES), vm = makeVault(t, 'h4hm', PAGES);
-  const run = (mod, v, prompt, session) => mod.hooks.runHook({
-    client: 'claude', event: 'prompt', stdin: JSON.stringify({ session_id: session, prompt }), env: { HOME: v.home },
-    config: { vault: { path: v.vault }, stateDir: v.state, hooks: { mode: 'normal', deadlineMs: 4700 }, retrieval: { abstainThreshold: 0 } }, now: NOW,
-  });
+  const vw = makeVault(t, 'h4hw', PAGES),
+    vm = makeVault(t, 'h4hm', PAGES);
+  const run = (mod, v, prompt, session) =>
+    mod.hooks.runHook({
+      client: 'claude',
+      event: 'prompt',
+      stdin: JSON.stringify({ session_id: session, prompt }),
+      env: { HOME: v.home },
+      config: {
+        vault: { path: v.vault },
+        stateDir: v.state,
+        hooks: { mode: 'normal', deadlineMs: 4700 },
+        retrieval: { abstainThreshold: 0 },
+      },
+      now: NOW,
+    });
   const diffs = [];
   let injected = 0;
   for (const [i, prompt] of PROMPTS.entries()) {
-    const a = await run(W, vw, prompt, `s${i}`), b = await run(M, vm, prompt, `s${i}`);
+    const a = await run(W, vw, prompt, `s${i}`),
+      b = await run(M, vm, prompt, `s${i}`);
     if (a.stdout.includes('additionalContext')) injected++;
     if (a.stdout !== b.stdout || a.exitCode !== b.exitCode) diffs.push(prompt);
   }

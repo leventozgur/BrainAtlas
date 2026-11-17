@@ -22,7 +22,11 @@ function isSubsequence(survivors, lines) {
 
 test('S1: page symlink to a target inside the vault is not indexed as a page and not listed in the index', async (t) => {
   const f = await startServer(t, {
-    files: { 'concepts/real.md': page('title: Gerçek Sayfa'), 'entities/a.md': page('title: A'), 'index.md': EMPTY_INDEX }
+    files: {
+      'concepts/real.md': page('title: Gerçek Sayfa'),
+      'entities/a.md': page('title: A'),
+      'index.md': EMPTY_INDEX,
+    },
   });
   await mkdir(join(f.wiki, 'entities'), { recursive: true });
   await symlink(join(f.wiki, 'concepts', 'real.md'), join(f.wiki, 'entities', 'alias.md'));
@@ -41,7 +45,11 @@ test('S2: page symlink to a file outside the vault is never indexed, and the out
   await symlink(join(outsideDir, 'dis.md'), join(f.wiki, 'entities', 'link.md'));
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 1, added: 1, removed: 0 });
   const out = await readFile(join(f.wiki, 'index.md'), 'utf8');
-  assert.equal(/DISSAYFA-ZQ|DISOZET-ZQ|link\.md/.test(out), false, 'outside content or symlink name leaked into the index');
+  assert.equal(
+    /DISSAYFA-ZQ|DISOZET-ZQ|link\.md/.test(out),
+    false,
+    'outside content or symlink name leaked into the index'
+  );
   assert.deepEqual(await snapshot(outsideDir), outsideBefore, 'outside file must be untouched');
 });
 
@@ -78,7 +86,9 @@ test('S5: wiki/ itself symlinked outside the vault: wiki_update_index refuses wi
 });
 
 test('S6: vault root is itself a symlink to a real directory (legitimate layout): index works and indexes its pages', async (t) => {
-  const f = await startServer(t, { files: { 'entities/a.md': page('title: A'), 'concepts/k.md': page('title: K'), 'index.md': EMPTY_INDEX } });
+  const f = await startServer(t, {
+    files: { 'entities/a.md': page('title: A'), 'concepts/k.md': page('title: K'), 'index.md': EMPTY_INDEX },
+  });
   await rename(f.vault, join(f.dir, 'realvault'));
   await symlink(join(f.dir, 'realvault'), f.vault);
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 2, added: 2, removed: 0 });
@@ -101,7 +111,10 @@ test('S7: wiki_list_pages, wiki_status and wiki_query hide page and directory sy
   const status = okJson(await call(f.client, 'wiki_status', {}));
   assert.equal(status.pageCount, 1);
   const inside = okJson(await call(f.client, 'wiki_query', { query: 'INSIDEZQ' }));
-  assert.ok(inside.results.some((row) => row.path === 'entities/real.md'), 'positive control: in-vault page is found');
+  assert.ok(
+    inside.results.some((row) => row.path === 'entities/real.md'),
+    'positive control: in-vault page is found'
+  );
   for (const marker of ['OUTSIDEZQ', 'DEEPZQ']) {
     const r = textOf(await call(f.client, 'wiki_query', { query: marker }));
     assert.equal(r.includes(marker), false, `wiki_query leaked ${marker}`);
@@ -131,8 +144,8 @@ test('C1: a category heading in another letter case (## Entities) receives the n
       'entities/a.md': page('title: A'),
       'entities/new.md': page('title: Yeni'),
       'concepts/k.md': page('title: K'),
-      'index.md': '# Wiki Index\n\n## Entities\n\n- [A](entities/a.md)\n\n## concepts\n\n- [K](concepts/k.md)\n'
-    }
+      'index.md': '# Wiki Index\n\n## Entities\n\n- [A](entities/a.md)\n\n## concepts\n\n- [K](concepts/k.md)\n',
+    },
   });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 3, added: 1, removed: 0 });
   assert.equal(
@@ -142,14 +155,22 @@ test('C1: a category heading in another letter case (## Entities) receives the n
 });
 
 test('C2: upper-case ## ENTITIES heading with no entries receives the page under it', async (t) => {
-  const f = await startServer(t, { files: { 'entities/new.md': page('title: Yeni'), 'index.md': '# Wiki Index\n\n## ENTITIES\n\n' } });
+  const f = await startServer(t, {
+    files: { 'entities/new.md': page('title: Yeni'), 'index.md': '# Wiki Index\n\n## ENTITIES\n\n' },
+  });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 1, added: 1, removed: 0 });
-  assert.equal(await readFile(join(f.wiki, 'index.md'), 'utf8'), '# Wiki Index\n\n## ENTITIES\n\n- [Yeni](entities/new.md)\n');
+  assert.equal(
+    await readFile(join(f.wiki, 'index.md'), 'utf8'),
+    '# Wiki Index\n\n## ENTITIES\n\n- [Yeni](entities/new.md)\n'
+  );
 });
 
 test('P1: a page linked from the preface and from a different category counts as linked; no duplicate line is added', async (t) => {
-  const index = '# Wiki Index\n\n- [A](entities/a.md) — önsöz\n\n## concepts\n\n- [A tekrar](entities/a.md) — ikinci\n\n## entities\n\n';
-  const f = await startServer(t, { files: { 'entities/a.md': page('title: A'), 'concepts/b.md': page('title: B'), 'index.md': index } });
+  const index =
+    '# Wiki Index\n\n- [A](entities/a.md) — önsöz\n\n## concepts\n\n- [A tekrar](entities/a.md) — ikinci\n\n## entities\n\n';
+  const f = await startServer(t, {
+    files: { 'entities/a.md': page('title: A'), 'concepts/b.md': page('title: B'), 'index.md': index },
+  });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 2, added: 1, removed: 0 });
   assert.equal(
     await readFile(join(f.wiki, 'index.md'), 'utf8'),
@@ -158,7 +179,8 @@ test('P1: a page linked from the preface and from a different category counts as
 });
 
 test('P2: a deleted page linked from the preface and from two categories loses every stale line', async (t) => {
-  const index = '# Wiki Index\n\n- [Gone](entities/gone.md) — önsöz\n\n## concepts\n\n- [Gone 2](entities/gone.md)\n\n## entities\n\n- [Gone 3](entities/gone.md)\n';
+  const index =
+    '# Wiki Index\n\n- [Gone](entities/gone.md) — önsöz\n\n## concepts\n\n- [Gone 2](entities/gone.md)\n\n## entities\n\n- [Gone 3](entities/gone.md)\n';
   const f = await startServer(t, { files: { 'entities/a.md': page('title: A'), 'index.md': index } });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 1, added: 1, removed: 3 });
   const out = await readFile(join(f.wiki, 'index.md'), 'utf8');
@@ -169,15 +191,24 @@ test('P2: a deleted page linked from the preface and from two categories loses e
 // ---------------------------------------------------------------- mixed line endings
 
 test('M1: mixed CRLF and LF lines: surviving lines keep their bytes, no bare CR, a second run is a no-op', async (t) => {
-  const orig = '# Wiki Index\r\n\n## entities\r\n- [Ahmet](entities/ahmet.md) — özet\n- [Gone](entities/gone.md) — eski\r\n\n## concepts\n- [K](concepts/k.md)\r\n';
+  const orig =
+    '# Wiki Index\r\n\n## entities\r\n- [Ahmet](entities/ahmet.md) — özet\n- [Gone](entities/gone.md) — eski\r\n\n## concepts\n- [K](concepts/k.md)\r\n';
   const f = await startServer(t, {
-    files: { 'entities/ahmet.md': page('title: Ahmet'), 'entities/yeni.md': page('title: Yeni'), 'concepts/k.md': page('title: K'), 'index.md': orig }
+    files: {
+      'entities/ahmet.md': page('title: Ahmet'),
+      'entities/yeni.md': page('title: Yeni'),
+      'concepts/k.md': page('title: K'),
+      'index.md': orig,
+    },
   });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 3, added: 1, removed: 1 });
   const out = await readFile(join(f.wiki, 'index.md'), 'utf8');
   assert.equal(/\r(?!\n)/.test(out), false, 'no bare CR may appear');
   const survivors = orig.split('\n').filter((line) => !line.includes('gone.md'));
-  assert.ok(isSubsequence(survivors, out.split('\n')), 'every surviving original line must be kept byte for byte, in order');
+  assert.ok(
+    isSubsequence(survivors, out.split('\n')),
+    'every surviving original line must be kept byte for byte, in order'
+  );
   assert.ok(out.includes('- [Yeni](entities/yeni.md)'), 'new page line is present');
   const after = await readFile(join(f.wiki, 'index.md'));
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 3, added: 0, removed: 0 });
@@ -188,7 +219,10 @@ test('M2: CRLF file whose removed last stale line is LF-terminated ends with a c
   const orig = '# Wiki Index\r\n\r\n## entities\r\n- [A](entities/a.md)\r\n- [Gone](entities/gone.md)\n';
   const f = await startServer(t, { files: { 'entities/a.md': page('title: A'), 'index.md': orig } });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 1, added: 0, removed: 1 });
-  assert.equal(await readFile(join(f.wiki, 'index.md'), 'utf8'), '# Wiki Index\r\n\r\n## entities\r\n- [A](entities/a.md)\r\n');
+  assert.equal(
+    await readFile(join(f.wiki, 'index.md'), 'utf8'),
+    '# Wiki Index\r\n\r\n## entities\r\n- [A](entities/a.md)\r\n'
+  );
 });
 
 // ---------------------------------------------------------------- idempotency
@@ -196,10 +230,16 @@ test('M2: CRLF file whose removed last stale line is LF-terminated ends with a c
 for (const [label, body] of [
   ['LF', '# Wiki Index\n\n## entities\n\n- [Eski](entities/eski.md) — özet\n'],
   ['CRLF', '# Wiki Index\r\n\r\n## entities\r\n\r\n- [Eski](entities/eski.md) — özet\r\n'],
-  ['mixed', '# Wiki Index\r\n\n## entities\n- [Eski](entities/eski.md)\r\n']
+  ['mixed', '# Wiki Index\r\n\n## entities\n- [Eski](entities/eski.md)\r\n'],
 ]) {
   test(`I1 (${label}): second wiki_update_index run reports added=0 removed=0 and leaves the bytes unchanged`, async (t) => {
-    const f = await startServer(t, { files: { 'entities/eski.md': page('title: Eski'), 'entities/yeni boşluk.md': page('title: Boşluklu'), 'index.md': body } });
+    const f = await startServer(t, {
+      files: {
+        'entities/eski.md': page('title: Eski'),
+        'entities/yeni boşluk.md': page('title: Boşluklu'),
+        'index.md': body,
+      },
+    });
     const first = okJson(await call(f.client, 'wiki_update_index'));
     assert.equal(first.added, 1);
     const afterFirst = await readFile(join(f.wiki, 'index.md'));
@@ -221,17 +261,29 @@ test('I2: a page whose file name contains parentheses is listed once; a second r
 const PAGE_PATH = 'entities/p.md';
 const PAGE = '---\ntype: entity\ntitle: Patch Sayfası\nstatus: active\n---\nEski gövde 🧪\n';
 // Body text after the closing frontmatter fence, without surrounding newlines (serialization whitespace is not under test).
-const parsedBody = async (f) => (await readFile(join(f.wiki, PAGE_PATH), 'utf8')).split('---\n').slice(2).join('---\n').trim();
+const parsedBody = async (f) =>
+  (await readFile(join(f.wiki, PAGE_PATH), 'utf8')).split('---\n').slice(2).join('---\n').trim();
 
 test('PA1: body then append are applied in order and the old body is gone (exact bytes)', async (t) => {
   const f = await startServer(t, { files: { [PAGE_PATH]: PAGE } });
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { body: 'B', append: '\nA' } })).updated, true);
+  assert.equal(
+    okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { body: 'B', append: '\nA' } })).updated,
+    true
+  );
   assert.equal(await parsedBody(f), 'B\nA');
 });
 
 test('PA2: frontmatter, body and append together: frontmatter merges, body is replaced then appended', async (t) => {
   const f = await startServer(t, { files: { [PAGE_PATH]: PAGE } });
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { frontmatter: { status: 'confirmed' }, body: 'Yeni', append: '\nEk' } })).updated, true);
+  assert.equal(
+    okJson(
+      await call(f.client, 'wiki_update_page', {
+        path: PAGE_PATH,
+        patch: { frontmatter: { status: 'confirmed' }, body: 'Yeni', append: '\nEk' },
+      })
+    ).updated,
+    true
+  );
   const text = await readFile(join(f.wiki, PAGE_PATH), 'utf8');
   assert.match(text, /status: confirmed/);
   assert.match(text, /title: Patch Sayfası/, 'untouched frontmatter key survives');
@@ -240,13 +292,24 @@ test('PA2: frontmatter, body and append together: frontmatter merges, body is re
 
 test('PA3: frontmatter and append only: the existing body is kept and the appended text follows it', async (t) => {
   const f = await startServer(t, { files: { [PAGE_PATH]: PAGE } });
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { frontmatter: { status: 'superseded' }, append: '\nSon' } })).updated, true);
+  assert.equal(
+    okJson(
+      await call(f.client, 'wiki_update_page', {
+        path: PAGE_PATH,
+        patch: { frontmatter: { status: 'superseded' }, append: '\nSon' },
+      })
+    ).updated,
+    true
+  );
   assert.equal(await parsedBody(f), 'Eski gövde 🧪\nSon');
 });
 
 test('PA4: empty body string with append yields only the appended text', async (t) => {
   const f = await startServer(t, { files: { [PAGE_PATH]: PAGE } });
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { body: '', append: 'Z' } })).updated, true);
+  assert.equal(
+    okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { body: '', append: 'Z' } })).updated,
+    true
+  );
   assert.equal(await parsedBody(f), 'Z');
 });
 
@@ -254,7 +317,10 @@ test('PA5: secret-shaped text in append is refused with E_SECRET_DETECTED; the p
   const f = await startServer(t, { files: { [PAGE_PATH]: PAGE } });
   const before = await snapshot(f.vault);
   const logBefore = await logCount(f.wiki, 'update-page');
-  const r = await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { body: 'Temiz', append: `\npassword: ${SECRET}` } });
+  const r = await call(f.client, 'wiki_update_page', {
+    path: PAGE_PATH,
+    patch: { body: 'Temiz', append: `\npassword: ${SECRET}` },
+  });
   refused(r, 'E_SECRET_DETECTED');
   assert.equal(textOf(r).includes(SECRET), false);
   assert.deepEqual(await snapshot(f.vault), before);
@@ -268,7 +334,7 @@ const PA6_CASES = [
   ['key with trailing space', '{"frontmatter ":{"status":"MARK-PA6-5"}}'],
   ['constructor key', '{"constructor":"MARK-PA6-6"}'],
   ['__proto__ key', '{"__proto__":{"x":"MARK-PA6-7"}}'],
-  ['non-string append beside valid body', '{"body":"MARK-PA6-8","append":5}']
+  ['non-string append beside valid body', '{"body":"MARK-PA6-8","append":5}'],
 ];
 for (const [label, raw] of PA6_CASES) {
   test(`PA6 (${label}): unknown patch key is refused with E_INVALID_INPUT, no echo, nothing written or logged`, async (t) => {

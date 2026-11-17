@@ -17,27 +17,50 @@ import { createOllamaProvider, updateSemanticIndex, markdownChunks } from '../..
 
 const CAND = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 // Every text gets the same vector, so semantic similarity alone puts every page in the answer for any query.
-const fakeFetch = async (_url, options) => ({ ok: true, json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }) });
+const fakeFetch = async (_url, options) => ({
+  ok: true,
+  json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }),
+});
 
 async function fixture(t, pages) {
   const root = await mkdtemp(join(tmpdir(), 'ba29-semantic-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const wiki = join(root, 'vault/wiki'), stateDir = join(root, 'state'), releasesDir = join(root, 'releases'), release = join(releasesDir, 'v1'), currentDir = join(root, 'current');
-  await mkdir(wiki, { recursive: true }); await mkdir(join(release, 'modules'), { recursive: true }); await mkdir(stateDir, { recursive: true });
+  const wiki = join(root, 'vault/wiki'),
+    stateDir = join(root, 'state'),
+    releasesDir = join(root, 'releases'),
+    release = join(releasesDir, 'v1'),
+    currentDir = join(root, 'current');
+  await mkdir(wiki, { recursive: true });
+  await mkdir(join(release, 'modules'), { recursive: true });
+  await mkdir(stateDir, { recursive: true });
   await cp(join(CAND, 'modules/semantic'), join(release, 'modules/semantic'), { recursive: true });
-  await symlink(join(CAND, 'packages'), join(release, 'packages')); await symlink(release, currentDir);
-  for (const [rel, body] of Object.entries(pages)) { await mkdir(dirname(join(wiki, rel)), { recursive: true }); await writeFile(join(wiki, rel), body); }
+  await symlink(join(CAND, 'packages'), join(release, 'packages'));
+  await symlink(release, currentDir);
+  for (const [rel, body] of Object.entries(pages)) {
+    await mkdir(dirname(join(wiki, rel)), { recursive: true });
+    await writeFile(join(wiki, rel), body);
+  }
   const config = defaultConfig('custom');
-  config.modules = ['semantic']; config.vault.path = join(root, 'vault');
+  config.modules = ['semantic'];
+  config.vault.path = join(root, 'vault');
   config.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2 };
   const provider = createOllamaProvider({ ...config.semantic, fetchImpl: fakeFetch });
   await updateSemanticIndex({ corpusDir: wiki, stateDir, provider, chunkMarkdown: markdownChunks });
-  const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl: fakeFetch });
+  const server = createServer({
+    config,
+    paths: { stateDir, releasesDir, currentDir },
+    env: { HOME: root },
+    fetchImpl: fakeFetch,
+  });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'ba29-semantic', version: '1' });
   await Promise.all([server.connect(st), client.connect(ct)]);
-  t.after(async () => { await client.close(); await server.close(); });
-  return async (query) => JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query } })).content[0].text);
+  t.after(async () => {
+    await client.close();
+    await server.close();
+  });
+  return async (query) =>
+    JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query } })).content[0].text);
 }
 
 const PAGES = {
@@ -55,7 +78,10 @@ test('item 6: MCP hybrid with the semantic module on never returns wiki/index.md
   assert.ok(paths.includes('car.md'), `car.md expected in ${JSON.stringify(paths)}`);
   assert.ok(!paths.includes('index.md'), `index.md must be excluded: ${JSON.stringify(paths)}`);
   assert.ok(!paths.includes('log.md'), `log.md must be excluded: ${JSON.stringify(paths)}`);
-  assert.ok(paths.every((p) => p === 'car.md' || p === 'sub/other.md'), JSON.stringify(paths));
+  assert.ok(
+    paths.every((p) => p === 'car.md' || p === 'sub/other.md'),
+    JSON.stringify(paths)
+  );
 });
 
 test('item 6: a query whose only semantic and lexical match is an excluded root page returns no excluded path', async (t) => {

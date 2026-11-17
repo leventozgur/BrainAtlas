@@ -30,7 +30,7 @@ test('invalid patch shapes are refused with E_INVALID_INPUT; file and log unchan
     ['body null', { body: null }],
     ['body object', { body: { x: 'MARK-BODY-OBJ-9' } }],
     ['append number', { append: 9 }],
-    ['append object', { append: { x: 'MARK-APP-OBJ-10' } }]
+    ['append object', { append: { x: 'MARK-APP-OBJ-10' } }],
   ];
   for (const [label, patch] of cases) {
     const before = await snapshot(f.vault);
@@ -46,7 +46,11 @@ test('invalid patch shapes are refused with E_INVALID_INPUT; file and log unchan
 test('invalid patch next to content is still refused (patch is validated even when content wins)', async (t) => {
   const f = await fixture(t);
   const before = await snapshot(f.vault);
-  const r = await call(f.client, 'wiki_update_page', { path: PAGE_PATH, content: '---\ntitle: Yeni\n---\nYeni\n', patch: { title: 'MARK-CT-11' } });
+  const r = await call(f.client, 'wiki_update_page', {
+    path: PAGE_PATH,
+    content: '---\ntitle: Yeni\n---\nYeni\n',
+    patch: { title: 'MARK-CT-11' },
+  });
   refused(r, 'E_INVALID_INPUT');
   assert.equal(/MARK-/.test(textOf(r)), false);
   assert.deepEqual(await snapshot(f.vault), before);
@@ -55,7 +59,15 @@ test('invalid patch next to content is still refused (patch is validated even wh
 test('valid frontmatter patch merges into existing frontmatter and keeps the body', async (t) => {
   const f = await fixture(t);
   const logBefore = await logCount(f.wiki, 'update-page');
-  assert.deepEqual(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { frontmatter: { status: 'confirmed', tags: ['x'] } } })), { path: 'wiki/entities/p.md', updated: true });
+  assert.deepEqual(
+    okJson(
+      await call(f.client, 'wiki_update_page', {
+        path: PAGE_PATH,
+        patch: { frontmatter: { status: 'confirmed', tags: ['x'] } },
+      })
+    ),
+    { path: 'wiki/entities/p.md', updated: true }
+  );
   const parsed = await readParsed(f);
   assert.equal(parsed.data.status, 'confirmed');
   assert.equal(parsed.data.title, 'Patch Sayfası', 'untouched frontmatter key survives');
@@ -66,7 +78,10 @@ test('valid frontmatter patch merges into existing frontmatter and keeps the bod
 
 test('valid body patch replaces the body and keeps frontmatter', async (t) => {
   const f = await fixture(t);
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { body: 'Yeni gövde' } })).updated, true);
+  assert.equal(
+    okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { body: 'Yeni gövde' } })).updated,
+    true
+  );
   const parsed = await readParsed(f);
   assert.equal(parsed.content.trim(), 'Yeni gövde');
   assert.equal(parsed.data.title, 'Patch Sayfası');
@@ -74,17 +89,36 @@ test('valid body patch replaces the body and keeps frontmatter', async (t) => {
 
 test('valid append patch adds text to the end of the body', async (t) => {
   const f = await fixture(t);
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { append: '\nEk satır' } })).updated, true);
+  assert.equal(
+    okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { append: '\nEk satır' } })).updated,
+    true
+  );
   assert.equal((await readParsed(f)).content.trim(), 'Eski gövde 🧪\nEk satır');
 });
 
 test('frontmatter and body together, and frontmatter and append together', async (t) => {
   const f = await fixture(t);
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { frontmatter: { status: 'superseded' }, body: 'Birlikte' } })).updated, true);
+  assert.equal(
+    okJson(
+      await call(f.client, 'wiki_update_page', {
+        path: PAGE_PATH,
+        patch: { frontmatter: { status: 'superseded' }, body: 'Birlikte' },
+      })
+    ).updated,
+    true
+  );
   let parsed = await readParsed(f);
   assert.equal(parsed.data.status, 'superseded');
   assert.equal(parsed.content.trim(), 'Birlikte');
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { frontmatter: { status: 'active' }, append: '\nSon' } })).updated, true);
+  assert.equal(
+    okJson(
+      await call(f.client, 'wiki_update_page', {
+        path: PAGE_PATH,
+        patch: { frontmatter: { status: 'active' }, append: '\nSon' },
+      })
+    ).updated,
+    true
+  );
   parsed = await readParsed(f);
   assert.equal(parsed.data.status, 'active');
   assert.equal(parsed.content.trim(), 'Birlikte\nSon');
@@ -92,7 +126,10 @@ test('frontmatter and body together, and frontmatter and append together', async
 
 test('body and append together: append is not silently dropped', async (t) => {
   const f = await fixture(t);
-  const r = await call(f.client, 'wiki_update_page', { path: PAGE_PATH, patch: { body: 'GOVDE-X', append: '\nEKLE-Y' } });
+  const r = await call(f.client, 'wiki_update_page', {
+    path: PAGE_PATH,
+    patch: { body: 'GOVDE-X', append: '\nEKLE-Y' },
+  });
   if (r.isError) {
     refused(r, 'E_INVALID_INPUT');
     assert.equal((await readParsed(f)).content.trim(), 'Eski gövde 🧪', 'refusal must leave the page unchanged');
@@ -100,7 +137,10 @@ test('body and append together: append is not silently dropped', async (t) => {
   }
   assert.equal(okJson(r).updated, true);
   const body = (await readParsed(f)).content;
-  assert.ok(body.includes('GOVDE-X') && body.includes('EKLE-Y'), `append was reported as applied but body is ${JSON.stringify(body.trim())}`);
+  assert.ok(
+    body.includes('GOVDE-X') && body.includes('EKLE-Y'),
+    `append was reported as applied but body is ${JSON.stringify(body.trim())}`
+  );
 });
 
 test('empty patch object is accepted and leaves content semantically unchanged', async (t) => {
@@ -113,7 +153,16 @@ test('empty patch object is accepted and leaves content semantically unchanged',
 
 test('content takes precedence over a valid patch, as documented', async (t) => {
   const f = await fixture(t);
-  assert.equal(okJson(await call(f.client, 'wiki_update_page', { path: PAGE_PATH, content: '---\ntitle: İçerik\n---\nİçerik gövdesi\n', patch: { append: '\nYOKSAY' } })).updated, true);
+  assert.equal(
+    okJson(
+      await call(f.client, 'wiki_update_page', {
+        path: PAGE_PATH,
+        content: '---\ntitle: İçerik\n---\nİçerik gövdesi\n',
+        patch: { append: '\nYOKSAY' },
+      })
+    ).updated,
+    true
+  );
   const parsed = await readParsed(f);
   assert.equal(parsed.data.title, 'İçerik');
   assert.equal(parsed.content.trim(), 'İçerik gövdesi');

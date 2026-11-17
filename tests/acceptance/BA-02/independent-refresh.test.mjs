@@ -22,7 +22,8 @@ const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
 function fixture(t) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ba02-ind-mcp-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  const vault = path.join(home, 'vault'), wiki = path.join(vault, 'wiki');
+  const vault = path.join(home, 'vault'),
+    wiki = path.join(vault, 'wiki');
   fs.mkdirSync(wiki, { recursive: true });
   fs.writeFileSync(path.join(wiki, 'base.md'), '# Base\nbaseline evidence\n');
   fs.writeFileSync(path.join(wiki, 'blocker.md'), '# Blocker\nblocker text\n');
@@ -34,11 +35,22 @@ function fixture(t) {
   return { home, vault, wiki, configFile, blocker: path.join(wiki, 'blocker.md') };
 }
 async function start(f) {
-  const transport = new StdioClientTransport({ command: process.execPath, args: [BIN], cwd: root,
-    env: { HOME: f.home, BRAINATLAS_CONFIG: f.configFile, BRAINATLAS_VAULT: f.vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [BIN],
+    cwd: root,
+    env: { HOME: f.home, BRAINATLAS_CONFIG: f.configFile, BRAINATLAS_VAULT: f.vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba02-ind', version: '1.0.0' });
   await client.connect(transport);
-  return { client, close: async () => { await client.close().catch(() => {}); await transport.close().catch(() => {}); } };
+  return {
+    client,
+    close: async () => {
+      await client.close().catch(() => {});
+      await transport.close().catch(() => {});
+    },
+  };
 }
 async function query(c, text) {
   const result = await c.client.callTool({ name: 'wiki_query', arguments: { query: text } });
@@ -46,23 +58,49 @@ async function query(c, text) {
   return JSON.parse(result.content[0].text).results.map((item) => item.path);
 }
 // Make a page unreadable (owner-only permission change): lstat still works, readFile fails with EACCES.
-function makeUnreadable(file) { fs.chmodSync(file, 0o000); }
-function makeReadable(file) { fs.chmodSync(file, 0o644); }
+function makeUnreadable(file) {
+  fs.chmodSync(file, 0o000);
+}
+function makeReadable(file) {
+  fs.chmodSync(file, 0o644);
+}
 
 test('(c) MCP write succeeds when the post-write refresh fails; the next wiki_query finds the new page', async (t) => {
-  if (isRoot) { t.skip('permission-based failure needs a non-root user'); return; }
+  if (isRoot) {
+    t.skip('permission-based failure needs a non-root user');
+    return;
+  }
   const f = fixture(t);
-  const c = await start(f); t.after(() => c.close());
+  const c = await start(f);
+  t.after(() => c.close());
   assert.deepEqual(await query(c, 'baseline'), ['base.md']);
-  makeUnreadable(f.blocker); t.after(() => { try { makeReadable(f.blocker); } catch { /* removed with the fixture */ } });
+  makeUnreadable(f.blocker);
+  t.after(() => {
+    try {
+      makeReadable(f.blocker);
+    } catch {
+      /* removed with the fixture */
+    }
+  });
   // The refresh inside the write must fail (a page cannot be read), while the write itself must succeed.
-  const written = await c.client.callTool({ name: 'wiki_write_page', arguments: { path: 'wiki/fresh.md', content: '---\ntitle: Fresh\n---\n# Fresh\nquokkanew evidence\n' } });
+  const written = await c.client.callTool({
+    name: 'wiki_write_page',
+    arguments: { path: 'wiki/fresh.md', content: '---\ntitle: Fresh\n---\n# Fresh\nquokkanew evidence\n' },
+  });
   assert.notEqual(written.isError, true, `write must succeed: ${written.content?.[0]?.text}`);
-  assert.equal(fs.readFileSync(path.join(f.wiki, 'fresh.md'), 'utf8').includes('quokkanew'), true, 'the page is on disk');
+  assert.equal(
+    fs.readFileSync(path.join(f.wiki, 'fresh.md'), 'utf8').includes('quokkanew'),
+    true,
+    'the page is on disk'
+  );
   // While the failure persists, queries keep working and do not error; they serve the last good index.
   const during = await c.client.callTool({ name: 'wiki_query', arguments: { query: 'quokkanew' } });
   assert.notEqual(during.isError, true, 'query during the failed refresh must not be an error');
-  assert.deepEqual(JSON.parse(during.content[0].text).results.map((r) => r.path), [], 'stale index is served while the refresh fails');
+  assert.deepEqual(
+    JSON.parse(during.content[0].text).results.map((r) => r.path),
+    [],
+    'stale index is served while the refresh fails'
+  );
   assert.deepEqual(await query(c, 'baseline'), ['base.md']);
   // Once the page is readable again, the next query picks up the change without any other action.
   makeReadable(f.blocker);
@@ -70,11 +108,21 @@ test('(c) MCP write succeeds when the post-write refresh fails; the next wiki_qu
 });
 
 test('(c) in-process: a failed refresh keeps the last good index; the next refreshIfChanged recovers', async (t) => {
-  if (isRoot) { t.skip('permission-based failure needs a non-root user'); return; }
+  if (isRoot) {
+    t.skip('permission-based failure needs a non-root user');
+    return;
+  }
   const f = fixture(t);
   const s = createSearcher({ vaultDir: f.wiki, stateDir: path.join(f.home, 'state'), now: ASOF });
   const opts = { limit: 5, abstainThreshold: 0, asOf: ASOF };
-  makeUnreadable(f.blocker); t.after(() => { try { makeReadable(f.blocker); } catch { /* removed with the fixture */ } });
+  makeUnreadable(f.blocker);
+  t.after(() => {
+    try {
+      makeReadable(f.blocker);
+    } catch {
+      /* removed with the fixture */
+    }
+  });
   fs.writeFileSync(path.join(f.wiki, 'fresh.md'), '# Fresh\nquokkanew evidence\n');
   await assert.rejects(s.refresh());
   assert.deepEqual(s.search('quokkanew', opts).results, [], 'last good index still answers');
@@ -91,12 +139,25 @@ test('(c) unchanged vault: refreshIfChanged reads no .md contents (spy on readFi
   const s = createSearcher({ vaultDir: f.wiki, stateDir: path.join(f.home, 'state'), now: ASOF });
   const reads = [];
   const { readFileSync, openSync } = fs;
-  fs.readFileSync = (file, ...rest) => { reads.push(String(file)); return readFileSync(file, ...rest); };
-  fs.openSync = (file, ...rest) => { reads.push(String(file)); return openSync(file, ...rest); };
-  t.after(() => { fs.readFileSync = readFileSync; fs.openSync = openSync; });
+  fs.readFileSync = (file, ...rest) => {
+    reads.push(String(file));
+    return readFileSync(file, ...rest);
+  };
+  fs.openSync = (file, ...rest) => {
+    reads.push(String(file));
+    return openSync(file, ...rest);
+  };
+  t.after(() => {
+    fs.readFileSync = readFileSync;
+    fs.openSync = openSync;
+  });
   for (let i = 0; i < 3; i++) assert.equal(s.refreshIfChanged(), false);
-  fs.readFileSync = readFileSync; fs.openSync = openSync;
-  assert.deepEqual(reads.filter((p) => p.endsWith('.md')), []);
+  fs.readFileSync = readFileSync;
+  fs.openSync = openSync;
+  assert.deepEqual(
+    reads.filter((p) => p.endsWith('.md')),
+    []
+  );
 });
 
 test('(c) same-size rewrite with mtime restored: detected; ctime is the observed change', (t) => {
@@ -106,9 +167,17 @@ test('(c) same-size rewrite with mtime restored: detected; ctime is the observed
   const file = path.join(f.wiki, 'base.md');
   const before = fs.lstatSync(file, { bigint: true });
   fs.writeFileSync(file, '# Base\nwombats evidence!\n'); // 'baseline evidence' and 'wombats evidence!' are both 17 characters
-  execFileSync('python3', ['-c', 'import os,sys; os.utime(sys.argv[1], ns=(int(sys.argv[2]), int(sys.argv[3])))', file, before.atimeNs.toString(), before.mtimeNs.toString()]);
+  execFileSync('python3', [
+    '-c',
+    'import os,sys; os.utime(sys.argv[1], ns=(int(sys.argv[2]), int(sys.argv[3])))',
+    file,
+    before.atimeNs.toString(),
+    before.mtimeNs.toString(),
+  ]);
   const after = fs.lstatSync(file, { bigint: true });
-  console.log(`same-size probe: size ${before.size}->${after.size}, mtime restored=${after.mtimeNs === before.mtimeNs}, ctime changed=${after.ctimeNs !== before.ctimeNs}`);
+  console.log(
+    `same-size probe: size ${before.size}->${after.size}, mtime restored=${after.mtimeNs === before.mtimeNs}, ctime changed=${after.ctimeNs !== before.ctimeNs}`
+  );
   assert.equal(after.size, before.size, 'same size');
   assert.equal(after.mtimeNs, before.mtimeNs, 'mtime restored to the nanosecond');
   assert.equal(s.refreshIfChanged(), true, 'the change is detected through ctime even with size and mtime unchanged');

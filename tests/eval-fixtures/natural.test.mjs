@@ -9,13 +9,21 @@ import { parse } from 'yaml';
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const corpusDir = resolve(root, 'eval/corpus-natural');
 const casesPath = resolve(root, 'eval/dev/natural-cases.json');
-const files = readdirSync(corpusDir).filter(name => name.endsWith('.md')).sort();
-const pages = new Map(files.map(name => [name, readFileSync(resolve(corpusDir, name), 'utf8')]));
+const files = readdirSync(corpusDir)
+  .filter((name) => name.endsWith('.md'))
+  .sort();
+const pages = new Map(files.map((name) => [name, readFileSync(resolve(corpusDir, name), 'utf8')]));
 const cases = JSON.parse(readFileSync(casesPath, 'utf8'));
 const categoryTargets = new Map([
-  ['tr', 20], ['en', 20], ['mixed', 12], ['synonym', 10],
-  ['technical-exact', 12], ['typo', 8], ['near-miss', 8],
-  ['stale-superseded', 5], ['no-answer', 5],
+  ['tr', 20],
+  ['en', 20],
+  ['mixed', 12],
+  ['synonym', 10],
+  ['technical-exact', 12],
+  ['typo', 8],
+  ['near-miss', 8],
+  ['stale-superseded', 5],
+  ['no-answer', 5],
 ]);
 
 function frontmatter(markdown, name) {
@@ -27,13 +35,21 @@ function frontmatter(markdown, name) {
 }
 
 function words(text) {
-  return (text.toLocaleLowerCase('tr-TR').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').match(/[\p{L}\p{N}_]+/gu) || []);
+  return (
+    text
+      .toLocaleLowerCase('tr-TR')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .match(/[\p{L}\p{N}_]+/gu) || []
+  );
 }
 
 function containsPrivatePattern(text) {
-  return /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text)
-    || /(?:^|[\s"'`])\/(?:Users|home)\/[^\s"'`]+/m.test(text)
-    || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text);
+  return (
+    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text) ||
+    /(?:^|[\s"'`])\/(?:Users|home)\/[^\s"'`]+/m.test(text) ||
+    /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text)
+  );
 }
 
 test('natural corpus has valid, substantial synthetic Markdown pages', () => {
@@ -98,7 +114,10 @@ test('case queries do not copy six consecutive words from any corpus page', () =
       for (const tokens of pageTokens) {
         let found = false;
         for (let i = 0; i + 6 <= tokens.length; i++) {
-          if (tokens.slice(i, i + 6).join(' ') === phrase) { found = true; break; }
+          if (tokens.slice(i, i + 6).join(' ') === phrase) {
+            found = true;
+            break;
+          }
         }
         assert.equal(found, false, `${item.id} copies a six-word phrase`);
       }

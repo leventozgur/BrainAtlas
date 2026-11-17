@@ -37,11 +37,27 @@ test('scale-bench: small N run returns the documented shape with the minimum que
     assert.equal(res.status, 0, res.stderr);
     const out = JSON.parse(res.stdout);
     assert.equal(out.seed, 1);
-    assert.deepEqual(out.sizes.map((x) => x.n), [30, 60]);
+    assert.deepEqual(
+      out.sizes.map((x) => x.n),
+      [30, 60]
+    );
     for (const row of out.sizes) {
       // BA-27: refreshAfterEditMs is added to each row (scale-bench `refreshAfterEditMs`); no other key changed.
-      assert.deepEqual(Object.keys(row).sort(), ['buildIndexMs', 'createSearcherColdMs', 'createSearcherWarmMs', 'hookMs', 'hybridOverheadMs', 'n', 'refreshAfterEditMs', 'searchMs'].sort());
-      for (const f of ['buildIndexMs', 'createSearcherColdMs', 'createSearcherWarmMs']) assert.ok(Number.isFinite(row[f]) && row[f] >= 0, f);
+      assert.deepEqual(
+        Object.keys(row).sort(),
+        [
+          'buildIndexMs',
+          'createSearcherColdMs',
+          'createSearcherWarmMs',
+          'hookMs',
+          'hybridOverheadMs',
+          'n',
+          'refreshAfterEditMs',
+          'searchMs',
+        ].sort()
+      );
+      for (const f of ['buildIndexMs', 'createSearcherColdMs', 'createSearcherWarmMs'])
+        assert.ok(Number.isFinite(row[f]) && row[f] >= 0, f);
       assert.equal(row.searchMs.count, 30, 'search queries (min 30)');
       assert.equal(row.hookMs.count, 20, 'hook prompts (min 20)');
       assert.equal(row.hybridOverheadMs.count, 30, 'hybrid queries (min 30)');
@@ -49,7 +65,11 @@ test('scale-bench: small N run returns the documented shape with the minimum que
         assert.ok(row[f].p50 >= 0 && row[f].p95 >= row[f].p50, `${f} percentiles ordered`);
       }
     }
-    assert.deepEqual(listDir(tmp).filter((x) => x !== 'netlog-dir'), [], 'scale temp dirs removed');
+    assert.deepEqual(
+      listDir(tmp).filter((x) => x !== 'netlog-dir'),
+      [],
+      'scale temp dirs removed'
+    );
     assert.deepEqual(listDir(home), [], 'HOME untouched');
     assert.equal(existsSync(join(stateless, 'net.log')), false, 'no network attempt');
     assert.equal(existsSync(netLog), false);

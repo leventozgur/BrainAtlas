@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-export const sha256 = value => createHash('sha256').update(value).digest('hex');
+export const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 export const makeSecret = () => ['sk', 'test' + 'x'.repeat(24)].join('-');
 
 export async function tempRoot(t) {
@@ -41,7 +41,13 @@ export function vecFor(text, dims = 3) {
 }
 
 export function fakeClock(start = 1_700_000_000_000) {
-  const clock = { time: start, now: () => clock.time, advance: ms => { clock.time += ms; } };
+  const clock = {
+    time: start,
+    now: () => clock.time,
+    advance: (ms) => {
+      clock.time += ms;
+    },
+  };
   return clock;
 }
 
@@ -49,11 +55,24 @@ export function fakeClock(start = 1_700_000_000_000) {
  * Deterministic fake provider. `durations[i]` is the simulated duration (ms) of call i+1
  * (the last value repeats). The shared fake clock is advanced by that amount.
  */
-export function fakeProvider({ dims = 3, fingerprint = 'fp-a', id = 'fake:model', clock = fakeClock(), durations = [0],
-  failOnCall = null, onCall = null, preprocessVersion, vector = vecFor } = {}) {
+export function fakeProvider({
+  dims = 3,
+  fingerprint = 'fp-a',
+  id = 'fake:model',
+  clock = fakeClock(),
+  durations = [0],
+  failOnCall = null,
+  onCall = null,
+  preprocessVersion,
+  vector = vecFor,
+} = {}) {
   const calls = [];
   const provider = {
-    id, dims, fingerprint, calls, clock,
+    id,
+    dims,
+    fingerprint,
+    calls,
+    clock,
     ...(preprocessVersion === undefined ? {} : { preprocessVersion }),
     async embedDocuments(texts) {
       calls.push([...texts]);
@@ -61,30 +80,58 @@ export function fakeProvider({ dims = 3, fingerprint = 'fp-a', id = 'fake:model'
       if (onCall) await onCall(index, texts);
       if (failOnCall === index) throw Object.assign(new Error('fixture provider failure'), { code: 'E_FIXTURE' });
       clock.advance(durations[Math.min(index - 1, durations.length - 1)]);
-      return texts.map(text => vector(text, dims));
+      return texts.map((text) => vector(text, dims));
     },
-    async embedQuery(text) { return vector(text, dims); },
-    get sizes() { return calls.map(call => call.length); },
-    get texts() { return calls.flat(); },
+    async embedQuery(text) {
+      return vector(text, dims);
+    },
+    get sizes() {
+      return calls.map((call) => call.length);
+    },
+    get texts() {
+      return calls.flat();
+    },
   };
   return provider;
 }
 
-export async function readJson(file) { return JSON.parse(await readFile(file, 'utf8')); }
-export async function readJsonOrNull(file) {
-  try { return await readJson(file); } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
+export async function readJson(file) {
+  return JSON.parse(await readFile(file, 'utf8'));
 }
-export async function exists(file) { try { await stat(file); return true; } catch (error) { if (error?.code === 'ENOENT') return false; throw error; } }
+export async function readJsonOrNull(file) {
+  try {
+    return await readJson(file);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+export async function exists(file) {
+  try {
+    await stat(file);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
 
 /** Recursive listing with file content hashes; used to prove "no write happened". */
 export async function snapshot(root, prefix = '') {
   const result = {};
   let entries;
-  try { entries = await readdir(join(root, prefix), { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT') return result; throw error; }
+  try {
+    entries = await readdir(join(root, prefix), { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return result;
+    throw error;
+  }
   for (const entry of entries) {
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) { result[`${rel}/`] = 'dir'; Object.assign(result, await snapshot(root, rel)); }
-    else result[rel] = sha256(await readFile(join(root, rel)));
+    if (entry.isDirectory()) {
+      result[`${rel}/`] = 'dir';
+      Object.assign(result, await snapshot(root, rel));
+    } else result[rel] = sha256(await readFile(join(root, rel)));
   }
   return result;
 }
@@ -100,10 +147,19 @@ export function normalizedIndexText(text) {
  */
 export async function drive(t, promise, stepMs = 500, max = 5000) {
   let settled = false;
-  const wrapped = promise.then(value => { settled = true; return value; }, error => { settled = true; throw error; });
+  const wrapped = promise.then(
+    (value) => {
+      settled = true;
+      return value;
+    },
+    (error) => {
+      settled = true;
+      throw error;
+    }
+  );
   wrapped.catch(() => {});
   for (let i = 0; i < max && !settled; i++) {
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
     t.mock.timers.tick(stepMs);
   }
   assert.equal(settled, true, 'driven promise did not settle');

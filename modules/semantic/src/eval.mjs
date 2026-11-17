@@ -9,7 +9,8 @@ import { searchHybrid } from './hybrid.mjs';
 
 /** Compare lexical and hybrid dev metrics; this result alone never enables the module. */
 export async function semanticGate({ devCases, corpusDir, provider }) {
-  if (!Array.isArray(devCases) || typeof corpusDir !== 'string' || !provider) throw new TypeError('Invalid semantic evaluation input.');
+  if (!Array.isArray(devCases) || typeof corpusDir !== 'string' || !provider)
+    throw new TypeError('Invalid semantic evaluation input.');
   const temporaryDir = await mkdtemp(path.join(os.tmpdir(), 'brainatlas-semantic-eval-'));
   try {
     const casesFile = path.join(temporaryDir, 'cases.json');
@@ -18,8 +19,16 @@ export async function semanticGate({ devCases, corpusDir, provider }) {
     const { runEval } = await import(/** @type {any} */ ('../../../eval/run-eval.mjs'));
     const lexical = runEval({ corpusDir, casesFile });
     const pages = loadPages(corpusDir);
-    const index = await buildSemanticIndex({ corpusDir, stateDir: path.join(temporaryDir, 'state'), provider, chunkMarkdown: markdownChunks });
-    let trHits = 0, trTotal = 0, hits = 0, answerable = 0;
+    const index = await buildSemanticIndex({
+      corpusDir,
+      stateDir: path.join(temporaryDir, 'state'),
+      provider,
+      chunkMarkdown: markdownChunks,
+    });
+    let trHits = 0,
+      trTotal = 0,
+      hits = 0,
+      answerable = 0;
     for (const item of devCases) {
       const relevant = Array.isArray(item?.relevant) ? item.relevant : [];
       if (!relevant.length || item?.abstain) continue;
@@ -27,13 +36,16 @@ export async function semanticGate({ devCases, corpusDir, provider }) {
       const found = results.filter((result) => relevant.includes(result.path)).length;
       hits += found / 5;
       answerable++;
-      if (item.trToEn) { trHits += found / relevant.length; trTotal++; }
+      if (item.trToEn) {
+        trHits += found / relevant.length;
+        trTotal++;
+      }
     }
     const hybridPrecision = answerable ? hits / answerable : 0;
     const hybridTrRecall = trTotal ? trHits / trTotal : 0;
     const trToEnDelta = hybridTrRecall - lexical.trToEnRecallAt5;
     const precisionDelta = hybridPrecision - lexical.precisionAt5;
-    return { enable: trToEnDelta >= 0.10 && precisionDelta >= -0.05, trToEnDelta, precisionDelta };
+    return { enable: trToEnDelta >= 0.1 && precisionDelta >= -0.05, trToEnDelta, precisionDelta };
   } finally {
     await rm(temporaryDir, { recursive: true, force: true });
   }

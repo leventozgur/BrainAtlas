@@ -17,7 +17,10 @@ async function outsideWikiFixture(t) {
   const outsideWiki = join(f.dir, 'outside-wiki');
   await mkdir(join(outsideWiki, 'entities'), { recursive: true });
   await mkdir(join(outsideWiki, 'DISDIR-ZQ'), { recursive: true });
-  await writeFile(join(outsideWiki, 'entities', 'dis.md'), page('title: DISWIKI-ZQ\nsummary: "DISBODY-ZQ"', 'DISBODY-ZQ'));
+  await writeFile(
+    join(outsideWiki, 'entities', 'dis.md'),
+    page('title: DISWIKI-ZQ\nsummary: "DISBODY-ZQ"', 'DISBODY-ZQ')
+  );
   await writeFile(join(outsideWiki, 'index.md'), '# Wiki Index\n\n- [DISIDX-ZQ](entities/dis.md)\n');
   await writeFile(join(outsideWiki, 'log.md'), 'DISLOG-ZQ\n');
   await writeFile(join(outsideWiki, 'DISROOT-ZQ.md'), page('title: DISROOT-ZQ'));
@@ -42,7 +45,7 @@ const CASES = [
   ['wiki_update_page', { path: 'entities/dis.md', patch: { body: 'MARK-WRITE' } }, 'refused'],
   ['wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' }, 'refused'],
   ['wiki_create_concept', { name: 'Yeni Kavram', content: 'Gövde.' }, 'refused'],
-  ['wiki_add_crosslinks', { path: 'entities/dis.md' }, 'refused']
+  ['wiki_add_crosslinks', { path: 'entities/dis.md' }, 'refused'],
 ];
 
 for (const [name, args, expect] of CASES) {
@@ -69,8 +72,10 @@ test('S8 combined: every tool, one server; no response anywhere carries outside 
   const vaultBefore = await snapshot(f.vault);
   const texts = [];
   for (const [name, args] of CASES) texts.push(textOf(await call(f.client, name, args)));
-  for (const query of ['DISBODY', 'DISIDX', 'DISLOG', 'DISROOT', 'DISDIR', 'DISWIKI']) texts.push(textOf(await call(f.client, 'wiki_query', { query })));
-  for (const text of texts) for (const marker of MARKERS) assert.equal(text.includes(marker), false, `a response leaked ${marker}`);
+  for (const query of ['DISBODY', 'DISIDX', 'DISLOG', 'DISROOT', 'DISDIR', 'DISWIKI'])
+    texts.push(textOf(await call(f.client, 'wiki_query', { query })));
+  for (const text of texts)
+    for (const marker of MARKERS) assert.equal(text.includes(marker), false, `a response leaked ${marker}`);
   assert.deepEqual(await snapshot(f.outsideWiki), outsideBefore);
   assert.deepEqual(await snapshot(f.vault), vaultBefore);
 });

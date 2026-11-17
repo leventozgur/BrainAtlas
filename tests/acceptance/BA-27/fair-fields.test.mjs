@@ -12,13 +12,17 @@ import { runGrepBaseline } from '../../../eval/grep-baseline.mjs';
 import { bm25Fair } from '../../../eval/lib/bm25-fair.mjs';
 
 const dirs = [];
-process.on('exit', () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+process.on('exit', () => {
+  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+});
 const NOW = new Date('2026-11-10T00:00:00Z');
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-12, `${msg}: expected ${b}, got ${a}`);
 
 const PAGES = {
-  'alpha.md': '---\ntitle: Zyqorvex gateway\nstatus: active\ngenerated: "2026-06-01"\n---\n# Zyqorvex gateway\n\n## Overview\nThe zyqorvex gateway accepts requests.\n\n## Timeouts\nThe zyqorvex gateway applies a timeout of thirty seconds.\n',
-  'sub/beta.md': '---\ntitle: Quillfrost ledger\nstatus: active\ngenerated: "2026-06-01"\n---\n# Quillfrost ledger\n\nThe quillfrost ledger stores double entry records.\n',
+  'alpha.md':
+    '---\ntitle: Zyqorvex gateway\nstatus: active\ngenerated: "2026-06-01"\n---\n# Zyqorvex gateway\n\n## Overview\nThe zyqorvex gateway accepts requests.\n\n## Timeouts\nThe zyqorvex gateway applies a timeout of thirty seconds.\n',
+  'sub/beta.md':
+    '---\ntitle: Quillfrost ledger\nstatus: active\ngenerated: "2026-06-01"\n---\n# Quillfrost ledger\n\nThe quillfrost ledger stores double entry records.\n',
   'index.md': '---\ntitle: Index\nstatus: active\ngenerated: "2026-06-01"\n---\n# Index\n\nzyqorvex pointer page.\n',
 };
 
@@ -54,11 +58,20 @@ test('BA-27 fix1 toy: search membership matches the design (preconditions for th
   const index = buildIndex(loadPages(dir), { now: NOW });
   const at = (q, t) => search(index, q, { limit: 10, asOf: NOW, abstainThreshold: t });
   assert.equal(at('zyqorvex unknownterm xqzzy', 0.35).abstained, true);
-  assert.deepEqual(at('zyqorvex unknownterm xqzzy', 0).results.map((r) => r.path), ['alpha.md', 'index.md']);
-  assert.deepEqual(at('zyqorvex', 0.35).results.map((r) => r.path), ['alpha.md', 'index.md']);
+  assert.deepEqual(
+    at('zyqorvex unknownterm xqzzy', 0).results.map((r) => r.path),
+    ['alpha.md', 'index.md']
+  );
+  assert.deepEqual(
+    at('zyqorvex', 0.35).results.map((r) => r.path),
+    ['alpha.md', 'index.md']
+  );
   assert.equal(at('unknownterm xqzzy', 0.35).results.length, 0);
   assert.equal(at('devam et', 0).results.length, 0);
-  assert.deepEqual(at('quillfrost ledger', 0.35).results.map((r) => r.path), ['sub/beta.md']);
+  assert.deepEqual(
+    at('quillfrost ledger', 0.35).results.map((r) => r.path),
+    ['sub/beta.md']
+  );
 });
 
 test('BA-27 fix1 toy: bm25Fair at threshold 0.35 equals the hand values', () => {

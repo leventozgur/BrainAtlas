@@ -8,18 +8,29 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const [rootArg, pagesArg = '2000', promptsArg = '20'] = process.argv.slice(2);
-if (!rootArg) { console.error('usage'); process.exit(2); }
+if (!rootArg) {
+  console.error('usage');
+  process.exit(2);
+}
 const root = resolve(rootArg);
 const { runHook } = await import(join(root, 'packages/hooks/src/index.mjs'));
 const { writeSyntheticCorpus } = await import(join(root, 'eval/lib/synthetic-corpus.mjs'));
-const n = Number(pagesArg), prompts = Math.max(20, Number(promptsArg));
+const n = Number(pagesArg),
+  prompts = Math.max(20, Number(promptsArg));
 const now = new Date('2026-01-15T00:00:00Z');
 const base = mkdtempSync(join(tmpdir(), 'ba02-hook-'));
 try {
-  const vault = join(base, 'vault'), stateDir = join(base, 'hook-state');
-  mkdirSync(vault); mkdirSync(stateDir);
+  const vault = join(base, 'vault'),
+    stateDir = join(base, 'hook-state');
+  mkdirSync(vault);
+  mkdirSync(stateDir);
   const { queries } = writeSyntheticCorpus(vault, { pages: n, seed: 1, queryCount: prompts });
-  const config = { vault: { path: resolve(vault) }, stateDir, hooks: { mode: 'normal', deadlineMs: 4700 }, retrieval: { abstainThreshold: 0 } };
+  const config = {
+    vault: { path: resolve(vault) },
+    stateDir,
+    hooks: { mode: 'normal', deadlineMs: 4700 },
+    retrieval: { abstainThreshold: 0 },
+  };
   const digest = createHash('sha256');
   const rows = [];
   for (let i = 0; i < prompts; i++) {

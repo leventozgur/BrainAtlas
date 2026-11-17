@@ -11,9 +11,16 @@ import path from 'node:path';
 import { buildIndex, createSearcher, loadPages, search } from '../../../packages/core/src/retrieval/index.mjs';
 
 const now = new Date('2026-11-11T00:00:00Z');
-const run = (index, query, options = {}) => search(index, query, { limit: 10, abstainThreshold: 0, asOf: now, ...options });
+const run = (index, query, options = {}) =>
+  search(index, query, { limit: 10, abstainThreshold: 0, asOf: now, ...options });
 const page = (p, body, extra = {}) => ({
-  path: p, title: extra.title ?? 'Page', aliases: [], keywords: [], headings: [], body, frontmatter: extra.frontmatter ?? {},
+  path: p,
+  title: extra.title ?? 'Page',
+  aliases: [],
+  keywords: [],
+  headings: [],
+  body,
+  frontmatter: extra.frontmatter ?? {},
 });
 
 let savedHome;
@@ -29,7 +36,8 @@ after(() => {
 });
 
 // A vault that contains none of the dates, versions or deep paths probed below.
-const unrelated = () => buildIndex([page('notes/garden.md', 'Plain prose about gardens, rivers and bread.', { title: 'Garden' })], { now });
+const unrelated = () =>
+  buildIndex([page('notes/garden.md', 'Plain prose about gardens, rivers and bread.', { title: 'Garden' })], { now });
 
 test('dates in every common format are not identifiers: an absent date never gives identifier-not-found', () => {
   const index = unrelated();
@@ -43,11 +51,14 @@ test('dates in every common format are not identifiers: an absent date never giv
 });
 
 test('present dates are found by ordinary matching (dates in the vault do not abstain)', () => {
-  const index = buildIndex([
-    page('log/feb.md', 'Deployment happened on 01.02.2025 at noon.', { title: 'February' }),
-    page('log/dec.md', 'Audit closed on 2025.12.31 by the team.', { title: 'December' }),
-    page('log/other.md', 'Nothing dated here, only tea.', { title: 'Tea' }),
-  ], { now });
+  const index = buildIndex(
+    [
+      page('log/feb.md', 'Deployment happened on 01.02.2025 at noon.', { title: 'February' }),
+      page('log/dec.md', 'Audit closed on 2025.12.31 by the team.', { title: 'December' }),
+      page('log/other.md', 'Nothing dated here, only tea.', { title: 'Tea' }),
+    ],
+    { now }
+  );
   const r1 = run(index, 'what happened on 01.02.2025?', { abstainThreshold: 0.35 });
   assert.equal(r1.abstained, false);
   assert.equal(r1.results[0].path, 'log/feb.md');
@@ -66,10 +77,13 @@ test('observation: an invalid calendar date (32.13.2025) is not a date and absta
 });
 
 test('versions 1.2.3, 10.20.30 and 2.4.0-rc.12 remain identifiers: absent ones abstain, present ones are found', () => {
-  const vault = buildIndex([
-    page('release/notes.md', 'Upgraded the client to 1.2.3 last week.', { title: 'Notes' }),
-    page('release/other.md', 'Unrelated changelog entry about caches.', { title: 'Other' }),
-  ], { now });
+  const vault = buildIndex(
+    [
+      page('release/notes.md', 'Upgraded the client to 1.2.3 last week.', { title: 'Notes' }),
+      page('release/other.md', 'Unrelated changelog entry about caches.', { title: 'Other' }),
+    ],
+    { now }
+  );
   for (const q of ['10.20.30', 'What changed in 10.20.30?', '2.4.0-rc.12', 'Is 2.4.0-rc.12 safe?']) {
     assert.equal(run(vault, q).reason, 'identifier-not-found', `absent version must be an identifier: ${q}`);
   }
@@ -83,11 +97,14 @@ test('versions 1.2.3, 10.20.30 and 2.4.0-rc.12 remain identifiers: absent ones a
 });
 
 test('abbreviations a.k.a, vs., e.g., i.e. are not identifiers (no exact keys, no identifier-not-found)', () => {
-  const idx = buildIndex([page('prose/abbr.md', 'Notes: a.k.a. aliases, vs. comparisons, e.g. samples, i.e. definitions.')], { now });
+  const idx = buildIndex(
+    [page('prose/abbr.md', 'Notes: a.k.a. aliases, vs. comparisons, e.g. samples, i.e. definitions.')],
+    { now }
+  );
   for (const bad of ['a.k.a', 'a.k', 'k.a', 'vs', 'e.g', 'i.e']) {
     assert.equal(Object.hasOwn(idx.exact, bad), false, `abbreviation indexed as identifier: ${bad}`);
   }
-  const onlySingleLetterDotted = Object.keys(idx.exact).filter(k => /^\p{L}(\.\p{L})+$/u.test(k));
+  const onlySingleLetterDotted = Object.keys(idx.exact).filter((k) => /^\p{L}(\.\p{L})+$/u.test(k));
   assert.deepEqual(onlySingleLetterDotted, []);
   for (const q of ['What does a.k.a mean?', 'vs. or e.g. examples?', 'compare a.k.a. with vs. and i.e. wording']) {
     assert.notEqual(run(unrelated(), q).reason, 'identifier-not-found', q);
@@ -95,7 +112,10 @@ test('abbreviations a.k.a, vs., e.g., i.e. are not identifiers (no exact keys, n
 });
 
 test('negative words (2026, v2, mp3, follow-up, and/or, 1.0, iOS) are not in the exact index', () => {
-  const idx = buildIndex([page('neg.md', 'In 2026 we used v2 and mp3, a follow-up and/or the 1.0 release on iOS 26.')], { now });
+  const idx = buildIndex(
+    [page('neg.md', 'In 2026 we used v2 and mp3, a follow-up and/or the 1.0 release on iOS 26.')],
+    { now }
+  );
   for (const bad of ['2026', 'v2', 'mp3', 'follow-up', 'and/or', '1.0', 'ios']) {
     assert.equal(Object.hasOwn(idx.exact, bad), false, `negative indexed as identifier: ${bad}`);
   }
@@ -112,17 +132,25 @@ function deepPath(n, leaf) {
 function deepCase(n, leaf) {
   const full = deepPath(n, leaf);
   const parts = full.split('/');
-  const index = buildIndex([
-    page(`deep/page-${n}.md`, `Handler lives at ${full}. Retries are capped.`, { title: `Deep ${n}` }),
-    page('notes/other.md', 'Other notes about bread and rivers.', { title: 'Other' }),
-  ], { now });
+  const index = buildIndex(
+    [
+      page(`deep/page-${n}.md`, `Handler lives at ${full}. Retries are capped.`, { title: `Deep ${n}` }),
+      page('notes/other.md', 'Other notes about bread and rivers.', { title: 'Other' }),
+    ],
+    { now }
+  );
   return { index, full, parts };
 }
 for (const n of [13, 20, 40]) {
   test(`a ${n}-component vault path with a plain basename: basename, 2- and 3-component suffixes find the document`, () => {
     const leaf = `handler-${n}.mjs`.replace('-', '_');
     const { index, parts } = deepCase(n, leaf);
-    for (const [kind, q] of Object.entries({ basename: leaf, suffix2: parts.slice(-2).join('/'), suffix3: parts.slice(-3).join('/'), full: parts.join('/') })) {
+    for (const [kind, q] of Object.entries({
+      basename: leaf,
+      suffix2: parts.slice(-2).join('/'),
+      suffix3: parts.slice(-3).join('/'),
+      full: parts.join('/'),
+    })) {
       const r = run(index, `Where is ${q}?`);
       assert.notEqual(r.reason, 'identifier-not-found', `${n} ${kind}`);
       assert.equal(r.results[0]?.path, `deep/page-${n}.md`, `${n} ${kind}: ${q}`);
@@ -141,7 +169,11 @@ for (const n of [13, 20, 40]) {
       const q = parts.slice(-k).join('/');
       const r = run(index, `Where is ${q}?`);
       // A vault-present identifier variant must never abstain with identifier-not-found.
-      assert.notEqual(r.reason, 'identifier-not-found', `${n}-component path, ${k}-component suffix ${q} is in the vault but abstained`);
+      assert.notEqual(
+        r.reason,
+        'identifier-not-found',
+        `${n}-component path, ${k}-component suffix ${q} is in the vault but abstained`
+      );
       assert.equal(r.results[0]?.path, `deep/page-${n}.md`, `${k}-component suffix ${q}`);
     }
   });
@@ -151,7 +183,8 @@ test('a 40-component path: the basename is found when it is the only identifier-
   const leaf = 'retry-policy-40.mjs';
   const full = deepPath(40, leaf);
   const pages = [page('deep/target.md', `Policy in ${full}.`, { title: 'Target' })];
-  for (let i = 0; i < 30; i++) pages.push(page(`deep/filler-${i}.md`, `Filler page ${i} with cats and dogs.`, { title: `Filler ${i}` }));
+  for (let i = 0; i < 30; i++)
+    pages.push(page(`deep/filler-${i}.md`, `Filler page ${i} with cats and dogs.`, { title: `Filler ${i}` }));
   const index = buildIndex(pages, { now });
   const r = run(index, leaf, { abstainThreshold: 0.35 });
   assert.equal(r.abstained, false);
@@ -161,14 +194,16 @@ test('a 40-component path: the basename is found when it is the only identifier-
 test('exact-index cache corruption (duplicate, out-of-range, non-array, empty) is rebuilt to the clean content', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ba03-final-cache-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const vault = path.join(dir, 'vault'); const state = path.join(dir, 'state');
-  fs.mkdirSync(vault); fs.mkdirSync(state);
+  const vault = path.join(dir, 'vault');
+  const state = path.join(dir, 'state');
+  fs.mkdirSync(vault);
+  fs.mkdirSync(state);
   fs.writeFileSync(path.join(vault, 'a.md'), 'Use E_ALPHA_ONE here, plus 2.4.0-rc.12.');
   fs.writeFileSync(path.join(vault, 'b.md'), 'E_BETA_TWO only, nothing else about alpha.');
   const cache = path.join(state, 'retrieval-index.json');
   createSearcher({ vaultDir: vault, stateDir: state, now });
   const clean = JSON.parse(fs.readFileSync(cache, 'utf8'));
-  const key = Object.keys(clean.index.exact).find(k => k === 'e_alpha_one');
+  const key = Object.keys(clean.index.exact).find((k) => k === 'e_alpha_one');
   assert.ok(key, 'expected normalized identifier key in clean exact index');
   const variants = {
     duplicate: [0, 0],
@@ -191,14 +226,19 @@ test('exact-index cache corruption (duplicate, out-of-range, non-array, empty) i
 test('observation: a 2000-page vault with 20-component paths (cache size and build time reported, no threshold)', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ba03-final-deep-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const vault = path.join(dir, 'vault'); const state = path.join(dir, 'state');
+  const vault = path.join(dir, 'vault');
+  const state = path.join(dir, 'state');
   const comps = Array.from({ length: 19 }, (_, i) => `s${String(i).padStart(2, '0')}`);
   const deepDir = path.join(vault, ...comps);
-  fs.mkdirSync(deepDir, { recursive: true }); fs.mkdirSync(state);
+  fs.mkdirSync(deepDir, { recursive: true });
+  fs.mkdirSync(state);
   const N = 2000;
   for (let i = 0; i < N; i++) {
     const full = [...comps, `note-${i}.md`].join('/');
-    fs.writeFileSync(path.join(deepDir, `note-${i}.md`), `---\ntitle: "Note ${i}"\n---\n# Note ${i}\nRecord ${i} is stored at ${full}. Garden bread river ${i % 37}.\n`);
+    fs.writeFileSync(
+      path.join(deepDir, `note-${i}.md`),
+      `---\ntitle: "Note ${i}"\n---\n# Note ${i}\nRecord ${i} is stored at ${full}. Garden bread river ${i % 37}.\n`
+    );
   }
   const t0 = process.hrtime.bigint();
   const pages = loadPages(vault);
@@ -210,7 +250,9 @@ test('observation: a 2000-page vault with 20-component paths (cache size and bui
   const cachePath = path.join(state, 'retrieval-index.json');
   const sizeKiB = fs.statSync(cachePath).size / 1024;
   const exactKeys = Object.keys(index.exact).length;
-  t.diagnostic(`N=${N} comps=20 buildIndex(loadPages+build)=${buildMs.toFixed(0)}ms createSearcher(cold,writes cache)=${coldMs.toFixed(0)}ms cache=${sizeKiB.toFixed(0)}KiB exactKeys=${exactKeys}`);
+  t.diagnostic(
+    `N=${N} comps=20 buildIndex(loadPages+build)=${buildMs.toFixed(0)}ms createSearcher(cold,writes cache)=${coldMs.toFixed(0)}ms cache=${sizeKiB.toFixed(0)}KiB exactKeys=${exactKeys}`
+  );
   // Correctness is asserted; cost is only reported.
   for (let k = 0; k < N; k += 40) {
     const r = s.search(`note-${k}.md`, { limit: 10, abstainThreshold: 0, asOf: now });

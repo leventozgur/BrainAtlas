@@ -18,7 +18,8 @@ export function readLinks(text) {
   lines.forEach((line, index) => {
     const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
     if (fence) {
-      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && line.trim() === marker[1]) fence = null;
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && line.trim() === marker[1])
+        fence = null;
       return;
     }
     if (marker && !(marker[1][0] === '`' && line.slice(marker[0].length).includes('`'))) {
@@ -26,7 +27,10 @@ export function readLinks(text) {
       return;
     }
     for (let i = 0; i < line.length; i++) {
-      if (line[i] === '\\') { i++; continue; }
+      if (line[i] === '\\') {
+        i++;
+        continue;
+      }
       if (line[i] !== '[') continue;
       const close = closeBracket(line, i + 1);
       if (close < 0 || line[close + 1] !== '(') continue;
@@ -40,7 +44,10 @@ export function readLinks(text) {
 function closeBracket(line, from) {
   let depth = 0;
   for (let j = from; j < line.length; j++) {
-    if (line[j] === '\\') { j++; continue; }
+    if (line[j] === '\\') {
+      j++;
+      continue;
+    }
     if (line[j] === '[') depth++;
     else if (line[j] === ']') {
       if (depth === 0) return j;
@@ -55,7 +62,11 @@ function destinationAt(line, start) {
     let value = '';
     for (let k = start + 1; k < line.length; k++) {
       const c = line[k];
-      if (c === '\\' && k + 1 < line.length && PUNCT.test(line[k + 1])) { value += line[k + 1]; k++; continue; }
+      if (c === '\\' && k + 1 < line.length && PUNCT.test(line[k + 1])) {
+        value += line[k + 1];
+        k++;
+        continue;
+      }
       if (c === '<') return null;
       if (c === '>') return /^[ \t]*\)/.test(line.slice(k + 1)) ? value : null;
       value += c;
@@ -66,11 +77,19 @@ function destinationAt(line, start) {
   let value = '';
   for (let k = start; k < line.length; k++) {
     const c = line[k];
-    if (c === '\\' && k + 1 < line.length && PUNCT.test(line[k + 1])) { value += line[k + 1]; k++; continue; }
+    if (c === '\\' && k + 1 < line.length && PUNCT.test(line[k + 1])) {
+      value += line[k + 1];
+      k++;
+      continue;
+    }
     if (/\s/.test(c) || CONTROL.test(c)) {
       return value.length && /^[ \t]*\)/.test(line.slice(k)) ? value : null;
     }
-    if (c === '(') { depth++; value += c; continue; }
+    if (c === '(') {
+      depth++;
+      value += c;
+      continue;
+    }
     if (c === ')') {
       if (depth === 0) return value;
       depth--;
@@ -84,9 +103,16 @@ function destinationAt(line, start) {
 export const pagePathOf = (dest) => dest.replace(/[#?][\s\S]*$/, '');
 
 /** Destinations that are not local page paths: anchor-only, scheme URLs, scheme-relative and absolute paths, empty. */
-export const isNonPageDestination = (dest) => dest === '' || dest.startsWith('#') || dest.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(dest);
+export const isNonPageDestination = (dest) =>
+  dest === '' || dest.startsWith('#') || dest.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(dest);
 
 /** Set of local page paths named by any link in the text (escaped, angle-bracket, anchored or query forms). */
 export function linkedPages(text) {
-  return new Set(readLinks(text).map((x) => x.dest).filter((d) => !isNonPageDestination(d)).map(pagePathOf).filter(Boolean));
+  return new Set(
+    readLinks(text)
+      .map((x) => x.dest)
+      .filter((d) => !isNonPageDestination(d))
+      .map(pagePathOf)
+      .filter(Boolean)
+  );
 }

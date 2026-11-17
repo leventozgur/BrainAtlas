@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-const canonical = (value) => JSON.stringify(value, (_key, nested) => Array.isArray(nested) ? [...nested].sort() : nested);
+const canonical = (value) =>
+  JSON.stringify(value, (_key, nested) => (Array.isArray(nested) ? [...nested].sort() : nested));
 
 function mergeField(baseValue, localValue, remoteValue) {
   const localChanged = canonical(localValue) !== canonical(baseValue);
@@ -19,17 +20,28 @@ function mergeEntry(baseValue, localValue, remoteValue) {
 function parseIndex(text) {
   const entries = new Map();
   const lines = String(text ?? '').split(/\r?\n/);
-  let category = 'Uncategorized', sawCategory = false;
+  let category = 'Uncategorized',
+    sawCategory = false;
   const header = [];
   for (const line of lines) {
     const heading = /^##\s+(.+?)\s*$/.exec(line);
-    if (heading) { category = heading[1]; sawCategory = true; continue; }
+    if (heading) {
+      category = heading[1];
+      sawCategory = true;
+      continue;
+    }
     const match = /^-\s+\[((?:\\.|[^\]])+)\]\(([^)]+)\)(?:\s+[—–-]\s+(.*))?\s*$/.exec(line);
     if (match) {
       const title = match[1].replace(/\\([\\[\]])/g, '$1');
       const path = match[2];
       const metadata = match[3] ?? '';
-      entries.set(path, { path, category, title, summary: metadata.replace(/#[\w-]+/g, '').trim(), tags: [...metadata.matchAll(/#([\w-]+)/g)].map((tag) => tag[1]) });
+      entries.set(path, {
+        path,
+        category,
+        title,
+        summary: metadata.replace(/#[\w-]+/g, '').trim(),
+        tags: [...metadata.matchAll(/#([\w-]+)/g)].map((tag) => tag[1]),
+      });
     } else if (!sawCategory) header.push(line);
   }
   return { header: header.join('\n').replace(/\n+$/, ''), entries };
@@ -44,7 +56,9 @@ function mergeIndexEntry(key, base, local, remote) {
 
 function renderIndex(header, entries) {
   const categories = new Map();
-  for (const entry of [...entries.values()].filter(Boolean).sort((a, b) => a.category.localeCompare(b.category) || a.path.localeCompare(b.path))) {
+  for (const entry of [...entries.values()]
+    .filter(Boolean)
+    .sort((a, b) => a.category.localeCompare(b.category) || a.path.localeCompare(b.path))) {
     if (!categories.has(entry.category)) categories.set(entry.category, []);
     categories.get(entry.category).push(entry);
   }
@@ -61,7 +75,9 @@ function renderIndex(header, entries) {
 }
 
 export function mergeIndexThreeWay(baseText, localText, remoteText) {
-  const base = parseIndex(baseText ?? '# Wiki Index\n'), local = parseIndex(localText ?? '# Wiki Index\n'), remote = parseIndex(remoteText ?? '# Wiki Index\n');
+  const base = parseIndex(baseText ?? '# Wiki Index\n'),
+    local = parseIndex(localText ?? '# Wiki Index\n'),
+    remote = parseIndex(remoteText ?? '# Wiki Index\n');
   const header = mergeField(base.header, local.header, remote.header);
   const conflicts = header.conflict ? [{ path: 'wiki/index.md', field: 'header' }] : [];
   const entries = new Map();
@@ -74,8 +90,12 @@ export function mergeIndexThreeWay(baseText, localText, remoteText) {
 }
 
 function splitLog(text) {
-  const blocks = String(text ?? '# Wiki Log\n').trimEnd().split(/\r?\n\s*\r?\n/).filter(Boolean);
-  const preamble = blocks.length && (/^#\s+/.test(blocks[0]) || /^<!--/.test(blocks[0])) ? blocks.shift() : '# Wiki Log';
+  const blocks = String(text ?? '# Wiki Log\n')
+    .trimEnd()
+    .split(/\r?\n\s*\r?\n/)
+    .filter(Boolean);
+  const preamble =
+    blocks.length && (/^#\s+/.test(blocks[0]) || /^<!--/.test(blocks[0])) ? blocks.shift() : '# Wiki Log';
   const entries = new Map();
   for (const block of blocks) {
     const operation = /<!--\s*sync-op:([0-9a-f-]{36})\s*-->/i.exec(block)?.[1]?.toLowerCase();
@@ -87,7 +107,9 @@ function splitLog(text) {
 }
 
 export function mergeLogThreeWay(baseText, localText, remoteText) {
-  const base = splitLog(baseText), local = splitLog(localText), remote = splitLog(remoteText);
+  const base = splitLog(baseText),
+    local = splitLog(localText),
+    remote = splitLog(remoteText);
   const preamble = mergeField(base.preamble, local.preamble, remote.preamble);
   if (preamble.conflict) return { content: null, conflicts: [{ path: 'wiki/log.md', field: 'header' }] };
   const entries = new Map();

@@ -35,16 +35,18 @@ const pad2 = (n) => String(n).padStart(2, '0');
 // Official TCKN check digits (10th: odd*7 - even mod 10; 11th: sum of first ten mod 10).
 function tckn(first9) {
   const n = [...first9].map(Number);
-  const odd = n[0] + n[2] + n[4] + n[6] + n[8], even = n[1] + n[3] + n[5] + n[7];
-  const d10 = ((odd * 7 - even) % 10 + 10) % 10;
+  const odd = n[0] + n[2] + n[4] + n[6] + n[8],
+    even = n[1] + n[3] + n[5] + n[7];
+  const d10 = (((odd * 7 - even) % 10) + 10) % 10;
   const d11 = [...n, d10].reduce((a, b) => a + b, 0) % 10;
   return first9 + d10 + d11;
 }
 function tcknOk(s) {
   if (!/^[1-9][0-9]{10}$/.test(s)) return false;
   const n = [...s].map(Number);
-  const odd = n[0] + n[2] + n[4] + n[6] + n[8], even = n[1] + n[3] + n[5] + n[7];
-  return ((odd * 7 - even) % 10 + 10) % 10 === n[9] && n.slice(0, 10).reduce((a, b) => a + b, 0) % 10 === n[10];
+  const odd = n[0] + n[2] + n[4] + n[6] + n[8],
+    even = n[1] + n[3] + n[5] + n[7];
+  return (((odd * 7 - even) % 10) + 10) % 10 === n[9] && n.slice(0, 10).reduce((a, b) => a + b, 0) % 10 === n[10];
 }
 // ISO 13616: rearranged = BBAN + "TR" as 2927 + "00"; check = 98 - (value mod 97).
 function iban(bban) {
@@ -58,15 +60,27 @@ function ibanOk(s) {
   const numeric = [...r].map((ch) => (ch >= 'A' && ch <= 'Z' ? String(ch.charCodeAt(0) - 55) : ch)).join('');
   return BigInt(numeric) % 97n === 1n;
 }
-const spaced = (compact) => compact.slice(0, 4) + ' ' + compact.slice(4).match(/.{1,4}/g).join(' ');
+const spaced = (compact) =>
+  compact.slice(0, 4) +
+  ' ' +
+  compact
+    .slice(4)
+    .match(/.{1,4}/g)
+    .join(' ');
 const validTckn = () => tckn(String(1 + Math.floor(rand() * 9)) + digits(8));
 const validIban = () => iban(digits(22));
-const fresh = (gen) => { for (;;) { const v = gen(); if (!uniform(v)) return v; } };
+const fresh = (gen) => {
+  for (;;) {
+    const v = gen();
+    if (!uniform(v)) return v;
+  }
+};
 
 // Six formats per rule: YAML, Markdown table, code block, sentence, .env line, URL. V is the value slot.
 const POS = [
   {
-    cat: 'azure-storage-key', rule: 'azure-storage-key',
+    cat: 'azure-storage-key',
+    rule: 'azure-storage-key',
     value: (i) => (i % 2 ? 'SharedAccessKey=' : 'AccountKey=') + fresh(() => str(86, B64)) + '==',
     tpl: [
       'connectionString: "DefaultEndpointsProtocol=https;AccountName=stg01;V;EndpointSuffix=core.windows.net"',
@@ -78,7 +92,8 @@ const POS = [
     ],
   },
   {
-    cat: 'azure-sas-token', rule: 'azure-sas-token',
+    cat: 'azure-sas-token',
+    rule: 'azure-sas-token',
     value: () => 'sv=2021-08-06&ss=b&srt=sco&sp=rl&se=2030-01-01T00:00:00Z&sig=' + fresh(() => str(43, B64)) + '=',
     tpl: [
       'connectionString: "BlobEndpoint=https://stg01.blob.core.windows.net/;V;EndpointSuffix=core.windows.net"',
@@ -90,7 +105,8 @@ const POS = [
     ],
   },
   {
-    cat: 'bearer-token', rule: 'bearer-token',
+    cat: 'bearer-token',
+    rule: 'bearer-token',
     value: () => 'Authorization: Bearer ' + 'a1' + str(38, ALNUM + '._-'),
     tpl: [
       '  headers: V',
@@ -102,7 +118,8 @@ const POS = [
     ],
   },
   {
-    cat: 'gitlab-pat', rule: 'gitlab-pat',
+    cat: 'gitlab-pat',
+    rule: 'gitlab-pat',
     value: () => 'glpat-' + fresh(() => str(20, ALNUM + '_-')),
     tpl: [
       'gitlab_token: "V"',
@@ -114,7 +131,8 @@ const POS = [
     ],
   },
   {
-    cat: 'azure-devops-pat', rule: 'azure-devops-pat',
+    cat: 'azure-devops-pat',
+    rule: 'azure-devops-pat',
     value: () => fresh(() => str(52, B32)),
     tpl: [
       'azure_devops_pat: "V"',
@@ -126,7 +144,8 @@ const POS = [
     ],
   },
   {
-    cat: 'secret-assignment-tr', rule: 'secret-assignment',
+    cat: 'secret-assignment-tr',
+    rule: 'secret-assignment',
     value: () => pick(LETTERS) + fresh(() => str(11, PW)),
     tpl: [
       'sifre: "V"',
@@ -138,7 +157,8 @@ const POS = [
     ],
   },
   {
-    cat: 'tckn', rule: 'tckn',
+    cat: 'tckn',
+    rule: 'tckn',
     value: () => validTckn(),
     tpl: [
       'TCKN: "V"',
@@ -150,7 +170,8 @@ const POS = [
     ],
   },
   {
-    cat: 'tr-iban', rule: 'tr-iban',
+    cat: 'tr-iban',
+    rule: 'tr-iban',
     value: (i) => (i % 2 ? validIban() : spaced(validIban())),
     tpl: [
       'iban: "V"',
@@ -165,19 +186,15 @@ const POS = [
 // Contact data: redacted only in hook output (redact with the personal option), never a write block.
 const CONTACT = [
   {
-    cat: 'email', rule: 'email',
-    value: (i) => 'ali.' + str(4, 'abcdefghijklmnop') + digits(2) + '@' + (i % 2 ? 'ornek.example' : 'mail.example.com'),
-    tpl: [
-      'contact: "V"',
-      '| e-posta | V |',
-      '```\nV\n```',
-      'Bize V adresinden ulaşın.',
-      'SUPPORT_EMAIL=V',
-      'mailto:V',
-    ],
+    cat: 'email',
+    rule: 'email',
+    value: (i) =>
+      'ali.' + str(4, 'abcdefghijklmnop') + digits(2) + '@' + (i % 2 ? 'ornek.example' : 'mail.example.com'),
+    tpl: ['contact: "V"', '| e-posta | V |', '```\nV\n```', 'Bize V adresinden ulaşın.', 'SUPPORT_EMAIL=V', 'mailto:V'],
   },
   {
-    cat: 'tr-phone', rule: 'tr-phone',
+    cat: 'tr-phone',
+    rule: 'tr-phone',
     value: (i) => {
       const area = '5' + digits(2);
       const f = [
@@ -189,14 +206,7 @@ const CONTACT = [
       ];
       return f[(i * 3 + Math.floor(rand() * 5)) % 5];
     },
-    tpl: [
-      'tel: "V"',
-      '| telefon | V |',
-      '```\nV\n```',
-      'Bize V numarasından ulaşın.',
-      'PHONE=V',
-      'tel:V',
-    ],
+    tpl: ['tel: "V"', '| telefon | V |', '```\nV\n```', 'Bize V numarasından ulaşın.', 'PHONE=V', 'tel:V'],
   },
 ];
 
@@ -231,11 +241,25 @@ const SIFRE = [
   'Şifre sıfırlama: adımlar ayrı sayfada.',
 ];
 const PLACEHOLDERS = [
-  'Authorization: Bearer <token>', 'Authorization: Bearer ${TOKEN}', 'Authorization: Bearer ${API_TOKEN}',
-  'password: changeme', 'password: <password>', 'şifre: ***', 'parola: ********', 'sifre=xxxxxxxxxxxx',
-  'AccountKey=<account-key>', 'sv=2021-08-06&sig=<signature>', 'token: <your-token>', 'password: ${DB_PASSWORD}',
-  'password: process.env.DB_PASSWORD', 'password: $DB_PASSWORD', 'password: "example"', 'password: null',
-  'password: redacted', 'glpat-xxxxxxxxxxxxxxxxxxxx', 'SharedAccessKey=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  'Authorization: Bearer <token>',
+  'Authorization: Bearer ${TOKEN}',
+  'Authorization: Bearer ${API_TOKEN}',
+  'password: changeme',
+  'password: <password>',
+  'şifre: ***',
+  'parola: ********',
+  'sifre=xxxxxxxxxxxx',
+  'AccountKey=<account-key>',
+  'sv=2021-08-06&sig=<signature>',
+  'token: <your-token>',
+  'password: ${DB_PASSWORD}',
+  'password: process.env.DB_PASSWORD',
+  'password: $DB_PASSWORD',
+  'password: "example"',
+  'password: null',
+  'password: redacted',
+  'glpat-xxxxxxxxxxxxxxxxxxxx',
+  'SharedAccessKey=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
 ];
 const clean = {
   code: (i) => `${CODE[i % CODE.length]} // v${i}`,
@@ -243,7 +267,12 @@ const clean = {
   githash: (i) => (i % 2 ? `commit ${str(40, HEX)}` : `rev ${str(7, HEX)}`),
   base64: () => `data:image/png;base64,${str(160, B64)}`,
   version: (i) => [`0.1.0-rc.${i % 20}`, `v1.${i}.0`, `node >=20.${i % 10}`, `2026.11.${10 + (i % 18)}`][i % 4],
-  date: (i) => [`2026-11-${pad2(1 + (i % 28))}`, `2026-11-${pad2(1 + (i % 28))}T10:${pad2(i % 60)}:00Z`, `${pad2(1 + (i % 28))}.11.2026 14:${pad2(i % 60)}`][i % 3],
+  date: (i) =>
+    [
+      `2026-11-${pad2(1 + (i % 28))}`,
+      `2026-11-${pad2(1 + (i % 28))}T10:${pad2(i % 60)}:00Z`,
+      `${pad2(1 + (i % 28))}.11.2026 14:${pad2(i % 60)}`,
+    ][i % 3],
   badTckn: (i) => {
     const n = [...validTckn()];
     const k = i % 2 ? 10 : 9;
@@ -260,41 +289,66 @@ const clean = {
     return i % 2 ? spaced(s) : s;
   },
   placeholder: (i) => PLACEHOLDERS[i % PLACEHOLDERS.length],
-  order: (i) => [
-    `Sipariş no: SP-2026-${digits(6)}`, `Fatura numarası 2026${digits(10)}`, `order_id: ${digits(10)}`,
-    `INV-${digits(8)}`, `Fatura no: FTR${digits(12)}`, `Sipariş kodu ${digits(10)} onaylandı.`,
-  ][i % 6],
+  order: (i) =>
+    [
+      `Sipariş no: SP-2026-${digits(6)}`,
+      `Fatura numarası 2026${digits(10)}`,
+      `order_id: ${digits(10)}`,
+      `INV-${digits(8)}`,
+      `Fatura no: FTR${digits(12)}`,
+      `Sipariş kodu ${digits(10)} onaylandı.`,
+    ][i % 6],
   sifre: (i) => `${SIFRE[i % SIFRE.length]} (${i})`,
 };
 const CLEAN_CATS = Object.keys(clean);
 const CLEAN_PER_CAT = 30;
-const WRAP = [
-  (t) => t,
-  (t) => '```\n' + t + '\n```',
-  (t) => t,
-  (t) => `| ${t} |`,
-];
+const WRAP = [(t) => t, (t) => '```\n' + t + '\n```', (t) => t, (t) => `| ${t} |`];
 
 function build() {
-  const positives = [], contacts = [], cleanItems = [];
+  const positives = [],
+    contacts = [],
+    cleanItems = [];
   for (const p of POS) {
     for (let i = 0; i < 12; i++) {
       const v = p.value(i);
       const t = p.tpl[i % 6];
-      positives.push({ id: `P-${p.cat}-${String(i).padStart(2, '0')}`, set: 'pos', cat: p.cat, fmt: i % 6, expected: p.rule, value: v, text: t.replace('V', v) });
+      positives.push({
+        id: `P-${p.cat}-${String(i).padStart(2, '0')}`,
+        set: 'pos',
+        cat: p.cat,
+        fmt: i % 6,
+        expected: p.rule,
+        value: v,
+        text: t.replace('V', v),
+      });
     }
   }
   for (const c of CONTACT) {
     for (let i = 0; i < 12; i++) {
       const v = c.value(i);
       const t = c.tpl[i % 6];
-      contacts.push({ id: `C-${c.cat}-${String(i).padStart(2, '0')}`, set: 'contact', cat: c.cat, fmt: i % 6, expected: c.rule, value: v, text: t.replace('V', v) });
+      contacts.push({
+        id: `C-${c.cat}-${String(i).padStart(2, '0')}`,
+        set: 'contact',
+        cat: c.cat,
+        fmt: i % 6,
+        expected: c.rule,
+        value: v,
+        text: t.replace('V', v),
+      });
     }
   }
   for (const cat of CLEAN_CATS) {
     for (let i = 0; i < CLEAN_PER_CAT; i++) {
       const base = clean[cat](i);
-      cleanItems.push({ id: `K-${cat}-${String(i).padStart(2, '0')}`, set: 'clean', cat, fmt: i % 4, expected: null, text: WRAP[i % 4](base) });
+      cleanItems.push({
+        id: `K-${cat}-${String(i).padStart(2, '0')}`,
+        set: 'clean',
+        cat,
+        fmt: i % 4,
+        expected: null,
+        text: WRAP[i % 4](base),
+      });
     }
   }
   return { positives, contacts, cleanItems };
@@ -303,10 +357,11 @@ function build() {
 // The replaced V slot: String.replace with a string pattern replaces only the first V, which is the value slot.
 // Templates contain no other capital V followed by lowercase text, so the first match is the slot. Checked below.
 function checkSlots() {
-  for (const p of [...POS, ...CONTACT]) for (const t of p.tpl) {
-    const slots = t.split('V').length - 1;
-    if (slots !== 1) throw new Error(`template slot count ${slots} for ${p.cat}`);
-  }
+  for (const p of [...POS, ...CONTACT])
+    for (const t of p.tpl) {
+      const slots = t.split('V').length - 1;
+      if (slots !== 1) throw new Error(`template slot count ${slots} for ${p.cat}`);
+    }
 }
 
 export function fixtures() {

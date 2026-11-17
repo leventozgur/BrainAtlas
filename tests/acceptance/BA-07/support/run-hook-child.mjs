@@ -16,5 +16,12 @@ const config = {
   semantic: { ...SEMANTIC_DEFAULTS, enabled: request.semanticEnabled },
 };
 const stdin = JSON.stringify({ session_id: 'ba07-trace', prompt: request.prompt });
-const { stdout } = await runHook({ client: 'claude', event: 'prompt', stdin, env: { HOME: request.home }, config, now: new Date() });
+const { stdout } = await runHook({
+  client: 'claude',
+  event: 'prompt',
+  stdin,
+  env: { HOME: request.home },
+  config,
+  now: new Date(),
+});
 process.stdout.write(stdout);

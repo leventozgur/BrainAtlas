@@ -11,30 +11,44 @@ const CLIENTS = new Set(['claude', 'codex', 'kiro']);
 const ID = /^[a-f0-9-]{36}$/u;
 const TEXT_LIMIT = 2000;
 const fail = (code, message) => new BrainAtlasError(code, message);
-const safeText = (value, limit = TEXT_LIMIT) => redact(String(value ?? '').slice(0, limit))
-  .replace(/\/(?:Users|home|private|tmp|var|opt|etc|Applications)\/[^\s)\]>'"]+/g, '/home/you/[path]')
-  .replace(/[A-Za-z]:\\Users\\[^\s)\]>'"]+/g, 'C:\\Users\\you\\[path]');
-const digest16 = (value) => createHash('sha256').update(String(value ?? '')).digest('hex').slice(0, 16);
+const safeText = (value, limit = TEXT_LIMIT) =>
+  redact(String(value ?? '').slice(0, limit))
+    .replace(/\/(?:Users|home|private|tmp|var|opt|etc|Applications)\/[^\s)\]>'"]+/g, '/home/you/[path]')
+    .replace(/[A-Za-z]:\\Users\\[^\s)\]>'"]+/g, 'C:\\Users\\you\\[path]');
+const digest16 = (value) =>
+  createHash('sha256')
+    .update(String(value ?? ''))
+    .digest('hex')
+    .slice(0, 16);
 
 function paths(ctx) {
   const stateDir = ctx?.paths?.stateDir;
   const vault = ctx?.config?.vault?.path;
-  if (typeof stateDir !== 'string' || typeof vault !== 'string') throw fail('E_RECEIPT_CONTEXT', 'Receipt context is incomplete.');
+  if (typeof stateDir !== 'string' || typeof vault !== 'string')
+    throw fail('E_RECEIPT_CONTEXT', 'Receipt context is incomplete.');
   return { stateDir: resolve(stateDir), vault: resolve(vault) };
 }
 
 function normalizeCandidates(value) {
   const values = Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [];
-  return values.slice(0, 20).filter((item) => item && typeof item === 'object' && !Array.isArray(item)).map((item) => ({
-    title: safeText(item.title, 240),
-    summary: safeText(item.summary, 4000),
-    suggestedPath: safeText(item.suggestedPath, 240),
-    sources: Array.isArray(item.sources) ? item.sources.slice(0, 20).map((source) => safeText(source, 500)) : [],
-  })).filter((item) => item.title || item.summary);
+  return values
+    .slice(0, 20)
+    .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => ({
+      title: safeText(item.title, 240),
+      summary: safeText(item.summary, 4000),
+      suggestedPath: safeText(item.suggestedPath, 240),
+      sources: Array.isArray(item.sources) ? item.sources.slice(0, 20).map((source) => safeText(source, 500)) : [],
+    }))
+    .filter((item) => item.title || item.summary);
 }
 
 function assertOwnedDirectory(info) {
-  if (!info.isDirectory() || info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid())) {
+  if (
+    !info.isDirectory() ||
+    info.isSymbolicLink() ||
+    (typeof process.getuid === 'function' && info.uid !== process.getuid())
+  ) {
     throw fail('E_RECEIPT_STATE_UNSAFE', 'Receipt state directory is unsafe.');
   }
 }
@@ -43,8 +57,9 @@ async function secureQueueDirectory(ctx, { create = false, child } = {}) {
   const { stateDir } = paths(ctx);
   if (create) await mkdir(stateDir, { recursive: true, mode: 0o700 });
   let stateInfo;
-  try { stateInfo = await lstat(stateDir); }
-  catch (cause) {
+  try {
+    stateInfo = await lstat(stateDir);
+  } catch (cause) {
     if (!create && cause.code === 'ENOENT') return null;
     throw cause;
   }
@@ -53,12 +68,16 @@ async function secureQueueDirectory(ctx, { create = false, child } = {}) {
   for (const part of ['receipts', 'queue', ...(child ? [child] : [])]) {
     current = join(current, part);
     if (create) {
-      try { await mkdir(current, { mode: 0o700 }); }
-      catch (cause) { if (cause.code !== 'EEXIST') throw cause; }
+      try {
+        await mkdir(current, { mode: 0o700 });
+      } catch (cause) {
+        if (cause.code !== 'EEXIST') throw cause;
+      }
     }
     let info;
-    try { info = await lstat(current); }
-    catch (cause) {
+    try {
+      info = await lstat(current);
+    } catch (cause) {
       if (!create && cause.code === 'ENOENT') return null;
       throw cause;
     }
@@ -66,15 +85,27 @@ async function secureQueueDirectory(ctx, { create = false, child } = {}) {
   }
   return current;
 }
-function checkId(id) { if (typeof id !== 'string' || !ID.test(id)) throw fail('E_RECEIPT_ID', 'Receipt id is invalid.'); return id; }
+function checkId(id) {
+  if (typeof id !== 'string' || !ID.test(id)) throw fail('E_RECEIPT_ID', 'Receipt id is invalid.');
+  return id;
+}
 async function readReceipt(file) {
   try {
     const info = await lstat(file);
-    if (!info.isFile() || info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid()) || info.size > 128 * 1024) throw new Error();
+    if (
+      !info.isFile() ||
+      info.isSymbolicLink() ||
+      (typeof process.getuid === 'function' && info.uid !== process.getuid()) ||
+      info.size > 128 * 1024
+    )
+      throw new Error();
     const value = JSON.parse(await readFile(file, 'utf8'));
-    if (!value || typeof value !== 'object' || !ID.test(value.id) || !Array.isArray(value.candidates)) throw new Error();
+    if (!value || typeof value !== 'object' || !ID.test(value.id) || !Array.isArray(value.candidates))
+      throw new Error();
     return value;
-  } catch { throw fail('E_RECEIPT_NOT_FOUND', 'Receipt is unavailable or invalid.'); }
+  } catch {
+    throw fail('E_RECEIPT_NOT_FOUND', 'Receipt is unavailable or invalid.');
+  }
 }
 
 /** Persist a bounded, redacted session-end receipt using only the event payload. */
@@ -102,7 +133,11 @@ export async function listReceipts(ctx) {
   const items = [];
   for (const entry of entries) {
     if (!entry.isFile() || !ID.test(entry.name.slice(0, -5)) || !entry.name.endsWith('.json')) continue;
-    try { items.push(await readReceipt(join(directory, entry.name))); } catch { /* invalid records are not displayed */ }
+    try {
+      items.push(await readReceipt(join(directory, entry.name)));
+    } catch {
+      /* invalid records are not displayed */
+    }
   }
   return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -115,9 +150,19 @@ export async function showReceipt(ctx, id) {
 
 function pagePath(receipt, candidate, index) {
   const suggested = candidate.suggestedPath;
-  if (typeof suggested === 'string' && /^wiki\/(?:entities|concepts|sources|summaries)\/[a-z0-9][a-z0-9._/-]*\.md$/i.test(suggested)
-      && !suggested.split('/').some((part) => part === '..')) return suggested;
-  const slug = safeText(candidate.title, 100).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || `receipt-${receipt.id.slice(0, 8)}-${index + 1}`;
+  if (
+    typeof suggested === 'string' &&
+    /^wiki\/(?:entities|concepts|sources|summaries)\/[a-z0-9][a-z0-9._/-]*\.md$/i.test(suggested) &&
+    !suggested.split('/').some((part) => part === '..')
+  )
+    return suggested;
+  const slug =
+    safeText(candidate.title, 100)
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 60) || `receipt-${receipt.id.slice(0, 8)}-${index + 1}`;
   return `wiki/summaries/${slug}.md`;
 }
 

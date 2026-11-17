@@ -36,31 +36,43 @@ async function lockApi() {
   if (lockModule) return lockModule;
   const candidates = [];
   try {
-    candidates.push(pathToFileURL(join(dirname(require.resolve('@brainatlas/mcp/package.json')), 'src', 'lock.mjs')).href);
-  } catch { /* no installed MCP package: use the sibling copy below */ }
+    candidates.push(
+      pathToFileURL(join(dirname(require.resolve('@brainatlas/mcp/package.json')), 'src', 'lock.mjs')).href
+    );
+  } catch {
+    /* no installed MCP package: use the sibling copy below */
+  }
   candidates.push(new URL('../../mcp/src/lock.mjs', import.meta.url).href);
   let cause = null;
   for (const url of candidates) {
-    try { lockModule = await import(url); return lockModule; }
-    catch (error) { cause = cause ?? error; }
+    try {
+      lockModule = await import(url);
+      return lockModule;
+    } catch (error) {
+      cause = cause ?? error;
+    }
   }
   const detail = typeof cause?.code === 'string' ? ` (${cause.code})` : '';
   throw failure('E_LOCK_UNAVAILABLE', `The Wiki write lock module could not be loaded${detail}.`);
 }
 
-const stripCr = line => (line.endsWith('\r') ? line.slice(0, -1) : line);
-const countWords = text => text.trim().split(/\s+/u).filter(Boolean).length;
-const asPosix = path => path.split(sep).join('/');
+const stripCr = (line) => (line.endsWith('\r') ? line.slice(0, -1) : line);
+const countWords = (text) => text.trim().split(/\s+/u).filter(Boolean).length;
+const asPosix = (path) => path.split(sep).join('/');
 
 /** A back-link line: outside fences, with a trailing `\r` and trailing spaces/tabs removed, it is exactly the heading. */
-const isBackLinkLine = line => stripCr(line).replace(/[ \t]+$/u, '') === BACK_LINK_HEADING;
+const isBackLinkLine = (line) => stripCr(line).replace(/[ \t]+$/u, '') === BACK_LINK_HEADING;
 
 /** Vault root as a real directory outside any symlink. */
 async function vaultRoot(vault) {
   const missing = () => failure('E_NOT_FOUND', 'Vault is missing or not a directory.');
   if (typeof vault !== 'string' || !vault) throw missing();
   let root;
-  try { root = await realpath(resolve(vault)); } catch { throw missing(); }
+  try {
+    root = await realpath(resolve(vault));
+  } catch {
+    throw missing();
+  }
   const info = await lstat(root).catch(() => null);
   if (!info || !info.isDirectory()) throw missing();
   return root;
@@ -79,7 +91,7 @@ function invalidPagePath(page) {
   if (typeof page !== 'string' || !page) return true;
   if (!page.startsWith('wiki/') || !page.endsWith('.md') || page.includes('\\') || page.includes('\0')) return true;
   const parts = page.split('/');
-  if (parts.some(part => !part || part === '.' || part === '..')) return true;
+  if (parts.some((part) => !part || part === '.' || part === '..')) return true;
   return reservedPath(page.toLowerCase());
 }
 
@@ -99,7 +111,7 @@ async function checkedPageFile(root, page) {
   let current = root;
   for (let index = 0; index < parts.length; index++) {
     const next = join(current, parts[index]);
-    const info = await lstat(next).catch(error => {
+    const info = await lstat(next).catch((error) => {
       if (error?.code === 'ENOENT') throw notFound();
       if (error?.code === 'ENOTDIR') throw pathEscape();
       throw error;
@@ -121,7 +133,7 @@ async function checkedPageFile(root, page) {
 async function archiveTarget(root, page) {
   const name = page.slice('wiki/'.length).replace(/\.md$/u, '').replaceAll('/', '--');
   const dir = join(root, ...ARCHIVE_DIRECTORY.split('/'));
-  const dirInfo = await lstat(dir).catch(error => {
+  const dirInfo = await lstat(dir).catch((error) => {
     if (error?.code === 'ENOENT') return null;
     throw error;
   });
@@ -132,7 +144,7 @@ async function archiveTarget(root, page) {
   }
   const file = `${name}-history.md`;
   const target = join(dir, file);
-  const fileInfo = await lstat(target).catch(error => {
+  const fileInfo = await lstat(target).catch((error) => {
     if (error?.code === 'ENOENT') return null;
     if (error?.code === 'ENOTDIR') throw pathEscape();
     throw error;
@@ -171,7 +183,7 @@ function headingDate(heading) {
   return null;
 }
 
-const isDelimiter = line => line === '---' || line === '---\r';
+const isDelimiter = (line) => line === '---' || line === '---\r';
 
 /** Index of the first body line: just after the closing `---`, or 0 when there is no closed frontmatter block. */
 function bodyStart(lines) {
@@ -180,7 +192,7 @@ function bodyStart(lines) {
   return 0;
 }
 
-const fenceOpener = line => {
+const fenceOpener = (line) => {
   const match = /^ {0,3}(`{3,}|~{3,})/u.exec(line);
   return match ? { char: match[1][0], length: match[1].length } : null;
 };
@@ -194,7 +206,7 @@ function parseSections(lines, start) {
   const sections = [];
   let fence = null;
   let open = null;
-  const close = end => {
+  const close = (end) => {
     if (!open) return;
     const parsed = headingDate(open.heading);
     sections.push({
@@ -204,7 +216,7 @@ function parseSections(lines, start) {
       date: parsed ? parsed.text : null,
       time: parsed ? parsed.time : 0,
       current: /current|güncel durum/u.test(open.heading.toLowerCase()),
-      backLink: isBackLinkLine(open.line)
+      backLink: isBackLinkLine(open.line),
     });
     open = null;
   };
@@ -215,8 +227,15 @@ function parseSections(lines, start) {
       continue;
     }
     const opener = fenceOpener(line);
-    if (opener) { fence = opener; continue; }
-    if (H2_START.test(line)) { close(index); open = { start: index, heading: line.slice(3).trim(), line }; continue; }
+    if (opener) {
+      fence = opener;
+      continue;
+    }
+    if (H2_START.test(line)) {
+      close(index);
+      open = { start: index, heading: line.slice(3).trim(), line };
+      continue;
+    }
     if (H1_START.test(line)) close(index);
   }
   close(lines.length);
@@ -233,7 +252,10 @@ function hasBackLink(lines) {
       continue;
     }
     const opener = fenceOpener(line);
-    if (opener) { fence = opener; continue; }
+    if (opener) {
+      fence = opener;
+      continue;
+    }
     if (isBackLinkLine(line)) return true;
   }
   return false;
@@ -273,7 +295,11 @@ export function verifyNoLineLoss(lines, moved, pageText, appended, suffix) {
   const rebuilt = [];
   let cursor = 0;
   for (let index = 0; index < lines.length;) {
-    if (!skipped.has(index)) { rebuilt.push(kept[cursor++]); index++; continue; }
+    if (!skipped.has(index)) {
+      rebuilt.push(kept[cursor++]);
+      index++;
+      continue;
+    }
     let end = index;
     while (end < lines.length && skipped.has(end)) end++;
     for (let each = index; each < end; each++) rebuilt.push(lines[each]);
@@ -291,10 +317,12 @@ function verifyArchive(archiveText, movedText) {
 /** Options are validated before the page path, so bad options always report E_ARGUMENT. */
 function normalizeOptions(options = {}) {
   const keep = options.keep ?? DEFAULT_KEEP;
-  if (!Number.isInteger(keep) || keep < 0 || keep > MAX_KEEP) throw failure('E_ARGUMENT', 'compact --keep must be an integer from 0 to 1000.');
+  if (!Number.isInteger(keep) || keep < 0 || keep > MAX_KEEP)
+    throw failure('E_ARGUMENT', 'compact --keep must be an integer from 0 to 1000.');
   const olderThan = options.olderThan ?? null;
   const threshold = olderThan === null ? null : parseCalendarDate(olderThan);
-  if (olderThan !== null && threshold === null) throw failure('E_ARGUMENT', 'compact --older-than must be a YYYY-MM-DD date.');
+  if (olderThan !== null && threshold === null)
+    throw failure('E_ARGUMENT', 'compact --older-than must be a YYYY-MM-DD date.');
   const page = options.page;
   if (invalidPagePath(page)) throw pathEscape();
   const now = options.now instanceof Date && !Number.isNaN(options.now.valueOf()) ? options.now : new Date();
@@ -309,11 +337,11 @@ async function evaluate(root, settings) {
   const lines = text.split('\n');
   const start = bodyStart(lines);
   const sections = parseSections(lines, start);
-  const candidates = sections.filter(section => section.date !== null && !section.current && !section.backLink);
-  const ordered = candidates.slice().sort((left, right) => (right.time - left.time) || (right.start - left.start));
+  const candidates = sections.filter((section) => section.date !== null && !section.current && !section.backLink);
+  const ordered = candidates.slice().sort((left, right) => right.time - left.time || right.start - left.start);
   const moved = ordered
     .slice(settings.keep)
-    .filter(section => settings.threshold === null || section.time < settings.threshold.time)
+    .filter((section) => settings.threshold === null || section.time < settings.threshold.time)
     .sort((left, right) => left.start - right.start);
 
   const wordsBefore = countWords(lines.slice(start).join('\n'));
@@ -326,17 +354,21 @@ async function evaluate(root, settings) {
     olderThan: settings.olderThan,
     sections: {
       h2: sections.length,
-      dated: sections.filter(section => section.date !== null).length,
-      current: sections.filter(section => section.current).length,
+      dated: sections.filter((section) => section.date !== null).length,
+      current: sections.filter((section) => section.current).length,
       kept: candidates.length - moved.length,
-      moved: moved.length
+      moved: moved.length,
     },
-    moved: moved.map(section => ({ heading: section.heading, date: section.date, lines: section.end - section.start })),
+    moved: moved.map((section) => ({
+      heading: section.heading,
+      date: section.date,
+      lines: section.end - section.start,
+    })),
     linesMoved: moved.reduce((total, section) => total + section.end - section.start, 0),
     lineLoss: 0,
     wordsBefore,
     wordsAfter: wordsBefore,
-    written: false
+    written: false,
   };
   if (!moved.length) return { result, write: null };
 
@@ -345,7 +377,7 @@ async function evaluate(root, settings) {
 
   const parsedTitle = parseFrontmatter(text).data?.title;
   const title = typeof parsedTitle === 'string' && parsedTitle.length ? parsedTitle : target.name;
-  const movedParts = moved.map(section => lines.slice(section.start, section.end).join('\n'));
+  const movedParts = moved.map((section) => lines.slice(section.start, section.end).join('\n'));
   let movedText = movedParts.join('\n');
   if (!movedText.endsWith('\n')) movedText += '\n';
   const header = `---\ntitle: ${JSON.stringify(`History: ${title}`)}\ntype: archive\nstatus: archived\narchived_from: ${JSON.stringify(settings.page)}\ngenerated: ${JSON.stringify(settings.now.toISOString())}\n---\n# History: ${title}\n\n`;
@@ -401,7 +433,7 @@ export async function applyCompaction(vault, options = {}) {
 export function formatCompaction(result) {
   const lines = [
     `compact ${result.mode}: ${result.page} → ${result.archive}`,
-    `moved ${result.moved.length} section(s), ${result.linesMoved} line(s); kept ${result.sections.kept} dated; words ${result.wordsBefore} → ${result.wordsAfter}`
+    `moved ${result.moved.length} section(s), ${result.linesMoved} line(s); kept ${result.sections.kept} dated; words ${result.wordsBefore} → ${result.wordsAfter}`,
   ];
   for (const section of result.moved) lines.push(`- ${section.date}  ${section.heading}`);
   if (result.undo) lines.push(result.undo);

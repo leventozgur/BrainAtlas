@@ -7,17 +7,40 @@ import { recordCreatedDirectories, missingDirectories } from '../install-manifes
 import { formatMaintenance, receiptCandidates, runMaintenance } from '../maintain.mjs';
 import { applyCompaction, formatCompaction, planCompaction } from '../compact.mjs';
 import { formatUsage, isFeedbackVerdict, recordFeedback, usageSummary } from '../usage.mjs';
-import { error, readCurrent, currentReleaseDir, managedRoots, enabledModuleEntries, moduleContext, activateEnabledModules } from './shared.mjs';
+import {
+  error,
+  readCurrent,
+  currentReleaseDir,
+  managedRoots,
+  enabledModuleEntries,
+  moduleContext,
+  activateEnabledModules,
+} from './shared.mjs';
 
 export async function hookCommandFor({ client, event, paths, config }) {
-  if (!['claude', 'codex', 'kiro', 'copilot', 'gemini'].includes(client) || !['prompt', 'session-start', 'session-end'].includes(event)) throw error('E_HOOK_CLIENT', 'Hook client or event is invalid.');
+  if (
+    !['claude', 'codex', 'kiro', 'copilot', 'gemini'].includes(client) ||
+    !['prompt', 'session-start', 'session-end'].includes(event)
+  )
+    throw error('E_HOOK_CLIENT', 'Hook client or event is invalid.');
   let component;
-  try { component = await import('@brainatlas/hooks'); }
-  catch (cause) { if (cause.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Hook component is unavailable.'); throw cause; }
-  if (typeof component.buildHookCommand !== 'function') throw error('E_COMPONENT_MISSING', 'Hook command builder is unavailable.');
+  try {
+    component = await import('@brainatlas/hooks');
+  } catch (cause) {
+    if (cause.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Hook component is unavailable.');
+    throw cause;
+  }
+  if (typeof component.buildHookCommand !== 'function')
+    throw error('E_COMPONENT_MISSING', 'Hook command builder is unavailable.');
   const state = join(paths.stateDir, vaultId(config.vault.path));
   await mkdir(state, { recursive: true });
-  return component.buildHookCommand({ nodePath: process.execPath, shimPath: paths.binPath, client, event, paths: { vault: config.vault.path, state, release: paths.currentDir, configFile: paths.configFile } });
+  return component.buildHookCommand({
+    nodePath: process.execPath,
+    shimPath: paths.binPath,
+    client,
+    event,
+    paths: { vault: config.vault.path, state, release: paths.currentDir, configFile: paths.configFile },
+  });
 }
 
 async function queueSessionEndReceipt({ client, hookInput, config, paths, env }) {
@@ -26,7 +49,9 @@ async function queueSessionEndReceipt({ client, hookInput, config, paths, env })
     const releaseDir = currentReleaseDir(paths, current);
     if (!releaseDir) return;
     const { ordered, entries } = await enabledModuleEntries(releaseDir, config);
-    const handler = ordered.map(manifest => entries.get(manifest.name)).find(entry => typeof entry?.onSessionEnd === 'function');
+    const handler = ordered
+      .map((manifest) => entries.get(manifest.name))
+      .find((entry) => typeof entry?.onSessionEnd === 'function');
     if (!handler) return;
     const ctx = moduleContext(config, paths, env, entries, ordered);
     await activateEnabledModules(ordered, entries, ctx);
@@ -36,10 +61,17 @@ async function queueSessionEndReceipt({ client, hookInput, config, paths, env })
   const deadline = Math.max(1, Number(config.hooks?.deadlineMs) || 1000);
   try {
     return await Promise.race([
-      operation.then(() => true, () => false),
-      new Promise(resolve => { timer = setTimeout(() => resolve(false), deadline); })
+      operation.then(
+        () => true,
+        () => false
+      ),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(false), deadline);
+      }),
     ]);
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Queue one review candidate per finding kind through the installed receipts module (Full). Lite: nothing is written. */
@@ -48,7 +80,9 @@ async function queueMaintenanceReceipt({ config, paths, env, candidates }) {
   const releaseDir = currentReleaseDir(paths, current);
   if (!releaseDir) return { queued: false, reason: 'receipts-module-missing' };
   const { ordered, entries } = await enabledModuleEntries(releaseDir, config);
-  const handler = ordered.map(manifest => entries.get(manifest.name)).find(entry => typeof entry?.onSessionEnd === 'function');
+  const handler = ordered
+    .map((manifest) => entries.get(manifest.name))
+    .find((entry) => typeof entry?.onSessionEnd === 'function');
   if (!handler) return { queued: false, reason: 'receipts-module-missing' };
   const cfg = structuredClone(config);
   cfg.stateDir = join(paths.stateDir, vaultId(config.vault.path));
@@ -58,14 +92,21 @@ async function queueMaintenanceReceipt({ config, paths, env, candidates }) {
   if (created.length) await recordCreatedDirectories(paths, created, env.HOME, roots);
   const ctx = moduleContext(cfg, paths, env, entries, ordered);
   await activateEnabledModules(ordered, entries, ctx);
-  const result = await handler.onSessionEnd(ctx, { client: 'claude', session_id: 'brainatlas-maintain', brainatlas_receipt: candidates });
+  const result = await handler.onSessionEnd(ctx, {
+    client: 'claude',
+    session_id: 'brainatlas-maintain',
+    brainatlas_receipt: candidates,
+  });
   return { queued: Boolean(result?.queued), id: result?.id, candidates: result?.candidates ?? 0 };
 }
 
 export async function wiki({ args, json, output, env }) {
   const { formatWikiResult, runWikiCommand } = await import('../wiki.mjs');
   const result = await runWikiCommand(args, { env });
-  if (json) { output(result.value); return; }
+  if (json) {
+    output(result.value);
+    return;
+  }
   const text = formatWikiResult(result.sub, result.value);
   if (text) console.log(text);
   return;
@@ -79,7 +120,8 @@ export async function compact({ flag, value, plan, json, output, paths, env }) {
   const rawKeep = value('--keep');
   let keep = 3;
   if (rawKeep !== undefined) {
-    if (!/^\d+$/u.test(rawKeep) || Number(rawKeep) > 1000) throw error('E_ARGUMENT', 'compact --keep must be an integer from 0 to 1000.');
+    if (!/^\d+$/u.test(rawKeep) || Number(rawKeep) > 1000)
+      throw error('E_ARGUMENT', 'compact --keep must be an integer from 0 to 1000.');
     keep = Number(rawKeep);
   }
   const olderThan = value('--older-than') ?? null;
@@ -88,7 +130,10 @@ export async function compact({ flag, value, plan, json, output, paths, env }) {
   const result = plan
     ? await planCompaction(vaultPath, { page, keep, olderThan })
     : await applyCompaction(vaultPath, { page, keep, olderThan });
-  if (json) { output(result); return; }
+  if (json) {
+    output(result);
+    return;
+  }
   console.log(formatCompaction(result));
   return;
 }
@@ -98,7 +143,8 @@ export async function maintain({ flag, value, json, output, paths, env }) {
   const repo = value('--repo');
   const queue = flag('--queue');
   const cfg = requested === undefined || queue ? await loadConfig({ paths, env }) : null;
-  if (queue && requested !== undefined && resolve(requested) !== resolve(cfg.vault.path)) throw error('E_ARGUMENT', '--queue only works with the configured vault.');
+  if (queue && requested !== undefined && resolve(requested) !== resolve(cfg.vault.path))
+    throw error('E_ARGUMENT', '--queue only works with the configured vault.');
   const report = await runMaintenance(requested ?? cfg.vault.path, repo === undefined ? {} : { repo });
   if (queue) {
     const candidates = receiptCandidates(report.findings);
@@ -106,9 +152,15 @@ export async function maintain({ flag, value, json, output, paths, env }) {
       ? await queueMaintenanceReceipt({ config: cfg, paths, env, candidates })
       : { queued: false, reason: 'no-findings' };
   }
-  if (json) { output(report); return; }
+  if (json) {
+    output(report);
+    return;
+  }
   const text = formatMaintenance(report);
-  if (queue) output(`${text}\n${report.queue.queued ? `Queued ${report.queue.candidates} review candidate(s) for receipts review.` : `Nothing queued (${report.queue.reason}).`}`);
+  if (queue)
+    output(
+      `${text}\n${report.queue.queued ? `Queued ${report.queue.candidates} review candidate(s) for receipts review.` : `Nothing queued (${report.queue.reason}).`}`
+    );
   else output(text);
   return;
 }
@@ -118,57 +170,95 @@ export async function usage({ args, value, json, output, paths, env }) {
   let days = 7;
   if (rawDays !== undefined) {
     const parsedDays = Number(rawDays);
-    if (!/^\d+$/.test(rawDays) || !Number.isSafeInteger(parsedDays) || parsedDays < 1) throw error('E_ARGUMENT', 'Usage --days must be an integer of at least 1.');
+    if (!/^\d+$/.test(rawDays) || !Number.isSafeInteger(parsedDays) || parsedDays < 1)
+      throw error('E_ARGUMENT', 'Usage --days must be an integer of at least 1.');
     days = parsedDays;
   }
   const positional = [];
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
     if (argument === '--json') continue;
-    if (argument === '--days') { index++; continue; }
+    if (argument === '--days') {
+      index++;
+      continue;
+    }
     if (argument.startsWith('--')) throw error('E_ARGUMENT', 'Usage arguments are invalid.');
     positional.push(argument);
   }
   const feedbackAction = positional[0] === 'feedback';
-  if (feedbackAction && (positional.length !== 2 || !isFeedbackVerdict(positional[1]))) throw error('E_ARGUMENT', 'Feedback verdict must be useful or not-useful.');
+  if (feedbackAction && (positional.length !== 2 || !isFeedbackVerdict(positional[1])))
+    throw error('E_ARGUMENT', 'Feedback verdict must be useful or not-useful.');
   if (feedbackAction && rawDays !== undefined) throw error('E_ARGUMENT', 'Usage --days is only valid for the summary.');
   if (!feedbackAction && positional.length) throw error('E_ARGUMENT', 'Usage arguments are invalid.');
   const cfg = await loadConfig({ paths, env });
   const stateDir = join(paths.stateDir, vaultId(cfg.vault.path));
   if (feedbackAction) {
     const result = await recordFeedback({ stateDir, verdict: positional[1] });
-    output(json ? result : `Recorded feedback: ${positional[1]}.`); return;
+    output(json ? result : `Recorded feedback: ${positional[1]}.`);
+    return;
   }
   const summary = await usageSummary({ stateDir, days });
-  output(json ? summary : formatUsage(summary)); return;
+  output(json ? summary : formatUsage(summary));
+  return;
 }
 
 export async function evalCommand({ value, output }) {
   let component;
-  try { component = await import(/** @type {any} */ (new URL('../../../../eval/run-eval.mjs', import.meta.url))); }
-  catch (e) { if (e.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Evaluation component is unavailable.'); throw e; }
-  if (typeof component.runEval !== 'function') throw error('E_COMPONENT_MISSING', 'Evaluation component is unavailable.');
+  try {
+    component = await import(/** @type {any} */ (new URL('../../../../eval/run-eval.mjs', import.meta.url)));
+  } catch (e) {
+    if (e.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Evaluation component is unavailable.');
+    throw e;
+  }
+  if (typeof component.runEval !== 'function')
+    throw error('E_COMPONENT_MISSING', 'Evaluation component is unavailable.');
   const evalDir = new URL('../../../../eval/', import.meta.url);
-  try { output(component.runEval({ casesFile: value('--cases') || fileURLToPath(new URL('dev/cases.json', evalDir)), corpusDir: value('--corpus') || fileURLToPath(new URL('corpus/', evalDir)) })); }
-  catch { throw error('E_EVAL_FAILED', 'Evaluation could not complete.'); }
+  try {
+    output(
+      component.runEval({
+        casesFile: value('--cases') || fileURLToPath(new URL('dev/cases.json', evalDir)),
+        corpusDir: value('--corpus') || fileURLToPath(new URL('corpus/', evalDir)),
+      })
+    );
+  } catch {
+    throw error('E_EVAL_FAILED', 'Evaluation could not complete.');
+  }
   return;
 }
 
 export async function hookOrMcp({ command, args, env, paths, output }) {
   /** @type {any} */
   let component;
-  try { component = command === 'hook' ? await import('@brainatlas/hooks') : await import('@brainatlas/mcp'); }
-  catch (e) { if (e.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.'); throw e; }
+  try {
+    component = command === 'hook' ? await import('@brainatlas/hooks') : await import('@brainatlas/mcp');
+  } catch (e) {
+    if (e.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.');
+    throw e;
+  }
   const entry = command === 'hook' ? component.runHook : component.main;
-  if (typeof entry !== 'function') throw error('E_COMPONENT_MISSING', 'Requested component entry point is unavailable.');
+  if (typeof entry !== 'function')
+    throw error('E_COMPONENT_MISSING', 'Requested component entry point is unavailable.');
   try {
     if (command === 'mcp') await entry();
     else {
-      const client = args[0]; const event = args[1];
-      if (args.length !== 2 || !['claude', 'codex', 'kiro', 'copilot', 'gemini'].includes(client) || !['prompt', 'session-start', 'session-end'].includes(event)) throw error('E_ARGUMENT', 'Hook client and event are required.');
-      let stdin = ''; for await (const chunk of process.stdin) { stdin += chunk; if (stdin.length > 1024 * 1024) throw error('E_HOOK_INPUT', 'Hook input is too large.'); }
-      const cfg = await loadConfig({ paths, env }); cfg.stateDir = join(paths.stateDir, vaultId(cfg.vault.path));
-      const roots = managedRoots(paths, env); const created = await missingDirectories(cfg.stateDir, env.HOME, roots); await mkdir(cfg.stateDir, { recursive: true });
+      const client = args[0];
+      const event = args[1];
+      if (
+        args.length !== 2 ||
+        !['claude', 'codex', 'kiro', 'copilot', 'gemini'].includes(client) ||
+        !['prompt', 'session-start', 'session-end'].includes(event)
+      )
+        throw error('E_ARGUMENT', 'Hook client and event are required.');
+      let stdin = '';
+      for await (const chunk of process.stdin) {
+        stdin += chunk;
+        if (stdin.length > 1024 * 1024) throw error('E_HOOK_INPUT', 'Hook input is too large.');
+      }
+      const cfg = await loadConfig({ paths, env });
+      cfg.stateDir = join(paths.stateDir, vaultId(cfg.vault.path));
+      const roots = managedRoots(paths, env);
+      const created = await missingDirectories(cfg.stateDir, env.HOME, roots);
+      await mkdir(cfg.stateDir, { recursive: true });
       if (created.length) await recordCreatedDirectories(paths, created, env.HOME, roots);
       let result;
       if (event === 'session-end') {
@@ -176,12 +266,20 @@ export async function hookOrMcp({ command, args, env, paths, output }) {
         try {
           const parsed = stdin.trim() ? JSON.parse(stdin) : {};
           if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) hookInput = parsed;
-        } catch { /* The hook component handles malformed payloads fail-open. */ }
+        } catch {
+          /* The hook component handles malformed payloads fail-open. */
+        }
         const queued = await queueSessionEndReceipt({ client, hookInput, config: cfg, paths, env });
-        result = queued ? await entry({ client, event, stdin, env, now: new Date(), config: cfg }) : { stdout: '', exitCode: 0 };
+        result = queued
+          ? await entry({ client, event, stdin, env, now: new Date(), config: cfg })
+          : { stdout: '', exitCode: 0 };
       } else result = await entry({ client, event, stdin, env, now: new Date(), config: cfg });
-      if (result.stdout) process.stdout.write(result.stdout); process.exitCode = result.exitCode;
+      if (result.stdout) process.stdout.write(result.stdout);
+      process.exitCode = result.exitCode;
     }
-  } catch (e) { if (e.code === 'E_NOT_IMPLEMENTED') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.'); throw e; }
+  } catch (e) {
+    if (e.code === 'E_NOT_IMPLEMENTED') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.');
+    throw e;
+  }
   return;
 }

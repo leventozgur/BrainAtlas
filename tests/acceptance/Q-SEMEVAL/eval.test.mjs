@@ -26,13 +26,25 @@ async function fixture(t) {
   await writeFile(cases, JSON.stringify(evalCases));
   return { root, corpus, cases };
 }
-const vectorForDocument = (text) => text.includes(' aa') ? [1, 0.1] : text.includes(' bb') ? [0.8, 0.6] : [0, 1];
+const vectorForDocument = (text) => (text.includes(' aa') ? [1, 0.1] : text.includes(' bb') ? [0.8, 0.6] : [0, 1]);
 function fakeProvider(calls = {}) {
   return {
-    id: 'hand-fixture', dims: 2, fingerprint: 'hand-fingerprint', preprocessVersion: 'hand-v1',
-    async embedDocuments(texts) { calls.documents = (calls.documents ?? 0) + 1; return texts.map(vectorForDocument); },
-    async embed(texts) { calls.legacy = (calls.legacy ?? 0) + 1; return texts.map(vectorForDocument); },
-    async embedQuery(query) { calls.queries = (calls.queries ?? 0) + 1; return query === 'quartz' ? [0, 1] : [0, 1]; },
+    id: 'hand-fixture',
+    dims: 2,
+    fingerprint: 'hand-fingerprint',
+    preprocessVersion: 'hand-v1',
+    async embedDocuments(texts) {
+      calls.documents = (calls.documents ?? 0) + 1;
+      return texts.map(vectorForDocument);
+    },
+    async embed(texts) {
+      calls.legacy = (calls.legacy ?? 0) + 1;
+      return texts.map(vectorForDocument);
+    },
+    async embedQuery(query) {
+      calls.queries = (calls.queries ?? 0) + 1;
+      return query === 'quartz' ? [0, 1] : [0, 1];
+    },
   };
 }
 
@@ -46,7 +58,8 @@ test('semantic evaluator returns hand-computed lexical, semantic and hybrid metr
     hybrid: { recallAt5: 1, precisionAt5: 0.2, mrrAt10: 0.5, ndcgAt10: 1 / Math.log2(3) },
   };
   for (const [mode, metrics] of Object.entries(hand)) {
-    for (const [key, value] of Object.entries(metrics)) assert.ok(Math.abs(result[mode][key] - value) < 1e-12, `${mode}.${key}`);
+    for (const [key, value] of Object.entries(metrics))
+      assert.ok(Math.abs(result[mode][key] - value) < 1e-12, `${mode}.${key}`);
     assert.deepEqual([result[mode].n, result[mode].answerable, result[mode].abstain], [2, 1, 1]);
     assert.equal(result[mode].byCategory.tr.n, 1);
     assert.equal(result[mode].byCategory.empty.answerable, 0);
@@ -73,17 +86,28 @@ test('semantic evaluator returns hand-computed lexical, semantic and hybrid metr
 test('semantic evaluator rejects malformed cases/configuration and keeps query, ID and corpus text out of metrics', async (t) => {
   const f = await fixture(t);
   const secret = ['sk', 'test' + 'z'.repeat(24)].join('-');
-  const privateCorpus = path.join(f.root, 'private-corpus'); await mkdir(privateCorpus);
+  const privateCorpus = path.join(f.root, 'private-corpus');
+  await mkdir(privateCorpus);
   await writeFile(path.join(privateCorpus, 'note.md'), `# Note\nquartz ${secret}`);
   const privateCases = path.join(f.root, 'private-cases.json');
-  await writeFile(privateCases, JSON.stringify([{ id: secret, query: secret, relevant: ['note.md'], category: secret }]));
+  await writeFile(
+    privateCases,
+    JSON.stringify([{ id: secret, query: secret, relevant: ['note.md'], category: secret }])
+  );
   const result = await runSemanticEval({ corpusDir: privateCorpus, casesFile: privateCases, provider: fakeProvider() });
   assert.ok(!JSON.stringify(result).includes(secret));
   await assert.rejects(runSemanticEval({ corpusDir: f.corpus, casesFile: f.cases, provider: null }));
-  await assert.rejects(runSemanticEval({ corpusDir: f.corpus, casesFile: f.cases, provider: fakeProvider(), limit: 0 }));
-  const malformed = path.join(f.root, 'malformed.json'); await writeFile(malformed, `{ "${secret}":`);
-  await assert.rejects(runSemanticEval({ corpusDir: f.corpus, casesFile: malformed, provider: fakeProvider() }), (error) => !String(error.message + error.stack).includes(secret));
-  const invalidCase = path.join(f.root, 'invalid-case.json'); await writeFile(invalidCase, JSON.stringify([{ query: 3, relevant: [] }]));
+  await assert.rejects(
+    runSemanticEval({ corpusDir: f.corpus, casesFile: f.cases, provider: fakeProvider(), limit: 0 })
+  );
+  const malformed = path.join(f.root, 'malformed.json');
+  await writeFile(malformed, `{ "${secret}":`);
+  await assert.rejects(
+    runSemanticEval({ corpusDir: f.corpus, casesFile: malformed, provider: fakeProvider() }),
+    (error) => !String(error.message + error.stack).includes(secret)
+  );
+  const invalidCase = path.join(f.root, 'invalid-case.json');
+  await writeFile(invalidCase, JSON.stringify([{ query: 3, relevant: [] }]));
   await assert.rejects(runSemanticEval({ corpusDir: f.corpus, casesFile: invalidCase, provider: fakeProvider() }));
 });
 
@@ -92,7 +116,9 @@ test('semantic CLI help lists recommended prefixes and fake-provider JSON is one
   const preload = path.join(f.root, 'fake-fetch.mjs');
   const calls = path.join(f.root, 'calls.jsonl');
   await writeFile(calls, '');
-  await writeFile(preload, `
+  await writeFile(
+    preload,
+    `
     import fs from 'node:fs';
     globalThis.fetch = async (url, options) => {
       const request = { url: String(url), body: JSON.parse(options.body) };
@@ -100,17 +126,33 @@ test('semantic CLI help lists recommended prefixes and fake-provider JSON is one
       if (process.env.SEMANTIC_FAKE_MODE === 'reject') throw new Error(process.env.SEMANTIC_FAKE_ERROR);
       return { ok: true, json: async () => ({ embeddings: request.body.input.map(() => [1]) }) };
     };
-  `);
+  `
+  );
   const env = { ...process.env, HOME: f.root, TMPDIR: f.root, SEMANTIC_FAKE_CALLS: calls };
-  const cli = (...args) => spawnSync(process.execPath, ['--import', preload, semanticCli, ...args], { cwd: rootDir, env, encoding: 'utf8' });
+  const cli = (...args) =>
+    spawnSync(process.execPath, ['--import', preload, semanticCli, ...args], { cwd: rootDir, env, encoding: 'utf8' });
 
   const help = spawnSync(process.execPath, [semanticCli, '--help'], { cwd: rootDir, env, encoding: 'utf8' });
   assert.equal(help.status, 0);
-  for (const model of ['embeddinggemma', 'multilingual-e5-small', 'qwen3-embedding']) assert.ok(help.stdout.includes(model));
-  for (const prefix of ['task: search result | query: ', 'passage: ', 'Query: ']) assert.ok(help.stdout.includes(prefix));
+  for (const model of ['embeddinggemma', 'multilingual-e5-small', 'qwen3-embedding'])
+    assert.ok(help.stdout.includes(model));
+  for (const prefix of ['task: search result | query: ', 'passage: ', 'Query: '])
+    assert.ok(help.stdout.includes(prefix));
 
   const before = (await readdir(f.root)).sort();
-  const result = cli('--corpus', f.corpus, '--cases', f.cases, '--model', 'embeddinggemma', '--dims', '1', '--base-url', 'http://127.0.0.1:1', '--json');
+  const result = cli(
+    '--corpus',
+    f.corpus,
+    '--cases',
+    f.cases,
+    '--model',
+    'embeddinggemma',
+    '--dims',
+    '1',
+    '--base-url',
+    'http://127.0.0.1:1',
+    '--json'
+  );
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim().split('\n').length, 1);
   const report = JSON.parse(result.stdout);
@@ -128,17 +170,40 @@ test('semantic CLI provider failure is concise, nonzero, and excludes prompt, UR
   const secret = ['sk', 'test' + 'y'.repeat(24)].join('-');
   const casesFile = path.join(f.root, 'failure-cases.json');
   await writeFile(casesFile, JSON.stringify([{ id: 'failure', query: secret, relevant: ['a.md'] }]));
-  const calls = path.join(f.root, 'calls.jsonl'); await writeFile(calls, '');
+  const calls = path.join(f.root, 'calls.jsonl');
+  await writeFile(calls, '');
   const preload = path.join(f.root, 'failure-fetch.mjs');
-  await writeFile(preload, `
+  await writeFile(
+    preload,
+    `
     import fs from 'node:fs';
     globalThis.fetch = async (url, options) => {
       fs.appendFileSync(process.env.SEMANTIC_FAKE_CALLS, String(url) + '\\n');
       throw new Error(process.env.SEMANTIC_FAKE_ERROR);
     };
-  `);
+  `
+  );
   const env = { ...process.env, HOME: f.root, TMPDIR: f.root, SEMANTIC_FAKE_CALLS: calls, SEMANTIC_FAKE_ERROR: secret };
-  const result = spawnSync(process.execPath, ['--import', preload, semanticCli, '--corpus', f.corpus, '--cases', casesFile, '--model', 'local', '--dims', '1', '--base-url', 'http://127.0.0.1:1/private-path', '--json'], { cwd: rootDir, env, encoding: 'utf8' });
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import',
+      preload,
+      semanticCli,
+      '--corpus',
+      f.corpus,
+      '--cases',
+      casesFile,
+      '--model',
+      'local',
+      '--dims',
+      '1',
+      '--base-url',
+      'http://127.0.0.1:1/private-path',
+      '--json',
+    ],
+    { cwd: rootDir, env, encoding: 'utf8' }
+  );
   assert.notEqual(result.status, 0);
   assert.equal(result.stdout, '');
   assert.equal(result.stderr.trim().split('\n').length, 1);
@@ -149,13 +214,41 @@ test('semantic CLI provider failure is concise, nonzero, and excludes prompt, UR
 });
 
 test('legacy run-eval keeps dev output keys and golden metrics; natural dev remains stable at threshold zero', () => {
-  const old = runEval({ corpusDir: path.join(rootDir, 'eval/corpus'), casesFile: path.join(rootDir, 'eval/dev/cases.json'), repeat: 1 });
-  assert.deepEqual(Object.keys(old), ['recallAt5', 'precisionAt5', 'abstainAccuracy', 'trToEnRecallAt5', 'n', 'abstainThreshold', 'mrrAt10', 'ndcgAt10', 'latencyMs', 'indexBuildMs', 'byCategory', 'falsePositives']);
-  assert.deepEqual([old.recallAt5, old.precisionAt5, old.abstainAccuracy, old.trToEnRecallAt5, old.n], [1, 0.2000000000000001, 1, 1, 46]);
+  const old = runEval({
+    corpusDir: path.join(rootDir, 'eval/corpus'),
+    casesFile: path.join(rootDir, 'eval/dev/cases.json'),
+    repeat: 1,
+  });
+  assert.deepEqual(Object.keys(old), [
+    'recallAt5',
+    'precisionAt5',
+    'abstainAccuracy',
+    'trToEnRecallAt5',
+    'n',
+    'abstainThreshold',
+    'mrrAt10',
+    'ndcgAt10',
+    'latencyMs',
+    'indexBuildMs',
+    'byCategory',
+    'falsePositives',
+  ]);
+  assert.deepEqual(
+    [old.recallAt5, old.precisionAt5, old.abstainAccuracy, old.trToEnRecallAt5, old.n],
+    [1, 0.2000000000000001, 1, 1, 46]
+  );
 
-  const natural = runEval({ corpusDir: path.join(rootDir, 'eval/corpus-natural'), casesFile: path.join(rootDir, 'eval/dev/natural-cases.json'), repeat: 1, abstainThreshold: 0 });
+  const natural = runEval({
+    corpusDir: path.join(rootDir, 'eval/corpus-natural'),
+    casesFile: path.join(rootDir, 'eval/dev/natural-cases.json'),
+    repeat: 1,
+    abstainThreshold: 0,
+  });
   // BA-27: 72/95 -> 77/95. The natural golden changed only because 11 superseded-only labels were moved to their superseded_by pages (eval/dev/natural-cases.json, relevantLegacy kept); corpus and retrieval are unchanged.
-  assert.ok(Math.abs(natural.recallAt5 - 77/95) <= 1e-9, `expected natural recallAt5 77/95 (0.8105) ± 1e-9 after BA-27 label hygiene, got ${natural.recallAt5}`);
+  assert.ok(
+    Math.abs(natural.recallAt5 - 77 / 95) <= 1e-9,
+    `expected natural recallAt5 77/95 (0.8105) ± 1e-9 after BA-27 label hygiene, got ${natural.recallAt5}`
+  );
   // PM update (BA-03, 2026-11-11): identifier-aware retrieval improves natural MRR (0.687 → 0.694); guard against regression.
   assert.ok(natural.mrrAt10 >= 0.687 - 1e-3, `natural mrrAt10 regressed: ${natural.mrrAt10}`);
   assert.equal(natural.n, 100);

@@ -10,7 +10,7 @@ import { commands } from '../../../modules/semantic/src/index.mjs';
 
 const setup = commands.semanticSetup;
 const makeSecret = () => ['sk', 'test' + 'x'.repeat(24)].join('-');
-const bytes = value => new TextEncoder().encode(value);
+const bytes = (value) => new TextEncoder().encode(value);
 
 async function fixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'q-setup-acceptance-'));
@@ -22,15 +22,24 @@ async function fixture(t, options = {}) {
   const configHome = join(home, 'config');
   const stateHome = join(home, 'state');
   await Promise.all([mkdir(home, { recursive: true }), mkdir(wiki, { recursive: true })]);
-  const paths = resolvePaths({ platform: 'linux', env: {
-    HOME: home, XDG_DATA_HOME: data, XDG_CONFIG_HOME: configHome, XDG_STATE_HOME: stateHome,
-  } });
+  const paths = resolvePaths({
+    platform: 'linux',
+    env: {
+      HOME: home,
+      XDG_DATA_HOME: data,
+      XDG_CONFIG_HOME: configHome,
+      XDG_STATE_HOME: stateHome,
+    },
+  });
   const config = defaultConfig('custom');
   config.modules = ['semantic'];
   config.vault.path = vault;
   config.retrieval = { budgetChars: 4321, abstainThreshold: 0.73 };
   config.semantic = { ...config.semantic, model: 'fixture-embed:latest', dims: 2 };
-  await writeFile(join(wiki, 'evidence.md'), `# Evidence\n${options.pageText ?? 'A local fixture page for deterministic embedding.'}\n`);
+  await writeFile(
+    join(wiki, 'evidence.md'),
+    `# Evidence\n${options.pageText ?? 'A local fixture page for deterministic embedding.'}\n`
+  );
   await saveConfig(config, { paths });
   const before = await readFile(paths.configFile, 'utf8');
   const calls = [];
@@ -48,7 +57,7 @@ async function fixture(t, options = {}) {
     nodeVersion: '20.0.0',
     totalmem: () => 6 * 1024 ** 3,
     statfs: async () => ({ bavail: 1, bsize: 1024 ** 3 }),
-    access: async file => {
+    access: async (file) => {
       if (file === '/fixture/bin/ollama') return;
       throw Object.assign(new Error('not executable'), { code: 'ENOENT' });
     },
@@ -57,9 +66,12 @@ async function fixture(t, options = {}) {
       if (options.versionFailure) throw new Error('fixture version failure');
       return { stdout: 'ollama version fixture', stderr: '' };
     },
-    progress: message => progress.push(message),
+    progress: (message) => progress.push(message),
     isTTY: options.isTTY ?? false,
-    prompt: async () => { options.promptCalls = (options.promptCalls ?? 0) + 1; return options.promptAnswer ?? true; },
+    prompt: async () => {
+      options.promptCalls = (options.promptCalls ?? 0) + 1;
+      return options.promptAnswer ?? true;
+    },
     fetchImpl: async (url, request = {}) => {
       const method = request.method ?? 'GET';
       const call = { url: String(url), method, body: request.body };
@@ -94,9 +106,28 @@ async function fixture(t, options = {}) {
       throw new Error('unexpected fixture endpoint');
     },
   };
-  const result = { root, home, vault, wiki, paths, config, before, ctx, calls, execs, progress,
-    get embedDocumentsCount() { return embedDocumentsCount; }, get embedQueriesCount() { return embedQueriesCount; },
-    get promptCalls() { return options.promptCalls ?? 0; } };
+  const result = {
+    root,
+    home,
+    vault,
+    wiki,
+    paths,
+    config,
+    before,
+    ctx,
+    calls,
+    execs,
+    progress,
+    get embedDocumentsCount() {
+      return embedDocumentsCount;
+    },
+    get embedQueriesCount() {
+      return embedQueriesCount;
+    },
+    get promptCalls() {
+      return options.promptCalls ?? 0;
+    },
+  };
   fixtureFetch.set(result, ctx.fetchImpl);
   return result;
 }
@@ -125,17 +156,23 @@ function assertOnlyLoopbackGet(calls) {
   }
 }
 
-test('successful setup enables semantic last, preserves retrieval/config, and is idempotent', async t => {
+test('successful setup enables semantic last, preserves retrieval/config, and is idempotent', async (t) => {
   const f = await fixture(t);
   const first = await run(f, ['--yes', '--json', '--mode', 'rrf']);
   assert.equal(first.exitCode, 0);
-  assert.deepEqual(Object.values(first.report.steps).map(step => step.status), ['ok', 'ok', 'ok', 'skipped', 'ok', 'ok', 'ok']);
+  assert.deepEqual(
+    Object.values(first.report.steps).map((step) => step.status),
+    ['ok', 'ok', 'ok', 'skipped', 'ok', 'ok', 'ok']
+  );
   assert.equal(first.report.mode, 'rrf');
   assert.equal(f.embedDocumentsCount, 1);
   assert.equal(f.embedQueriesCount, 1);
-  assert.deepEqual(f.execs.map(item => item.args), [['--version']]);
+  assert.deepEqual(
+    f.execs.map((item) => item.args),
+    [['--version']]
+  );
   assert.equal(f.execs[0].options.timeout, 3000);
-  assert.ok(f.calls.every(call => new URL(call.url).hostname === '127.0.0.1'));
+  assert.ok(f.calls.every((call) => new URL(call.url).hostname === '127.0.0.1'));
 
   const saved = JSON.parse(await readFile(f.paths.configFile, 'utf8'));
   assert.equal(saved.semantic.enabled, true);
@@ -159,7 +196,7 @@ test('successful setup enables semantic last, preserves retrieval/config, and is
   assert.equal(await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8'), savedIndexText);
 });
 
-test('dry-run and non-TTY runs make only loopback GETs and leave config and state untouched', async t => {
+test('dry-run and non-TTY runs make only loopback GETs and leave config and state untouched', async (t) => {
   for (const args of [[], ['--dry-run'], ['--dry-run', '--yes']]) {
     const f = await fixture(t);
     const result = await run(f, args);
@@ -167,8 +204,11 @@ test('dry-run and non-TTY runs make only loopback GETs and leave config and stat
     assertOnlyLoopbackGet(f.calls);
     assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
     await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.json')));
-    assert.deepEqual(f.execs.map(item => item.args), [['--version']]);
-  assert.equal(f.promptCalls, 0);
+    assert.deepEqual(
+      f.execs.map((item) => item.args),
+      [['--version']]
+    );
+    assert.equal(f.promptCalls, 0);
   }
 
   const missing = await fixture(t, { modelInstalled: false });
@@ -180,7 +220,7 @@ test('dry-run and non-TTY runs make only loopback GETs and leave config and stat
   await assert.rejects(readFile(join(missing.paths.stateDir, 'semantic', 'index.json')));
 });
 
-test('interactive decline and missing wiki are safe and actionable', async t => {
+test('interactive decline and missing wiki are safe and actionable', async (t) => {
   const declined = await fixture(t, { isTTY: true, promptAnswer: false });
   const answer = await setup(['--json'], declined.ctx);
   const declineReport = JSON.parse(answer.output);
@@ -202,23 +242,55 @@ test('interactive decline and missing wiki are safe and actionable', async t => 
   assert.equal(await readFile(missing.paths.configFile, 'utf8'), missing.before);
 });
 
-test('missing Ollama, stopped server, failed model pull, index failure, and probe failure preserve config and give a next step', async t => {
+test('missing Ollama, stopped server, failed model pull, index failure, and probe failure preserve config and give a next step', async (t) => {
   const cases = [
-    { name: 'ollama', next: /ollama\.com\/download/u, configure: f => { f.ctx.access = async () => { throw new Error('absent'); }; } },
-    { name: 'server', next: /ollama serve/u, configure: f => { f.ctx.fetchImpl = async (url, request = {}) => {
-      if (String(url).endsWith('/api/version')) throw new Error('offline');
-      return fFetch(f, url, request);
-    }; } },
-    { name: 'model', next: /server|disk|semanticSetup/u, configure: f => { f.ctx.fetchImpl = async (url, request = {}) => {
-      if (String(url).endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [] }) };
-      if (String(url).endsWith('/api/pull')) return { ok: false, status: 500 };
-      return fFetch(f, url, request);
-    }; } },
-    { name: 'index', next: /vault|model|state|semanticSetup/u, configure: f => { f.ctx.fetchImpl = failingFetch(f, { failIndex: true }); } },
-    { name: 'probe', next: /vault|model|semanticSetup/u, configure: f => { f.ctx.fetchImpl = failingFetch(f, { failProbe: true }); } },
+    {
+      name: 'ollama',
+      next: /ollama\.com\/download/u,
+      configure: (f) => {
+        f.ctx.access = async () => {
+          throw new Error('absent');
+        };
+      },
+    },
+    {
+      name: 'server',
+      next: /ollama serve/u,
+      configure: (f) => {
+        f.ctx.fetchImpl = async (url, request = {}) => {
+          if (String(url).endsWith('/api/version')) throw new Error('offline');
+          return fFetch(f, url, request);
+        };
+      },
+    },
+    {
+      name: 'model',
+      next: /server|disk|semanticSetup/u,
+      configure: (f) => {
+        f.ctx.fetchImpl = async (url, request = {}) => {
+          if (String(url).endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [] }) };
+          if (String(url).endsWith('/api/pull')) return { ok: false, status: 500 };
+          return fFetch(f, url, request);
+        };
+      },
+    },
+    {
+      name: 'index',
+      next: /vault|model|state|semanticSetup/u,
+      configure: (f) => {
+        f.ctx.fetchImpl = failingFetch(f, { failIndex: true });
+      },
+    },
+    {
+      name: 'probe',
+      next: /vault|model|semanticSetup/u,
+      configure: (f) => {
+        f.ctx.fetchImpl = failingFetch(f, { failProbe: true });
+      },
+    },
   ];
   for (const scenario of cases) {
-    await t.test(scenario.name, async t => {
+    await t.test(scenario.name, async (t) => {
       const f = await fixture(t);
       scenario.configure(f);
       const result = await run(f);
@@ -226,7 +298,7 @@ test('missing Ollama, stopped server, failed model pull, index failure, and prob
       assert.equal(result.report.steps[scenario.name].status, 'action-needed');
       assert.match(result.report.next, scenario.next);
       assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
-      assert.ok(f.execs.every(item => JSON.stringify(item.args) === '["--version"]'));
+      assert.ok(f.execs.every((item) => JSON.stringify(item.args) === '["--version"]'));
     });
   }
 });
@@ -241,12 +313,20 @@ function failingFetch(f, failure) {
   const original = f.ctx.fetchImpl;
   fixtureFetch.set(f, original);
   return async (url, request = {}) => {
-    if (failure.failIndex && String(url).endsWith('/api/embed') && !JSON.parse(request.body).input[0]?.startsWith(f.config.semantic.queryPrefix)) {
+    if (
+      failure.failIndex &&
+      String(url).endsWith('/api/embed') &&
+      !JSON.parse(request.body).input[0]?.startsWith(f.config.semantic.queryPrefix)
+    ) {
       f.ctx.fetchImpl = original;
       f.calls.push({ url: String(url), method: request.method, body: request.body });
       return { ok: false, status: 500 };
     }
-    if (failure.failProbe && String(url).endsWith('/api/embed') && JSON.parse(request.body).input[0]?.startsWith(f.config.semantic.queryPrefix)) {
+    if (
+      failure.failProbe &&
+      String(url).endsWith('/api/embed') &&
+      JSON.parse(request.body).input[0]?.startsWith(f.config.semantic.queryPrefix)
+    ) {
       f.calls.push({ url: String(url), method: request.method, body: request.body });
       return { ok: false, status: 500 };
     }
@@ -254,25 +334,25 @@ function failingFetch(f, failure) {
   };
 }
 
-test('missing model can be pulled only after --yes, then completes with the configured model', async t => {
+test('missing model can be pulled only after --yes, then completes with the configured model', async (t) => {
   const f = await fixture(t, { modelInstalled: false });
   const result = await setup(['--yes'], f.ctx);
   assert.equal(result.exitCode, 0);
   assert.match(result.output, /model: ok/u);
-  const pull = f.calls.find(call => call.url.endsWith('/api/pull'));
+  const pull = f.calls.find((call) => call.url.endsWith('/api/pull'));
   assert.ok(pull);
   assert.equal(pull.method, 'POST');
   assert.deepEqual(JSON.parse(pull.body), { model: f.config.semantic.model, stream: true });
-  assert.ok(f.progress.some(message => message.includes('240 MB')));
+  assert.ok(f.progress.some((message) => message.includes('240 MB')));
   assert.equal(JSON.parse(await readFile(f.paths.configFile, 'utf8')).semantic.enabled, true);
 });
 
-test('remote and credential URLs fail before any request and do not echo credentials', async t => {
+test('remote and credential URLs fail before any request and do not echo credentials', async (t) => {
   const secret = makeSecret();
   for (const baseUrl of ['https://remote.invalid', `http://${secret}@127.0.0.1:11434`]) {
     const f = await fixture(t);
     f.ctx.config.semantic.baseUrl = baseUrl;
-    await assert.rejects(setup(['--yes', '--json'], f.ctx), error => {
+    await assert.rejects(setup(['--yes', '--json'], f.ctx), (error) => {
       assert.equal(error.code, 'E_SEMANTIC_PROVIDER');
       assert.ok(!String(error.message + error.stack).includes(secret));
       assert.ok(!String(error.message + error.stack).includes(baseUrl));
@@ -283,7 +363,7 @@ test('remote and credential URLs fail before any request and do not echo credent
   }
 });
 
-test('bad arguments and malformed tags do not change config or proceed to indexing', async t => {
+test('bad arguments and malformed tags do not change config or proceed to indexing', async (t) => {
   const invalid = await fixture(t);
   await assert.rejects(setup(['--mode', 'other'], invalid.ctx), { code: 'E_ARGUMENT' });
   assert.equal(invalid.calls.length, 0);
@@ -294,11 +374,11 @@ test('bad arguments and malformed tags do not change config or proceed to indexi
   assert.equal(result.exitCode, 2);
   assert.equal(result.report.steps.model.status, 'action-needed');
   assert.match(result.report.next, /semanticSetup/u);
-  assert.equal(malformed.calls.filter(call => call.url.endsWith('/api/pull')).length, 0);
+  assert.equal(malformed.calls.filter((call) => call.url.endsWith('/api/pull')).length, 0);
   assert.equal(await readFile(malformed.paths.configFile, 'utf8'), malformed.before);
 });
 
-test('setup output does not expose page text or provider errors; corpus symlinks and state symlinks stay contained', async t => {
+test('setup output does not expose page text or provider errors; corpus symlinks and state symlinks stay contained', async (t) => {
   const secret = makeSecret();
   const outsideSecret = `${makeSecret()}-outside`;
   const f = await fixture(t, { pageText: `Local note ${secret}`, failProbe: true, errorText: secret });
@@ -309,8 +389,12 @@ test('setup output does not expose page text or provider errors; corpus symlinks
   const result = await run(f);
   assert.equal(result.exitCode, 2);
   assert.ok(!`${result.output}${JSON.stringify(result.report)}${f.progress.join('\n')}`.includes(secret));
-  assert.ok(f.calls.every(call => new URL(call.url).hostname === '127.0.0.1'));
-  assert.ok(f.calls.filter(call => call.url.endsWith('/api/embed')).every(call => JSON.parse(call.body).input.every(text => !text.includes(outsideSecret))));
+  assert.ok(f.calls.every((call) => new URL(call.url).hostname === '127.0.0.1'));
+  assert.ok(
+    f.calls
+      .filter((call) => call.url.endsWith('/api/embed'))
+      .every((call) => JSON.parse(call.body).input.every((text) => !text.includes(outsideSecret)))
+  );
 
   const g = await fixture(t);
   await mkdir(outsideDir);
@@ -325,7 +409,7 @@ test('setup output does not expose page text or provider errors; corpus symlinks
   assert.equal(await readFile(g.paths.configFile, 'utf8'), g.before);
 });
 
-test('vault path traversal cannot redirect semantic state writes outside the injected HOME', async t => {
+test('vault path traversal cannot redirect semantic state writes outside the injected HOME', async (t) => {
   const f = await fixture(t);
   f.ctx.config.vault.path = '../vault';
   const result = await run(f);
@@ -336,7 +420,7 @@ test('vault path traversal cannot redirect semantic state writes outside the inj
   assert.equal(JSON.parse(await readFile(f.paths.configFile, 'utf8')).semantic.enabled, true);
 });
 
-test('runtime and resource preflight boundaries are explicit', async t => {
+test('runtime and resource preflight boundaries are explicit', async (t) => {
   const boundary = await fixture(t);
   boundary.ctx.nodeVersion = '20.0.0';
   boundary.ctx.totalmem = () => 6 * 1024 ** 3;
@@ -369,12 +453,16 @@ test('source has no shell-installer pattern and docs use the semanticSetup comma
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       if (entry.name === 'node_modules' || entry.name === '.git') continue;
       const file = join(directory, entry.name);
-      if (entry.isDirectory()) files.push(...await collectSourceFiles(file));
+      if (entry.isDirectory()) files.push(...(await collectSourceFiles(file)));
       else if (entry.isFile() && /\.(?:mjs|cjs|js|sh)$/u.test(entry.name)) files.push(file);
     }
     return files;
   }
-  const sourceFiles = (await Promise.all(['modules', 'packages', 'scripts', 'release'].map(directory => collectSourceFiles(resolve(root, directory))))).flat();
+  const sourceFiles = (
+    await Promise.all(
+      ['modules', 'packages', 'scripts', 'release'].map((directory) => collectSourceFiles(resolve(root, directory)))
+    )
+  ).flat();
   for (const file of sourceFiles) {
     const source = await readFile(file, 'utf8');
     assert.doesNotMatch(source, /curl\s*\|\s*(?:sh|bash)/iu, file);
@@ -407,10 +495,13 @@ test('source has no shell-installer pattern and docs use the semanticSetup comma
   assert.match(semanticDocs, /brainatlas config set semantic\.enabled false/u);
   assert.match(installDocs, /brainatlas-<v>-distribution\.tar\.gz/u);
   assert.match(installDocs, /empty directory|boş dizin/iu);
-  for (const command of ['semanticSetup', 'semanticIndex', 'semanticStatus']) assert.ok(Object.hasOwn(commands, command), `${command} must be an exported module command`);
+  for (const command of ['semanticSetup', 'semanticIndex', 'semanticStatus'])
+    assert.ok(Object.hasOwn(commands, command), `${command} must be an exported module command`);
   assert.match(troubleshooting, /brainatlas semanticIndex\b/u);
   assert.match(troubleshooting, /brainatlas semanticStatus\b/u);
-  const documentedSemanticCommands = [...`${semanticDocs}\n${troubleshooting}`.matchAll(/\bbrainatlas\s+(semantic[A-Z][A-Za-z]+)\b/gu)].map(match => match[1]);
+  const documentedSemanticCommands = [
+    ...`${semanticDocs}\n${troubleshooting}`.matchAll(/\bbrainatlas\s+(semantic[A-Z][A-Za-z]+)\b/gu),
+  ].map((match) => match[1]);
   assert.ok(documentedSemanticCommands.length > 0);
-  assert.ok(documentedSemanticCommands.every(command => Object.hasOwn(commands, command)));
+  assert.ok(documentedSemanticCommands.every((command) => Object.hasOwn(commands, command)));
 });

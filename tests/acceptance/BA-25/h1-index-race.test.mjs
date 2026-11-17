@@ -11,25 +11,40 @@ async function raceIndex(t, root) {
   const f = await makeFixture(t);
   const a = await openClient(t, root, f, 'proc-a');
   const b = await openClient(t, root, f, 'proc-b');
-  let lost = 0, failed = 0, invalidRounds = 0, invalidSamples = [];
+  let lost = 0,
+    failed = 0,
+    invalidRounds = 0,
+    invalidSamples = [];
   for (let r = 0; r < ROUNDS; r++) {
-    const nameA = `ba25 idx a ${r}`, nameB = `ba25 idx b ${r}`;
+    const nameA = `ba25 idx a ${r}`,
+      nameB = `ba25 idx b ${r}`;
     const [ra, rb] = await Promise.all([
       call(a.client, 'wiki_create_concept', { name: nameA, content: `Body A ${r}.` }),
       call(b.client, 'wiki_create_concept', { name: nameB, content: `Body B ${r}.` }),
     ]);
-    for (const [result, name] of [[ra, nameA], [rb, nameB]]) {
-      if (result.isError) { failed++; continue; }
+    for (const [result, name] of [
+      [ra, nameA],
+      [rb, nameB],
+    ]) {
+      if (result.isError) {
+        failed++;
+        continue;
+      }
       const link = `](concepts/${name.replace(/ /g, '-')}.md)`;
       // Page written but no index line: a lost index update.
       if (!(await readText(f.indexFile)).includes(link)) lost++;
     }
     const index = await readText(f.indexFile);
     const bad = invalidIndexLines(index);
-    if (bad.length) { invalidRounds++; if (invalidSamples.length < 3) invalidSamples.push(bad.slice(0, 2)); }
+    if (bad.length) {
+      invalidRounds++;
+      if (invalidSamples.length < 3) invalidSamples.push(bad.slice(0, 2));
+    }
   }
   // Every created page must be listed by the Wiki list too (both processes saw the whole vault).
-  const listed = JSON.parse(textOf(await call(a.client, 'wiki_list_pages', {}))).pages.filter((p) => /wiki\/concepts\/ba25-idx-[ab]-\d+\.md$/.test(p)).length;
+  const listed = JSON.parse(textOf(await call(a.client, 'wiki_list_pages', {}))).pages.filter((p) =>
+    /wiki\/concepts\/ba25-idx-[ab]-\d+\.md$/.test(p)
+  ).length;
   return { rounds: ROUNDS, lost, failed, invalidRounds, invalidSamples, listedNewPages: listed };
 }
 

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added Prettier as a development-only formatter (`npm run format`, `npm run format:check`): the JavaScript sources are formatted once with the shared `.prettierrc.json`, CI runs `npm run format:check` after `npm run typecheck`, and the supply-chain guard allows the pinned dev-only root `prettier`; no formatting or behaviour change beyond whitespace, and no release archive changes.
 - Added TypeScript `checkJs` type checking without a build or emit: `npm run typecheck` runs `tsc -p tsconfig.json` over the product code, CI runs it after `npm run lint`, and the supply-chain guard allows the pinned dev-only roots `typescript` and `@types/node`; no runtime dependency and no release archive changes.
 - Added ESLint (flat config) as a development-only tool: `npm run lint` is lint-clean, CI runs it after `npm run guard`, and the supply-chain guard allows the pinned dev-only roots `eslint`, `@eslint/js` and `globals`; no runtime dependency and no release archive changes.
 - Added `npm run release:verify -- --dir <folder>` (`scripts/release-verify.mjs`) to check a built release folder's required files, checksums, allowed signers copy, signature, distribution contents and version, and to run a clean install with `brainatlas doctor`.

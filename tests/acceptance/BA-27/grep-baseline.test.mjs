@@ -8,7 +8,9 @@ import { join } from 'node:path';
 import { grepRanking, runGrepBaseline } from '../../../eval/grep-baseline.mjs';
 
 const dirs = [];
-process.on('exit', () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+process.on('exit', () => {
+  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+});
 
 // Toy corpus. Matching lines per term are counted per line (a line with "kiwi kiwi" counts once).
 //   a.md: "kiwi kiwi mango"          -> kiwi 1 line, mango 1 line
@@ -55,15 +57,19 @@ test('BA-27 grep: query folding follows the Turkish rule (IŞIK matches ışık)
 test('BA-27 grep: recallAt5, mrrAt10, currentFirstRate on seven cases (hand values in comments)', () => {
   const dir = corpus();
   const casesFile = join(dir, 'cases.json');
-  writeFileSync(casesFile, JSON.stringify([
-    { id: 'g1', query: 'kiwi', relevant: ['b.md'] },                                   // ranking e,a,b,c -> b at 3: recall 1, rr 1/3
-    { id: 'g2', query: 'papaya', relevant: ['d.md'] },                                  // c,d -> d at 2: recall 1, rr 1/2
-    { id: 'g3', query: 'kiwi mango papaya', relevant: ['d.md'] },                      // d at 5: recall 1 (top 5), rr 1/5
-    { id: 'g4', query: 'xylophone', relevant: ['a.md'] },                              // no match: recall 0, rr 0
-    { id: 'g5', query: 'xylophone', relevant: [], abstain: true },                     // not answerable: excluded
-    { id: 'g6', query: 'kiwi', relevant: ['e.md'], category: 'current-state' },         // e at 1: recall 1, rr 1, current hit
-    { id: 'g7', query: 'papaya', relevant: ['d.md'], category: 'current-state' },       // c first: recall 1, rr 1/2, current miss
-  ]), 'utf8');
+  writeFileSync(
+    casesFile,
+    JSON.stringify([
+      { id: 'g1', query: 'kiwi', relevant: ['b.md'] }, // ranking e,a,b,c -> b at 3: recall 1, rr 1/3
+      { id: 'g2', query: 'papaya', relevant: ['d.md'] }, // c,d -> d at 2: recall 1, rr 1/2
+      { id: 'g3', query: 'kiwi mango papaya', relevant: ['d.md'] }, // d at 5: recall 1 (top 5), rr 1/5
+      { id: 'g4', query: 'xylophone', relevant: ['a.md'] }, // no match: recall 0, rr 0
+      { id: 'g5', query: 'xylophone', relevant: [], abstain: true }, // not answerable: excluded
+      { id: 'g6', query: 'kiwi', relevant: ['e.md'], category: 'current-state' }, // e at 1: recall 1, rr 1, current hit
+      { id: 'g7', query: 'papaya', relevant: ['d.md'], category: 'current-state' }, // c first: recall 1, rr 1/2, current miss
+    ]),
+    'utf8'
+  );
   const r = runGrepBaseline({ corpusDir: dir, casesFile });
   assert.equal(r.n, 7, 'n counts every case including abstaining ones');
   // answerable = g1..g4, g6, g7 (6 cases); recall = (1+1+1+0+1+1)/6 = 5/6
