@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: MIT
-// BA-25 hypothesis 3 (guard), part A: calls without expectedSha256 must behave exactly like main.
-// The same call sequence runs against a main server and a candidate server on identical vault copies. Replies and the
-// final Wiki files must match after normalising wall-clock timestamps. Two intentional, documented differences are
-// removed before comparison: wiki_read_page carries the new `sha256` field, and wiki_status carries the `indexAgeMs`
-// clock value. The test skips itself once main contains the lock module (then main is no longer the old behaviour).
+// BA-25 hypothesis 3 (guard), part A: the candidate's calls without expectedSha256 leave no lock or temporary file
+// behind. Hermetic: two fixture runs, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
-import { existsSync } from 'node:fs';
-import { makeFixture, openClient, call, textOf, page, secret, filesUnder, WT, MAIN, mainHasFeature, LOCK_NAME } from './harness.mjs';
+import { relative } from 'node:path';
+import { makeFixture, openClient, call, textOf, page, secret, filesUnder, WT, LOCK_NAME } from './harness.mjs';
 
 const TS = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g;
 const normalize = (value) => JSON.parse(JSON.stringify(value).replace(TS, '<TS>'));
@@ -56,22 +52,6 @@ async function runScript(t, root) {
   for (const path of await filesUnder(f.wikiDir)) tree[relative(f.wikiDir, path)] = (await readFile(path, 'utf8')).replace(TS, '<TS>');
   return { replies, tree, f };
 }
-
-test('guard A: candidate replies and final Wiki files equal main for calls without expectedSha256', { skip: mainHasFeature ? 'feature already present in main' : false }, async (t) => {
-  const main = await runScript(t, MAIN);
-  const cand = await runScript(t, WT);
-  assert.equal(cand.replies.length, main.replies.length);
-  for (let i = 0; i < main.replies.length; i++) {
-    assert.deepEqual(cand.replies[i], main.replies[i], `reply ${i} (${SCRIPT[i][0]}) differs from main`);
-  }
-  assert.deepEqual(Object.keys(cand.tree).sort(), Object.keys(main.tree).sort(), 'same file set in the Wiki');
-  for (const key of Object.keys(main.tree)) assert.equal(cand.tree[key], main.tree[key], `file ${key} differs from main`);
-  // The lock file must not survive the run.
-  assert.equal(existsSync(join(cand.f.wikiDir, LOCK_NAME)), false);
-  // Sanity: the script really exercised writes and refusals (guards against a vacuous comparison).
-  assert.ok(main.replies.some((r) => r.isError), 'script includes refused calls');
-  assert.ok(main.replies.some((r) => !r.isError && r.name === 'wiki_add_crosslinks'), 'script includes a successful crosslink');
-});
 
 test('guard A (candidate only): the script ends with no lock file and no temporary file in the Wiki', async (t) => {
   const cand = await runScript(t, WT);

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // BA-29 independent acceptance, hypothesis 4 (read access). Pages excluded from search results (wiki/index.md, wiki/log.md,
 // wiki/AGENTS.md, wiki/CLAUDE.md, wiki/GEMINI.md) stay readable through wiki_read_page, wiki_read_index, wiki_list_pages and
-// wiki_status, exactly as main answers them. The search-side check (wiki_query never returns them) runs on the candidate only.
-// Main is the checkout that holds the git common directory; the main comparison skips when main already has the BA-29 scope.
+// wiki_status. The search-side check (wiki_query never returns them) runs on the candidate only.
 // Hermetic: temporary directories and an in-memory MCP transport; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,20 +9,14 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CAND = resolve(here, '..', '..', '..');
-const common = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd: CAND, encoding: 'utf8' }).stdout.trim();
-const MAIN = resolve(CAND, common, '..');
 const dirs = [];
 process.on('exit', () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 const tmp = (p) => { const d = mkdtempSync(join(tmpdir(), `ba29-read-${p}-`)); dirs.push(d); return d; };
-
-const mainHasScope = (await import(pathToFileURL(join(MAIN, 'packages/core/src/retrieval/index.mjs')).href)).searchScope !== undefined;
-const skipMain = mainHasScope ? 'main already has the BA-29 scope' : false;
 
 const FILES = {
   'wiki/index.md': '---\ntitle: Index\nstatus: active\n---\n# Index\n\n- [[alpha]] zyqorvex gateway entry\n',
@@ -71,35 +64,6 @@ async function session(mcp, root, v) {
   };
   return { call, close: async () => { await client.close(); await server.close(); } };
 }
-
-const READS = [
-  ['wiki_read_page', { path: 'index.md' }],
-  ['wiki_read_page', { path: 'log.md' }],
-  ['wiki_read_page', { path: 'AGENTS.md' }],
-  ['wiki_read_page', { path: 'CLAUDE.md' }],
-  ['wiki_read_page', { path: 'GEMINI.md' }],
-  ['wiki_read_page', { path: 'alpha.md' }],
-  ['wiki_read_page', { path: 'sub/index.md' }],
-  ['wiki_read_index', {}],
-  ['wiki_list_pages', {}],
-  ['wiki_list_pages', { type: 'entity' }],
-  ['wiki_status', {}],
-];
-
-test('read access 4a: read tools answer the excluded wiki pages exactly as main does', { skip: skipMain }, async () => {
-  const M = await load(MAIN), C = await load(CAND);
-  const mSession = await session(M, MAIN, vault());
-  const cSession = await session(C, CAND, vault());
-  try {
-    for (const [name, args] of READS) {
-      const a = await mSession.call(name, args);
-      const b = await cSession.call(name, args);
-      assert.deepEqual(b, a, `${name} ${JSON.stringify(args)} differs from main`);
-    }
-  } finally {
-    await mSession.close(); await cSession.close();
-  }
-});
 
 test('read access 4b: the excluded pages are readable on the candidate, with content', async () => {
   const C = await load(CAND);

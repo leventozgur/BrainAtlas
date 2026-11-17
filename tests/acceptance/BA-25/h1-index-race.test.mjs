@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // BA-25 hypothesis 1 (index loss): two separate MCP server processes create different pages at the same time, >= 50 rounds.
 // Candidate criterion: lost index lines = 0, index valid Markdown every round, no failed call.
-// The main baseline is informational only and skips itself once main contains the lock module.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readText, makeFixture, openClient, call, textOf, invalidIndexLines, metric, WT, MAIN, mainHasFeature } from './harness.mjs';
+import { readText, makeFixture, openClient, call, textOf, invalidIndexLines, metric, WT } from './harness.mjs';
 
 const ROUNDS = 50;
 
@@ -33,13 +32,6 @@ async function raceIndex(t, root) {
   const listed = JSON.parse(textOf(await call(a.client, 'wiki_list_pages', {}))).pages.filter((p) => /wiki\/concepts\/ba25-idx-[ab]-\d+\.md$/.test(p)).length;
   return { rounds: ROUNDS, lost, failed, invalidRounds, invalidSamples, listedNewPages: listed };
 }
-
-test('H1 main baseline (information only): index loss rate under two processes', { skip: mainHasFeature ? 'feature already present in main' : false }, async (t) => {
-  const result = await raceIndex(t, MAIN);
-  metric('H1.main', result);
-  // Informational: the baseline is expected to lose lines; the number is reported, not gated.
-  assert.equal(result.rounds, ROUNDS);
-});
 
 test('H1 candidate: two processes, 50 rounds, no lost index line and valid Markdown every round', async (t) => {
   const result = await raceIndex(t, WT);

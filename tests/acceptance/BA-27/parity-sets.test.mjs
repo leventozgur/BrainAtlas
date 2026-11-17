@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: MIT
-// BA-27 independent acceptance (parity, determinism, set validity). Written from the brief only.
-// The main-checkout comparisons skip themselves once main carries BA-27 (its ba-suite then has the new keys).
+// BA-27 independent acceptance (determinism, set validity). Written from the brief only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { KINDS, validateCase } from '../../../eval/lib/case-schema.mjs';
 import { runGrepBaseline } from '../../../eval/grep-baseline.mjs';
-import { runBaSuite } from '../../../eval/ba-suite.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..', '..', '..');
@@ -30,10 +28,6 @@ function walkFiles(root, base = root) {
   }
   return out.sort();
 }
-
-const TIMING = new Set(['latencyMs', 'indexBuildMs', 'durationMs']);
-const strip = (v) => JSON.parse(JSON.stringify(v, (k, x) => (TIMING.has(k) ? undefined : x)));
-const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, obj[k]]));
 
 // ---------- determinism of the dev generators ----------
 
@@ -103,47 +97,7 @@ test('BA-27 set validity: hookRealistic has 72 cases with the documented kind mi
   assert.ok(cases.filter((c) => c.kind === 'operational').every((c) => c.abstain === true));
 });
 
-// ---------- parity with main (skips once main carries BA-27) ----------
-
-const OLD_KEYS = ['cases', 'xling', 'identifier', 'currentState', 'multihop', 'nearNegative'];
-const mainRoot = (() => {
-  try {
-    const common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: ROOT, encoding: 'utf8' }).trim();
-    return dirname(resolve(ROOT, common));
-  } catch { return null; }
-})();
-const mainSuiteFile = mainRoot ? join(mainRoot, 'eval', 'ba-suite.mjs') : null;
-const mainSource = mainSuiteFile && existsSync(mainSuiteFile) ? readFileSync(mainSuiteFile, 'utf8') : null;
-const mainHasBa27 = mainSource ? mainSource.includes('hookRealistic') : true;
-
-test('BA-27 parity: the six unchanged BM25 sets equal main (times excluded); natural and hook differ only by the label hygiene, proven both ways', async (t) => {
-  if (!mainSource) return t.skip('main checkout or its ba-suite not found');
-  if (mainHasBa27) return t.skip('main already carries BA-27 keys; compare against the pre-BA-27 snapshot instead');
-  const { runBaSuite: runMain } = await import(pathToFileURL(mainSuiteFile).href);
-  const cand = strip(await runBaSuite());
-  const main = strip(await runMain());
-  for (const key of OLD_KEYS) assert.deepEqual(cand[key], main[key], `${key} differs from main`);
-
-  const mainHookKeys = Object.keys(main.hook);
-  // Proof A: the candidate evaluator with main's natural labels equals main on natural and on the old hook keys.
-  const copyA = join(tempDir('proofA'), 'root');
-  cpSync(EVAL, join(copyA, 'eval'), { recursive: true, filter: skipHolder });
-  cpSync(join(ROOT, 'packages'), join(copyA, 'packages'), { recursive: true });
-  cpSync(join(ROOT, 'modules'), join(copyA, 'modules'), { recursive: true });
-  cpSync(join(ROOT, 'docs'), join(copyA, 'docs'), { recursive: true });
-  cpSync(join(mainRoot, 'eval', 'dev', 'natural-cases.json'), join(copyA, 'eval', 'dev', 'natural-cases.json'));
-  const candOld = strip(await runBaSuite({ sourceRoot: join(copyA, 'eval') }));
-  assert.deepEqual(candOld.natural, main.natural, 'proof A natural');
-  assert.deepEqual(pick(candOld.hook, mainHookKeys), main.hook, 'proof A hook (old keys)');
-
-  // Proof B: main's evaluator with the candidate's natural labels equals the candidate on natural and old hook keys.
-  const copyB = join(tempDir('proofB'), 'eval');
-  cpSync(join(mainRoot, 'eval'), copyB, { recursive: true, filter: (src) => !src.startsWith(join(mainRoot, 'eval', 'holdout')) });
-  cpSync(join(EVAL, 'dev', 'natural-cases.json'), join(copyB, 'dev', 'natural-cases.json'));
-  const mainNew = strip(await runMain({ sourceRoot: copyB }));
-  assert.deepEqual(mainNew.natural, cand.natural, 'proof B natural');
-  assert.deepEqual(pick(cand.hook, mainHookKeys), mainNew.hook, 'proof B hook (old keys)');
-});
+// ---------- label hygiene of the changed natural cases ----------
 
 test('BA-27 label hygiene: exactly the 11 documented natural cases changed; each old label is superseded and points to its replacement', () => {
   const now = JSON.parse(readFileSync(join(EVAL, 'dev', 'natural-cases.json'), 'utf8'));

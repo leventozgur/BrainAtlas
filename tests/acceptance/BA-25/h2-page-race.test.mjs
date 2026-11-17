@@ -2,11 +2,11 @@
 // BA-25 hypothesis 2 (page loss): two separate MCP server processes read the same page hash and both write different
 // content with expectedSha256 at the same time, >= 50 rounds. Candidate criterion, per round: exactly one success and one
 // E_CONFLICT; the final file is the winner's content; lost updates = 0; the E_CONFLICT reply has no page content or hash;
-// the log has no entry for the failed write. The main baseline is informational and skips once main has the feature.
+// the log has no entry for the failed write.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { readText, makeFixture, openClient, call, textOf, isErr, okJson, page, metric, WT, MAIN, mainHasFeature, sha256 } from './harness.mjs';
+import { readText, makeFixture, openClient, call, textOf, isErr, okJson, page, metric, WT, sha256 } from './harness.mjs';
 
 const ROUNDS = 50;
 const PAGE = 'concepts/ba25-cas.md';
@@ -65,12 +65,6 @@ async function racePage(t, root) {
   }
   return stats;
 }
-
-test('H2 main baseline (information only): lost updates under expectedSha256 race', { skip: mainHasFeature ? 'feature already present in main' : false }, async (t) => {
-  const stats = await racePage(t, MAIN);
-  metric('H2.main', stats);
-  assert.equal(stats.rounds, ROUNDS);
-});
 
 test('H2 candidate: two processes, 50 rounds, one success + one E_CONFLICT per round, zero lost updates', async (t) => {
   const stats = await racePage(t, WT);
