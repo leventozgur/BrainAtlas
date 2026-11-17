@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `brainatlas maintain --fix (--plan | --apply) [--sources]`: a safe, mechanical repair mode on top of the read-only report. It appends one index line per unlisted page under the page folder's H2 section (or `## Unsorted (maintain --fix)`), rewrites a broken wikilink to plain text when exactly one vault-root `archive/` file matches, and with `--sources` lists existing, unlinked `sources` files under `## Source files`. `--plan` writes nothing; `--apply` runs under the Wiki write lock, proves line by line that no original line was lost (`E_FIX_VERIFY`), writes atomically, adds one content-free `wiki/log.md` entry per changed file and is idempotent. Everything else stays report-only in `unfixed`. On a 300-page vault `--plan` took about 1 s. See docs/user/maintain.md.
+
 - Added TypeScript `checkJs` type checking without a build or emit: `npm run typecheck` runs `tsc -p tsconfig.json` over the product code, CI runs it after `npm run lint`, and the supply-chain guard allows the pinned dev-only roots `typescript` and `@types/node`; no runtime dependency and no release archive changes.
 - Added ESLint (flat config) as a development-only tool: `npm run lint` is lint-clean, CI runs it after `npm run guard`, and the supply-chain guard allows the pinned dev-only roots `eslint`, `@eslint/js` and `globals`; no runtime dependency and no release archive changes.
 - Added `npm run release:verify -- --dir <folder>` (`scripts/release-verify.mjs`) to check a built release folder's required files, checksums, allowed signers copy, signature, distribution contents and version, and to run a clean install with `brainatlas doctor`.

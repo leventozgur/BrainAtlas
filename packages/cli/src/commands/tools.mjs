@@ -6,6 +6,7 @@ import { loadConfig, vaultId } from '@brainatlas/core';
 import { recordCreatedDirectories, missingDirectories } from '../install-manifest.mjs';
 import { formatMaintenance, receiptCandidates, runMaintenance } from '../maintain.mjs';
 import { applyCompaction, formatCompaction, planCompaction } from '../compact.mjs';
+import { applyFix, formatFix, planFix } from '../maintain-fix.mjs';
 import { formatUsage, isFeedbackVerdict, recordFeedback, usageSummary } from '../usage.mjs';
 import { error, readCurrent, currentReleaseDir, managedRoots, enabledModuleEntries, moduleContext, activateEnabledModules } from './shared.mjs';
 
@@ -93,10 +94,24 @@ export async function compact({ flag, value, plan, json, output, paths, env }) {
   return;
 }
 
-export async function maintain({ flag, value, json, output, paths, env }) {
+export async function maintain({ flag, value, json, plan, output, paths, env }) {
   const requested = value('--vault');
   const repo = value('--repo');
   const queue = flag('--queue');
+  const fix = flag('--fix');
+  const sources = flag('--sources');
+  if (fix) {
+    const apply = flag('--apply');
+    if (queue) throw error('E_ARGUMENT', 'maintain --fix cannot be combined with --queue.');
+    if (repo !== undefined) throw error('E_ARGUMENT', 'maintain --fix cannot be combined with --repo.');
+    if (plan === apply) throw error('E_ARGUMENT', 'maintain --fix requires exactly one of --plan or --apply.');
+    const vaultPath = requested === undefined ? (await loadConfig({ paths, env, readOnly: true })).vault.path : requested;
+    const result = plan ? await planFix(vaultPath, { sources }) : await applyFix(vaultPath, { sources });
+    if (json) { output(result); return; }
+    console.log(formatFix(result));
+    return;
+  }
+  if (sources) throw error('E_ARGUMENT', 'maintain --sources requires --fix.');
   const cfg = requested === undefined || queue ? await loadConfig({ paths, env }) : null;
   if (queue && requested !== undefined && resolve(requested) !== resolve(cfg.vault.path)) throw error('E_ARGUMENT', '--queue only works with the configured vault.');
   const report = await runMaintenance(requested ?? cfg.vault.path, repo === undefined ? {} : { repo });

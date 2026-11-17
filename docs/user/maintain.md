@@ -1,10 +1,12 @@
-# Wiki maintenance report (`brainatlas maintain`)
+# Wiki maintenance (`brainatlas maintain`)
 
 `brainatlas maintain` reads the Wiki and prints a maintenance report: stale pages, broken links, orphan pages, index
-problems, oversized pages and pages with many dated Update sections. It is read-only. It never edits a page or the index.
+problems, oversized pages and pages with many dated Update sections. The report is read-only: it never edits a page or
+the index. The opt-in `--fix` mode repairs the mechanical findings described below.
 
 ```text
 brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]
+brainatlas maintain --fix (--plan | --apply) [--sources] [--vault PATH] [--json]
 ```
 
 - `--vault PATH`: scan this vault. Without it, the configured vault is scanned.
@@ -77,4 +79,70 @@ For an `oversized` page, `brainatlas compact` moves its older dated sections ver
 ## Notes
 
 - Thresholds (3000 words, 6 dated Update sections) are fixed in this release.
-- The report reads only. It has no fix or apply mode. Changes to the Wiki still go through a person.
+- The report reads only. Without `--fix`, no page and no index line is ever changed; it has no apply mode.
+
+## Fix mode (`--fix`)
+
+`--fix` repairs three mechanical classes and reports everything else. Exactly one of `--plan` or `--apply` is required,
+and `--fix` cannot be combined with `--queue` or `--repo`. `--sources` is only valid together with `--fix`.
+
+```text
+brainatlas maintain --fix (--plan | --apply) [--sources] [--vault PATH] [--json]
+```
+
+- `--plan` reads the Wiki and prints the exact changes it would make. It writes nothing: no page, no index line, no
+  `wiki/log.md` entry, no lock file.
+- `--apply` recomputes the same plan from a fresh read inside the Wiki write lock, then writes each changed file
+  atomically and appends one `wiki/log.md` entry per changed file: `- <ISO> {"action":"maintain-fix","path":"wiki/..."}`.
+  The entry carries no page text, titles, summaries, counts or change kinds. Running it again immediately changes nothing
+  and writes no log entry.
+- `--sources` also fills missing `## Source files` lists (see below). Without it, only the index and archived links are
+  repaired.
+- `--json` prints one object: `{ok, mode, changes, unfixed, counts, written, durationMs}`.
+
+Each change is `{kind, path, line, before, after}`. `line` is the 1-based line number in the file before the change, and
+`after` is the new line; appended lines have `before: null` and their new line number. Changes are sorted by path, then
+line. `counts` has exactly the keys `index-missing`, `archived-link` and `source-link`. Unfixed items are
+`{kind, path, detail, reason}`.
+
+| Class | What is repaired |
+| --- | --- |
+| `index-missing` | One index list line is appended to `wiki/index.md` for each content page the index does not list: the title links to the page path, followed by ` — ` and the summary when there is one. |
+| `archived-link` | A broken wikilink whose name matches exactly one regular file under the vault-root `archive/` folder becomes plain text: ``<Alias or Name> (archived: `archive/<path>.md`)``. |
+| `source-link` | With `--sources`: existing vault-relative `sources` entries the body does not link to are listed under `## Source files`. |
+
+Rules:
+
+- Index lines go under the first H2 named after the page folder (`concepts` → `## Concepts`, and so on): after its last
+  list line, or right after the heading when it has none. Pages with no matching section go under
+  `## Unsorted (maintain --fix)` at the end of the index, which is created once.
+- The index title is the frontmatter `title`, else the first `# ` heading, else the file name without `.md`. The summary
+  is `summary`, else `description`: newlines collapse to one space, it is trimmed and cut to 160 characters including a
+  trailing `…` when it is longer, counted in Unicode code points. Titles collapse to one line with `]` escaped, and every generated link destination is
+  percent-encoded (spaces, `(`, `)`, `?`, `#`), so paths with spaces or parentheses stay a single entry on the next run.
+- Archive matching is case-insensitive on the base name with an optional `.md`, with no other folding: `[[Old Thing]]`
+  matches `archive/2026/old thing.md` but not `archive/old-thing.md`, and `[[Şeker]]` does not match `archive/seker.md`.
+  No match leaves the link as an `unknown-target` unfixed item; several matches leave it as an
+  `ambiguous-archive` broken-link item.
+- A wikilink that the report calls ambiguous (the name exists on more than one page) is never rewritten to archive text:
+  it stays as the report's `unknown-target` item.
+- Code is never touched: links inside fenced blocks and inline code are left alone.
+- Source lists only include `sources` values that are strings, start with `raw/`, `wiki/` or `archive/`, have no `..`
+  segment and exist as regular files. Duplicates are dropped and an existing trailing `## Source files` section is
+  extended instead of duplicated.
+
+Safety:
+
+- Only files inside `wiki/` are written. `raw/`, `archive/`, `planning/`, `inbox/`, `wiki/archive/` pages, `wiki/log.md`
+  (outside `appendLog`) and everything outside the vault are never written.
+- No line is ever deleted. Before writing, each file is checked line by line: it may differ from the original only in
+  lines rewritten by `archived-link` and lines inserted by `index-missing`/`source-link`. A failed check aborts with
+  `E_FIX_VERIFY` before anything is written.
+- Frontmatter is never changed, including when the file starts with a UTF-8 BOM; a change that lands inside the
+  frontmatter aborts the run with `E_FIX_VERIFY`.
+- Symlinked pages (a name ending in `.md`) and symlinked directories are skipped and reported as `symlink`. A symlink to
+  any other file, such as an image, is not a page and is ignored.
+- Inserted lines reuse the file's own line ending, so a CRLF file stays CRLF.
+- Report-only findings stay in `unfixed`: other broken links from the read-only report (`unknown-target`), archive matches
+  that are ambiguous (`broken-link` with `ambiguous-archive`), orphan pages (`report-only`, kind `orphan`, dropped when
+  this plan adds the page to the index) and a missing index (`index-absent`). Nothing else from the report is changed.
