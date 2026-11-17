@@ -112,7 +112,7 @@ test('eval accepts exactly +0.10 recall and rejects below it', async t => {
   await assert.rejects(semanticGate({devCases:null,corpusDir:corpus,provider:fake}), TypeError);
 });
 
-test('doctor exposes semantic index freshness metrics', { skip: 'PM: doctor wiring lives in the CLI (not owned by X-SEMANTIC); module exports the freshness metric; CLI doctor integration is a recorded follow-up (module is off by default).' }, async t => {
+test('doctor exposes semantic index freshness metrics', { skip: 'doctor reports semantic freshness in moduleHealth only for an installed release with the semantic module enabled (doctorResult in packages/cli/src/commands/lifecycle.mjs); this fixture has no installed release. Covered by an installed-release check, not here.' }, async t => {
   const {root} = await fixture(t);
   const env = {...process.env, HOME:root, XDG_CONFIG_HOME:path.join(root,'config'), XDG_DATA_HOME:path.join(root,'data'), XDG_STATE_HOME:path.join(root,'state')};
   const result = spawnSync(process.execPath, ['packages/cli/bin/brainatlas.mjs','doctor','--json'], {env, encoding:'utf8'});

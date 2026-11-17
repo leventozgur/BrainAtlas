@@ -184,7 +184,7 @@ test('holdout is isolated from dev and the eval runner records its outcome', () 
   assert.equal(result.n, JSON.parse(fs.readFileSync(holdoutFile, 'utf8')).length);
 });
 
-test('brainatlas eval CLI runs an eval file and emits machine-readable metrics', { skip: 'PM: CLI wiring of `brainatlas eval` belongs to I-INSTALL (TRACKS.md C2 brief: runEval export only)' }, () => {
+test('brainatlas eval CLI runs an eval file and emits machine-readable metrics', {}, () => {
   const cli = path.join(root, 'packages/cli/bin/brainatlas.mjs');
   const proc = spawnSync(process.execPath, [cli, 'eval', '--corpus', path.join(root, 'eval/corpus'), '--cases', path.join(root, 'eval/dev/cases.json'), '--now', now.toISOString()], { cwd: root, encoding: 'utf8' });
   assert.equal(proc.status, 0, proc.stderr);
