@@ -90,7 +90,7 @@ async function readStoredHostId(path) {
   }
 }
 
-/** Resolve a configured sync host identity or create one private to this state directory. */
+/** Resolve a configured sync host identity or create one private to this state directory. @param {{stateDir?:string,env?:Record<string,string|undefined>,config?:any,hostId?:string|null}} [options] @returns {Promise<string>} */
 export async function resolveHostId({ stateDir, env = {}, config = {}, hostId: legacyHostId } = {}) {
   if (typeof stateDir !== 'string' || !stateDir) throw invalidState();
   const fromEnvironment = normalizeHostId(env?.BRAINATLAS_HOST_ID);

@@ -12,7 +12,7 @@ export const LOCK_WAIT_MS = 5_000;
 const RETRY_MS = 25;
 
 function busyError() {
-  const error = new Error('The Wiki write lock is busy.');
+  const error = /** @type {Error & {code:string}} */ (new Error('The Wiki write lock is busy.'));
   error.code = 'E_BUSY';
   return error;
 }

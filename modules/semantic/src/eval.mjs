@@ -15,7 +15,7 @@ export async function semanticGate({ devCases, corpusDir, provider }) {
     const casesFile = path.join(temporaryDir, 'cases.json');
     await writeFile(casesFile, JSON.stringify(devCases), { mode: 0o600 });
     // PM hotfix: eval/ is not shipped in releases; load the runner only when the gate actually runs (repo checkout).
-    const { runEval } = await import('../../../eval/run-eval.mjs');
+    const { runEval } = await import(/** @type {any} */ ('../../../eval/run-eval.mjs'));
     const lexical = runEval({ corpusDir, casesFile });
     const pages = loadPages(corpusDir);
     const index = await buildSemanticIndex({ corpusDir, stateDir: path.join(temporaryDir, 'state'), provider, chunkMarkdown: markdownChunks });

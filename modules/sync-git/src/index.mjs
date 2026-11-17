@@ -93,7 +93,7 @@ function strictUtf8(bytes) {
 /**
  * A Git backed object transport. It owns only `stateDir/sync/git`; it never
  * opens or modifies the vault's Git metadata.
- * @param {{stateDir:string,remote:string,branch?:string,authorName?:string,authorEmail?:string,env?:Record<string,string|undefined>,config?:object,hostId?:string,runCommand?:Function,now?:()=>Date}} options
+ * @param {{stateDir?:string,remote?:string,branch?:string,authorName?:string,authorEmail?:string,env?:Record<string,string|undefined>,config?:object,hostId?:string,runCommand?:Function,now?:()=>Date,atomicWriter?:Function}} options
  */
 export function createGitTransport({ stateDir, remote, branch = 'main', authorName, authorEmail, env = process.env, config = {}, hostId: legacyHostId, runCommand = coreRunCommand, now = () => new Date(), atomicWriter = atomicWriteFile } = {}) {
   if (typeof stateDir !== 'string' || !stateDir) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Git transport state is incomplete.');
@@ -126,6 +126,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
   }
 
   function commandEnv() {
+    /** @type {Record<string,string|undefined>} */
     const result = {
       ...process.env,
       ...(env ?? {}),
@@ -480,6 +481,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       const bytes = await readObject(path);
       return bytes ? { bytes: Uint8Array.from(bytes), rev: sha256(bytes) } : null;
     },
+    /** @param {string} path @param {Uint8Array} bytes @param {{ifRev?:string,ifAbsent?:boolean}} [options] */
     async put(path, bytes, options = {}) {
       transportPath(path);
       if (!(bytes instanceof Uint8Array)) throw new TypeError('Transport bytes must be a Uint8Array.');
@@ -498,6 +500,7 @@ export function createGitTransport({ stateDir, remote, branch = 'main', authorNa
       if (!stored) throw new SyncTransportError('E_DEGRADED');
       return { rev: sha256(stored) };
     },
+    /** @param {string} path @param {{ifRev?:string}} [options] */
     async delete(path, options = {}) {
       transportPath(path);
       if (!options || typeof options !== 'object' || Array.isArray(options)) throw new BrainAtlasError('E_ARGUMENT', 'Git delete options are invalid.');

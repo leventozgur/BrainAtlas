@@ -145,7 +145,7 @@ export function isSafetyFindingAllowed(relPath, text, finding, allow = []) {
   return allow.some((entry) => entry && entry.path === fingerprint.path && entry.ruleId === fingerprint.ruleId
     && (Object.hasOwn(fingerprint, 'sha256') ? entry.sha256 === fingerprint.sha256 : !Object.hasOwn(entry, 'sha256')));
 }
-/** @param {string} text @param {{rules?:object[]}} options */
+/** @param {string} text @param {{rules?:object[],personal?:boolean}} options */
 export function redact(text, options = {}) {
   const findings = scanText(text, options);
   // BA-26: with the personal option, e-mail and TR phone numbers are redacted too. Output only; scanText never reports them.

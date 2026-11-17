@@ -38,6 +38,7 @@ function assertOwnedDirectory(info) {
     throw fail('E_RECEIPT_STATE_UNSAFE', 'Receipt state directory is unsafe.');
   }
 }
+/** @param {any} ctx @param {{create?:boolean,child?:string}} [options] */
 async function secureQueueDirectory(ctx, { create = false, child } = {}) {
   const { stateDir } = paths(ctx);
   if (create) await mkdir(stateDir, { recursive: true, mode: 0o700 });
@@ -128,7 +129,7 @@ function pageContent(candidate, receipt) {
   return `---\ntype: summary\ngenerated: "${generated}"\nstatus: proposed\nsources:${sources ? `\n${sources}` : ' []'}\nverified: []\nstale_after: "P90D"\n---\n\n# ${title}\n\n${summary}\n`;
 }
 
-/** Human approval is the sole path from the queue into the vault. */
+/** Human approval is the sole path from the queue into the vault. @param {any} ctx @param {string} id @param {{edit?:Array<{title?:string,summary?:string,suggestedPath?:string}>}} [options] */
 export async function approveReceipt(ctx, id, { edit } = {}) {
   const receipt = await showReceipt(ctx, id);
   const { vault } = paths(ctx);

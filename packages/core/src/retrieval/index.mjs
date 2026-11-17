@@ -7,7 +7,7 @@ import { atomicWriteFileSync } from '../util/index.mjs';
 
 const weights = [4, 3, 2, 1];
 const stops = new Set('the a an and or of to in for on is are with how what which when where who why does do will this that bir ve veya ile icin nasil nedir ne hangi bu su de da mi mu'.split(' '));
-function fail(code, message) { const e = new Error(message); e.code = code; throw e; }
+function fail(code, message) { const e = /** @type {Error & {code:string}} */ (new Error(message)); e.code = code; throw e; }
 export function normalizeText(s) {
   if (typeof s !== 'string') fail('E_INVALID_INPUT', 'Expected text');
   return s.replace(/[ıİ]/g, 'i').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');

@@ -41,7 +41,7 @@ function cleanTempSync() {
   }
   tempDirs.clear();
 }
-for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) process.on(signal, () => { cleanTempSync(); process.exit(code); });
+for (const [signal, code] of /** @type {Array<[NodeJS.Signals, number]>} */ ([['SIGINT', 130], ['SIGTERM', 143]])) process.on(signal, () => { cleanTempSync(); process.exit(code); });
 
 async function cleanTemp(path) {
   if (!path) return;

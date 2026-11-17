@@ -301,6 +301,7 @@ async function checkCodeReferences(page, repoRoot, cache, add) {
  * With `repo` (BA-42), `sources` `repo:` entries and `symbols:` are also checked against that working tree; without it no
  * repository is read.
  */
+/** @param {string} vault @param {{now?:Date,repo?:string}} [options] */
 export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
   const started = Date.now();
   const root = await vaultRoot(vault);

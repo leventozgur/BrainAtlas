@@ -51,6 +51,7 @@ export async function dispatchModuleCommand(command, args, { paths, env, output,
   } else if (result !== undefined) output(result);
 }
 
+/** @param {string} action @param {{paths:any,env:any,config:any,dependencies?:{plan?:boolean}}} options */
 export async function installedSyncSchedule(action, { paths, env, config: cfg, dependencies = {} }) {
   let current;
   try { current = await readCurrent(paths); } catch { return null; }

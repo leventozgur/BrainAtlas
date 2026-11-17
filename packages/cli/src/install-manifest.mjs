@@ -244,6 +244,7 @@ async function restoreEntry(paths, entry, roots, applicationPaths) {
   else throw fail('E_MANIFEST_INVALID', 'Install backup type is invalid.');
 }
 
+/** @param {any} paths @param {{plan?:boolean,home?:string,roots?:string[]}} [options] */
 export async function uninstallManagedFiles(paths, { plan = false, home, roots = [home] } = {}) {
   const manifest = await readManifest(paths);
   if (plan) return { action: 'uninstall', files: manifest.files.map(({ path, beforeSha256, afterSha256 }) => ({ path, beforeSha256, afterSha256 })), createdDirectories: manifest.createdDirectories };

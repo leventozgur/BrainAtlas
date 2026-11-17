@@ -28,7 +28,7 @@ async function readInitSeedTemplates() {
     initSeedTemplatesPromise = Promise.all([...INIT_SEED_TEMPLATE_URLS].map(async ([path, url]) => {
       try { return [path, await readFile(url)]; }
       catch (error) { if (isMissing(error)) return null; throw error; }
-    })).then((rows) => new Map(rows.filter(Boolean)));
+    })).then((rows) => new Map(/** @type {Array<[string, Buffer]>} */ (rows.filter(Boolean))));
   }
   return initSeedTemplatesPromise;
 }
@@ -119,7 +119,7 @@ function pendingDeletePath(path, requester) { return `${PENDING_DELETE_PREFIX}${
 
 /**
  * Build a transport agnostic synchronizer. Each instance owns `stateDir/sync/`.
- * @param {{vaultPath:string,stateDir:string,config?:object,transport?:object,env?:Record<string,string|undefined>,hostId?:string,now?:()=>Date,logger?:object}} options
+ * @param {{vaultPath?:string,stateDir?:string,config?:object,transport?:object,env?:Record<string,string|undefined>,hostId?:string,now?:()=>Date,logger?:object}} options
  */
 export function createSyncEngine({ vaultPath, stateDir, config = {}, transport, env = process.env, hostId, now = () => new Date(), logger = {} } = {}) {
   if (typeof vaultPath !== 'string' || typeof stateDir !== 'string') throw new SyncTransportError('E_STATE_INVALID');

@@ -154,7 +154,7 @@ function changesFor(ctx, current) {
     else if (skillBefore !== skillAfter) {
       // The structured marker lets uninstall tell an init-time skill conflict apart from
       // other conflicts without matching error text.
-      const conflict = new BrainAtlasError('E_CONFIG_CONFLICT', 'A different BrainAtlas skill file already exists.');
+      const conflict = /** @type {BrainAtlasError & {reason:string}} */ (new BrainAtlasError('E_CONFIG_CONFLICT', 'A different BrainAtlas skill file already exists.'));
       conflict.reason = 'skill-file';
       throw conflict;
     }

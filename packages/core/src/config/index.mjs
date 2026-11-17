@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,shadow?:{abstainThreshold:number}},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number}},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
 /** @type {object} */
 export const CONFIG_SCHEMA = {
@@ -105,7 +105,7 @@ export function defaultConfig(profile) {
   return { schemaVersion: 1, profile, vault: { path: '.' }, modules: [...PROFILES[profile].modules], agents: [], scope: 'global', retrieval: { budgetChars: 4000, abstainThreshold: 0.35 }, hooks: { mode: 'normal', deadlineMs: 1000 }, safety: { secretFilter: true, extraDenyGlobs: [], allow: [] }, okf: { level: 'warn' }, sync: { transport: null, options: {} }, semantic: { ...SEMANTIC_DEFAULTS }, telemetry: false, readOnly: false, node: { path: 'node' } };
 }
 
-/** @param {unknown} obj @returns {{ok:boolean, errors:Array<{path:string,code:string,message:string}>}} */
+/** @param {any} obj @returns {{ok:boolean, errors:Array<{path:string,code:string,message:string}>}} */
 export function validateConfig(obj) {
   const errors = [];
   validateSchema(obj, CONFIG_SCHEMA, '', errors);
@@ -151,7 +151,7 @@ export async function loadConfig(options) {
   const { paths, env = {}, readOnly = false } = options || {};
   if (!paths?.configFile) throw new BrainAtlasError('E_PATHS', 'Configuration file path is required.');
   let text;
-  try { text = await readFile(paths.configFile, 'utf8'); } catch (cause) { if (cause?.code === 'ENOENT') return defaultConfig(env.BRAINATLAS_PROFILE || 'lite'); throw new BrainAtlasError('E_CONFIG_READ', 'Could not read configuration.'); }
+  try { text = await readFile(paths.configFile, 'utf8'); } catch (cause) { if (cause?.code === 'ENOENT') return defaultConfig(/** @type {'lite'|'full'|'custom'} */ (env.BRAINATLAS_PROFILE || 'lite')); throw new BrainAtlasError('E_CONFIG_READ', 'Could not read configuration.'); }
   let value;
   try { value = JSON.parse(text); } catch { throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.'); }
   if (!Number.isInteger(value?.schemaVersion) || value.schemaVersion < 1) {
@@ -225,7 +225,7 @@ export function unsetConfigValue(cfg, dottedKey) {
   return out;
 }
 
-/** @param {unknown| string} objOrText @param {{backupDir:string,now?:Date,sourceText?:string,dryRun?:boolean,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
+/** @param {unknown| string} objOrText @param {{backupDir?:string,now?:Date,sourceText?:string,dryRun?:boolean,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
 export async function migrateConfig(objOrText, options = {}) {
   const { backupDir, now = new Date(), sourceText, dryRun = false, migrations } = options;
   let obj = objOrText;

@@ -36,7 +36,7 @@ async function initScaffoldTemplates() {
     ['planning/backlog.md', new URL('../../../templates/vault/backlog.md', import.meta.url)],
     ['AGENTS.md', new URL('../../../templates/policy/AGENTS.md', import.meta.url)]
   ];
-  return new Map(await Promise.all(entries.map(async ([path, url]) => [path, await readFile(url)])));
+  return new Map(/** @type {Array<[string, Buffer]>} */ (await Promise.all(entries.map(async ([path, url]) => [path, await readFile(url)]))));
 }
 
 async function inspectInitScaffold(target, templates) {

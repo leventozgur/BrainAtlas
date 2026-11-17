@@ -63,7 +63,7 @@ function unitEscape(value) {
   return String(value).replaceAll('\\', '\\\\').replaceAll(' ', '\\x20').replaceAll('"', '\\"');
 }
 
-/** Build user-level scheduler files without touching the filesystem or host scheduler. */
+/** Build user-level scheduler files without touching the filesystem or host scheduler. @param {{platform?:string,paths?:any,intervalMin?:number}} [options] */
 export function planScheduler({ platform, paths, intervalMin = 30 } = {}) {
   if (!['darwin', 'linux'].includes(platform) || !paths || typeof paths.binPath !== 'string' || typeof paths.stateDir !== 'string'
       || !Number.isSafeInteger(intervalMin) || intervalMin < 1 || intervalMin > 1440) throw new SyncTransportError('E_STATE_INVALID');
@@ -86,6 +86,7 @@ export function planScheduler({ platform, paths, intervalMin = 30 } = {}) {
   return { platform, intervalMin, logPath, text, files, uninstall, installManifest: { files: [...uninstall] } };
 }
 
+/** @param {{platform?:string,paths?:any}} [options] */
 export function planSchedulerUninstall({ platform, paths } = {}) {
   const plan = planScheduler({ platform, paths });
   return { platform, files: plan.uninstall, text: `Remove these scheduler files:\n${plan.uninstall.join('\n')}` };

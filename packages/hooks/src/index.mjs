@@ -187,7 +187,7 @@ function retrieve(options, query, searchOptions, remaining, semantic, shadow) {
     worker.once('exit', () => finish(new Error('search')));
   });
 }
-/** @param {{client:string,event:string,stdin:string,env:object,now:Date,config:object}} input @returns {Promise<{stdout:string,exitCode:number}>} */
+/** @param {{client?:string,event?:string,stdin?:string,env?:object,now?:Date,config?:any}} [input] @returns {Promise<{stdout:string,exitCode:number}>} */
 export async function runHook(input = {}) {
   const {client, event, stdin = '', env = {}, config = {}, now = new Date()} = input;
   if (!clients.has(client) || !events.has(event)) return {stdout:empty(client),exitCode:2};

@@ -6,7 +6,7 @@ import { DropboxError } from './errors.mjs';
 const HELPER_PATH = fileURLToPath(new URL('./mac-keychain-helper.swift', import.meta.url));
 
 function commandFailure(exitCode) {
-  const error = new DropboxError('E_CREDENTIAL_STORE');
+  const error = /** @type {DropboxError & {exitCode:number|null}} */ (new DropboxError('E_CREDENTIAL_STORE'));
   error.exitCode = exitCode;
   return error;
 }

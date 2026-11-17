@@ -4,7 +4,7 @@ import { join, posix } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
 /** @typedef {{dataDir:string,configFile:string,stateDir:string,installManifest:string,releasesDir:string,currentDir:string,binPath:string}} ResolvedPaths */
-/** @param {{platform?:string,env:Record<string,string|undefined>}} options @returns {ResolvedPaths} */
+/** @param {{platform?:string,env?:Record<string,string|undefined>}} options @returns {ResolvedPaths} */
 export function resolvePaths(options = {}) {
   const { platform = process.platform, env = {} } = options;
   if (!env.HOME) throw new BrainAtlasError('E_NO_HOME', 'HOME must be provided to resolve BrainAtlas paths.');

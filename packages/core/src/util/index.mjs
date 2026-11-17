@@ -7,7 +7,7 @@ import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 export { NotImplementedError, BrainAtlasError };
-/** @param {string} file @param {string|Uint8Array} data @param {{mode?:number}} options */
+/** @param {string} file @param {string|Uint8Array} data @param {{mode?:number,tempPrefix?:string,fsOps?:typeof fsPromises}} options */
 export async function atomicWriteFile(file, data, options = {}) {
   if (typeof file !== 'string' || data === undefined) throw new NotImplementedError('util.atomicWriteFile');
   const target = resolve(file);
@@ -24,7 +24,7 @@ export async function atomicWriteFile(file, data, options = {}) {
     throw error;
   }
 }
-/** Synchronous counterpart for synchronous APIs that must persist before returning. */
+/** Synchronous counterpart for synchronous APIs that must persist before returning. @param {string} file @param {string|Uint8Array} data @param {{mode?:number,tempPrefix?:string,fsSyncOps?:typeof fsSync}} options */
 export function atomicWriteFileSync(file, data, options = {}) {
   if (typeof file !== 'string' || data === undefined) throw new NotImplementedError('util.atomicWriteFileSync');
   const target = resolve(file);

@@ -476,7 +476,7 @@ function assertNoMcp(ctx, p) {
 /** @param {Record<string,unknown>} env @returns {boolean} */
 export function detect(env = {}) { return typeof env.HOME === 'string' && !!env.HOME; }
 
-/** @param {import('@brainatlas/core').AdapterContext} ctx */
+/** @param {Record<string,any>} ctx */
 export function plan(ctx) {
   if (!ctx?.nodePath || !ctx?.shimPath) err('E_ARGUMENT', 'Node and shim paths are required.');
   const p = paths(ctx), changes = [];
@@ -629,5 +629,5 @@ export async function doctor(ctx) {
   ] };
 }
 
-/** @param {object} ctx */
+/** @param {object} _ctx */
 export async function trustReview(_ctx) { return { required: true, client: 'Codex CLI', steps: ['Run /hooks in Codex CLI and approve the BrainAtlas prompt hook.'] }; }

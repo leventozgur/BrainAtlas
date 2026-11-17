@@ -5,7 +5,7 @@ export const PREPROCESS_VERSION = '1';
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 
 function safeError(message) {
-  const error = new Error(message);
+  const error = /** @type {Error & {code:string,fallbackReason?:string}} */ (new Error(message));
   error.code = 'E_SEMANTIC_PROVIDER';
   return error;
 }
@@ -35,7 +35,7 @@ function validateVector(value, dims) {
   return Float32Array.from(value);
 }
 
-/** Create an Ollama provider using only the supplied fetch implementation. */
+/** Create an Ollama provider using only the supplied fetch implementation. @param {{baseUrl?:string,model?:string,dims?:number,fetchImpl?:Function,queryPrefix?:string,documentPrefix?:string,batchSize?:number,timeoutMs?:number}} [options] */
 export function createOllamaProvider({
   baseUrl = DEFAULT_BASE_URL,
   model,

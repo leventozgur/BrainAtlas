@@ -11,6 +11,7 @@ npm ci --ignore-scripts
 npm test
 npm run guard
 npm run lint
+npm run typecheck
 ```
 
 Do not use `npm install` to update the lockfile as part of an unrelated change. Network access may be unavailable in the development environment; if dependencies are missing, report that rather than changing dependency policy.
@@ -18,6 +19,10 @@ Do not use `npm install` to update the lockfile as part of an unrelated change. 
 ## Lint
 
 `npm run lint` runs ESLint with the flat config in `eslint.config.mjs`. ESLint is development-only: the root `devDependencies` are limited to `eslint`, `@eslint/js` and `globals`, the supply-chain guard allows exactly those dev roots, and they never enter a release archive. Fix findings in the code without changing behaviour; a narrow `// eslint-disable-next-line <rule> -- <reason>` is reserved for intentional patterns.
+
+## Type check
+
+`npm run typecheck` runs `tsc -p tsconfig.json` with `allowJs`/`checkJs` and `noEmit` over `packages/`, `modules/`, `scripts/` and `release/`; there is no build step and nothing is emitted. TypeScript and `@types/node` are development-only roots in the guard and never enter a release archive. Fix type errors by improving JSDoc annotations (or a precise `/** @type {X} */ (expr)` cast) without changing runtime behaviour; `// @ts-ignore` and `// @ts-nocheck` are not used.
 
 ## Verify before publishing
 

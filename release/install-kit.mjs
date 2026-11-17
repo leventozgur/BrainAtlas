@@ -37,6 +37,7 @@ function readTar(buffer) {
 
 /** Resolve existing symlinks, including dangling ones, without creating paths. */
 async function resolvePathForSafety(input) {
+  /** @type {string} */
   let current = sep;
   const pending = resolve(input).split(sep).filter(Boolean);
   let links = 0;
@@ -77,6 +78,7 @@ async function assertInstallRootSafe(installRoot) {
   };
   const allowSymlinkedRoot = process.env.BRAINATLAS_ALLOW_SYMLINKED_ROOT === '1' || args.includes('--allow-symlinked-root');
   const absolute = resolve(installRoot);
+  /** @type {string} */
   let prefix = sep;
   let dataRoot;
   let followedExternalBrainAtlasRoot = false;

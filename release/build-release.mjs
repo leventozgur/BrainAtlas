@@ -65,7 +65,7 @@ function untar(buf) {
   return result;
 }
 
-/** @param {{version:string,profile:'lite'|'full',modules:string[],builtAt:string,out?:string}} options @returns {Promise<string[]>} */
+/** @param {{version:string,profile:'lite'|'full',builtAt?:string,out?:string}} options @returns {Promise<string[]>} */
 export async function buildRelease(options) {
   const { version, profile, builtAt = '1970-01-01T00:00:00.000Z', out = root } = options || {};
   const sourceRoot = resolve(process.env.BRAINATLAS_RELEASE_SOURCE || root);
@@ -98,7 +98,7 @@ export async function buildRelease(options) {
       const entries = await walk(sourceRoot, target);
       if (!entries.length) throw fail('E_MANIFEST_INVALID', 'Workspace dependency is missing.');
       files.push(...entries.map(f => ({ ...f, path: `node_modules/${name}/${f.path.slice(target.length + 1)}` })));
-      const pkg = JSON.parse(await readFile(join(sourceRoot, target, 'package.json'))); queue.push(pkg.dependencies || {});
+      const pkg = JSON.parse(/** @type {any} */ (await readFile(join(sourceRoot, target, 'package.json')))); queue.push(pkg.dependencies || {});
     } else {
       const entries = await walk(sourceRoot, `node_modules/${name}`);
       if (!entries.length) throw fail('E_MANIFEST_INVALID', 'A production dependency is not installed.');
@@ -115,7 +115,7 @@ export async function buildRelease(options) {
   if (profile === 'lite' && forbidden.test(manifestBytes.toString('utf8'))) throw fail('E_LITE_PURITY', 'Lite release contains forbidden content.');
   files.push({ path: 'release-manifest.json', data: manifestBytes, mode: 0o644 });
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-  const archive = gzipSync(tar(files.map(f => ({ ...f, path: `brainatlas-${version}/${f.path}` }))), { level: 9, mtime: 0 });
+  const archive = gzipSync(tar(files.map(f => ({ ...f, path: `brainatlas-${version}/${f.path}` }))), /** @type {any} */ ({ level: 9, mtime: 0 }));
   await mkdir(out, { recursive: true }); const name = `brainatlas-${version}-${profile}.tgz`; const dest = join(out, name);
   await atomicWrite(dest, archive);
   const sumsPath = join(out, 'SHA256SUMS'); let lines = [];
@@ -124,7 +124,7 @@ export async function buildRelease(options) {
   return [dest, sumsPath];
 }
 
-/** Build a self-contained offline distribution directory for both release profiles. */
+/** Build a self-contained offline distribution directory for both release profiles. @param {{version?:string,out?:string,builtAt?:string}} [options] */
 export async function buildDistribution(options = {}) {
   const sourceRoot = resolve(process.env.BRAINATLAS_RELEASE_SOURCE || root);
   const packageInfo = JSON.parse(await readFile(join(sourceRoot, 'package.json'), 'utf8'));
@@ -140,7 +140,7 @@ export async function buildDistribution(options = {}) {
   await mkdir(stage);
   let movedPrevious = false;
   try {
-    for (const profile of ['lite', 'full']) await buildRelease({ version, profile, builtAt, out: stage });
+    for (const profile of /** @type {Array<'lite'|'full'>} */ (['lite', 'full'])) await buildRelease({ version, profile, builtAt, out: stage });
     await mkdir(join(stage, 'release'));
     await cp(join(sourceRoot, 'install.sh'), join(stage, 'install.sh'));
     await cp(join(sourceRoot, 'release', 'install-kit.mjs'), join(stage, 'release', 'install-kit.mjs'));
@@ -221,7 +221,7 @@ export async function extractRelease(archivePath, checksumPath, signaturePath, d
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const args = process.argv.slice(2); const get = key => { const index = args.indexOf(key); return index < 0 ? undefined : args[index + 1]; };
   try {
-    if (get('--profile')) await buildRelease({ version: get('--version'), profile: get('--profile'), out: get('--out') });
+    if (get('--profile')) await buildRelease({ version: get('--version'), profile: /** @type {'lite'|'full'} */ (get('--profile')), out: get('--out') });
     else await buildDistribution({ version: get('--version'), out: get('--out') });
   } catch (e) { console.error(`${e.code || 'E_RELEASE'}: ${e.message}`); process.exitCode = 1; }
 }

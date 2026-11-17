@@ -70,6 +70,7 @@ export async function semanticSetup(args, ctx) {
   validateConfiguredProvider({ ...settings, allowRemote: false });
   const isTTY = ctx.isTTY ?? Boolean(process.stdin.isTTY && process.stderr.isTTY);
   const dry = options.dry || (!options.yes && !isTTY);
+  /** @type {Record<string,{status:string,reason:string,queryMs?:number,pages?:number}>} */
   const steps = Object.fromEntries(names.map(name => [name, { status: 'skipped', reason: 'Not reached.' }]));
   const report = { dryRun: dry, mode: options.mode ?? settings.mode, steps, next: null };
   const set = (name, status, reason, extra = {}) => { steps[name] = { status, reason, ...extra }; };

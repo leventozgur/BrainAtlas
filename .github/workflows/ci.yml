@@ -22,6 +22,7 @@ jobs:
       - run: npm test
       - run: npm run guard
       - run: npm run lint
+      - run: npm run typecheck
   # Wall-clock latency budgets (tests/perf/). Isolated from `test` so machine load cannot fail the main suite;
   # continue-on-error keeps it advisory and it never blocks a merge on its own.
   perf:

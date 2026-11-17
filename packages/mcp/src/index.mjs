@@ -24,7 +24,8 @@ const descriptions = {
   wiki_update_index: 'Add missing pages to the Wiki index and remove entries for deleted pages; existing lines are kept.'
 };
 
-function mcpError(code, message) { const error = new Error(message); error.code = code; return error; }
+function mcpError(code, message) { const error = /** @type {Error & {code:string}} */ (new Error(message)); error.code = code; return error; }
+/** @returns {{content:Array<{type:'text',text:string}>}} */
 function textResult(value) { return { content: [{ type: 'text', text: JSON.stringify(value) }] }; }
 function asText(error) {
   if (error?.code === 'E_SECRET_DETECTED') return 'E_SECRET_DETECTED: write refused because secret-like content was detected.';
@@ -255,6 +256,7 @@ async function readOptionalIndex(target) {
 }
 
 /** @param {{config:object,paths:object,env:object}} options @returns {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} */
+/** @param {{config:any,paths:any,env:any,fetchImpl?:Function}} options */
 export function createServer(options) {
   if (!options || !options.config || !options.paths || !options.env) throw mcpError('E_MCP_OPTIONS', 'config, paths and env are required.');
   const { config, paths, env } = options;
@@ -409,7 +411,7 @@ export function createServer(options) {
   };
   const tool = (name, schema, handler) => server.registerTool(name, { description: descriptions[name], inputSchema: schema.shape }, async (args) => {
     try { return textResult(await handler(args)); }
-    catch (error) { return { content: [{ type: 'text', text: asText(error) }], isError: true }; }
+    catch (error) { return /** @type {{content:Array<{type:'text',text:string}>,isError:boolean}} */ ({ content: [{ type: 'text', text: asText(error) }], isError: true }); }
   });
   // Page list for index maintenance. core.listPages skips symlinked files and directories (Dirent.isSymbolicLink), so
   // nothing outside the Wiki is read. The Wiki directory itself must resolve inside the vault.

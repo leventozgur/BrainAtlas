@@ -24,6 +24,7 @@ const helpUsages = Object.freeze({
 });
 
 async function availableHelpCommands(paths, env) {
+  /** @type {Array<{name:string,kind:string,usage:any,description:any,module?:string}>} */
   const commands = [...builtInCommands].map(name => ({ name, kind: 'built-in', usage: helpUsages[name], description: helpDescriptions[name] }));
   const current = await readCurrent(paths).catch(() => null);
   const releaseDir = currentReleaseDir(paths, current);

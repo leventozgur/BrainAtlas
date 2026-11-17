@@ -158,7 +158,7 @@ export function detect(env) {
   if (typeof env?.COPILOT_HOME === 'string' && env.COPILOT_HOME) return existsSync(env.COPILOT_HOME);
   return typeof env?.HOME === 'string' && Boolean(env.HOME) && existsSync(join(env.HOME, '.copilot'));
 }
-/** @param {import('@brainatlas/core').AdapterContext} ctx */
+/** @param {Record<string,any>} ctx */
 export function plan(ctx) {
   if (!['global', 'vault'].includes(ctx?.scope)) throw error('E_SCOPE', 'Adapter scope must be global or vault.');
   const warnings = ['Copilot organization policy may disable MCP or hooks; this cannot be detected offline.', 'The global Copilot instructions path is unverified and needs user confirmation.'];
@@ -265,6 +265,7 @@ export async function remove(ctx) {
 function collectPaths(ctx) {
   const base = ctx.scope === 'vault' ? vaultRoot(ctx) : home(ctx); const global = ctx.scope !== 'vault';
   const main = global ? join(base, '.copilot', 'mcp-config.json') : join(base, '.vscode', 'mcp.json');
+  /** @type {Array<{file:string,key?:string,type:string}>} */
   const paths = [{ file: main, key: global ? 'mcpServers.brainatlas' : 'servers.brainatlas', type: 'json' }];
   if (global && ctx.config?.agents?.copilot?.vscodeUserMcp === true) {
     const d = platform(ctx) === 'darwin' ? join(home(ctx), 'Library', 'Application Support', 'Code', 'User') : join(home(ctx), '.config', 'Code', 'User');

@@ -59,7 +59,7 @@ function credentialsJson(value) {
   } catch { throw new DropboxError('E_AUTH'); }
 }
 
-/** Print the PKCE authorization URL, read a code from stdin, exchange it, and persist tokens. */
+/** Print the PKCE authorization URL, read a code from stdin, exchange it, and persist tokens. @param {{appKey?:string,fetch?:Function,credentialStore?:any,stdin?:any,stdout?:any,now?:()=>number,random?:Function}} [options] */
 export async function enrollDropbox({ appKey, fetch: fetchImpl = globalThis.fetch, credentialStore, stdin = process.stdin, stdout = process.stdout, now = () => Date.now(), random = randomBytes } = {}) {
   validAppKey(appKey);
   if (typeof fetchImpl !== 'function' || !credentialStore || typeof credentialStore.set !== 'function') throw new DropboxError('E_ARGUMENT');
@@ -95,7 +95,7 @@ export async function enrollDropbox({ appKey, fetch: fetchImpl = globalThis.fetc
   return { status: 'ENROLLED' };
 }
 
-/** Return a refresh-aware access token callback for Dropbox API requests. */
+/** Return a refresh-aware access token callback for Dropbox API requests. @param {{credentialStore?:any,fetch?:Function,now?:()=>number}} [options] */
 export function createDropboxTokenProvider({ credentialStore, fetch: fetchImpl = globalThis.fetch, now = () => Date.now() } = {}) {
   if (!credentialStore || typeof credentialStore.get !== 'function' || typeof credentialStore.set !== 'function' || typeof fetchImpl !== 'function') {
     throw new DropboxError('E_CREDENTIAL_STORE');

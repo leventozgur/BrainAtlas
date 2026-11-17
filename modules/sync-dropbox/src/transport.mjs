@@ -45,7 +45,7 @@ function normalizeListedPath(path, root) {
   return relative;
 }
 
-/** Build a Dropbox API v2 object transport. The injected fetch is used for every request. */
+/** Build a Dropbox API v2 object transport. The injected fetch is used for every request. @param {{fetch?:Function,getAccessToken?:Function,root?:string,apiBase?:string,contentBase?:string,hostId?:string}} [options] */
 export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, getAccessToken, root = '/BrainAtlas', apiBase = API_BASE, contentBase = CONTENT_BASE, hostId } = {}) {
   if (typeof fetchImpl !== 'function' || typeof getAccessToken !== 'function') throw new DropboxError('E_AUTH');
   const normalizedRoot = validateRoot(root);
@@ -56,6 +56,7 @@ export function createDropboxTransport({ fetch: fetchImpl = globalThis.fetch, ge
     return `${normalizedRoot}${relativePath ? `/${relativePath}` : ''}` || '/';
   };
 
+  /** @param {string} url @param {string} token @param {{args?:any,bytes?:any,contentType?:boolean}} [options] */
   async function send(url, token, { args, bytes, contentType = false } = {}) {
     const headers = { authorization: `Bearer ${token}` };
     let body;

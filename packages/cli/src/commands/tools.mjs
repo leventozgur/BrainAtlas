@@ -145,7 +145,7 @@ export async function usage({ args, value, json, output, paths, env }) {
 
 export async function evalCommand({ value, output }) {
   let component;
-  try { component = await import(new URL('../../../../eval/run-eval.mjs', import.meta.url)); }
+  try { component = await import(/** @type {any} */ (new URL('../../../../eval/run-eval.mjs', import.meta.url))); }
   catch (e) { if (e.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Evaluation component is unavailable.'); throw e; }
   if (typeof component.runEval !== 'function') throw error('E_COMPONENT_MISSING', 'Evaluation component is unavailable.');
   const evalDir = new URL('../../../../eval/', import.meta.url);
@@ -155,6 +155,7 @@ export async function evalCommand({ value, output }) {
 }
 
 export async function hookOrMcp({ command, args, env, paths, output }) {
+  /** @type {any} */
   let component;
   try { component = command === 'hook' ? await import('@brainatlas/hooks') : await import('@brainatlas/mcp'); }
   catch (e) { if (e.code === 'ERR_MODULE_NOT_FOUND') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.'); throw e; }

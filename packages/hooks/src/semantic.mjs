@@ -30,6 +30,13 @@ export function semanticEntryUrl() {
  * @param {object} options.settings merged semantic settings (SEMANTIC_DEFAULTS + config.semantic)
  * @param {string} options.stateDir global BrainAtlas state directory (the index lives in its `semantic/` subdirectory)
  * @param {(result: object) => object} options.prepare finishing step (redaction and excerpt cap) for hybrid results
+ * @param {string} options.query prompt text
+ * @param {number} options.limit maximum lexical result count
+ * @param {number} [options.abstainThreshold] lexical abstention threshold
+ * @param {string} [options.entryUrl] semantic module entry URL
+ * @param {number} [options.budgetMs] semantic step budget in milliseconds
+ * @param {Function} [options.fetchImpl] fetch implementation for the provider
+ * @param {(url:string)=>Promise<any>} [options.loadModule] dynamic module loader
  */
 export async function semanticHits({ searcher, query, limit, abstainThreshold, lexical, settings, stateDir, prepare, entryUrl = semanticEntryUrl(), budgetMs = SEMANTIC_BUDGET_MS, fetchImpl = globalThis.fetch, loadModule = url => import(url) }) {
   const started = Date.now();

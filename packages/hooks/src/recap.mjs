@@ -134,7 +134,7 @@ async function pendingReceipts(stateDir) {
 /**
  * Deterministic session-start card built from the wiki log and the receipts queue.
  * Returns '' when there is nothing to report or when anything fails.
- * @param {{vaultPath:string,stateDir?:string,now?:Date,maxChars?:number}} options
+ * @param {{vaultPath?:string,stateDir?:string,now?:Date,maxChars?:number}} options
  * @returns {Promise<string>}
  */
 export async function buildRecap({ vaultPath, stateDir, now = new Date(), maxChars = 800 } = {}) {

@@ -59,7 +59,7 @@ function percentile(values, p) {
   return sorted[Math.min(sorted.length, rank) - 1];
 }
 
-/** Aggregates hook and feedback metrics for the last `days` days. Content-free by construction. */
+/** Aggregates hook and feedback metrics for the last `days` days. Content-free by construction. @param {{stateDir?:string,days?:number,now?:Date}} [options] */
 export async function usageSummary({ stateDir, days = 7, now = new Date() } = {}) {
   if (!Number.isInteger(days) || days < 1) throw argumentError('Usage days must be an integer of at least 1.');
   const dir = join(stateDir, 'metrics');
@@ -113,7 +113,7 @@ export function formatUsage(summary) {
   ].join('\n');
 }
 
-/** Appends one one-word feedback record with the hooks.jsonl permissions (file 0600, directory 0700). */
+/** Appends one one-word feedback record with the hooks.jsonl permissions (file 0600, directory 0700). @param {{stateDir?:string,verdict?:string,now?:Date}} [options] */
 export async function recordFeedback({ stateDir, verdict, now = new Date() } = {}) {
   if (!isFeedbackVerdict(verdict)) throw argumentError('Feedback verdict must be useful or not-useful.');
   await secureDirectory(stateDir, true);

@@ -115,7 +115,7 @@ async function scanFiles(root, current = root, rows = []) {
  * Local-folder object storage for folders synchronized by an external client.
  * Revisions include content digest and mtime. Conditional writes are best effort;
  * this transport intentionally makes no cross-process CAS guarantee.
- * @param {{path:string,vaultPath:string,hostId?:string}} options
+ * @param {{path?:string,vaultPath?:string,hostId?:string,atomicWriter?:Function}} options
  */
 export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = atomicWriteFile } = {}) {
   if (typeof path !== 'string' || typeof vaultPath !== 'string') throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder transport paths are incomplete.');
