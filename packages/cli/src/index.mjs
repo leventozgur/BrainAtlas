@@ -15,7 +15,7 @@ import { applyCompaction, formatCompaction, planCompaction } from './compact.mjs
 import { formatUsage, isFeedbackVerdict, recordFeedback, usageSummary } from './usage.mjs';
 
 const error = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details });
-const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'safety', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'maintain', 'compact', 'usage', 'help']);
+const builtInCommands = new Set(['init', 'install', 'status', 'doctor', 'config', 'safety', 'module', 'uninstall', 'update', 'rollback', 'recover', 'eval', 'hook', 'mcp', 'migrate', 'adopt', 'maintain', 'compact', 'usage', 'wiki', 'help']);
 const validVersion = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && value !== '..';
 function compareVersions(left, right) {
   const parse = value => /^(?:v)?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
@@ -215,7 +215,18 @@ async function removeAdapters(cfg, paths, env) {
       const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
       if (typeof adapter.remove !== 'function') { warnings.push(`Adapter ${agent} has no remove operation.`); continue; }
       const ctx = { env, config: cfg, paths, scope: cfg.scope, nodePath: cfg.node.path, shimPath: paths.binPath, now: new Date() };
-      const planned = typeof adapter.plan === 'function' ? await adapter.plan(ctx) : { changes: [] };
+      // An init-time conflict (for example a pre-existing skill file) must not stop uninstall:
+      // removal reaches the adapter so it can report E_MANAGED_BLOCK_EDITED or restore user bytes.
+      // A user's MCP entry or hook must not block removing the cli-channel files either.
+      const planForRemoval = async () => {
+        if (typeof adapter.plan !== 'function') return { changes: [] };
+        try { return await adapter.plan(ctx); }
+        catch (cause) {
+          if (cfg.channel === 'cli' && (cause?.reason === 'skill-file' || cause?.code === 'E_CHANNEL_SWITCH')) return { changes: [] };
+          throw cause;
+        }
+      };
+      const planned = await planForRemoval();
       const managed = new Map();
       const manifest = await readInstallManifest(paths);
       for (const entry of manifest.files) {
@@ -630,14 +641,14 @@ const helpDescriptions = Object.freeze({
   doctor: 'Check installation health.', config: 'Read or change BrainAtlas configuration.', safety: 'Review and manage fingerprinted safety allowances.', module: 'List, add, or remove installed modules.',
   uninstall: 'Remove BrainAtlas while preserving the vault.', update: 'Install or inspect a release update.', rollback: 'Switch to a previous release.',
   recover: 'Inspect or recover an interrupted update.', eval: 'Run the local retrieval evaluation.', hook: 'Run an agent hook.', mcp: 'Start the BrainAtlas MCP server.',
-  migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', maintain: 'Read-only Wiki maintenance report (stale, broken, orphan and oversized pages); writes nothing unless --queue.', compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).', usage: 'Summarize hook metrics for the last days or record feedback.', help: 'Show built-in and active module commands.'
+  migrate: 'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.', adopt: 'Inspect existing agent setup and propose adoption.', maintain: 'Read-only Wiki maintenance report (stale, broken, orphan and oversized pages); writes nothing unless --queue.', compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).', usage: 'Summarize hook metrics for the last days or record feedback.', wiki: 'Read-only Wiki tools from the shell (same results as the MCP read tools).', help: 'Show built-in and active module commands.'
 });
 const helpUsages = Object.freeze({
-  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
+  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--channel mcp|cli] [--plan] [--json]', install: 'brainatlas install [--finalize]', status: 'brainatlas status [--json]', doctor: 'brainatlas doctor [--json]',
   config: 'brainatlas config get [KEY] | set KEY VALUE [--plan]', safety: 'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]', module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   uninstall: 'brainatlas uninstall [--plan]', update: 'brainatlas update --from ARCHIVE [--plan] | --check', rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]', eval: 'brainatlas eval [--cases FILE] [--corpus DIR]', hook: 'brainatlas hook CLIENT EVENT', mcp: 'brainatlas mcp',
-  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]', compact: 'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]', usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful', help: 'brainatlas --help | brainatlas help [COMMAND]'
+  migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]', adopt: 'brainatlas adopt --plan [--json]', maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]', compact: 'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]', usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful', wiki: 'brainatlas wiki query <text> [--limit N] [--compact] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]', help: 'brainatlas --help | brainatlas help [COMMAND]'
 });
 
 async function availableHelpCommands(paths, env) {
@@ -823,6 +834,8 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
     const requestedVault = value('--vault');
     const requestedProfile = value('--profile');
     const requestedAgents = value('--agents');
+    const requestedChannel = value('--channel');
+    if (requestedChannel !== undefined && !['mcp', 'cli'].includes(requestedChannel)) throw error('E_ARGUMENT', 'Channel must be mcp or cli.');
     const configExists = await exists(paths.configFile);
     const original = configExists ? await loadConfig({ paths, env }) : null;
     let vault = requestedVault;
@@ -863,6 +876,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
         recordChange('agents', cfg.agents, next);
         cfg.agents = next;
       }
+    }
+    if (requestedChannel !== undefined) {
+      const before = original?.channel ?? null;
+      const after = requestedChannel === 'cli' ? 'cli' : null;
+      const effective = channel => channel === 'cli' ? 'cli' : 'mcp';
+      if (original && (original.agents || []).length && effective(before) !== effective(after)) throw error('E_CHANNEL_SWITCH', 'Run brainatlas uninstall before changing the channel.');
+      recordChange('channel', before, after);
+      if (after === 'cli') cfg.channel = 'cli'; else delete cfg.channel;
     }
     const agents = cfg.agents;
     const adapterRoot = fileURLToPath(new URL('../../adapters/', import.meta.url));
@@ -1101,6 +1122,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, depe
   if (command === 'recover') {
     if (plan) { const journal = await readJournal(paths); output({ action: 'recover', pending: Boolean(journal), journal }); return; }
     output(await recoverUpdate(paths, env)); return;
+  }
+  if (command === 'wiki') {
+    const { formatWikiResult, runWikiCommand } = await import('./wiki.mjs');
+    const result = await runWikiCommand(args, { env });
+    if (json) { output(result.value); return; }
+    const text = formatWikiResult(result.sub, result.value);
+    if (text) console.log(text);
+    return;
   }
   if (command === 'compact') {
     const page = value('--page');

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.0-rc.12 — 2026-11-17
+
+Shell access for machines that cannot register MCP servers or hooks. The default install (MCP + hooks) is unchanged.
+
+- New read-only command group `brainatlas wiki query|read|index|list|status|lint [--vault PATH] [--json]`. Each subcommand calls the same MCP read tool in-process (no second copy of search or read logic); `--json` output is deep-equal to the registered MCP server's answer for the same tool and arguments, and tool errors keep their `E_*` codes. Nothing is written except the search index cache, as with MCP. Each call starts a new Node process: on a real vault `wiki query` took p50 about 0.5 s, p95 about 0.52 s (12 calls). See docs/user/wiki-cli.md.
+- New install channel `brainatlas init --channel cli`: every adapter writes only its managed instruction block, telling the agent to use the `wiki` commands above, and no MCP entry or hook; for Claude Code a managed `~/.claude/skills/brainatlas/SKILL.md` is also written. `--channel mcp` returns to the default. Changing the channel of an existing install requires `brainatlas uninstall` first (`E_CHANNEL_SWITCH`). In the cli channel there is no automatic context injection. Without `--channel` every file written by the five adapters is byte-identical to before. See docs/user/cli-channel.md.
+
 ## 0.1.0-rc.11 — 2026-11-16
 
 Retrieval quality, safety and maintenance. Linked pages, provenance trust, identifier-aware search and current-state snippets improve which page and section reach the agent; new `maintain`, `compact` and `usage` commands help keep long-lived vaults healthy; MCP writes are locked and atomic. Progressive disclosure and semantic search in the prompt hook stay opt-in.
