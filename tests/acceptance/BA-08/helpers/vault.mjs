@@ -10,7 +10,8 @@ export function isolateHome(prefix) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-home-`));
   process.env.HOME = home;
   return () => {
-    if (saved === undefined) delete process.env.HOME; else process.env.HOME = saved;
+    if (saved === undefined) delete process.env.HOME;
+    else process.env.HOME = saved;
     fs.rmSync(home, { recursive: true, force: true });
   };
 }
@@ -37,7 +38,7 @@ export function writeFiles(vault, files) {
 
 /** Sorted neighbour paths of a page in an index built by buildIndex; null when the page is not indexed. */
 export function neighbourPaths(index, file) {
-  const id = index.docs.findIndex(d => d.page.path === file);
+  const id = index.docs.findIndex((d) => d.page.path === file);
   if (id < 0) return null;
-  return (index.links[id] || []).map(n => index.docs[n].page.path).sort();
+  return (index.links[id] || []).map((n) => index.docs[n].page.path).sort();
 }

@@ -9,7 +9,7 @@ const TOOL_FOR = {
   index: 'wiki_read_index',
   list: 'wiki_list_pages',
   status: 'wiki_status',
-  lint: 'wiki_lint'
+  lint: 'wiki_lint',
 };
 
 const ALLOWED_OPTIONS = {
@@ -18,7 +18,7 @@ const ALLOWED_OPTIONS = {
   index: new Set(),
   list: new Set(['--type']),
   status: new Set(),
-  lint: new Set()
+  lint: new Set(),
 };
 
 const failure = (code, message) => Object.assign(new Error(message), { code });
@@ -43,13 +43,19 @@ export function parseWikiArguments(argv) {
   for (let index = 1; index < argv.length; index++) {
     const token = argv[index];
     if (token === '--json') continue;
-    if (!token.startsWith('--')) { positional.push(token); continue; }
+    if (!token.startsWith('--')) {
+      positional.push(token);
+      continue;
+    }
     const equals = token.indexOf('=');
     const name = equals < 0 ? token : token.slice(0, equals);
     if (name !== '--vault' && !allowed.has(name)) {
       throw failure('E_ARGUMENT', `Unknown option for wiki ${sub}: ${name}.`);
     }
-    if (name === '--compact') { options.compact = true; continue; }
+    if (name === '--compact') {
+      options.compact = true;
+      continue;
+    }
     let raw;
     if (equals >= 0) raw = token.slice(equals + 1);
     else {
@@ -103,8 +109,11 @@ export async function runWikiCommand(argv, { env = process.env } = {}) {
   const result = await callToolInProcess(options, TOOL_FOR[sub], args);
   if (result.isError) throw toolFailure(result.text);
   let value;
-  try { value = JSON.parse(result.text); }
-  catch { throw failure('E_WIKI_TOOL', 'The Wiki tool returned an unreadable response.'); }
+  try {
+    value = JSON.parse(result.text);
+  } catch {
+    throw failure('E_WIKI_TOOL', 'The Wiki tool returned an unreadable response.');
+  }
   return { sub, value };
 }
 

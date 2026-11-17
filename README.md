@@ -113,4 +113,3 @@ This is a high-level comparison of project types, not a feature benchmark. Verif
 - [Usage summary and feedback](docs/user/usage.md)
 - [Semantic retrieval (experimental)](docs/user/semantic.md)
 - [Troubleshooting](docs/user/troubleshooting.md)
-- [Demo recording script](docs/user/demo-gif-script.md)

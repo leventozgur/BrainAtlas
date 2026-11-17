@@ -14,7 +14,11 @@ async function assertThreeRuns(f, indexed, added) {
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index', {})), { indexed, added, removed: 0 }, 'run 1');
   const afterFirst = await readIndex(f);
   for (const run of [2, 3]) {
-    assert.deepEqual(okJson(await call(f.client, 'wiki_update_index', {})), { indexed, added: 0, removed: 0 }, `run ${run} adds nothing`);
+    assert.deepEqual(
+      okJson(await call(f.client, 'wiki_update_index', {})),
+      { indexed, added: 0, removed: 0 },
+      `run ${run} adds nothing`
+    );
     assert.deepEqual(await readIndex(f), afterFirst, `run ${run} keeps the bytes`);
   }
   return afterFirst.toString('utf8');
@@ -26,15 +30,27 @@ test('spaced names on a fresh index: angle-bracket destinations, root page under
   const text = await assertThreeRuns(f, 2, 2);
   assert.ok(text.includes('](<entities/ali yilmaz.md>)'), 'folder page uses an angle-bracket destination');
   assert.ok(text.includes('](<root note.md>)'), 'root page uses an angle-bracket destination');
-  assert.deepEqual(readLinks(text).map((x) => x.dest).sort(), Object.keys(files).sort(), 'the independent reader reads each name back exactly');
+  assert.deepEqual(
+    readLinks(text)
+      .map((x) => x.dest)
+      .sort(),
+    Object.keys(files).sort(),
+    'the independent reader reads each name back exactly'
+  );
   assert.equal(okJson(await call(f.client, 'wiki_status', {})).indexCoveragePct, 100);
 });
 
 test('parentheses inside an angle-bracket destination are escaped; the name reads back unescaped; three runs idempotent', async (t) => {
   const f = await startServer(t, { files: { 'entities/a b(c).md': page('Parantezli boşluk') } });
   const text = await assertThreeRuns(f, 1, 1);
-  assert.ok(text.includes('](<entities/a b\\(c\\).md>)'), 'the parentheses are backslash-escaped inside the angle brackets');
-  assert.deepEqual(readLinks(text).map((x) => x.dest), ['entities/a b(c).md']);
+  assert.ok(
+    text.includes('](<entities/a b\\(c\\).md>)'),
+    'the parentheses are backslash-escaped inside the angle brackets'
+  );
+  assert.deepEqual(
+    readLinks(text).map((x) => x.dest),
+    ['entities/a b(c).md']
+  );
   assert.equal(okJson(await call(f.client, 'wiki_status', {})).indexCoveragePct, 100);
 });
 
@@ -76,5 +92,9 @@ test('a line feed in the file name cannot be a CommonMark destination: the serve
     return;
   }
   const text = await assertThreeRuns(f, 1, 1);
-  assert.deepEqual(readLinks(text).map((x) => x.dest), [name], 'the index holds exactly one readable entry for the page');
+  assert.deepEqual(
+    readLinks(text).map((x) => x.dest),
+    [name],
+    'the index holds exactly one readable entry for the page'
+  );
 });

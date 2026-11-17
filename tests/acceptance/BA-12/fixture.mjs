@@ -5,7 +5,16 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export const MARKER = 'BA12MARK-7f3a-body-only';
-export const KINDS = ['stale', 'superseded-broken', 'broken-link', 'orphan', 'index-missing', 'index-stale', 'oversized', 'update-sprawl'];
+export const KINDS = [
+  'stale',
+  'superseded-broken',
+  'broken-link',
+  'orphan',
+  'index-missing',
+  'index-stale',
+  'oversized',
+  'update-sprawl',
+];
 
 // key: a short target string expected in the finding's detail (for broken-link and index-stale).
 // path: vault-relative path of the page or index that holds the defect.
@@ -54,16 +63,39 @@ export const AMBIGUOUS = [{ kind: 'index-missing', path: 'wiki/summaries/hn-link
 
 // Pages that must produce no finding at all (hard negatives).
 export const CLEAN_PATHS = [
-  'wiki/concepts/c-ok-1.md','wiki/concepts/c-ok-2.md', 'wiki/concepts/c-successor.md', 'wiki/concepts/st-future.md',
-  'wiki/concepts/paren(x).md', 'wiki/entities/angle page.md', 'wiki/entities/e-ok.md', 'wiki/sources/s-ok.md',
-  'wiki/concepts/dupname.md', 'wiki/entities/dupname.md', 'wiki/concepts/sup-chain-b.md', 'wiki/concepts/big-ok.md',
+  'wiki/concepts/c-ok-1.md',
+  'wiki/concepts/c-ok-2.md',
+  'wiki/concepts/c-successor.md',
+  'wiki/concepts/st-future.md',
+  'wiki/concepts/paren(x).md',
+  'wiki/entities/angle page.md',
+  'wiki/entities/e-ok.md',
+  'wiki/sources/s-ok.md',
+  'wiki/concepts/dupname.md',
+  'wiki/entities/dupname.md',
+  'wiki/concepts/sup-chain-b.md',
+  'wiki/concepts/big-ok.md',
   'wiki/sources/us-5.md',
 ];
 
 /** Content pages in the seeded vault (index and log excluded). */
 export const contentPageCount = () => PAGES.length;
 
-const WORDS = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'theta', 'kappa', 'sigma', 'omega', 'vector', 'graph', 'note'];
+const WORDS = [
+  'alpha',
+  'beta',
+  'gamma',
+  'delta',
+  'epsilon',
+  'zeta',
+  'theta',
+  'kappa',
+  'sigma',
+  'omega',
+  'vector',
+  'graph',
+  'note',
+];
 
 function words(n) {
   const out = [];
@@ -92,7 +124,11 @@ function frontmatter({ type, status = 'proposed', generated = '"2026-10-01"', st
   return lines.join('\n');
 }
 
-const dated = (n, prefix) => Array.from({ length: n }, (_, i) => `## ${prefix} 2026-03-0${i + 1}: synthetic note\n\nShort dated text ${i + 1}.\n`).join('\n');
+const dated = (n, prefix) =>
+  Array.from(
+    { length: n },
+    (_, i) => `## ${prefix} 2026-03-0${i + 1}: synthetic note\n\nShort dated text ${i + 1}.\n`
+  ).join('\n');
 
 const HUB_BODY = [
   'Hub page with synthetic links. Marker ' + MARKER + '.',
@@ -116,39 +152,144 @@ const HUB_BODY = [
 const PAGES = [
   // Hub and clean pages
   { path: 'concepts/c-ok-1.md', title: 'Hub', fm: { type: 'concept' }, body: HUB_BODY },
-  { path: 'concepts/c-ok-2.md', title: 'C OK 2', fm: { type: 'concept' }, body: '## Intro\n\nClean text.\n\n## Sec\n\nMore clean text.' },
+  {
+    path: 'concepts/c-ok-2.md',
+    title: 'C OK 2',
+    fm: { type: 'concept' },
+    body: '## Intro\n\nClean text.\n\n## Sec\n\nMore clean text.',
+  },
   { path: 'concepts/c-successor.md', title: 'Successor', fm: { type: 'concept' }, body: 'Replacement page.' },
-  { path: 'concepts/st-future.md', title: 'Future', fm: { type: 'concept', generated: '"2999-01-01"', stale: 'P30D' }, body: 'Future generated date, not expired.' },
+  {
+    path: 'concepts/st-future.md',
+    title: 'Future',
+    fm: { type: 'concept', generated: '"2999-01-01"', stale: 'P30D' },
+    body: 'Future generated date, not expired.',
+  },
   { path: 'concepts/paren(x).md', title: 'Paren file', fm: { type: 'concept' }, body: 'Escaped name page.' },
   { path: 'entities/angle page.md', title: 'Angle page', fm: { type: 'entity' }, body: 'Spaced name page.' },
   { path: 'entities/e-ok.md', title: 'E OK', fm: { type: 'entity' }, body: 'Clean entity.' },
   { path: 'sources/s-ok.md', title: 'S OK', fm: { type: 'source' }, body: 'Clean source.' },
-  { path: 'concepts/dupname.md', title: 'Dup concept', fm: { type: 'concept' }, body: 'Concept with a duplicated file name.' },
-  { path: 'entities/dupname.md', title: 'Dup entity', fm: { type: 'entity' }, body: 'Entity with a duplicated file name.' },
-  { path: 'concepts/sup-chain-b.md', title: 'Chain B', fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/c-successor.md' }, body: 'Valid superseded page.' },
+  {
+    path: 'concepts/dupname.md',
+    title: 'Dup concept',
+    fm: { type: 'concept' },
+    body: 'Concept with a duplicated file name.',
+  },
+  {
+    path: 'entities/dupname.md',
+    title: 'Dup entity',
+    fm: { type: 'entity' },
+    body: 'Entity with a duplicated file name.',
+  },
+  {
+    path: 'concepts/sup-chain-b.md',
+    title: 'Chain B',
+    fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/c-successor.md' },
+    body: 'Valid superseded page.',
+  },
   { path: 'concepts/big-ok.md', title: 'Big OK', fm: { type: 'concept' }, body: words(2500) },
-  { path: 'sources/us-5.md', title: 'US 5', fm: { type: 'source' }, body: dated(5, 'Update') + '\nThe word Update appears in ordinary text here.' },
-  { path: 'summaries/hn-linked-unindexed.md', title: 'HN linked', fm: { type: 'summary' }, body: 'Linked from the hub but not in the index.' },
+  {
+    path: 'sources/us-5.md',
+    title: 'US 5',
+    fm: { type: 'source' },
+    body: dated(5, 'Update') + '\nThe word Update appears in ordinary text here.',
+  },
+  {
+    path: 'summaries/hn-linked-unindexed.md',
+    title: 'HN linked',
+    fm: { type: 'summary' },
+    body: 'Linked from the hub but not in the index.',
+  },
 
   // Stale seeds
-  { path: 'concepts/st-date.md', title: 'Stale date', fm: { type: 'concept', stale: '"2000-01-01"' }, body: 'Expired date.' },
-  { path: 'concepts/st-pnd.md', title: 'Stale PnD', fm: { type: 'concept', generated: '"2000-01-01"', stale: 'P30D' }, body: 'Expired duration in days.' },
-  { path: 'entities/st-pnw.md', title: 'Stale PnW', fm: { type: 'entity', generated: '"2000-01-01"', stale: 'P2W' }, body: 'Expired duration in weeks.' },
-  { path: 'sources/st-ts.md', title: 'Stale timestamp', fm: { type: 'source', stale: '"2000-01-01T00:00:00Z"' }, body: 'Expired timestamp.' },
-  { path: 'summaries/st-unquoted.md', title: 'Stale unquoted', fm: { type: 'summary', stale: '2000-01-01' }, body: 'Expired unquoted date.' },
+  {
+    path: 'concepts/st-date.md',
+    title: 'Stale date',
+    fm: { type: 'concept', stale: '"2000-01-01"' },
+    body: 'Expired date.',
+  },
+  {
+    path: 'concepts/st-pnd.md',
+    title: 'Stale PnD',
+    fm: { type: 'concept', generated: '"2000-01-01"', stale: 'P30D' },
+    body: 'Expired duration in days.',
+  },
+  {
+    path: 'entities/st-pnw.md',
+    title: 'Stale PnW',
+    fm: { type: 'entity', generated: '"2000-01-01"', stale: 'P2W' },
+    body: 'Expired duration in weeks.',
+  },
+  {
+    path: 'sources/st-ts.md',
+    title: 'Stale timestamp',
+    fm: { type: 'source', stale: '"2000-01-01T00:00:00Z"' },
+    body: 'Expired timestamp.',
+  },
+  {
+    path: 'summaries/st-unquoted.md',
+    title: 'Stale unquoted',
+    fm: { type: 'summary', stale: '2000-01-01' },
+    body: 'Expired unquoted date.',
+  },
 
   // Superseded seeds
-  { path: 'concepts/sup-no-field.md', title: 'No field', fm: { type: 'concept', status: 'superseded' }, body: 'Superseded with no successor field.' },
-  { path: 'concepts/sup-no-target.md', title: 'No target', fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/does-not-exist.md' }, body: 'Successor is missing.' },
-  { path: 'concepts/sup-chain-a.md', title: 'Chain A', fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/sup-chain-b.md' }, body: 'Successor is itself superseded.' },
-  { path: 'concepts/loop-a.md', title: 'Loop A', fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/loop-b.md' }, body: 'Loop member.' },
-  { path: 'concepts/loop-b.md', title: 'Loop B', fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/loop-a.md' }, body: 'Loop member.' },
+  {
+    path: 'concepts/sup-no-field.md',
+    title: 'No field',
+    fm: { type: 'concept', status: 'superseded' },
+    body: 'Superseded with no successor field.',
+  },
+  {
+    path: 'concepts/sup-no-target.md',
+    title: 'No target',
+    fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/does-not-exist.md' },
+    body: 'Successor is missing.',
+  },
+  {
+    path: 'concepts/sup-chain-a.md',
+    title: 'Chain A',
+    fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/sup-chain-b.md' },
+    body: 'Successor is itself superseded.',
+  },
+  {
+    path: 'concepts/loop-a.md',
+    title: 'Loop A',
+    fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/loop-b.md' },
+    body: 'Loop member.',
+  },
+  {
+    path: 'concepts/loop-b.md',
+    title: 'Loop B',
+    fm: { type: 'concept', status: 'superseded', superseded: 'wiki/concepts/loop-a.md' },
+    body: 'Loop member.',
+  },
 
   // Broken link seeds
-  { path: 'concepts/bl-wiki.md', title: 'BL wiki', fm: { type: 'concept' }, body: 'Broken wikilink: [[zz-no-such-page]].' },
-  { path: 'entities/bl-rel.md', title: 'BL rel', fm: { type: 'entity' }, body: 'Broken relative link: [gone](../concepts/zz-gone.md).' },
-  { path: 'concepts/bl-anchor.md', title: 'BL anchor', fm: { type: 'concept' }, body: 'Missing target with anchor: [gone part](../sources/zz-absent.md#part).' },
-  { path: 'sources/bl-amb.md', title: 'BL ambiguous', fm: { type: 'source' }, body: 'Ambiguous wikilink: [[dupname]].' },
+  {
+    path: 'concepts/bl-wiki.md',
+    title: 'BL wiki',
+    fm: { type: 'concept' },
+    body: 'Broken wikilink: [[zz-no-such-page]].',
+  },
+  {
+    path: 'entities/bl-rel.md',
+    title: 'BL rel',
+    fm: { type: 'entity' },
+    body: 'Broken relative link: [gone](../concepts/zz-gone.md).',
+  },
+  {
+    path: 'concepts/bl-anchor.md',
+    title: 'BL anchor',
+    fm: { type: 'concept' },
+    body: 'Missing target with anchor: [gone part](../sources/zz-absent.md#part).',
+  },
+  {
+    path: 'sources/bl-amb.md',
+    title: 'BL ambiguous',
+    fm: { type: 'source' },
+    body: 'Ambiguous wikilink: [[dupname]].',
+  },
 
   // Orphans (not linked, not indexed)
   { path: 'concepts/orph-1.md', title: 'Orphan 1', fm: { type: 'concept' }, body: 'Nothing links here.' },
@@ -168,8 +309,13 @@ const PAGES = [
   // Update sprawl seeds
   { path: 'concepts/us-6.md', title: 'US 6', fm: { type: 'concept' }, body: `${MARKER}\n\n${dated(6, 'Update')}` },
   {
-    path: 'entities/us-8.md', title: 'US 8', fm: { type: 'entity' },
-    body: Array.from({ length: 8 }, (_, i) => `## ${i % 2 ? 'Update' : 'Güncelleme'} 2026-04-0${i + 1}: synthetic note\n\nText ${i + 1}.\n`).join('\n'),
+    path: 'entities/us-8.md',
+    title: 'US 8',
+    fm: { type: 'entity' },
+    body: Array.from(
+      { length: 8 },
+      (_, i) => `## ${i % 2 ? 'Update' : 'Güncelleme'} 2026-04-0${i + 1}: synthetic note\n\nText ${i + 1}.\n`
+    ).join('\n'),
   },
   { path: 'summaries/us-6b.md', title: 'US 6b', fm: { type: 'summary' }, body: dated(6, 'Update') },
 ];
@@ -241,25 +387,45 @@ export function buildSeededVault(root) {
 /** Scoring. Returns { seeds, detected, perKind, falsePositives, companionsSeen, ambiguousSeen, totalFindings, strictFp }. */
 export function score(findings) {
   const used = new Set();
-  const matchOf = (seed, pass) => findings.findIndex((f, i) => {
-    if (used.has(i) || f.kind !== seed.kind) return false;
-    if (pass === 1) return f.path === seed.path || (seed.key !== undefined && JSON.stringify(f.detail ?? '').includes(seed.key)) || (seed.key !== undefined && f.path.includes(seed.key));
-    return f.path === seed.path;
-  });
+  const matchOf = (seed, pass) =>
+    findings.findIndex((f, i) => {
+      if (used.has(i) || f.kind !== seed.kind) return false;
+      if (pass === 1)
+        return (
+          f.path === seed.path ||
+          (seed.key !== undefined && JSON.stringify(f.detail ?? '').includes(seed.key)) ||
+          (seed.key !== undefined && f.path.includes(seed.key))
+        );
+      return f.path === seed.path;
+    });
   const seedHit = new Map();
   for (const seed of SEEDS) {
     let idx = matchOf(seed, 1);
     if (idx < 0) idx = matchOf(seed, 2);
-    if (idx >= 0) { used.add(idx); seedHit.set(seed.id, findings[idx]); }
+    if (idx >= 0) {
+      used.add(idx);
+      seedHit.set(seed.id, findings[idx]);
+    }
   }
   const isIn = (list, f) => list.some((x) => x.kind === f.kind && x.path === f.path);
   const perKind = Object.fromEntries(KINDS.map((k) => [k, { seeds: 0, detected: 0, falsePositives: 0 }]));
-  for (const seed of SEEDS) { perKind[seed.kind].seeds += 1; if (seedHit.has(seed.id)) perKind[seed.kind].detected += 1; }
-  const falsePositives = []; const companionsSeen = []; const ambiguousSeen = [];
+  for (const seed of SEEDS) {
+    perKind[seed.kind].seeds += 1;
+    if (seedHit.has(seed.id)) perKind[seed.kind].detected += 1;
+  }
+  const falsePositives = [];
+  const companionsSeen = [];
+  const ambiguousSeen = [];
   findings.forEach((f, i) => {
     if (used.has(i)) return;
-    if (isIn(COMPANIONS, f)) { companionsSeen.push(f); return; }
-    if (isIn(AMBIGUOUS, f)) { ambiguousSeen.push(f); return; }
+    if (isIn(COMPANIONS, f)) {
+      companionsSeen.push(f);
+      return;
+    }
+    if (isIn(AMBIGUOUS, f)) {
+      ambiguousSeen.push(f);
+      return;
+    }
     falsePositives.push(f);
     if (perKind[f.kind]) perKind[f.kind].falsePositives += 1;
   });

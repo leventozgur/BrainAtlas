@@ -32,7 +32,11 @@ async function runCli(argv, env) {
   const output = [];
   const original = console.log;
   console.log = (line) => output.push(String(line));
-  try { await main(argv, env); } finally { console.log = original; }
+  try {
+    await main(argv, env);
+  } finally {
+    console.log = original;
+  }
   assert.equal(output.length, 1, 'command should emit one result');
   return JSON.parse(output[0]);
 }
@@ -57,7 +61,11 @@ test('CLI plan, allow, list, changed finding, revoke, and sync inventory stay va
   assert.equal(configAfterAllow.safety.allow.length, 1);
   assert.equal(Object.hasOwn(configAfterAllow.safety.allow[0], 'sha256'), true);
   assert.equal(JSON.stringify(configAfterAllow.safety.allow).includes(synthetic), false);
-  const approvedInventory = await inventoryVault({ vaultPath: fx.vault, stateDir: join(fx.env.XDG_STATE_HOME, 'state'), config: configAfterAllow });
+  const approvedInventory = await inventoryVault({
+    vaultPath: fx.vault,
+    stateDir: join(fx.env.XDG_STATE_HOME, 'state'),
+    config: configAfterAllow,
+  });
   assert.equal(approvedInventory.files.has(path), true);
 
   const listed = await runCli(['safety', 'list', path, '--json'], fx.env);
@@ -67,9 +75,13 @@ test('CLI plan, allow, list, changed finding, revoke, and sync inventory stay va
 
   const changed = `${initial}secret: "S-ALLOW-added-85KlMnOpQrSt"\n`;
   await writeFile(join(fx.vault, path), changed);
-  const changedInventory = await inventoryVault({ vaultPath: fx.vault, stateDir: join(fx.env.XDG_STATE_HOME, 'state'), config: configAfterAllow });
+  const changedInventory = await inventoryVault({
+    vaultPath: fx.vault,
+    stateDir: join(fx.env.XDG_STATE_HOME, 'state'),
+    config: configAfterAllow,
+  });
   assert.equal(changedInventory.files.has(path), false);
-  assert.ok(changedInventory.refused.some(row => row.path === path && row.ruleId === 'secret-assignment'));
+  assert.ok(changedInventory.refused.some((row) => row.path === path && row.ruleId === 'secret-assignment'));
 
   const plannedRevokeBefore = await readFile(fx.paths.configFile, 'utf8');
   const plannedRevoke = await runCli(['safety', 'revoke', path, '--plan', '--json'], fx.env);
@@ -78,9 +90,13 @@ test('CLI plan, allow, list, changed finding, revoke, and sync inventory stay va
   await runCli(['safety', 'revoke', path, '--json'], fx.env);
   const revokedConfig = await loadConfig({ paths: fx.paths, env: fx.env });
   assert.deepEqual(revokedConfig.safety.allow, []);
-  const revokedInventory = await inventoryVault({ vaultPath: fx.vault, stateDir: join(fx.env.XDG_STATE_HOME, 'state'), config: revokedConfig });
+  const revokedInventory = await inventoryVault({
+    vaultPath: fx.vault,
+    stateDir: join(fx.env.XDG_STATE_HOME, 'state'),
+    config: revokedConfig,
+  });
   assert.equal(revokedInventory.files.has(path), false);
-  assert.ok(revokedInventory.refused.some(row => row.path === path && row.ruleId === 'secret-assignment'));
+  assert.ok(revokedInventory.refused.some((row) => row.path === path && row.ruleId === 'secret-assignment'));
 });
 
 test('path allowance stores only path and rule and does not disable content findings', async (t) => {
@@ -96,11 +112,19 @@ test('path allowance stores only path and rule and does not disable content find
   assert.equal(result.entries[0].ruleId, 'denied-path');
   const afterAllow = await loadConfig({ paths: fx.paths, env: fx.env });
   assert.deepEqual(afterAllow.safety.allow, [{ path, ruleId: 'denied-path' }]);
-  const allowedInventory = await inventoryVault({ vaultPath: fx.vault, stateDir: join(fx.env.XDG_STATE_HOME, 'state'), config: afterAllow });
+  const allowedInventory = await inventoryVault({
+    vaultPath: fx.vault,
+    stateDir: join(fx.env.XDG_STATE_HOME, 'state'),
+    config: afterAllow,
+  });
   assert.equal(allowedInventory.files.has(path), true);
 
   await writeFile(join(fx.vault, path), 'secret: "S-ALLOW-content-46TuVwXyZaBc"\n');
-  const contentInventory = await inventoryVault({ vaultPath: fx.vault, stateDir: join(fx.env.XDG_STATE_HOME, 'state'), config: afterAllow });
+  const contentInventory = await inventoryVault({
+    vaultPath: fx.vault,
+    stateDir: join(fx.env.XDG_STATE_HOME, 'state'),
+    config: afterAllow,
+  });
   assert.equal(contentInventory.files.has(path), false);
-  assert.ok(contentInventory.refused.some(row => row.path === path && row.ruleId === 'secret-assignment'));
+  assert.ok(contentInventory.refused.some((row) => row.path === path && row.ruleId === 'secret-assignment'));
 });

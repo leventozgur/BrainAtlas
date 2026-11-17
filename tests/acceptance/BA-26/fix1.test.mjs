@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // BA-26 blind acceptance, re-test after fix1 (commit d0dfea3): query/fragment/matrix assignments and İ/ı key folding.
 // Expected values come from the fix's stated intent and the brief, not from a product run. Values are built at run
-// time. Temporary vaults live under tests/acceptance/BA-26/.work and are removed afterwards. No network.
-import test from 'node:test';
+// time. Temporary vaults live under a per-run directory in the OS temp directory and are removed afterwards.
+// No network.
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mainRoot } from './support.mjs';
@@ -12,7 +14,8 @@ import { mainRoot } from './support.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MAIN = mainRoot();
 const ROOT = path.resolve(HERE, '../../..');
-const WORK = path.join(HERE, '.work');
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'ba26-'));
+after(() => fs.rmSync(WORK, { recursive: true, force: true }));
 const safety = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/safety/index.mjs')).href);
 const mainSafety = await import(pathToFileURL(path.join(MAIN, 'packages/core/src/safety/index.mjs')).href);
 const { runHook } = await import(pathToFileURL(path.join(ROOT, 'packages/hooks/src/index.mjs')).href);
@@ -64,7 +67,9 @@ const NEGATIVES = [
 ];
 
 test('fix1 positives: query, fragment, matrix and İ/ı-folded keys are findings with the expected rule', () => {
-  const misses = POSITIVES.filter(([text, rule]) => !ids(text).has(rule)).map(([t, r]) => `${r} <- ${t.slice(0, 50)} got=[${rules(t)}]`);
+  const misses = POSITIVES.filter(([text, rule]) => !ids(text).has(rule)).map(
+    ([t, r]) => `${r} <- ${t.slice(0, 50)} got=[${rules(t)}]`
+  );
   assert.deepEqual(misses, []);
 });
 
@@ -77,18 +82,39 @@ test('fix1 hook: query, fragment, matrix and Turkish upper-case secrets never re
   fs.mkdirSync(WORK, { recursive: true });
   const root = fs.mkdtempSync(path.join(WORK, 'fix1-hook-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const vault = path.join(root, 'vault'), home = path.join(root, 'home'), state = path.join(root, 'state');
-  fs.mkdirSync(path.join(vault, 'wiki'), { recursive: true }); fs.mkdirSync(home); fs.mkdirSync(state);
-  const leaks = [], shown = [];
-  for (const [i, [text, rule]] of POSITIVES.entries()) {
+  const vault = path.join(root, 'vault'),
+    home = path.join(root, 'home'),
+    state = path.join(root, 'state');
+  fs.mkdirSync(path.join(vault, 'wiki'), { recursive: true });
+  fs.mkdirSync(home);
+  fs.mkdirSync(state);
+  const leaks = [],
+    shown = [];
+  for (const [i, [text]] of POSITIVES.entries()) {
     // Each page carries a unique keyword so its own prompt retrieves it.
-    fs.writeFileSync(path.join(vault, 'wiki', `f${i}.md`), `---\ntitle: Bağlantı ${i}\nstatus: confirmed\n---\nfix1kw${i} ${text}\n`);
+    fs.writeFileSync(
+      path.join(vault, 'wiki', `f${i}.md`),
+      `---\ntitle: Bağlantı ${i}\nstatus: confirmed\n---\nfix1kw${i} ${text}\n`
+    );
   }
   for (const [i, [text]] of POSITIVES.entries()) {
     const secret = text.match(new RegExp(V.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '|' + HE))?.[0];
-    const res = await runHook({ client: 'claude', event: 'prompt', stdin: JSON.stringify({ session_id: `fix1-${i}`, prompt: `fix1kw${i}` }), env: { HOME: home },
-      config: { vault: { path: vault }, stateDir: state, hooks: { mode: 'normal', deadlineMs: 4700 }, retrieval: { abstainThreshold: 0 } }, now: NOW });
-    const out = res.stdout.includes('additionalContext') ? JSON.parse(res.stdout).hookSpecificOutput.additionalContext : '';
+    const res = await runHook({
+      client: 'claude',
+      event: 'prompt',
+      stdin: JSON.stringify({ session_id: `fix1-${i}`, prompt: `fix1kw${i}` }),
+      env: { HOME: home },
+      config: {
+        vault: { path: vault },
+        stateDir: state,
+        hooks: { mode: 'normal', deadlineMs: 4700 },
+        retrieval: { abstainThreshold: 0 },
+      },
+      now: NOW,
+    });
+    const out = res.stdout.includes('additionalContext')
+      ? JSON.parse(res.stdout).hookSpecificOutput.additionalContext
+      : '';
     if (out.includes(`Bağlantı ${i}`)) shown.push(i);
     if (secret && out.includes(secret)) leaks.push(`${i}: ${secret.slice(0, 4)}...`);
   }
@@ -125,27 +151,11 @@ test('fix1 false positives: query-shaped clean set (120 URLs) yields no finding 
 test('fix1 vs main: the query pass adds no finding on query-shaped clean content that main does not report', () => {
   const extra = [];
   for (const x of QCLEAN_ITEMS) {
-    const mine = safety.scanText(x).length, theirs = mainSafety.scanText(x).length;
+    const mine = safety.scanText(x).length,
+      theirs = mainSafety.scanText(x).length;
     if (mine > theirs) extra.push(`${x.slice(0, 60)} wt=${mine} main=${theirs}`);
   }
   assert.deepEqual(extra, []);
-});
-
-test('fix1 ReDoS guard: adversarial query strings complete quickly (not a p95 measurement)', (t) => {
-  const cases = {
-    manyPairs: 'https://a.example/?' + 'a='.repeat(60000),
-    longKey: '?' + 'k'.repeat(200000) + '=',
-    longAmp: '&x=' + 'y'.repeat(200000),
-    semiPairs: '?a=b;'.repeat(50000),
-    keyNoEq: '?' + 'sifre'.repeat(30000),
-  };
-  for (const [name, text] of Object.entries(cases)) {
-    const start = Date.now();
-    safety.scanText(text);
-    const ms = Date.now() - start;
-    t.diagnostic(`${name}: ${text.length} chars, ${ms} ms`);
-    assert.ok(ms < 3000, `${name} took ${ms} ms`);
-  }
 });
 
 test('fix1 Turkish case: ŞİFRE/PAROLA/DB_ŞİFRE mixed and lower case keys all match, values are not echoed in the finding', () => {

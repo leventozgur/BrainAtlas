@@ -4,8 +4,18 @@ import * as wiki from '@llmwiki/core';
 
 // Turkish mapping runs before lowercasing: 'İ'.toLowerCase() yields a combining dot.
 const TURKISH = {
-  'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'İ': 'i',
-  'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u'
+  ç: 'c',
+  Ç: 'c',
+  ğ: 'g',
+  Ğ: 'g',
+  ı: 'i',
+  İ: 'i',
+  ö: 'o',
+  Ö: 'o',
+  ş: 's',
+  Ş: 's',
+  ü: 'u',
+  Ü: 'u',
 };
 
 /** Pure: name -> ASCII slug, or '' when no letter or digit is left. */

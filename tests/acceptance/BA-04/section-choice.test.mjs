@@ -9,7 +9,8 @@ const top = (pages, query, options) => run(pages, query, options).results[0] ?? 
 const headingOf = (pages, query, options) => top(pages, query, options)?.heading ?? null;
 
 test('ISO dates, with and without time, pick the newest section regardless of file order', () => {
-  const body = '# Widget\n## Timeout 2025-01-10\nwidget timeout is 5 seconds\n## Timeout 2025-06-01T12:30Z\nwidget timeout is 9 seconds\n## Timeout 2025-03-20\nwidget timeout is 7 seconds\n';
+  const body =
+    '# Widget\n## Timeout 2025-01-10\nwidget timeout is 5 seconds\n## Timeout 2025-06-01T12:30Z\nwidget timeout is 9 seconds\n## Timeout 2025-03-20\nwidget timeout is 7 seconds\n';
   const r = top([page('w.md', body)], 'widget timeout');
   assert.equal(r.heading, 'Timeout 2025-06-01T12:30Z');
   assert.match(r.snippet, /^## Timeout 2025-06-01T12:30Z\nwidget timeout is 9 seconds$/);
@@ -19,31 +20,60 @@ test('ISO dates, with and without time, pick the newest section regardless of fi
 
 test('DD.MM.YYYY headings are read day first', () => {
   // 05.03.2026 is 5 March, so 2026-04-01 is newer. A month-first reading would make it 3 May and win.
-  assert.equal(headingOf([page('l.md', '## Limit 05.03.2026\nwidget limit is 40\n## Limit 2026-04-01\nwidget limit is 60\n')], 'widget limit'), 'Limit 2026-04-01');
-  assert.equal(headingOf([page('l.md', '## Limit 05.03.2026\nwidget limit is 40\n## Limit 2026-02-11\nwidget limit is 60\n')], 'widget limit'), 'Limit 05.03.2026');
+  assert.equal(
+    headingOf(
+      [page('l.md', '## Limit 05.03.2026\nwidget limit is 40\n## Limit 2026-04-01\nwidget limit is 60\n')],
+      'widget limit'
+    ),
+    'Limit 2026-04-01'
+  );
+  assert.equal(
+    headingOf(
+      [page('l.md', '## Limit 05.03.2026\nwidget limit is 40\n## Limit 2026-02-11\nwidget limit is 60\n')],
+      'widget limit'
+    ),
+    'Limit 05.03.2026'
+  );
 });
 
 test('an invalid calendar date counts as no date and is never chosen', () => {
-  assert.equal(headingOf([page('l.md', '## Limit 2026-02-30\nwidget limit is 90\n## Limit 2026-01-10\nwidget limit is 40\n')], 'widget limit'), 'Limit 2026-01-10');
-  assert.equal(headingOf([page('l.md', '## Limit 31.02.2026\nwidget limit is 90\n## Limit 2026-01-10\nwidget limit is 40\n')], 'widget limit'), 'Limit 2026-01-10');
+  assert.equal(
+    headingOf(
+      [page('l.md', '## Limit 2026-02-30\nwidget limit is 90\n## Limit 2026-01-10\nwidget limit is 40\n')],
+      'widget limit'
+    ),
+    'Limit 2026-01-10'
+  );
+  assert.equal(
+    headingOf(
+      [page('l.md', '## Limit 31.02.2026\nwidget limit is 90\n## Limit 2026-01-10\nwidget limit is 40\n')],
+      'widget limit'
+    ),
+    'Limit 2026-01-10'
+  );
 });
 
 test('a Current state heading wins over a newer dated section, in either file order', () => {
-  const current = '## Current state — widget limit 40\nwidget limit is 40\n## 2026-09-01 widget limit change\nwidget limit is 60\n';
-  const reversed = '## 2026-09-01 widget limit change\nwidget limit is 60\n## Current state — widget limit 40\nwidget limit is 40\n';
+  const current =
+    '## Current state — widget limit 40\nwidget limit is 40\n## 2026-09-01 widget limit change\nwidget limit is 60\n';
+  const reversed =
+    '## 2026-09-01 widget limit change\nwidget limit is 60\n## Current state — widget limit 40\nwidget limit is 40\n';
   assert.equal(headingOf([page('c.md', current)], 'widget limit'), 'Current state — widget limit 40');
   assert.equal(headingOf([page('c.md', reversed)], 'widget limit'), 'Current state — widget limit 40');
 });
 
 test('the Turkish Güncel durum marker is recognised, case and diacritics folded', () => {
-  const tr = '## 2026-09-01 widget limit change\nwidget limit is 60\n## Güncel durum — widget limit 40\nwidget limit is 40\n';
+  const tr =
+    '## 2026-09-01 widget limit change\nwidget limit is 60\n## Güncel durum — widget limit 40\nwidget limit is 40\n';
   assert.equal(headingOf([page('g.md', tr)], 'widget limit'), 'Güncel durum — widget limit 40');
-  const upper = '## 2026-09-01 widget limit change\nwidget limit is 60\n## GUNCEL DURUM — widget limit 40\nwidget limit is 40\n';
+  const upper =
+    '## 2026-09-01 widget limit change\nwidget limit is 60\n## GUNCEL DURUM — widget limit 40\nwidget limit is 40\n';
   assert.equal(headingOf([page('g.md', upper)], 'widget limit'), 'GUNCEL DURUM — widget limit 40');
 });
 
 test('a section dated after the as-of date is never preferred; the as-of day itself is eligible', () => {
-  const body = '## 2027-01-01 widget limit planned\nwidget limit will be 100\n## 2026-03-01 widget limit\nwidget limit is 60\n';
+  const body =
+    '## 2027-01-01 widget limit planned\nwidget limit will be 100\n## 2026-03-01 widget limit\nwidget limit is 60\n';
   assert.equal(headingOf([page('f.md', body)], 'widget limit'), '2026-03-01 widget limit');
   const onDay = '## 2026-03-01 widget limit\nwidget limit is 60\n## 2026-11-11 widget limit\nwidget limit is 70\n';
   assert.equal(headingOf([page('f.md', onDay)], 'widget limit'), '2026-11-11 widget limit');
@@ -71,16 +101,20 @@ test('a dated section below 0.6 of the best score is not a candidate; at 0.6 or 
 });
 
 test('on a page with several topics, a newer unrelated dated section is not chosen', () => {
-  const body = '# Runbook\n## Current state — batch size 120\nbatch size is 120 per cycle\n## 2026-10-30 Harbor body limit\nharbor body limit reached once per cycle\n';
+  const body =
+    '# Runbook\n## Current state — batch size 120\nbatch size is 120 per cycle\n## 2026-10-30 Harbor body limit\nharbor body limit reached once per cycle\n';
   assert.equal(headingOf([page('r.md', body)], 'batch size cycle'), 'Current state — batch size 120');
 });
 
 test('a heading inside a backtick or tilde code fence is not a section', () => {
-  const body = '## Limit 2025-01-01\nwidget limit is 5\n```\n## 2026-10-01 widget limit fake\nwidget limit is 99\n```\n';
+  const body =
+    '## Limit 2025-01-01\nwidget limit is 5\n```\n## 2026-10-01 widget limit fake\nwidget limit is 99\n```\n';
   assert.equal(headingOf([page('k.md', body)], 'widget limit'), 'Limit 2025-01-01');
-  const four = '## Limit 2025-01-01\nwidget limit is 5\n````\n```\n## 2026-10-02 widget limit fake\nwidget limit is 99\n````\n';
+  const four =
+    '## Limit 2025-01-01\nwidget limit is 5\n````\n```\n## 2026-10-02 widget limit fake\nwidget limit is 99\n````\n';
   assert.equal(headingOf([page('k.md', four)], 'widget limit'), 'Limit 2025-01-01');
-  const tilde = '## Limit 2025-01-01\nwidget limit is 5\n~~~\n## 2026-10-03 widget limit fake\nwidget limit is 99\n~~~\n';
+  const tilde =
+    '## Limit 2025-01-01\nwidget limit is 5\n~~~\n## 2026-10-03 widget limit fake\nwidget limit is 99\n~~~\n';
   assert.equal(headingOf([page('k.md', tilde)], 'widget limit'), 'Limit 2025-01-01');
 });
 
@@ -133,6 +167,9 @@ test('the character budget applies to the whole selected snippet, heading line i
 
 test('the as-of date is the reference point, not the wall clock', () => {
   const body = '## 2026-10-01 widget limit old\nwidget limit is 1\n## 2026-11-05 widget limit new\nwidget limit is 2\n';
-  assert.equal(headingOf([page('a.md', body)], 'widget limit', { asOf: new Date('2026-10-20T00:00:00Z') }), '2026-10-01 widget limit old');
+  assert.equal(
+    headingOf([page('a.md', body)], 'widget limit', { asOf: new Date('2026-10-20T00:00:00Z') }),
+    '2026-10-01 widget limit old'
+  );
   assert.equal(headingOf([page('a.md', body)], 'widget limit', { asOf: NOW }), '2026-11-05 widget limit new');
 });

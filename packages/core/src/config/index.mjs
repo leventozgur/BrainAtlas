@@ -1,48 +1,154 @@
 // SPDX-License-Identifier: MIT
-import { mkdir, readFile, rename, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,shadow?:{abstainThreshold:number}},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number}},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
 /** @type {object} */
 export const CONFIG_SCHEMA = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', additionalProperties: false,
-  required: ['schemaVersion','profile','vault','modules','agents','scope','retrieval','hooks','safety','okf','sync','telemetry','readOnly','node'],
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schemaVersion',
+    'profile',
+    'vault',
+    'modules',
+    'agents',
+    'scope',
+    'retrieval',
+    'hooks',
+    'safety',
+    'okf',
+    'sync',
+    'telemetry',
+    'readOnly',
+    'node',
+  ],
   properties: {
-    schemaVersion: { type: 'integer', enum: [1] }, profile: { type: 'string', enum: ['lite','full','custom'] },
-    channel: { type: 'string', enum: ['mcp','cli'] },
-    vault: { type: 'object', required: ['path'], properties: { path: { type: 'string', minLength: 1 } }, additionalProperties: false },
-    modules: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true }, agents: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
-    scope: { type: 'string', enum: ['global','vault'] },
-    retrieval: { type: 'object', required: ['budgetChars','abstainThreshold'], properties: { budgetChars: { type: 'integer', minimum: 1 }, abstainThreshold: { type: 'number', minimum: 0, maximum: 1 }, exclude: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 200 }, uniqueItems: true }, shadow: { type: 'object', required: ['abstainThreshold'], properties: { abstainThreshold: { type: 'number', minimum: 0, maximum: 1 } }, additionalProperties: false } }, additionalProperties: false },
-    hooks: { type: 'object', required: ['mode','deadlineMs'], properties: { mode: { type: 'string', enum: ['normal','economic','manual'] }, deadlineMs: { type: 'integer', minimum: 1 }, disclosure: { type: 'string', enum: ['full','progressive'] } }, additionalProperties: false },
-    safety: { type: 'object', required: ['secretFilter','extraDenyGlobs'], properties: {
-      secretFilter: { const: true }, extraDenyGlobs: { type: 'array', items: { type: 'string' } },
-      allow: { type: 'array', items: { type: 'object', required: ['path','ruleId'], properties: {
-        path: { type: 'string', minLength: 1 }, ruleId: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,63}$' },
-        sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' }
-      }, additionalProperties: false } }
-    }, additionalProperties: false },
-    okf: { type: 'object', required: ['level'], properties: { level: { type: 'string', enum: ['warn','strict'] } }, additionalProperties: false },
-    sync: { type: 'object', required: ['transport','options'], properties: { transport: { type: ['string','null'] }, options: { type: 'object' } }, additionalProperties: false },
-    semantic: { type: 'object', properties: { enabled: { type: 'boolean' }, baseUrl: { type: 'string', minLength: 1 }, model: { type: 'string', minLength: 1 }, dims: { type: 'integer', minimum: 1 }, queryPrefix: { type: 'string' }, documentPrefix: { type: 'string' }, minScore: { type: 'number', minimum: -1, maximum: 1 }, mode: { type: 'string', enum: ['semantic-primary','rrf'] }, timeoutMs: { type: 'integer', minimum: 1 }, indexTimeoutMs: { type: 'integer', minimum: 1 }, indexBatchSize: { type: 'integer', minimum: 1, maximum: 64 }, allowRemote: { type: 'boolean' } }, additionalProperties: false },
-    telemetry: { const: false }, readOnly: { type: 'boolean' }, node: { type: 'object', required: ['path'], properties: { path: { type: 'string' } }, additionalProperties: false }
-  }
+    schemaVersion: { type: 'integer', enum: [1] },
+    profile: { type: 'string', enum: ['lite', 'full', 'custom'] },
+    channel: { type: 'string', enum: ['mcp', 'cli'] },
+    vault: {
+      type: 'object',
+      required: ['path'],
+      properties: { path: { type: 'string', minLength: 1 } },
+      additionalProperties: false,
+    },
+    modules: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
+    agents: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
+    scope: { type: 'string', enum: ['global', 'vault'] },
+    retrieval: {
+      type: 'object',
+      required: ['budgetChars', 'abstainThreshold'],
+      properties: {
+        budgetChars: { type: 'integer', minimum: 1 },
+        abstainThreshold: { type: 'number', minimum: 0, maximum: 1 },
+        exclude: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 200 }, uniqueItems: true },
+        shadow: {
+          type: 'object',
+          required: ['abstainThreshold'],
+          properties: { abstainThreshold: { type: 'number', minimum: 0, maximum: 1 } },
+          additionalProperties: false,
+        },
+      },
+      additionalProperties: false,
+    },
+    hooks: {
+      type: 'object',
+      required: ['mode', 'deadlineMs'],
+      properties: {
+        mode: { type: 'string', enum: ['normal', 'economic', 'manual'] },
+        deadlineMs: { type: 'integer', minimum: 1 },
+        disclosure: { type: 'string', enum: ['full', 'progressive'] },
+      },
+      additionalProperties: false,
+    },
+    safety: {
+      type: 'object',
+      required: ['secretFilter', 'extraDenyGlobs'],
+      properties: {
+        secretFilter: { const: true },
+        extraDenyGlobs: { type: 'array', items: { type: 'string' } },
+        allow: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['path', 'ruleId'],
+            properties: {
+              path: { type: 'string', minLength: 1 },
+              ruleId: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,63}$' },
+              sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+    okf: {
+      type: 'object',
+      required: ['level'],
+      properties: { level: { type: 'string', enum: ['warn', 'strict'] } },
+      additionalProperties: false,
+    },
+    sync: {
+      type: 'object',
+      required: ['transport', 'options'],
+      properties: { transport: { type: ['string', 'null'] }, options: { type: 'object' } },
+      additionalProperties: false,
+    },
+    semantic: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean' },
+        baseUrl: { type: 'string', minLength: 1 },
+        model: { type: 'string', minLength: 1 },
+        dims: { type: 'integer', minimum: 1 },
+        queryPrefix: { type: 'string' },
+        documentPrefix: { type: 'string' },
+        minScore: { type: 'number', minimum: -1, maximum: 1 },
+        mode: { type: 'string', enum: ['semantic-primary', 'rrf'] },
+        timeoutMs: { type: 'integer', minimum: 1 },
+        indexTimeoutMs: { type: 'integer', minimum: 1 },
+        indexBatchSize: { type: 'integer', minimum: 1, maximum: 64 },
+        allowRemote: { type: 'boolean' },
+      },
+      additionalProperties: false,
+    },
+    telemetry: { const: false },
+    readOnly: { type: 'boolean' },
+    node: { type: 'object', required: ['path'], properties: { path: { type: 'string' } }, additionalProperties: false },
+  },
 };
 
 export const PROFILES = Object.freeze({
-  lite: Object.freeze({ modules: Object.freeze([]), lockedKeys: Object.freeze(['telemetry','safety.secretFilter']) }),
+  lite: Object.freeze({ modules: Object.freeze([]), lockedKeys: Object.freeze(['telemetry', 'safety.secretFilter']) }),
   full: Object.freeze({ modules: Object.freeze(['*']), lockedKeys: Object.freeze(['safety.secretFilter']) }),
-  custom: Object.freeze({ modules: Object.freeze([]), lockedKeys: Object.freeze([]) })
+  custom: Object.freeze({ modules: Object.freeze([]), lockedKeys: Object.freeze([]) }),
 });
 
-export const SEMANTIC_DEFAULTS = Object.freeze({ enabled: false, baseUrl: 'http://127.0.0.1:11434', model: 'embeddinggemma:300m-qat-q4_0', dims: 768, queryPrefix: 'task: search result | query: ', documentPrefix: 'title: none | text: ', minScore: 0.45, mode: 'semantic-primary', timeoutMs: 5000, indexTimeoutMs: 120000, indexBatchSize: 32, allowRemote: false });
+export const SEMANTIC_DEFAULTS = Object.freeze({
+  enabled: false,
+  baseUrl: 'http://127.0.0.1:11434',
+  model: 'embeddinggemma:300m-qat-q4_0',
+  dims: 768,
+  queryPrefix: 'task: search result | query: ',
+  documentPrefix: 'title: none | text: ',
+  minScore: 0.45,
+  mode: 'semantic-primary',
+  timeoutMs: 5000,
+  indexTimeoutMs: 120000,
+  indexBatchSize: 32,
+  allowRemote: false,
+});
 
 const clone = (value) => structuredClone(value);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const pathName = (path) => path || '$';
-const isObjectSchema = (schema) => Boolean(schema) && (schema.type === 'object' || (Array.isArray(schema.type) && schema.type.includes('object')));
+const isObjectSchema = (schema) =>
+  Boolean(schema) && (schema.type === 'object' || (Array.isArray(schema.type) && schema.type.includes('object')));
 const RESERVED_KEY_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 const hasReservedSegment = (keys) => keys.some((key) => RESERVED_KEY_SEGMENTS.has(key));
 
@@ -53,12 +159,16 @@ const hasReservedSegment = (keys) => keys.some((key) => RESERVED_KEY_SEGMENTS.ha
  * @param {string[]} keys @returns {Array<{schema:object|null}>|null}
  */
 function resolveConfigKey(keys) {
-  const entries = []; let node = CONFIG_SCHEMA; let freeForm = false;
+  const entries = [];
+  let node = CONFIG_SCHEMA;
+  let freeForm = false;
   for (const key of keys) {
     if (!freeForm) {
       if (node && typeof node === 'object' && node.properties) {
         if (!has(node.properties, key)) return null;
-        node = node.properties[key]; entries.push({ schema: node }); continue;
+        node = node.properties[key];
+        entries.push({ schema: node });
+        continue;
       }
       if (!isObjectSchema(node)) return null;
       freeForm = true;
@@ -67,34 +177,75 @@ function resolveConfigKey(keys) {
   }
   return entries;
 }
-function error(path, code, message) { return { path: pathName(path), code, message }; }
+function error(path, code, message) {
+  return { path: pathName(path), code, message };
+}
 
 /** Small dependency-free validator for the schema keywords used by CONFIG_SCHEMA. */
 function validateSchema(value, schema, path, errors) {
-  if (has(schema, 'const') && value !== schema.const) errors.push(error(path, 'E_CONST', `Invalid value for ${pathName(path)}.`));
-  if (schema.enum && !schema.enum.includes(value)) errors.push(error(path, 'E_ENUM', `Invalid value for ${pathName(path)}.`));
+  if (has(schema, 'const') && value !== schema.const)
+    errors.push(error(path, 'E_CONST', `Invalid value for ${pathName(path)}.`));
+  if (schema.enum && !schema.enum.includes(value))
+    errors.push(error(path, 'E_ENUM', `Invalid value for ${pathName(path)}.`));
   if (schema.type) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
-    const matches = types.some((type) => type === 'null' ? value === null : type === 'array' ? Array.isArray(value) : type === 'integer' ? Number.isInteger(value) : type === 'number' ? typeof value === 'number' && Number.isFinite(value) : type === 'object' ? value !== null && typeof value === 'object' && !Array.isArray(value) : typeof value === type);
-    if (!matches) { errors.push(error(path, 'E_TYPE', `Invalid type for ${pathName(path)}.`)); return; }
+    const matches = types.some((type) =>
+      type === 'null'
+        ? value === null
+        : type === 'array'
+          ? Array.isArray(value)
+          : type === 'integer'
+            ? Number.isInteger(value)
+            : type === 'number'
+              ? typeof value === 'number' && Number.isFinite(value)
+              : type === 'object'
+                ? value !== null && typeof value === 'object' && !Array.isArray(value)
+                : typeof value === type
+    );
+    if (!matches) {
+      errors.push(error(path, 'E_TYPE', `Invalid type for ${pathName(path)}.`));
+      return;
+    }
   }
   if (typeof value === 'number') {
-    if (schema.minimum !== undefined && value < schema.minimum) errors.push(error(path, 'E_MINIMUM', `${pathName(path)} is below its minimum.`));
-    if (schema.maximum !== undefined && value > schema.maximum) errors.push(error(path, 'E_MAXIMUM', `${pathName(path)} is above its maximum.`));
+    if (schema.minimum !== undefined && value < schema.minimum)
+      errors.push(error(path, 'E_MINIMUM', `${pathName(path)} is below its minimum.`));
+    if (schema.maximum !== undefined && value > schema.maximum)
+      errors.push(error(path, 'E_MAXIMUM', `${pathName(path)} is above its maximum.`));
   }
   if (typeof value === 'string') {
-    if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(error(path, 'E_MIN_LENGTH', `${pathName(path)} is too short.`));
-    if (schema.pattern && !(new RegExp(schema.pattern).test(value))) errors.push(error(path, 'E_PATTERN', `${pathName(path)} has an invalid format.`));
+    if (schema.minLength !== undefined && value.length < schema.minLength)
+      errors.push(error(path, 'E_MIN_LENGTH', `${pathName(path)} is too short.`));
+    if (schema.pattern && !new RegExp(schema.pattern).test(value))
+      errors.push(error(path, 'E_PATTERN', `${pathName(path)} has an invalid format.`));
   }
   if (Array.isArray(value)) {
     if (schema.items) value.forEach((item, index) => validateSchema(item, schema.items, `${path}[${index}]`, errors));
-    if (schema.uniqueItems) for (let i = 0; i < value.length; i++) for (let j = 0; j < i; j++) if (JSON.stringify(value[i]) === JSON.stringify(value[j])) { errors.push(error(path, 'E_UNIQUE', `${pathName(path)} contains duplicate items.`)); return; }
+    if (schema.uniqueItems)
+      for (let i = 0; i < value.length; i++)
+        for (let j = 0; j < i; j++)
+          if (JSON.stringify(value[i]) === JSON.stringify(value[j])) {
+            errors.push(error(path, 'E_UNIQUE', `${pathName(path)} contains duplicate items.`));
+            return;
+          }
   }
   if (value && typeof value === 'object' && !Array.isArray(value) && schema.properties) {
-    for (const key of schema.required || []) if (!has(value, key)) errors.push(error(path ? `${path}.${key}` : key, 'E_REQUIRED', `Missing required key ${path ? `${path}.` : ''}${key}.`));
+    for (const key of schema.required || [])
+      if (!has(value, key))
+        errors.push(
+          error(path ? `${path}.${key}` : key, 'E_REQUIRED', `Missing required key ${path ? `${path}.` : ''}${key}.`)
+        );
     for (const key of Object.keys(value)) {
-      if (!has(schema.properties, key)) { if (schema.additionalProperties === false) errors.push(error(path ? `${path}.${key}` : key, 'E_ADDITIONAL_PROPERTY', `Unknown key ${path ? `${path}.` : ''}${key}.`)); }
-      else validateSchema(value[key], schema.properties[key], path ? `${path}.${key}` : key, errors);
+      if (!has(schema.properties, key)) {
+        if (schema.additionalProperties === false)
+          errors.push(
+            error(
+              path ? `${path}.${key}` : key,
+              'E_ADDITIONAL_PROPERTY',
+              `Unknown key ${path ? `${path}.` : ''}${key}.`
+            )
+          );
+      } else validateSchema(value[key], schema.properties[key], path ? `${path}.${key}` : key, errors);
     }
   }
 }
@@ -102,25 +253,74 @@ function validateSchema(value, schema, path, errors) {
 /** @param {'lite'|'full'|'custom'} profile @returns {Config} */
 export function defaultConfig(profile) {
   if (!has(PROFILES, profile)) throw new BrainAtlasError('E_PROFILE', 'Unknown configuration profile.');
-  return { schemaVersion: 1, profile, vault: { path: '.' }, modules: [...PROFILES[profile].modules], agents: [], scope: 'global', retrieval: { budgetChars: 4000, abstainThreshold: 0.35 }, hooks: { mode: 'normal', deadlineMs: 1000 }, safety: { secretFilter: true, extraDenyGlobs: [], allow: [] }, okf: { level: 'warn' }, sync: { transport: null, options: {} }, semantic: { ...SEMANTIC_DEFAULTS }, telemetry: false, readOnly: false, node: { path: 'node' } };
+  return {
+    schemaVersion: 1,
+    profile,
+    vault: { path: '.' },
+    modules: [...PROFILES[profile].modules],
+    agents: [],
+    scope: 'global',
+    retrieval: { budgetChars: 4000, abstainThreshold: 0.35 },
+    hooks: { mode: 'normal', deadlineMs: 1000 },
+    safety: { secretFilter: true, extraDenyGlobs: [], allow: [] },
+    okf: { level: 'warn' },
+    sync: { transport: null, options: {} },
+    semantic: { ...SEMANTIC_DEFAULTS },
+    telemetry: false,
+    readOnly: false,
+    node: { path: 'node' },
+  };
 }
 
-/** @param {unknown} obj @returns {{ok:boolean, errors:Array<{path:string,code:string,message:string}>}} */
+/** @param {any} obj @returns {{ok:boolean, errors:Array<{path:string,code:string,message:string}>}} */
 export function validateConfig(obj) {
   const errors = [];
   validateSchema(obj, CONFIG_SCHEMA, '', errors);
-  if (obj && typeof obj === 'object' && !Array.isArray(obj) && obj.safety && typeof obj.safety === 'object' && obj.safety.secretFilter === false) errors.push(error('safety.secretFilter', 'E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.'));
+  if (
+    obj &&
+    typeof obj === 'object' &&
+    !Array.isArray(obj) &&
+    obj.safety &&
+    typeof obj.safety === 'object' &&
+    obj.safety.secretFilter === false
+  )
+    errors.push(error('safety.secretFilter', 'E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.'));
   if (obj?.semantic?.baseUrl !== undefined) {
-    try { const url = new URL(obj.semantic.baseUrl); if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || (!obj.semantic.allowRemote && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))) throw new Error(); }
-    catch { errors.push(error('semantic.baseUrl', 'E_SEMANTIC_PROVIDER', 'Semantic provider configuration is invalid.')); }
+    try {
+      const url = new URL(obj.semantic.baseUrl);
+      if (
+        !['http:', 'https:'].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash ||
+        (!obj.semantic.allowRemote && !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))
+      )
+        throw new Error();
+    } catch {
+      errors.push(error('semantic.baseUrl', 'E_SEMANTIC_PROVIDER', 'Semantic provider configuration is invalid.'));
+    }
   }
   // BA-29: retrieval.exclude patterns are relative to the search root; an absolute, drive-letter, backslash or `..` pattern is refused.
   const exclude = obj?.retrieval?.exclude;
-  if (Array.isArray(exclude)) exclude.forEach((pattern, index) => {
-    if (typeof pattern === 'string' && (pattern.startsWith('/') || /^[A-Za-z]:/.test(pattern) || pattern.includes('\\') || pattern.split('/').includes('..'))) {
-      errors.push(error(`retrieval.exclude[${index}]`, 'E_PATH_INVALID', 'Retrieval exclude patterns must be relative to the search root.'));
-    }
-  });
+  if (Array.isArray(exclude))
+    exclude.forEach((pattern, index) => {
+      if (
+        typeof pattern === 'string' &&
+        (pattern.startsWith('/') ||
+          /^[A-Za-z]:/.test(pattern) ||
+          pattern.includes('\\') ||
+          pattern.split('/').includes('..'))
+      ) {
+        errors.push(
+          error(
+            `retrieval.exclude[${index}]`,
+            'E_PATH_INVALID',
+            'Retrieval exclude patterns must be relative to the search root.'
+          )
+        );
+      }
+    });
   const allow = obj?.safety?.allow;
   if (Array.isArray(allow)) {
     const seen = new Set();
@@ -128,17 +328,36 @@ export function validateConfig(obj) {
       const entry = allow[index];
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
       const path = entry.path;
-      if (typeof path === 'string' && (path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path) || path.includes('\\') || path.includes('\0')
-          || path.split('/').some((part) => !part || part === '.' || part === '..'))) {
-        errors.push(error(`safety.allow[${index}].path`, 'E_PATH_INVALID', 'Safety allow paths must be canonical vault-relative paths.'));
+      if (
+        typeof path === 'string' &&
+        (path.startsWith('/') ||
+          /^[A-Za-z]:[\\/]/.test(path) ||
+          path.includes('\\') ||
+          path.includes('\0') ||
+          path.split('/').some((part) => !part || part === '.' || part === '..'))
+      ) {
+        errors.push(
+          error(
+            `safety.allow[${index}].path`,
+            'E_PATH_INVALID',
+            'Safety allow paths must be canonical vault-relative paths.'
+          )
+        );
       }
       if (typeof entry.ruleId === 'string') {
-        if (entry.ruleId === 'denied-path' && has(entry, 'sha256')) errors.push(error(`safety.allow[${index}].sha256`, 'E_FINGERPRINT', 'Path findings do not have a content fingerprint.'));
-        if (entry.ruleId !== 'denied-path' && !has(entry, 'sha256')) errors.push(error(`safety.allow[${index}].sha256`, 'E_FINGERPRINT', 'Content findings require a SHA-256 fingerprint.'));
+        if (entry.ruleId === 'denied-path' && has(entry, 'sha256'))
+          errors.push(
+            error(`safety.allow[${index}].sha256`, 'E_FINGERPRINT', 'Path findings do not have a content fingerprint.')
+          );
+        if (entry.ruleId !== 'denied-path' && !has(entry, 'sha256'))
+          errors.push(
+            error(`safety.allow[${index}].sha256`, 'E_FINGERPRINT', 'Content findings require a SHA-256 fingerprint.')
+          );
       }
       if (typeof path === 'string' && typeof entry.ruleId === 'string') {
         const key = `${path}\0${entry.ruleId}\0${entry.sha256 ?? ''}`;
-        if (seen.has(key)) errors.push(error('safety.allow', 'E_UNIQUE', 'safety.allow contains duplicate fingerprints.'));
+        if (seen.has(key))
+          errors.push(error('safety.allow', 'E_UNIQUE', 'safety.allow contains duplicate fingerprints.'));
         seen.add(key);
       }
     }
@@ -151,9 +370,19 @@ export async function loadConfig(options) {
   const { paths, env = {}, readOnly = false } = options || {};
   if (!paths?.configFile) throw new BrainAtlasError('E_PATHS', 'Configuration file path is required.');
   let text;
-  try { text = await readFile(paths.configFile, 'utf8'); } catch (cause) { if (cause?.code === 'ENOENT') return defaultConfig(env.BRAINATLAS_PROFILE || 'lite'); throw new BrainAtlasError('E_CONFIG_READ', 'Could not read configuration.'); }
+  try {
+    text = await readFile(paths.configFile, 'utf8');
+  } catch (cause) {
+    if (cause?.code === 'ENOENT')
+      return defaultConfig(/** @type {'lite'|'full'|'custom'} */ (env.BRAINATLAS_PROFILE || 'lite'));
+    throw new BrainAtlasError('E_CONFIG_READ', 'Could not read configuration.');
+  }
   let value;
-  try { value = JSON.parse(text); } catch { throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.'); }
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.');
+  }
   if (!Number.isInteger(value?.schemaVersion) || value.schemaVersion < 1) {
     const migrated = await migrateConfig(text, { backupDir: dirname(paths.configFile), dryRun: readOnly });
     value = migrated.config;
@@ -170,32 +399,51 @@ export async function saveConfig(cfg, options) {
   const result = validateConfig(cfg);
   if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
   const file = paths?.configFile;
-  if (typeof file !== 'string' || !isAbsolute(file) || file.split(/[\\/]/).includes('..') || normalize(file) !== file) throw new BrainAtlasError('E_PATH_ESCAPE', 'Configuration file path is invalid.');
+  if (typeof file !== 'string' || !isAbsolute(file) || file.split(/[\\/]/).includes('..') || normalize(file) !== file)
+    throw new BrainAtlasError('E_PATH_ESCAPE', 'Configuration file path is invalid.');
   const dir = dirname(file);
   const tmp = join(dir, `.config-${process.pid}-${Date.now()}.tmp`);
   await mkdir(dir, { recursive: true });
-  try { await writeFile(tmp, `${JSON.stringify(cfg, null, 2)}\n`, { flag: 'wx', mode: 0o600 }); await rename(tmp, file); }
-  catch { try { const { unlink } = await import('node:fs/promises'); await unlink(tmp); } catch {} throw new BrainAtlasError('E_CONFIG_WRITE', 'Could not save configuration.'); }
+  try {
+    await writeFile(tmp, `${JSON.stringify(cfg, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    await rename(tmp, file);
+  } catch {
+    try {
+      const { unlink } = await import('node:fs/promises');
+      await unlink(tmp);
+    } catch {
+      /* best-effort temp cleanup; the write error is reported below */
+    }
+    throw new BrainAtlasError('E_CONFIG_WRITE', 'Could not save configuration.');
+  }
 }
 
 /** @param {Config} cfg @param {string} dottedKey @param {unknown} value @returns {Config} */
 export function setConfigValue(cfg, dottedKey, value) {
-  if (!cfg || !has(PROFILES, cfg.profile) || typeof dottedKey !== 'string' || !dottedKey) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
+  if (!cfg || !has(PROFILES, cfg.profile) || typeof dottedKey !== 'string' || !dottedKey)
+    throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
   const lockedValue = dottedKey === 'safety.secretFilter' ? true : dottedKey === 'telemetry' ? false : undefined;
-  if (PROFILES[cfg.profile].lockedKeys.includes(dottedKey) && value !== lockedValue) throw new BrainAtlasError('E_LOCKED_KEY', `Configuration key ${dottedKey} is locked for this profile.`);
-  if (dottedKey === 'safety.secretFilter' && value === false) throw new BrainAtlasError('E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.');
+  if (PROFILES[cfg.profile].lockedKeys.includes(dottedKey) && value !== lockedValue)
+    throw new BrainAtlasError('E_LOCKED_KEY', `Configuration key ${dottedKey} is locked for this profile.`);
+  if (dottedKey === 'safety.secretFilter' && value === false)
+    throw new BrainAtlasError('E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.');
   const keys = dottedKey.split('.');
-  if (keys.some((key) => !key) || hasReservedSegment(keys)) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
+  if (keys.some((key) => !key) || hasReservedSegment(keys))
+    throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
   const entries = resolveConfigKey(keys);
   if (!entries) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
-  const out = clone(cfg); if (keys[0] === 'semantic') out.semantic = { ...SEMANTIC_DEFAULTS, ...out.semantic }; let target = out;
+  const out = clone(cfg);
+  if (keys[0] === 'semantic') out.semantic = { ...SEMANTIC_DEFAULTS, ...out.semantic };
+  let target = out;
   for (let index = 0; index < keys.length - 1; index += 1) {
     const key = keys[index];
     if (!has(target, key) || target[key] === undefined) {
-      if (!isObjectSchema(entries[index].schema)) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
+      if (!isObjectSchema(entries[index].schema))
+        throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
       target[key] = {};
     }
-    if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
+    if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key]))
+      throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
     target = target[key];
   }
   target[keys.at(-1)] = clone(value);
@@ -206,15 +454,20 @@ export function setConfigValue(cfg, dottedKey, value) {
 
 /** @param {Config} cfg @param {string} dottedKey @returns {Config} */
 export function unsetConfigValue(cfg, dottedKey) {
-  if (!cfg || !has(PROFILES, cfg.profile) || typeof dottedKey !== 'string' || !dottedKey) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
+  if (!cfg || !has(PROFILES, cfg.profile) || typeof dottedKey !== 'string' || !dottedKey)
+    throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
   const keys = dottedKey.split('.');
-  if (keys.some((key) => !key) || hasReservedSegment(keys)) throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
-  if (PROFILES[cfg.profile].lockedKeys.includes(dottedKey)) throw new BrainAtlasError('E_LOCKED_KEY', `Configuration key ${dottedKey} is locked for this profile.`);
+  if (keys.some((key) => !key) || hasReservedSegment(keys))
+    throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
+  if (PROFILES[cfg.profile].lockedKeys.includes(dottedKey))
+    throw new BrainAtlasError('E_LOCKED_KEY', `Configuration key ${dottedKey} is locked for this profile.`);
   const entries = resolveConfigKey(keys);
   if (!entries) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
   const required = keys.length === 1 ? CONFIG_SCHEMA.required : entries.at(-2)?.schema?.required;
-  if (Array.isArray(required) && required.includes(keys.at(-1))) throw new BrainAtlasError('E_CONFIG_KEY', `Configuration key ${dottedKey} is required.`);
-  const out = clone(cfg); let target = out;
+  if (Array.isArray(required) && required.includes(keys.at(-1)))
+    throw new BrainAtlasError('E_CONFIG_KEY', `Configuration key ${dottedKey} is required.`);
+  const out = clone(cfg);
+  let target = out;
   for (const key of keys.slice(0, -1)) {
     if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) return out;
     target = target[key];
@@ -225,26 +478,36 @@ export function unsetConfigValue(cfg, dottedKey) {
   return out;
 }
 
-/** @param {unknown| string} objOrText @param {{backupDir:string,now?:Date,sourceText?:string,dryRun?:boolean,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
+/** @param {unknown| string} objOrText @param {{backupDir?:string,now?:Date,sourceText?:string,dryRun?:boolean,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
 export async function migrateConfig(objOrText, options = {}) {
   const { backupDir, now = new Date(), sourceText, dryRun = false, migrations } = options;
   let obj = objOrText;
   if (typeof objOrText === 'string') {
-    try { obj = JSON.parse(objOrText); } catch { throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.'); }
+    try {
+      obj = JSON.parse(objOrText);
+    } catch {
+      throw new BrainAtlasError('E_CONFIG_PARSE', 'Configuration file is not valid JSON.');
+    }
   }
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.');
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj))
+    throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.');
   const migration = (await import('./migrations/000-to-1.mjs')).default;
   const chain = migrations || [migration];
-  let current = clone(obj); const applied = [];
+  let current = clone(obj);
+  const applied = [];
   let version = Number.isInteger(current?.schemaVersion) ? current.schemaVersion : 0;
   while (version < 1) {
     const migration = chain.find((item) => item.from === version);
-    if (!migration || migration.to <= version) throw new BrainAtlasError('E_MIGRATION_MISSING', `No configuration migration from version ${version}.`);
+    if (!migration || migration.to <= version)
+      throw new BrainAtlasError('E_MIGRATION_MISSING', `No configuration migration from version ${version}.`);
     current = await migration.migrate(clone(current));
-    version = migration.to; current.schemaVersion = version; applied.push(`${String(migration.from).padStart(3, '0')}-to-${migration.to}`);
+    version = migration.to;
+    current.schemaVersion = version;
+    applied.push(`${String(migration.from).padStart(3, '0')}-to-${migration.to}`);
   }
   const validation = validateConfig(current);
-  if (!validation.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Migrated configuration is invalid.', validation.errors);
+  if (!validation.ok)
+    throw new BrainAtlasError('E_CONFIG_INVALID', 'Migrated configuration is invalid.', validation.errors);
   if (!applied.length) return { config: current, applied, backupPath: null };
   if (dryRun) return { config: current, applied, backupPath: null };
   if (!backupDir) throw new BrainAtlasError('E_BACKUP_DIR', 'A backup directory is required for migration.');

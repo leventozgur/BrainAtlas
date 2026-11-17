@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 import { VERSION } from '@brainatlas/core';
 import { cleanEnv } from './clean-env.mjs';
 
-test('installed shim works directly and through Node and repairs an old shim', async t => {
+test('installed shim works directly and through Node and repairs an old shim', async (t) => {
   const root = resolve('.');
   const work = await realpath(await mkdtemp(join(tmpdir(), "ba shim ' space-")));
   t.after(() => rm(work, { recursive: true, force: true }));
@@ -18,7 +18,13 @@ test('installed shim works directly and through Node and repairs an old shim', a
   await mkdir(release, { recursive: true });
   await symlink(join(root, 'packages'), join(release, 'packages'), 'dir');
   await symlink('releases/test', join(data, 'current'));
-  const env = cleanEnv({ HOME: home, XDG_DATA_HOME: join(home, 'Application Support'), XDG_CONFIG_HOME: join(home, 'config'), XDG_STATE_HOME: join(home, 'state'), BRAINATLAS_PLATFORM: 'linux' });
+  const env = cleanEnv({
+    HOME: home,
+    XDG_DATA_HOME: join(home, 'Application Support'),
+    XDG_CONFIG_HOME: join(home, 'config'),
+    XDG_STATE_HOME: join(home, 'state'),
+    BRAINATLAS_PLATFORM: 'linux',
+  });
   const cli = join(root, 'packages/cli/bin/brainatlas.mjs');
   const shim = join(data, 'bin', 'brainatlas');
   const run = (command, args) => spawnSync(command, args, { cwd: root, env, encoding: 'utf8' });
@@ -26,7 +32,7 @@ test('installed shim works directly and through Node and repairs an old shim', a
   const installed = finalize();
   assert.equal(installed.status, 0, installed.stderr);
 
-  const checkVersion = result => {
+  const checkVersion = (result) => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.trim(), VERSION);
   };
@@ -37,9 +43,11 @@ test('installed shim works directly and through Node and repairs an old shim', a
       checkVersion(run(process.execPath, [shim, '--version']));
     }
   });
-  await t.test('Node permission mode', t => {
+  await t.test('Node permission mode', (t) => {
     if (!process.allowedNodeEnvironmentFlags.has('--permission')) return t.skip('Node does not support --permission');
-    checkVersion(run(process.execPath, ['--permission', `--allow-fs-read=${work}`, `--allow-fs-read=${root}`, shim, '--version']));
+    checkVersion(
+      run(process.execPath, ['--permission', `--allow-fs-read=${work}`, `--allow-fs-read=${root}`, shim, '--version'])
+    );
   });
   await t.test('old shell-only shim fails under Node and finalize repairs it', async () => {
     const original = await readFile(shim, 'utf8');

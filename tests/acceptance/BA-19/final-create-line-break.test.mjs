@@ -21,8 +21,14 @@ for (const ch of BREAKS) {
     const after = await readIndex(f);
     const inserted = singleInsertion(before, after);
     assert.ok(inserted.line.includes('](entities/satir-sonu.md)'));
-    assert.ok(!/[\r\u2028\u2029]/.test(after.toString('utf8')), 'no CR, U+2028 or U+2029 anywhere in the index (LF is the line separator itself)');
-    assert.ok(!inserted.line.slice(inserted.line.indexOf('](')).includes(ch), 'the link destination holds no line-breaking character');
+    assert.ok(
+      !/[\r\u2028\u2029]/.test(after.toString('utf8')),
+      'no CR, U+2028 or U+2029 anywhere in the index (LF is the line separator itself)'
+    );
+    assert.ok(
+      !inserted.line.slice(inserted.line.indexOf('](')).includes(ch),
+      'the link destination holds no line-breaking character'
+    );
     assert.ok(linkedPages(after.toString('utf8')).has('entities/satir-sonu.md'));
     const page = okJson(await call(f.client, 'wiki_read_page', { path: 'entities/satir-sonu.md' }));
     assert.ok(page !== null);
@@ -34,7 +40,9 @@ for (const ch of BREAKS) {
 
 test('create concept named with CR and U+2028 between words: the slug is the words joined by hyphens, one index line', async (t) => {
   const f = await startServer(t, {});
-  const created = okJson(await call(f.client, 'wiki_create_concept', { name: 'Birinci\r\nIkinci Ucuncu', content: 'Gövde.\n' }));
+  const created = okJson(
+    await call(f.client, 'wiki_create_concept', { name: 'Birinci\r\nIkinci Ucuncu', content: 'Gövde.\n' })
+  );
   assert.equal(created.path, 'wiki/concepts/birinci-ikinci-ucuncu.md');
   const text = (await readIndex(f)).toString('utf8');
   assert.ok(!text.includes('\r') && !text.includes(' '));
@@ -51,7 +59,11 @@ test('create with a name that slugifies to nothing (only a line break): observed
     const raw = await readOrNull(join(f.wiki, 'index.md'));
     assert.ok(raw === null || raw.toString('utf8') === '', 'a refusal writes no index');
     const entities = join(f.wiki, 'entities');
-    assert.equal(fs.existsSync(entities) ? fs.readdirSync(entities, { withFileTypes: true }).filter((e) => e.isFile()).length : 0, 0, 'a refusal creates no page');
+    assert.equal(
+      fs.existsSync(entities) ? fs.readdirSync(entities, { withFileTypes: true }).filter((e) => e.isFile()).length : 0,
+      0,
+      'a refusal creates no page'
+    );
   } else {
     const text = (await readIndex(f)).toString('utf8');
     assert.ok(!text.includes(' '), 'no line break reaches the index in either outcome');

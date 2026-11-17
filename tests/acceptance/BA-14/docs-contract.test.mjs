@@ -21,13 +21,23 @@ test('contract text names the BA-14 rules: patch whitelist, E_INVALID_INPUT, ret
 
 test('tool input keys in the contract match the advertised inputSchema of every tool', async (t) => {
   const f = await startServer(t);
-  const listed = Object.fromEntries((await f.client.listTools()).tools.map((tool) => [tool.name, Object.keys(tool.inputSchema?.properties ?? {}).sort()]));
+  const listed = Object.fromEntries(
+    (await f.client.listTools()).tools.map((tool) => [
+      tool.name,
+      Object.keys(tool.inputSchema?.properties ?? {}).sort(),
+    ])
+  );
   const schemaLine = doc.match(/Tool schemas are: (.+?)\.\n/s);
   assert.ok(schemaLine, 'schema summary line is present');
   const declared = [...schemaLine[1].matchAll(/`(wiki_\w+)\{([^}]*)\}`/g)];
   assert.ok(declared.length >= 12, `expected all tools in the contract, found ${declared.length}`);
   for (const [, name, body] of declared) {
-    const keys = body.split(',').map((part) => part.trim()).filter(Boolean).map((part) => part.replace(/\?.*$/, '').split(':')[0]).sort();
+    const keys = body
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => part.replace(/\?.*$/, '').split(':')[0])
+      .sort();
     assert.deepEqual(listed[name], keys, `${name} keys differ between contract and tool list`);
   }
 });
@@ -36,11 +46,17 @@ test('advertised wiki_update_index description does not promise a full rebuild',
   const f = await startServer(t);
   const tool = (await f.client.listTools()).tools.find((x) => x.name === 'wiki_update_index');
   assert.ok(tool, 'wiki_update_index is advertised');
-  assert.doesNotMatch(tool.description, /rebuild/i, `advertised description says "${tool.description}" but the contract says minimal edit`);
+  assert.doesNotMatch(
+    tool.description,
+    /rebuild/i,
+    `advertised description says "${tool.description}" but the contract says minimal edit`
+  );
 });
 
 test('contract example: update_index return shape has exactly the three documented fields', async (t) => {
-  const f = await startServer(t, { files: { 'entities/a.md': '---\ntitle: A\n---\nA.\n', 'index.md': '# Wiki Index\n\n## entities\n\n' } });
+  const f = await startServer(t, {
+    files: { 'entities/a.md': '---\ntitle: A\n---\nA.\n', 'index.md': '# Wiki Index\n\n## entities\n\n' },
+  });
   const r = okJson(await call(f.client, 'wiki_update_index'));
   assert.deepEqual(Object.keys(r).sort(), ['added', 'indexed', 'removed']);
 });

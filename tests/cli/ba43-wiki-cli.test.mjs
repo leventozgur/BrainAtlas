@@ -16,7 +16,8 @@ import { cleanEnv } from './clean-env.mjs';
 const BIN = resolve('packages/cli/bin/brainatlas.mjs');
 const ROOT = resolve('.');
 
-const page = (title, body) => `---\ntype: concept\ntitle: ${JSON.stringify(title)}\ngenerated: "2026-11-01"\nstatus: confirmed\nsources: []\nverified: []\nstale_after: "P90D"\naliases: []\nkeywords: []\n---\n\n# ${title}\n\n${body}\n`;
+const page = (title, body) =>
+  `---\ntype: concept\ntitle: ${JSON.stringify(title)}\ngenerated: "2026-11-01"\nstatus: confirmed\nsources: []\nverified: []\nstale_after: "P90D"\naliases: []\nkeywords: []\n---\n\n# ${title}\n\n${body}\n`;
 
 async function write(dir, rel, text) {
   const file = join(dir, rel);
@@ -30,9 +31,17 @@ async function fixture(t) {
   const home = join(base, 'home');
   const vault = join(base, 'vault');
   await mkdir(home, { recursive: true });
-  await write(vault, 'wiki/index.md', '# Wiki Index\n\n## Concepts\n\n- [Alpha term](concepts/alpha.md)\n- [Beta term](concepts/beta.md)\n');
+  await write(
+    vault,
+    'wiki/index.md',
+    '# Wiki Index\n\n## Concepts\n\n- [Alpha term](concepts/alpha.md)\n- [Beta term](concepts/beta.md)\n'
+  );
   await write(vault, 'wiki/log.md', '# Log\n');
-  await write(vault, 'wiki/concepts/alpha.md', page('Alpha', 'alpha keyword body.\n\n## Details\n\nmore alpha keyword text.\n\n## Notes\n\nnotes text.\n'));
+  await write(
+    vault,
+    'wiki/concepts/alpha.md',
+    page('Alpha', 'alpha keyword body.\n\n## Details\n\nmore alpha keyword text.\n\n## Notes\n\nnotes text.\n')
+  );
   await write(vault, 'wiki/concepts/beta.md', page('Beta', 'beta keyword body.\n\n## Details\n\nmore beta text.\n'));
   await write(vault, 'wiki/entities/gamma.md', page('Gamma', 'gamma entity body.\n'));
   await write(vault, 'wiki/summaries/delta.md', page('Delta', 'delta summary body.\n'));
@@ -44,9 +53,10 @@ async function fixture(t) {
     BRAINATLAS_PLATFORM: 'linux',
     BRAINATLAS_OFFLINE: '1',
     BRAINATLAS_VAULT: vault,
-    PATH: process.env.PATH || '/usr/bin:/bin'
+    PATH: process.env.PATH || '/usr/bin:/bin',
   });
-  const run = (...args) => spawnSync(process.execPath, [BIN, ...args], { env, encoding: 'utf8', shell: false, timeout: 15000 });
+  const run = (...args) =>
+    spawnSync(process.execPath, [BIN, ...args], { env, encoding: 'utf8', shell: false, timeout: 15000 });
   return { base, home, vault, env, run };
 }
 
@@ -54,10 +64,18 @@ async function snapshot(root) {
   const out = {};
   async function visit(dir, rel) {
     let entries;
-    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
     for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const childRel = rel ? `${rel}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) { out[childRel] = 'dir'; await visit(join(dir, entry.name), childRel); continue; }
+      if (entry.isDirectory()) {
+        out[childRel] = 'dir';
+        await visit(join(dir, entry.name), childRel);
+        continue;
+      }
       out[childRel] = await readFile(join(dir, entry.name), 'utf8');
     }
   }
@@ -67,11 +85,17 @@ async function snapshot(root) {
 
 async function mcpClient(t, env) {
   const transport = new StdioClientTransport({
-    command: process.execPath, args: [BIN, 'mcp'], cwd: ROOT, env, stderr: 'pipe'
+    command: process.execPath,
+    args: [BIN, 'mcp'],
+    cwd: ROOT,
+    env,
+    stderr: 'pipe',
   });
   const client = new Client({ name: 'ba43-parity', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   return client;
 }
 
@@ -89,20 +113,37 @@ function cliJson(run, ...args) {
 }
 
 const PARITY = [
-  ['query', 'alpha'], ['query', 'alpha', '--limit', '1'], ['query', 'alpha', '--compact'],
-  ['read', 'concepts/alpha.md'], ['read', 'wiki/concepts/alpha.md'], ['read', 'concepts/alpha.md#details'],
-  ['read', 'concepts/alpha.md', '--anchor', 'details'], ['read', 'concepts/alpha.md', '--max-chars', '10'],
-  ['index'], ['list'], ['list', '--type', 'concepts'], ['status'], ['lint']
+  ['query', 'alpha'],
+  ['query', 'alpha', '--limit', '1'],
+  ['query', 'alpha', '--compact'],
+  ['read', 'concepts/alpha.md'],
+  ['read', 'wiki/concepts/alpha.md'],
+  ['read', 'concepts/alpha.md#details'],
+  ['read', 'concepts/alpha.md', '--anchor', 'details'],
+  ['read', 'concepts/alpha.md', '--max-chars', '10'],
+  ['index'],
+  ['list'],
+  ['list', '--type', 'concepts'],
+  ['status'],
+  ['lint'],
 ];
 const TOOL_CASES = [
-  ['wiki_query', { query: 'alpha' }], ['wiki_query', { query: 'alpha', limit: 1 }], ['wiki_query', { query: 'alpha', compact: true }],
-  ['wiki_read_page', { path: 'concepts/alpha.md' }], ['wiki_read_page', { path: 'wiki/concepts/alpha.md' }],
-  ['wiki_read_page', { path: 'concepts/alpha.md#details' }], ['wiki_read_page', { path: 'concepts/alpha.md', anchor: 'details' }],
+  ['wiki_query', { query: 'alpha' }],
+  ['wiki_query', { query: 'alpha', limit: 1 }],
+  ['wiki_query', { query: 'alpha', compact: true }],
+  ['wiki_read_page', { path: 'concepts/alpha.md' }],
+  ['wiki_read_page', { path: 'wiki/concepts/alpha.md' }],
+  ['wiki_read_page', { path: 'concepts/alpha.md#details' }],
+  ['wiki_read_page', { path: 'concepts/alpha.md', anchor: 'details' }],
   ['wiki_read_page', { path: 'concepts/alpha.md', maxChars: 10 }],
-  ['wiki_read_index', {}], ['wiki_list_pages', {}], ['wiki_list_pages', { type: 'concepts' }], ['wiki_status', {}], ['wiki_lint', {}]
+  ['wiki_read_index', {}],
+  ['wiki_list_pages', {}],
+  ['wiki_list_pages', { type: 'concepts' }],
+  ['wiki_status', {}],
+  ['wiki_lint', {}],
 ];
 
-test('every subcommand --json deep-equals the registered MCP read tool', async t => {
+test('every subcommand --json deep-equals the registered MCP read tool', async (t) => {
   const f = await fixture(t);
   const client = await mcpClient(t, f.env);
   assert.equal(PARITY.length, TOOL_CASES.length);
@@ -112,7 +153,8 @@ test('every subcommand --json deep-equals the registered MCP read tool', async t
     const fromMcp = await mcpValue(client, name, args);
     if (name === 'wiki_status') {
       // The index age is wall-clock derived and can differ by a millisecond between two processes.
-      fromCli.indexAgeMs = 0; fromMcp.indexAgeMs = 0;
+      fromCli.indexAgeMs = 0;
+      fromMcp.indexAgeMs = 0;
     }
     assert.deepEqual(fromCli, fromMcp, `${name} ${JSON.stringify(args)}`);
   }
@@ -121,7 +163,7 @@ test('every subcommand --json deep-equals the registered MCP read tool', async t
   assert.equal(abstained.abstained, true);
 });
 
-test('tool errors keep the tool code and message; argument errors are E_ARGUMENT', async t => {
+test('tool errors keep the tool code and message; argument errors are E_ARGUMENT', async (t) => {
   const f = await fixture(t);
   const client = await mcpClient(t, f.env);
   const escape = f.run('wiki', 'read', '../x.md', '--json');
@@ -131,7 +173,10 @@ test('tool errors keep the tool code and message; argument errors are E_ARGUMENT
   assert.equal(mcpMissing.isError, true);
   const missing = f.run('wiki', 'read', 'missing.md', '--json');
   assert.equal(missing.status, 1);
-  assert.equal(JSON.parse(missing.stdout).error.code, /^(E_[A-Z0-9_]+)/u.exec(mcpMissing.content[0].text)?.[1] ?? 'E_WIKI_TOOL');
+  assert.equal(
+    JSON.parse(missing.stdout).error.code,
+    /^(E_[A-Z0-9_]+)/u.exec(mcpMissing.content[0].text)?.[1] ?? 'E_WIKI_TOOL'
+  );
   const anchor = f.run('wiki', 'read', 'concepts/alpha.md', '--anchor', 'nope', '--json');
   assert.equal(anchor.status, 1);
   assert.equal(JSON.parse(anchor.stdout).error.code, 'E_INVALID_INPUT');
@@ -140,7 +185,13 @@ test('tool errors keep the tool code and message; argument errors are E_ARGUMENT
   assert.doesNotMatch(limit.stderr, /\n\s+at /u);
 
   for (const args of [
-    [], ['foo'], ['query'], ['read'], ['index', 'extra'], ['query', 'x', '--limit', 'abc'], ['list', '--bogus']
+    [],
+    ['foo'],
+    ['query'],
+    ['read'],
+    ['index', 'extra'],
+    ['query', 'x', '--limit', 'abc'],
+    ['list', '--bogus'],
   ]) {
     const result = f.run('wiki', ...args, '--json');
     assert.equal(result.status, 1, args.join(' '));
@@ -148,12 +199,12 @@ test('tool errors keep the tool code and message; argument errors are E_ARGUMENT
   }
 });
 
-test('text output follows the query, read, index and list formats', async t => {
+test('text output follows the query, read, index and list formats', async (t) => {
   const f = await fixture(t);
   const query = f.run('wiki', 'query', 'alpha');
   assert.equal(query.status, 0, query.stderr);
   assert.match(query.stdout, /^1\. concepts\/alpha\.md/mu);
-  assert.match(query.stdout, /\n   /u);
+  assert.match(query.stdout, /\n {3}/u);
   assert.equal(f.run('wiki', 'query', 'nothing-matches-this').stdout.trim(), 'No confident match.');
 
   const read = f.run('wiki', 'read', 'concepts/alpha.md', '--max-chars', '10');
@@ -164,12 +215,15 @@ test('text output follows the query, read, index and list formats', async t => {
   const list = f.run('wiki', 'list');
   assert.equal(list.status, 0, list.stderr);
   assert.deepEqual(list.stdout.trim().split('\n'), [
-    'wiki/concepts/alpha.md', 'wiki/concepts/beta.md', 'wiki/entities/gamma.md', 'wiki/summaries/delta.md'
+    'wiki/concepts/alpha.md',
+    'wiki/concepts/beta.md',
+    'wiki/entities/gamma.md',
+    'wiki/summaries/delta.md',
   ]);
   assert.equal(formatWikiResult('list', { pages: [] }), '');
 });
 
-test('--vault overrides the environment vault and the configured vault is the default', async t => {
+test('--vault overrides the environment vault and the configured vault is the default', async (t) => {
   const f = await fixture(t);
   const other = join(f.base, 'other');
   await write(other, 'wiki/index.md', '# Other\n');
@@ -177,24 +231,41 @@ test('--vault overrides the environment vault and the configured vault is the de
   const overridden = cliJson(f.run, 'list', '--vault', other);
   assert.deepEqual(overridden.pages, ['wiki/concepts/only.md']);
 
-  const env = cleanEnv({ HOME: f.home, XDG_CONFIG_HOME: join(f.home, 'config'), XDG_STATE_HOME: join(f.home, 'state'), BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1', PATH: process.env.PATH });
+  const env = cleanEnv({
+    HOME: f.home,
+    XDG_CONFIG_HOME: join(f.home, 'config'),
+    XDG_STATE_HOME: join(f.home, 'state'),
+    BRAINATLAS_PLATFORM: 'linux',
+    BRAINATLAS_OFFLINE: '1',
+    PATH: process.env.PATH,
+  });
   const config = defaultConfig('lite');
   config.vault.path = f.vault;
   const configFile = join(f.home, 'brainatlas.json');
   await writeFile(configFile, JSON.stringify(config));
   const result = spawnSync(process.execPath, [BIN, 'wiki', 'list', '--json'], {
-    env: { ...env, BRAINATLAS_CONFIG: configFile }, encoding: 'utf8', shell: false, timeout: 15000
+    env: { ...env, BRAINATLAS_CONFIG: configFile },
+    encoding: 'utf8',
+    shell: false,
+    timeout: 15000,
   });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).pages.length, 4);
 });
 
-test('every subcommand leaves the vault byte for byte unchanged', async t => {
+test('every subcommand leaves the vault byte for byte unchanged', async (t) => {
   const f = await fixture(t);
   const before = await snapshot(f.vault);
   const commands = [
-    ['query', 'alpha'], ['read', 'concepts/alpha.md'], ['index'], ['list'], ['status'], ['lint'],
-    ['query', 'alpha', '--compact'], ['list', '--type', 'concepts'], ['read', 'concepts/alpha.md', '--anchor', 'details']
+    ['query', 'alpha'],
+    ['read', 'concepts/alpha.md'],
+    ['index'],
+    ['list'],
+    ['status'],
+    ['lint'],
+    ['query', 'alpha', '--compact'],
+    ['list', '--type', 'concepts'],
+    ['read', 'concepts/alpha.md', '--anchor', 'details'],
   ];
   for (const args of commands) {
     const result = f.run('wiki', ...args, '--json');
@@ -204,11 +275,11 @@ test('every subcommand leaves the vault byte for byte unchanged', async t => {
   }
 });
 
-test('help lists wiki with its description and usage', async t => {
+test('help lists wiki with its description and usage', async (t) => {
   const f = await fixture(t);
   const all = f.run('--help', '--json');
   assert.equal(all.status, 0, all.stderr);
-  const command = JSON.parse(all.stdout).commands.find(item => item.name === 'wiki');
+  const command = JSON.parse(all.stdout).commands.find((item) => item.name === 'wiki');
   assert.equal(command.description, 'Read-only Wiki tools from the shell (same results as the MCP read tools).');
   assert.match(command.usage, /^brainatlas wiki query <text> \[--limit N\] \[--compact\] \| read <path>/u);
   const detail = f.run('help', 'wiki');

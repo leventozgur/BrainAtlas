@@ -13,12 +13,14 @@ const crlf = (lines) => lines.join('\r\n');
 // Pages on disk for the main fixture. Includes a subfolder page, a renamed page, a bracketed title, and a page
 // that is linked twice in the index.
 const MAIN_PAGES = {
-  'entities/ahmet.md': page('type: entity\ntitle: Ahmet Yılmaz\nsummary: "Türkçe özet 🚀 çok önemli"\ntags: [kişi, türkçe]'),
+  'entities/ahmet.md': page(
+    'type: entity\ntitle: Ahmet Yılmaz\nsummary: "Türkçe özet 🚀 çok önemli"\ntags: [kişi, türkçe]'
+  ),
   'entities/x/y.md': page('title: Derin Sayfa'),
   'entities/yeni.md': page('title: "Yeni Sayfa [test]"\nsummary: "Yeni özet 🎉"\ntags: [yeni, proje]'),
   'entities/yeni-ad.md': page('title: Yeni Ad'),
   'concepts/kavram-a.md': page('title: Kavram A'),
-  'concepts/kavram-b.md': page('title: Kavram B\ndescription: "B özet"')
+  'concepts/kavram-b.md': page('title: Kavram B\ndescription: "B özet"'),
 };
 
 // Hand-edited index: Turkish and emoji summaries, several tags, out-of-order categories, a blockquote note,
@@ -50,7 +52,7 @@ const INDEX_MAIN = [
   '## Ana notlar',
   '',
   '- [Eski ad](entities/eski-ad.md) — yeniden adlandırıldı',
-  ''
+  '',
 ];
 
 // Expected result for INDEX_MAIN with MAIN_PAGES: added Kavram B, Derin Sayfa, Yeni Ad, Yeni Sayfa; removed Silinen, Eski ad.
@@ -82,7 +84,7 @@ const EXPECTED_MAIN = [
   '',
   '## Ana notlar',
   '',
-  ''
+  '',
 ];
 
 test('R1: hand-written summaries, tags, notes, paragraphs and sub-headings survive wiki_update_index (brief bug 1)', async (t) => {
@@ -97,7 +99,7 @@ test('R1: hand-written summaries, tags, notes, paragraphs and sub-headings survi
     'Bu index elle düzenlendi; ilk paragraf korunmalı.',
     '### Alt not',
     '- [Harici](https://example.com/a.md) — dış bağlantı',
-    '- [Çapa](#bolum) — sayfa içi çapa'
+    '- [Çapa](#bolum) — sayfa içi çapa',
   ]) {
     assert.ok(out.split('\n').includes(kept), `lost: ${kept}`);
   }
@@ -106,7 +108,10 @@ test('R1: hand-written summaries, tags, notes, paragraphs and sub-headings survi
 test('R2: unknown patch key is refused with E_INVALID_INPUT and leaves file and log untouched (brief bug 2)', async (t) => {
   const f = await startServer(t, { files: { 'entities/p.md': page('title: Eski Başlık') } });
   const before = await snapshot(f.vault);
-  refused(await call(f.client, 'wiki_update_page', { path: 'entities/p.md', patch: { title: 'MARK-R2' } }), 'E_INVALID_INPUT');
+  refused(
+    await call(f.client, 'wiki_update_page', { path: 'entities/p.md', patch: { title: 'MARK-R2' } }),
+    'E_INVALID_INPUT'
+  );
   assert.deepEqual(await snapshot(f.vault), before);
 });
 
@@ -135,11 +140,14 @@ test('C: LF index without a final newline gets a new category appended and keeps
     files: {
       'concepts/kavram-a.md': page('title: Kavram A'),
       'notes/n.md': page('title: Not N\ntags: [a]'),
-      'index.md': lf(original)
-    }
+      'index.md': lf(original),
+    },
   });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 2, added: 1, removed: 0 });
-  assert.equal(await readFile(join(f.wiki, 'index.md'), 'utf8'), lf([...original, '', '## notes', '', '- [Not N](notes/n.md) — #a']));
+  assert.equal(
+    await readFile(join(f.wiki, 'index.md'), 'utf8'),
+    lf([...original, '', '## notes', '', '- [Not N](notes/n.md) — #a'])
+  );
 });
 
 test('D: CRLF index without a final newline ends with a clean line ending after a removed last line', async (t) => {
@@ -197,35 +205,51 @@ test('G: many categories, out-of-order headings, new page placed under its own f
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 60, added: 30, removed: 0 });
   const lines = (await readFile(join(f.wiki, 'index.md'), 'utf8')).split('\n');
   const headings = lines.filter((line) => line.startsWith('## '));
-  assert.deepEqual(headings, [...folders].reverse().map((folder) => `## ${folder}`), 'category order is preserved');
+  assert.deepEqual(
+    headings,
+    [...folders].reverse().map((folder) => `## ${folder}`),
+    'category order is preserved'
+  );
   for (const folder of folders) {
     const start = lines.indexOf(`## ${folder}`);
     const end = lines.findIndex((line, i) => i > start && line.startsWith('## '));
     const section = lines.slice(start, end === -1 ? undefined : end);
     assert.ok(section.includes(`- [P ${folder}](${folder}/p.md) — özet ${folder}`), `${folder} keeps its hand summary`);
     assert.ok(section.includes(`- [N ${folder}](${folder}/n.md)`), `${folder} gets its new page in the same section`);
-    assert.ok(section.indexOf(`- [N ${folder}](${folder}/n.md)`) > section.indexOf(`- [P ${folder}](${folder}/p.md) — özet ${folder}`), 'new line comes after the last entry');
+    assert.ok(
+      section.indexOf(`- [N ${folder}](${folder}/n.md)`) >
+        section.indexOf(`- [P ${folder}](${folder}/p.md) — özet ${folder}`),
+      'new line comes after the last entry'
+    );
   }
 });
 
 test('H: titles with brackets and parentheses are escaped, and the escaped line is recognized on the next run', async (t) => {
   const f = await startServer(t, {
-    files: { 'entities/kapanis.md': page('title: "Kapanış [v2] (taslak)"'), 'index.md': '# Wiki Index\n\n## entities\n\n' }
+    files: {
+      'entities/kapanis.md': page('title: "Kapanış [v2] (taslak)"'),
+      'index.md': '# Wiki Index\n\n## entities\n\n',
+    },
   });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 1, added: 1, removed: 0 });
-  assert.equal(await readFile(join(f.wiki, 'index.md'), 'utf8'), '# Wiki Index\n\n## entities\n\n- [Kapanış \\[v2\\] \\(taslak\\)](entities/kapanis.md)\n');
+  assert.equal(
+    await readFile(join(f.wiki, 'index.md'), 'utf8'),
+    '# Wiki Index\n\n## entities\n\n- [Kapanış \\[v2\\] \\(taslak\\)](entities/kapanis.md)\n'
+  );
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 1, added: 0, removed: 0 });
 });
 
 test('I: summary precedence, description fallback, whitespace normalization and word-like tag filtering', async (t) => {
   const f = await startServer(t, {
     files: {
-      'concepts/a.md': page('title: "  Çok   boşluk  "\nsummary: "S1  özet"\ndescription: "D1"\ntags: [ok-tag, "bad tag", üç]'),
+      'concepts/a.md': page(
+        'title: "  Çok   boşluk  "\nsummary: "S1  özet"\ndescription: "D1"\ntags: [ok-tag, "bad tag", üç]'
+      ),
       'concepts/b.md': page('title: Yalnız açıklama\ndescription: "D2"'),
       'concepts/c.md': page('title: Boş özet\nsummary: "   "\ndescription: "D3"'),
       'concepts/d.md': page('title: Metin etiket\ntags: "tek"'),
-      'index.md': '# Wiki Index\n\n## concepts\n\n'
-    }
+      'index.md': '# Wiki Index\n\n## concepts\n\n',
+    },
   });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 4, added: 4, removed: 0 });
   const out = await readFile(join(f.wiki, 'index.md'), 'utf8');
@@ -233,13 +257,34 @@ test('I: summary precedence, description fallback, whitespace normalization and 
   assert.ok(out.includes('- [Yalnız açıklama](concepts/b.md) — D2'), out);
   assert.ok(out.includes('- [Boş özet](concepts/c.md) — D3'), out);
   assert.ok(out.includes('- [Metin etiket](concepts/d.md)'), out);
-  assert.ok(!/bad|üç/.test(out.split('\n').filter((l) => l.includes('concepts/a.md')).join('\n')), 'non word-like tags are dropped');
+  assert.ok(
+    !/bad|üç/.test(
+      out
+        .split('\n')
+        .filter((l) => l.includes('concepts/a.md'))
+        .join('\n')
+    ),
+    'non word-like tags are dropped'
+  );
 });
 
 test('J: category-less entry lines are kept byte for byte and an existing page is not listed a second time', async (t) => {
-  const index = ['# Wiki Index', '', '- [Önsöz](entities/onsoz.md) — giriş satırı', '', '## concepts', '', '- [Kavram A](concepts/kavram-a.md)', ''].join('\n');
+  const index = [
+    '# Wiki Index',
+    '',
+    '- [Önsöz](entities/onsoz.md) — giriş satırı',
+    '',
+    '## concepts',
+    '',
+    '- [Kavram A](concepts/kavram-a.md)',
+    '',
+  ].join('\n');
   const f = await startServer(t, {
-    files: { 'entities/onsoz.md': page('title: Önsöz'), 'concepts/kavram-a.md': page('title: Kavram A'), 'index.md': index }
+    files: {
+      'entities/onsoz.md': page('title: Önsöz'),
+      'concepts/kavram-a.md': page('title: Kavram A'),
+      'index.md': index,
+    },
   });
   const r = okJson(await call(f.client, 'wiki_update_index'));
   assert.deepEqual(r, { indexed: 2, added: 0, removed: 0 }, 'the page is already linked in the index');
@@ -247,16 +292,32 @@ test('J: category-less entry lines are kept byte for byte and an existing page i
 });
 
 test('J2: category-less entry line whose page was deleted is removed like any other stale entry', async (t) => {
-  const index = ['# Wiki Index', '', '- [Silinmiş](entities/silinmis.md) — eski satır', '', '## concepts', '', '- [Kavram A](concepts/kavram-a.md)', ''].join('\n');
+  const index = [
+    '# Wiki Index',
+    '',
+    '- [Silinmiş](entities/silinmis.md) — eski satır',
+    '',
+    '## concepts',
+    '',
+    '- [Kavram A](concepts/kavram-a.md)',
+    '',
+  ].join('\n');
   const f = await startServer(t, { files: { 'concepts/kavram-a.md': page('title: Kavram A'), 'index.md': index } });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 1, added: 0, removed: 1 });
-  assert.equal(await readFile(join(f.wiki, 'index.md'), 'utf8'), ['# Wiki Index', '', '', '## concepts', '', '- [Kavram A](concepts/kavram-a.md)', ''].join('\n'));
+  assert.equal(
+    await readFile(join(f.wiki, 'index.md'), 'utf8'),
+    ['# Wiki Index', '', '', '## concepts', '', '- [Kavram A](concepts/kavram-a.md)', ''].join('\n')
+  );
 });
 
 test('K: a secret-shaped summary in a new page refuses the write; index and log are unchanged and the secret is not echoed', async (t) => {
   const index = '# Wiki Index\n\n## entities\n\n- [Ahmet Yılmaz](entities/ahmet.md) — özet\n';
   const f = await startServer(t, {
-    files: { 'entities/ahmet.md': page('title: Ahmet Yılmaz'), 'entities/gizli.md': page(`title: Gizli\nsummary: "password: ${SECRET}"`), 'index.md': index }
+    files: {
+      'entities/ahmet.md': page('title: Ahmet Yılmaz'),
+      'entities/gizli.md': page(`title: Gizli\nsummary: "password: ${SECRET}"`),
+      'index.md': index,
+    },
   });
   const before = await snapshot(f.vault);
   const r = await call(f.client, 'wiki_update_index');
@@ -267,7 +328,9 @@ test('K: a secret-shaped summary in a new page refuses the write; index and log 
 
 test('K2: a secret-shaped title in a new page refuses the write the same way', async (t) => {
   const index = '# Wiki Index\n\n## entities\n\n';
-  const f = await startServer(t, { files: { 'entities/gizli-baslik.md': page(`title: "${SECRET}"`), 'index.md': index } });
+  const f = await startServer(t, {
+    files: { 'entities/gizli-baslik.md': page(`title: "${SECRET}"`), 'index.md': index },
+  });
   const before = await snapshot(f.vault);
   const r = await call(f.client, 'wiki_update_index');
   refused(r, 'E_SECRET_DETECTED');
@@ -322,14 +385,23 @@ test('N: traversal-looking entries in an existing index never gain new lines poi
   const out = await readFile(join(f.wiki, 'index.md'), 'utf8');
   assert.equal(out.includes('Dışarıda'), false);
   assert.equal(r.added, 1, 'only the real page is added');
-  assert.equal(out.split('\n').filter((line) => line.includes('../')).every((line) => index.includes(line)), true, 'no new traversal line');
+  assert.equal(
+    out
+      .split('\n')
+      .filter((line) => line.includes('../'))
+      .every((line) => index.includes(line)),
+    true,
+    'no new traversal line'
+  );
 });
 
 test('O: a page inside a subfolder is listed under its first folder category, and log records the update', async (t) => {
-  const f = await startServer(t, { files: { 'entities/deep/er/page.md': page('title: Derin Yol'), 'index.md': '# Wiki Index\n\n## entities\n\n' } });
+  const f = await startServer(t, {
+    files: { 'entities/deep/er/page.md': page('title: Derin Yol'), 'index.md': '# Wiki Index\n\n## entities\n\n' },
+  });
   const before = await logCount(f.wiki, 'update-index');
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 1, added: 1, removed: 0 });
   assert.ok((await readFile(join(f.wiki, 'index.md'), 'utf8')).includes('- [Derin Yol](entities/deep/er/page.md)'));
   assert.equal(await logCount(f.wiki, 'update-index'), before + 1);
-  assert.equal(await readOrNull(join(f.wiki, 'log.md')) !== null, true);
+  assert.equal((await readOrNull(join(f.wiki, 'log.md'))) !== null, true);
 });

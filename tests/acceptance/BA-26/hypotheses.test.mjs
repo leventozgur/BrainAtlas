@@ -28,7 +28,10 @@ test('H1 capture: scanText finds each positive with its expected rule (rate >= 0
     const ok = findings.some((f) => f.ruleId === it.expected);
     byCat[it.cat] ??= { n: 0, hit: 0 };
     byCat[it.cat].n++;
-    if (ok) { hits++; byCat[it.cat].hit++; } else misses.push(`${it.id} fmt=${it.fmt} expected=${it.expected} got=[${findings.map((f) => f.ruleId)}]`);
+    if (ok) {
+      hits++;
+      byCat[it.cat].hit++;
+    } else misses.push(`${it.id} fmt=${it.fmt} expected=${it.expected} got=[${findings.map((f) => f.ruleId)}]`);
     // Redaction of the same content must not keep a raw matched value (BA-16 rule: redact before any cut).
     const redacted = safety.redact(it.text);
     for (const f of findings) {

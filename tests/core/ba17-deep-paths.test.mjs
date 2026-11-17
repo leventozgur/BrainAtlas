@@ -13,10 +13,29 @@ function components(dirs, leaf, middle = []) {
   return [...Array.from({ length: dirs }, (_, i) => `d${String(i).padStart(2, '0')}`), ...middle, leaf];
 }
 function vaultWith(parts) {
-  return buildIndex([
-    { path: 'deep/target.md', title: 'Target', aliases: [], keywords: [], headings: [], body: `Handler lives at ${parts.join('/')}. Retries are capped.`, frontmatter: {} },
-    { path: 'notes/other.md', title: 'Other', aliases: [], keywords: [], headings: [], body: 'Other notes about bread and rivers.', frontmatter: {} },
-  ], { now });
+  return buildIndex(
+    [
+      {
+        path: 'deep/target.md',
+        title: 'Target',
+        aliases: [],
+        keywords: [],
+        headings: [],
+        body: `Handler lives at ${parts.join('/')}. Retries are capped.`,
+        frontmatter: {},
+      },
+      {
+        path: 'notes/other.md',
+        title: 'Other',
+        aliases: [],
+        keywords: [],
+        headings: [],
+        body: 'Other notes about bread and rivers.',
+        frontmatter: {},
+      },
+    ],
+    { now }
+  );
 }
 
 for (const depth of [13, 14, 20, 40]) {

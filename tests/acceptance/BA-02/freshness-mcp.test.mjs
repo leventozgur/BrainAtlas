@@ -17,7 +17,8 @@ const BIN = path.join(root, 'packages/mcp/bin/brainatlas-mcp.mjs');
 function fixture(t) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ba02-mcp-fresh-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  const vault = path.join(home, 'vault'), wiki = path.join(vault, 'wiki');
+  const vault = path.join(home, 'vault'),
+    wiki = path.join(vault, 'wiki');
   fs.mkdirSync(wiki, { recursive: true });
   fs.writeFileSync(path.join(wiki, 'base.md'), '# Base\nbaseline evidence\n');
   const config = defaultConfig('lite');
@@ -28,11 +29,23 @@ function fixture(t) {
   return { home, vault, wiki, configFile };
 }
 async function start(f) {
-  const transport = new StdioClientTransport({ command: process.execPath, args: [BIN], cwd: root,
-    env: { HOME: f.home, BRAINATLAS_CONFIG: f.configFile, BRAINATLAS_VAULT: f.vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [BIN],
+    cwd: root,
+    env: { HOME: f.home, BRAINATLAS_CONFIG: f.configFile, BRAINATLAS_VAULT: f.vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba02-fresh', version: '1.0.0' });
   await client.connect(transport);
-  return { client, transport, close: async () => { await client.close().catch(() => {}); await transport.close().catch(() => {}); } };
+  return {
+    client,
+    transport,
+    close: async () => {
+      await client.close().catch(() => {});
+      await transport.close().catch(() => {});
+    },
+  };
 }
 async function queryRaw(c, text) {
   return c.client.callTool({ name: 'wiki_query', arguments: { query: text } });
@@ -44,12 +57,19 @@ async function query(c, text) {
 }
 function utimesExact(file, ref) {
   // Restore the reference mtime to the nanosecond; Node's utimes truncates to milliseconds.
-  execFileSync('python3', ['-c', 'import os,sys; os.utime(sys.argv[1], ns=(int(sys.argv[2]), int(sys.argv[3])))', file, ref.atimeNs.toString(), ref.mtimeNs.toString()]);
+  execFileSync('python3', [
+    '-c',
+    'import os,sys; os.utime(sys.argv[1], ns=(int(sys.argv[2]), int(sys.argv[3])))',
+    file,
+    ref.atimeNs.toString(),
+    ref.mtimeNs.toString(),
+  ]);
 }
 
 test('external add, edit, rename and delete are visible to the next wiki_query over stdio', async (t) => {
   const f = fixture(t);
-  const c = await start(f); t.after(() => c.close());
+  const c = await start(f);
+  t.after(() => c.close());
   assert.deepEqual(await query(c, 'zephyr'), []);
   fs.writeFileSync(path.join(f.wiki, 'added.md'), '# Added\nzephyr appears\n');
   assert.deepEqual(await query(c, 'zephyr'), ['added.md']);
@@ -66,7 +86,8 @@ test('external add, edit, rename and delete are visible to the next wiki_query o
 test('same-size external rewrite with the original mtime restored is visible over stdio', async (t) => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.wiki, 'swap.md'), '# Swap\nfoxtrot here\n');
-  const c = await start(f); t.after(() => c.close());
+  const c = await start(f);
+  t.after(() => c.close());
   assert.deepEqual(await query(c, 'foxtrot'), ['swap.md']);
   const file = path.join(f.wiki, 'swap.md');
   const ref = fs.lstatSync(file, { bigint: true });
@@ -79,10 +100,18 @@ test('same-size external rewrite with the original mtime restored is visible ove
 
 test('a page written through a second MCP process on the same vault is visible without restart', async (t) => {
   const f = fixture(t);
-  const reader = await start(f); t.after(() => reader.close());
-  const writer = await start(f); t.after(() => writer.close());
+  const reader = await start(f);
+  t.after(() => reader.close());
+  const writer = await start(f);
+  t.after(() => writer.close());
   assert.deepEqual(await query(reader, 'vermilion'), []);
-  const result = await writer.client.callTool({ name: 'wiki_write_page', arguments: { path: 'wiki/other-agent.md', content: '---\ntitle: Other agent\n---\n# Other agent\nvermilion note\n' } });
+  const result = await writer.client.callTool({
+    name: 'wiki_write_page',
+    arguments: {
+      path: 'wiki/other-agent.md',
+      content: '---\ntitle: Other agent\n---\n# Other agent\nvermilion note\n',
+    },
+  });
   assert.notEqual(result.isError, true);
   assert.deepEqual(await query(reader, 'vermilion'), ['other-agent.md']);
   // And the reverse direction: the reader's view must follow the writer's delete through its own (external) edit.
@@ -96,25 +125,42 @@ test('a symlinked page is never returned, even after it is created at runtime', 
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ba02-outside-'));
   t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
   fs.writeFileSync(path.join(outside, 'secret.md'), '# Secret\nsecretmarker value\n');
-  const c = await start(f); t.after(() => c.close());
+  const c = await start(f);
+  t.after(() => c.close());
   fs.symlinkSync(path.join(outside, 'secret.md'), path.join(f.wiki, 'link.md'));
   assert.deepEqual(await query(c, 'secretmarker'), []);
   const read = await c.client.callTool({ name: 'wiki_read_page', arguments: { path: 'wiki/link.md' } });
-  assert.ok(read.isError === true || !String(read.content?.[0]?.text).includes('secretmarker'), 'symlink target content must not be readable as a page');
+  assert.ok(
+    read.isError === true || !String(read.content?.[0]?.text).includes('secretmarker'),
+    'symlink target content must not be readable as a page'
+  );
 });
 
 test('concurrent deletes and renames during queries do not crash the server', async (t) => {
   const f = fixture(t);
   for (let i = 0; i < 20; i++) fs.writeFileSync(path.join(f.wiki, `churn-${i}.md`), `# Churn ${i}\nchurnterm ${i}\n`);
-  const c = await start(f); t.after(() => c.close());
+  const c = await start(f);
+  t.after(() => c.close());
   let stop = false;
   const churn = (async () => {
     for (let round = 0; round < 40 && !stop; round++) {
       const i = round % 20;
       const file = path.join(f.wiki, `churn-${i}.md`);
-      try { fs.renameSync(file, file + '.tmp'); } catch { /* already moved */ }
-      try { fs.renameSync(file + '.tmp', file); } catch { /* already restored */ }
-      try { fs.rmSync(file); } catch { /* absent */ }
+      try {
+        fs.renameSync(file, file + '.tmp');
+      } catch {
+        /* already moved */
+      }
+      try {
+        fs.renameSync(file + '.tmp', file);
+      } catch {
+        /* already restored */
+      }
+      try {
+        fs.rmSync(file);
+      } catch {
+        /* absent */
+      }
       fs.writeFileSync(file, `# Churn ${i}\nchurnterm ${i}\n`);
       await new Promise((r) => setTimeout(r, 2));
     }
@@ -125,9 +171,15 @@ test('concurrent deletes and renames during queries do not crash the server', as
       const result = await queryRaw(c, 'churnterm');
       if (result.isError) {
         outcomes.toolError++;
-        assert.match(result.content[0].text, /^E_[A-Z_]+: |^E_MCP_OPERATION/, 'errors must be the generic refusal text');
+        assert.match(
+          result.content[0].text,
+          /^E_[A-Z_]+: |^E_MCP_OPERATION/,
+          'errors must be the generic refusal text'
+        );
       } else outcomes.ok++;
-    } catch { outcomes.transport++; }
+    } catch {
+      outcomes.transport++;
+    }
   }
   stop = true;
   await churn;

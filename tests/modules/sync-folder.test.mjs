@@ -28,8 +28,13 @@ test('folder transport shares bytes between hosts and uses content plus mtime re
   const read = await hostB.get('wiki/data.bin');
   assert.deepEqual(read.bytes, bytes);
   assert.equal(read.rev, created.rev);
-  assert.deepEqual((await hostB.list('wiki')).map(({ path }) => path), ['wiki/data.bin']);
-  await assert.rejects(hostB.put('wiki/data.bin', Buffer.from('stale'), { ifRev: 'stale-revision' }), { code: 'E_CONFLICT' });
+  assert.deepEqual(
+    (await hostB.list('wiki')).map(({ path }) => path),
+    ['wiki/data.bin']
+  );
+  await assert.rejects(hostB.put('wiki/data.bin', Buffer.from('stale'), { ifRev: 'stale-revision' }), {
+    code: 'E_CONFLICT',
+  });
   const updated = await hostB.put('wiki/data.bin', Buffer.from('updated\n'), { ifRev: read.rev });
   assert.notEqual(updated.rev, read.rev);
   assert.equal(Buffer.from((await hostA.get('wiki/data.bin')).bytes).toString(), 'updated\n');
@@ -54,8 +59,12 @@ test('concurrent conditional writes recheck the shared revision where possible',
 
 test('folder configuration requires an absolute path outside the vault', async (t) => {
   const fx = await fixture(t);
-  await assert.rejects(createFolderTransport({ path: 'relative-share', vaultPath: fx.vault }).list(), { code: 'E_INVALID_PATH' });
-  await assert.rejects(createFolderTransport({ path: join(fx.vault, 'sync'), vaultPath: fx.vault }).list(), { code: 'E_INVALID_PATH' });
+  await assert.rejects(createFolderTransport({ path: 'relative-share', vaultPath: fx.vault }).list(), {
+    code: 'E_INVALID_PATH',
+  });
+  await assert.rejects(createFolderTransport({ path: join(fx.vault, 'sync'), vaultPath: fx.vault }).list(), {
+    code: 'E_INVALID_PATH',
+  });
 });
 
 test('provider conflict copies are surfaced as degraded status and never folded into another object', async (t) => {
@@ -81,7 +90,13 @@ test('provider conflict copies are surfaced as degraded status and never folded 
   await writeFile(join(fx.share, 'notes', '.syncthing.partial'), 'temporary');
   const listed = await transport.list();
   assert.equal(listed.length, conflicts.length + 1);
-  assert.deepEqual(listed.filter((row) => row.conflict).map((row) => row.path).sort(), [...conflicts].sort());
+  assert.deepEqual(
+    listed
+      .filter((row) => row.conflict)
+      .map((row) => row.path)
+      .sort(),
+    [...conflicts].sort()
+  );
   const status = await transport.status();
   assert.equal(status.status, 'degraded');
   assert.equal(status.code, 'E_DEGRADED');
@@ -99,7 +114,9 @@ test('folder writes reject traversal and symlink escapes', async (t) => {
   await mkdir(outside);
   const link = join(fx.share, 'link');
   await symlink(outside, link, 'dir');
-  await assert.rejects(transport.put('link/escaped.md', Buffer.from('secret'), { ifAbsent: true }), { code: 'E_INVALID_PATH' });
+  await assert.rejects(transport.put('link/escaped.md', Buffer.from('secret'), { ifAbsent: true }), {
+    code: 'E_INVALID_PATH',
+  });
 });
 
 test('a configured symlink to an external shared folder is accepted as the root', async (t) => {
@@ -113,15 +130,28 @@ test('a configured symlink to an external shared folder is accepted as the root'
 
 test('folder atomic write failure keeps old bytes and removes ignored temporary files', async (t) => {
   const fx = await fixture(t);
-  const target = join(fx.share, 'record.md'); await writeFile(target, 'old complete');
+  const target = join(fx.share, 'record.md');
+  await writeFile(target, 'old complete');
   let temporaryPath;
-  const fsOps={...await import('node:fs/promises'), writeFile: async (file,...args) => { temporaryPath=file; return (await import('node:fs/promises')).writeFile(file,...args); }, rename: async () => { throw new Error('injected rename failure'); }};
-  const atomicWriter=(file,data,options)=>atomicWriteFile(file,data,{...options,fsOps});
-  const transport=createFolderTransport({path:fx.share,vaultPath:fx.vault,atomicWriter});
-  const current=await transport.get('record.md');
-  await assert.rejects(transport.put('record.md',Buffer.from('new complete'),{ifRev:current.rev}),/injected rename failure/);
-  assert.match(temporaryPath,/\/\.brainatlas-tmp-[^/]+$/);
-  assert.equal(await readFile(target,'utf8'),'old complete');
+  const fsOps = {
+    ...(await import('node:fs/promises')),
+    writeFile: async (file, ...args) => {
+      temporaryPath = file;
+      return (await import('node:fs/promises')).writeFile(file, ...args);
+    },
+    rename: async () => {
+      throw new Error('injected rename failure');
+    },
+  };
+  const atomicWriter = (file, data, options) => atomicWriteFile(file, data, { ...options, fsOps });
+  const transport = createFolderTransport({ path: fx.share, vaultPath: fx.vault, atomicWriter });
+  const current = await transport.get('record.md');
+  await assert.rejects(
+    transport.put('record.md', Buffer.from('new complete'), { ifRev: current.rev }),
+    /injected rename failure/
+  );
+  assert.match(temporaryPath, /\/\.brainatlas-tmp-[^/]+$/);
+  assert.equal(await readFile(target, 'utf8'), 'old complete');
   assert.deepEqual(await readdir(fx.share), ['record.md']);
 });
 
@@ -131,11 +161,26 @@ test('activation wires selected folder transport and the manifest declares its d
   const manifest = readModuleManifest(moduleDir);
   assert.deepEqual(manifest.profiles, ['full', 'custom']);
   assert.equal(manifest.experimental, true);
-  assert.deepEqual(resolveModuleOrder([
-    manifest,
-    { name: 'sync-engine', version: '0.1.0-rc.12', description: 'engine', requires: [], provides: ['sync'], profiles: ['full'], entry: 'src/index.mjs' },
-  ]).map((item) => item.name), ['sync-engine', 'sync-folder']);
-  const ctx = { config: { vault: { path: fx.vault }, sync: { transport: 'folder', options: { path: fx.share } } }, paths: { stateDir: join(fx.root, 'state') }, env: {} };
+  assert.deepEqual(
+    resolveModuleOrder([
+      manifest,
+      {
+        name: 'sync-engine',
+        version: '0.1.0-rc.12',
+        description: 'engine',
+        requires: [],
+        provides: ['sync'],
+        profiles: ['full'],
+        entry: 'src/index.mjs',
+      },
+    ]).map((item) => item.name),
+    ['sync-engine', 'sync-folder']
+  );
+  const ctx = {
+    config: { vault: { path: fx.vault }, sync: { transport: 'folder', options: { path: fx.share } } },
+    paths: { stateDir: join(fx.root, 'state') },
+    env: {},
+  };
   await activate(ctx);
   assert.deepEqual(ctx.transport.capabilities, { cas: false, mode: 'object' });
   assert.match(ctx.transport.hostId, /^[a-z0-9-]+$/);

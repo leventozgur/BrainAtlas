@@ -18,11 +18,18 @@ async function setup(t, internal, flag) {
   await symlink(target, path.join(home, '.codex'), 'dir');
   const env = { HOME: home };
   if (flag !== undefined) env.BRAINATLAS_ALLOW_SYMLINKED_ROOT = flag;
-  const ctx = { env, scope: 'global', paths: { stateDir: path.join(root, 'state') }, nodePath: '/usr/bin/node', shimPath: '/opt/example/brainatlas', now: new Date('2026-01-02T00:00:00Z') };
+  const ctx = {
+    env,
+    scope: 'global',
+    paths: { stateDir: path.join(root, 'state') },
+    nodePath: '/usr/bin/node',
+    shimPath: '/opt/example/brainatlas',
+    now: new Date('2026-01-02T00:00:00Z'),
+  };
   return { target, original, ctx };
 }
 for (const flag of [undefined, '', '0', 'true']) {
-  test(`outside HOME symlink denied with opt-in ${JSON.stringify(flag)}`, async t => {
+  test(`outside HOME symlink denied with opt-in ${JSON.stringify(flag)}`, async (t) => {
     const f = await setup(t, false, flag);
     assert.throws(() => adapter.plan(f.ctx), { code: 'E_PATH_ESCAPE' });
     await assert.rejects(adapter.remove(f.ctx), { code: 'E_PATH_ESCAPE' });
@@ -30,8 +37,11 @@ for (const flag of [undefined, '', '0', 'true']) {
     assert.equal(await readFile(path.join(f.target, 'config.toml'), 'utf8'), f.original);
   });
 }
-for (const [name, internal, flag] of [['outside opted in', false, '1'], ['inside HOME', true, undefined]]) {
-  test(`${name} symlink supports full lifecycle`, async t => {
+for (const [name, internal, flag] of [
+  ['outside opted in', false, '1'],
+  ['inside HOME', true, undefined],
+]) {
+  test(`${name} symlink supports full lifecycle`, async (t) => {
     const f = await setup(t, internal, flag);
     const plan = adapter.plan(f.ctx);
     await adapter.apply(plan, f.ctx);
@@ -40,7 +50,7 @@ for (const [name, internal, flag] of [['outside opted in', false, '1'], ['inside
     assert.equal(await readFile(path.join(f.target, 'config.toml'), 'utf8'), f.original);
   });
 }
-test('retargeting a config directory after planning is rejected before writes', async t => {
+test('retargeting a config directory after planning is rejected before writes', async (t) => {
   const f = await setup(t, true);
   const plan = adapter.plan(f.ctx);
   const link = path.join(f.ctx.env.HOME, '.codex');

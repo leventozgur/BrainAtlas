@@ -10,12 +10,16 @@ const page = (title) => `---\ntitle: ${title}\n---\nKısa gövde.\n`;
 
 test('anchor-only, external and scheme-relative entries are kept byte for byte and are not pages; anchored entry counts once', async (t) => {
   const index = [
-    '# Wiki Index', '', '## entities', '',
+    '# Wiki Index',
+    '',
+    '## entities',
+    '',
     '- [Yerel çapa](#ozet) — yalnız çapa',
     '- [Dış](https://example.com/a.md) — harici',
     '- [Protokolsüz](//cdn.example.com/b.md)',
     '- [Posta](mailto:ornek@example.com)',
-    '- [Ali](entities/ali.md#ozet) — bölüm', ''
+    '- [Ali](entities/ali.md#ozet) — bölüm',
+    '',
   ].join('\n');
   const f = await startServer(t, { files: { 'index.md': index, 'entities/ali.md': page('Ali') } });
   const before = await readIndex(f);
@@ -27,21 +31,34 @@ test('anchor-only, external and scheme-relative entries are kept byte for byte a
 });
 
 test('stale entries with a fragment, a query, or an angle-bracket destination are removed; the live page keeps one entry; a second run is a no-op', async (t) => {
-  const index = '# Wiki Index\n\n## entities\n\n- [S1](entities/gone.md#x) — eski\n- [S2](entities/gone2.md?v=2)\n- [S3](<entities/gone 3.md#y>)\n- [Ali](entities/ali.md?v=1#ozet) — canlı\n';
+  const index =
+    '# Wiki Index\n\n## entities\n\n- [S1](entities/gone.md#x) — eski\n- [S2](entities/gone2.md?v=2)\n- [S3](<entities/gone 3.md#y>)\n- [Ali](entities/ali.md?v=1#ozet) — canlı\n';
   const f = await startServer(t, { files: { 'index.md': index, 'entities/ali.md': page('Ali') } });
-  assert.deepEqual(okJson(await call(f.client, 'wiki_update_index', {})), { indexed: 1, added: 0, removed: 3 }, 'three stale entries are removed');
-  assert.equal((await readIndex(f)).toString('utf8'), '# Wiki Index\n\n## entities\n\n- [Ali](entities/ali.md?v=1#ozet) — canlı\n');
+  assert.deepEqual(
+    okJson(await call(f.client, 'wiki_update_index', {})),
+    { indexed: 1, added: 0, removed: 3 },
+    'three stale entries are removed'
+  );
+  assert.equal(
+    (await readIndex(f)).toString('utf8'),
+    '# Wiki Index\n\n## entities\n\n- [Ali](entities/ali.md?v=1#ozet) — canlı\n'
+  );
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index', {})), { indexed: 1, added: 0, removed: 0 });
 });
 
 test('a salt-only line in a category keeps its bytes; a new page goes into its own folder category and no other', async (t) => {
   const index = '# Wiki Index\n\n## entities\n\n- [Yerel](#ozet)\n\n## concepts\n\n- [K](concepts/k.md)\n';
-  const f = await startServer(t, { files: { 'index.md': index, 'entities/ali.md': page('Ali'), 'concepts/k.md': page('K') } });
+  const f = await startServer(t, {
+    files: { 'index.md': index, 'entities/ali.md': page('Ali'), 'concepts/k.md': page('K') },
+  });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index', {})), { indexed: 2, added: 1, removed: 0 });
   const text = (await readIndex(f)).toString('utf8');
   assert.ok(text.split('\n').includes('- [Yerel](#ozet)'), 'the salt-only line is kept as it was');
   assert.ok(sectionLines(text, 'entities').includes('- [Ali](entities/ali.md)'), 'the new page is under ## entities');
-  assert.ok(!sectionLines(text, 'concepts').includes('- [Ali](entities/ali.md)'), 'the new page is not under ## concepts');
+  assert.ok(
+    !sectionLines(text, 'concepts').includes('- [Ali](entities/ali.md)'),
+    'the new page is not under ## concepts'
+  );
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index', {})), { indexed: 2, added: 0, removed: 0 });
 });
 

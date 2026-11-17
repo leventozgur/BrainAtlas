@@ -79,8 +79,14 @@ function top1Rates(items) {
   const answers = items.filter((r) => !r.abstain);
   const withExcluded = items.filter((r) => Array.isArray(r.excluded) && r.excluded.length > 0);
   return {
-    top1RelevantRate: ratio(answers.filter((r) => r.injected.length > 0 && r.relevant.includes(r.injected[0])).length, answers.length),
-    top1ExcludedRate: ratio(withExcluded.filter((r) => r.injected.length > 0 && r.excluded.includes(r.injected[0])).length, withExcluded.length),
+    top1RelevantRate: ratio(
+      answers.filter((r) => r.injected.length > 0 && r.relevant.includes(r.injected[0])).length,
+      answers.length
+    ),
+    top1ExcludedRate: ratio(
+      withExcluded.filter((r) => r.injected.length > 0 && r.excluded.includes(r.injected[0])).length,
+      withExcluded.length
+    ),
   };
 }
 
@@ -94,7 +100,6 @@ function top1Rates(items) {
 export function summarizeHookRecords(records) {
   const n = records.length;
   const answerable = records.filter((r) => !r.abstain);
-  const abstaining = records.filter((r) => r.abstain);
   const injectedTotal = records.reduce((sum, r) => sum + r.injected.length, 0);
   const injectedRelevant = records.reduce((sum, r) => sum + r.injected.filter((p) => r.relevant.includes(p)).length, 0);
   const categories = new Map();
@@ -121,30 +126,48 @@ export function summarizeHookRecords(records) {
     if (withFalse) group.falseInjectionRate = ratio(falses.filter((r) => r.injected.length).length, falses.length);
     return group;
   };
-  const byCategory = Object.fromEntries([...categories.entries()].sort(([a], [b]) => a.localeCompare(b, 'en')).map(([category, items]) => [category, summarizeGroup(items, false)]));
-  const byKind = Object.fromEntries([...kinds.entries()].sort(([a], [b]) => a.localeCompare(b, 'en')).map(([kind, items]) => [kind, summarizeGroup(items, true)]));
+  const byCategory = Object.fromEntries(
+    [...categories.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, 'en'))
+      .map(([category, items]) => [category, summarizeGroup(items, false)])
+  );
+  const byKind = Object.fromEntries(
+    [...kinds.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, 'en'))
+      .map(([kind, items]) => [kind, summarizeGroup(items, true)])
+  );
   // BA-31m: project-awareness summary. Only cases that carry a cwd; the same group shape plus the top-1 rates.
   const withCwd = records.filter((r) => typeof r.cwd === 'string');
-  const withCwdSummary = {...summarizeGroup(withCwd, true), ...top1Rates(withCwd)};
+  const withCwdSummary = { ...summarizeGroup(withCwd, true), ...top1Rates(withCwd) };
   const chars = records.map((r) => r.chars);
   const durations = records.map((r) => r.durationMs);
   const hitCount = records.filter(hit).length;
   const top5 = records.flatMap((r) => (Array.isArray(r.meta) ? r.meta : []));
   const sectionCases = records.filter((r) => r.sectionHit === true || r.sectionHit === false);
-  const charStats = {mean: n ? chars.reduce((sum, v) => sum + v, 0) / n : 0, p50: percentile(chars, 0.5), p95: percentile(chars, 0.95)};
+  const charStats = {
+    mean: n ? chars.reduce((sum, v) => sum + v, 0) / n : 0,
+    p50: percentile(chars, 0.5),
+    p95: percentile(chars, 0.95),
+  };
   return {
     n,
     injectionRate: ratio(records.filter((r) => r.injected.length).length, n),
     injectionPrecision: ratio(injectedRelevant, injectedTotal),
     missRate: answerable.length ? ratio(answerable.filter((r) => !hit(r)).length, answerable.length) : 0,
-    falseInjectionRate: ratio(records.filter(falseRecord).filter((r) => r.injected.length).length, records.filter(falseRecord).length),
+    falseInjectionRate: ratio(
+      records.filter(falseRecord).filter((r) => r.injected.length).length,
+      records.filter(falseRecord).length
+    ),
     chars: charStats,
-    durationMs: {p50: percentile(durations, 0.5), p95: percentile(durations, 0.95)},
+    durationMs: { p50: percentile(durations, 0.5), p95: percentile(durations, 0.95) },
     byCategory,
     // BA-27 additions. Existing keys above keep their meaning.
     byKind,
     injectedChars: charStats,
-    charsPerHit: ratio(chars.reduce((sum, v) => sum + v, 0), hitCount),
+    charsPerHit: ratio(
+      chars.reduce((sum, v) => sum + v, 0),
+      hitCount
+    ),
     neededPageInjected: ratio(answerable.filter(hit).length, answerable.length),
     metaShareTop5: ratio(top5.filter(Boolean).length, top5.length),
     sectionHitAt1: ratio(sectionCases.filter((r) => r.sectionHit === true).length, sectionCases.length),

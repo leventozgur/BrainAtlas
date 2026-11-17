@@ -6,7 +6,14 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { VERSION } from '@brainatlas/core';
 import { createServer } from './index.mjs';
 
-const READ_TOOLS = new Set(['wiki_query', 'wiki_read_page', 'wiki_read_index', 'wiki_list_pages', 'wiki_status', 'wiki_lint']);
+const READ_TOOLS = new Set([
+  'wiki_query',
+  'wiki_read_page',
+  'wiki_read_index',
+  'wiki_list_pages',
+  'wiki_status',
+  'wiki_lint',
+]);
 
 function argumentError(name) {
   const message = `Unknown read-only Wiki tool: ${name}.`;
@@ -31,7 +38,7 @@ export async function callToolInProcess(options, name, args = {}) {
     await client.connect(clientTransport);
     const result = await client.callTool({ name, arguments: args });
     const content = Array.isArray(result?.content) ? result.content : [];
-    const first = content.find(item => item?.type === 'text');
+    const first = content.find((item) => item?.type === 'text');
     const text = typeof first?.text === 'string' ? first.text : '';
     return { isError: result?.isError === true, text };
   } finally {

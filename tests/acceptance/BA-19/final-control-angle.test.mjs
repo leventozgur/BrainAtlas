@@ -11,7 +11,7 @@ const CONTROLS = [
   ['U+0001', '\u0001'],
   ['U+001F', '\u001f'],
   ['U+007F DEL', '\u007f'],
-  ['U+009B CSI (C1 control)', '\u009b']
+  ['U+009B CSI (C1 control)', '\u009b'],
 ];
 const hex = (ch) => `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
 
@@ -26,7 +26,10 @@ for (const [label, ch] of CONTROLS) {
     const text = bytes1.toString('utf8');
     const lines = text.split('\n').filter((line) => line.includes('d.md'));
     assert.equal(lines.length, 1, 'exactly one entry line for the control-character page');
-    assert.ok(lines[0].includes(`](<entities/c${ch}d.md>)`), `${hex(ch)} must be inside angle brackets, got a plain destination`);
+    assert.ok(
+      lines[0].includes(`](<entities/c${ch}d.md>)`),
+      `${hex(ch)} must be inside angle brackets, got a plain destination`
+    );
     assert.ok(linkedPages(text).has(path), 'the independent reader finds the page with the exact name');
     assert.ok(text.includes(ch), 'the character is kept as written (not dropped or replaced)');
     assert.equal(okJson(await call(f.client, 'wiki_status', {})).indexCoveragePct, 100);
@@ -55,12 +58,22 @@ test('control-character names next to ordinary names: all pages are linked, no d
 
 test('a control-character page created through wiki_create_entity is not possible from the name (slugify); the index stays valid', async (t) => {
   const f = await startServer(t, {});
-  const created = okJson(await call(f.client, 'wiki_create_entity', { name: 'Ad\u0001Kontrol\u009b', content: 'Gövde.\n' }));
-  assert.equal(created.path, 'wiki/entities/ad-kontrol.md', 'every character outside [a-z0-9] becomes a hyphen in the slug');
+  const created = okJson(
+    await call(f.client, 'wiki_create_entity', { name: 'Ad\u0001Kontrol\u009b', content: 'Gövde.\n' })
+  );
+  assert.equal(
+    created.path,
+    'wiki/entities/ad-kontrol.md',
+    'every character outside [a-z0-9] becomes a hyphen in the slug'
+  );
   const text = (await readIndex(f)).toString('utf8');
   const entry = text.split('\n').find((line) => line.includes('entities/ad-kontrol.md'));
   assert.ok(entry, 'the page has one entry line');
-  assert.ok(!/[\u0000-\u001f\u007f-\u009f]/.test(entry.slice(entry.indexOf(']('))), 'the link destination holds no control character');
+  assert.ok(
+    // eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
+    !/[\u0000-\u001f\u007f-\u009f]/.test(entry.slice(entry.indexOf(']('))),
+    'the link destination holds no control character'
+  );
   // Observation (not a contract rule): the title is the raw create name, so control characters can appear in the link text.
   t.diagnostic(`title as written in the index link text: ${JSON.stringify(entry.slice(0, entry.indexOf('](')))}`);
   assert.ok(linkedPages(text).has('entities/ad-kontrol.md'));

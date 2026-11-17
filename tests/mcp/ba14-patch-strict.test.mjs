@@ -24,11 +24,18 @@ async function fixture(t) {
   config.vault.path = vault;
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba14-patch-test', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   return { vault, client, pageFile: resolve(vault, 'wiki', pagePath), logFile: resolve(vault, 'wiki/log.md') };
 }
 

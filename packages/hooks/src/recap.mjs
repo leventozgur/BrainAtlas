@@ -17,10 +17,14 @@ const LINE_SEPARATORS = String.fromCharCode(0x2028, 0x2029);
 const CONTROL = new RegExp(`[\u0000-\u001f\u007f-\u009f${LINE_SEPARATORS}]`);
 const CONTROL_ALL = new RegExp(CONTROL.source, 'g');
 
-const ownedByUser = st => typeof process.getuid !== 'function' || st.uid === process.getuid();
+const ownedByUser = (st) => typeof process.getuid !== 'function' || st.uid === process.getuid();
 async function ownedDirectory(dir) {
-  try { const st = await lstat(dir); return st.isDirectory() && !st.isSymbolicLink() && ownedByUser(st); }
-  catch { return false; }
+  try {
+    const st = await lstat(dir);
+    return st.isDirectory() && !st.isSymbolicLink() && ownedByUser(st);
+  } catch {
+    return false;
+  }
 }
 // Reads only the newest 64 KB of the log; a symlinked log is refused by O_NOFOLLOW.
 async function readLogTail(file) {
@@ -35,19 +39,29 @@ async function readLogTail(file) {
     const buf = Buffer.alloc(st.size - from);
     const { bytesRead } = await h.read(buf, 0, buf.length, from);
     const bytes = buf.subarray(0, bytesRead);
-    if (start === 0) return bytes.toString('utf8').replace(/^﻿/, '');
+    if (start === 0) return bytes.toString('utf8').replace(/^\uFEFF/, '');
     if (bytes[0] === 0x0a) return bytes.subarray(1).toString('utf8');
     // Mid-line start: the first (partial) line is dropped.
     const body = bytes.subarray(1);
     const nl = body.indexOf(0x0a);
     return nl < 0 ? '' : body.subarray(nl + 1).toString('utf8');
-  } catch { return ''; }
-  finally { await h?.close().catch(() => {}); }
+  } catch {
+    return '';
+  } finally {
+    await h?.close().catch(() => {});
+  }
 }
 function wikiPagePath(rel) {
-  if (rel.length > PATH_CHARS || !rel.startsWith('wiki/') || !rel.endsWith('.md') || rel.includes('\\') || CONTROL.test(rel)) return false;
+  if (
+    rel.length > PATH_CHARS ||
+    !rel.startsWith('wiki/') ||
+    !rel.endsWith('.md') ||
+    rel.includes('\\') ||
+    CONTROL.test(rel)
+  )
+    return false;
   if (rel === 'wiki/index.md' || rel === 'wiki/log.md') return false;
-  return rel.split('/').every(part => part && part !== '.' && part !== '..');
+  return rel.split('/').every((part) => part && part !== '.' && part !== '..');
 }
 // Newest machine entry per page within the window; human lines are ignored.
 function recentPages(text, nowMs) {
@@ -59,12 +73,18 @@ function recentPages(text, nowMs) {
     const time = Date.parse(match[1]);
     if (!Number.isFinite(time) || time < cutoff) continue;
     let entry;
-    try { entry = JSON.parse(match[2]); } catch { continue; }
-    if (!entry || typeof entry !== 'object' || typeof entry.action !== 'string' || typeof entry.path !== 'string') continue;
+    try {
+      entry = JSON.parse(match[2]);
+    } catch {
+      continue;
+    }
+    if (!entry || typeof entry !== 'object' || typeof entry.action !== 'string' || typeof entry.path !== 'string')
+      continue;
     if (!wikiPagePath(entry.path)) continue;
     if (!latest.has(entry.path) || latest.get(entry.path) < time) latest.set(entry.path, time);
   }
-  return [...latest].map(([path, time]) => ({ path, time }))
+  return [...latest]
+    .map(([path, time]) => ({ path, time }))
     .sort((a, b) => b.time - a.time || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 // Reads the first 4 KB of a page; the real path must stay inside the vault and the leaf must not be a link.
@@ -78,12 +98,15 @@ async function readPageHead(vaultReal, rel) {
     const buf = Buffer.alloc(HEAD_BYTES);
     const { bytesRead } = await h.read(buf, 0, HEAD_BYTES, 0);
     return buf.subarray(0, bytesRead).toString('utf8');
-  } catch { return null; }
-  finally { await h?.close().catch(() => {}); }
+  } catch {
+    return null;
+  } finally {
+    await h?.close().catch(() => {});
+  }
 }
 // Minimal frontmatter split for the title only; no YAML parser is loaded on the hook path.
 function frontmatterSplit(head) {
-  const lines = head.replace(/^﻿/, '').split(/\r?\n/);
+  const lines = head.replace(/^\uFEFF/, '').split(/\r?\n/);
   if (lines[0] !== '---') return { fields: null, body: lines.join('\n') };
   const end = lines.findIndex((line, i) => i > 0 && line === '---');
   if (end < 0) return { fields: null, body: '' };
@@ -91,13 +114,13 @@ function frontmatterSplit(head) {
 }
 const DOUBLE_ESCAPES = { n: '\n', t: '\t', r: '\r', '"': '"', '\\': '\\', '/': '/' };
 function unescapeDouble(text) {
-  return text.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, code) => (code.length === 5
-    ? String.fromCharCode(parseInt(code.slice(1), 16))
-    : (DOUBLE_ESCAPES[code] ?? code)));
+  return text.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, code) =>
+    code.length === 5 ? String.fromCharCode(parseInt(code.slice(1), 16)) : (DOUBLE_ESCAPES[code] ?? code)
+  );
 }
 // Top-level, single-line `title:` only. Returns null when absent, duplicated, empty, non-string or unsupported.
 function frontmatterTitle(lines) {
-  const keys = lines.filter(line => /^title[ \t]*:/.test(line));
+  const keys = lines.filter((line) => /^title[ \t]*:/.test(line));
   if (keys.length !== 1) return null;
   const raw = keys[0].replace(/^title[ \t]*:[ \t]*/, '');
   if (raw.startsWith('"')) {
@@ -116,7 +139,10 @@ function frontmatterTitle(lines) {
 function titleOf(head, rel) {
   const { fields, body } = frontmatterSplit(head);
   let title = (fields && frontmatterTitle(fields)) || '';
-  if (!title.trim()) { const heading = /^#[ \t]+(.+)$/m.exec(body); title = heading ? heading[1] : ''; }
+  if (!title.trim()) {
+    const heading = /^#[ \t]+(.+)$/m.exec(body);
+    title = heading ? heading[1] : '';
+  }
   title = title.replace(CONTROL_ALL, ' ').replace(/\s+/g, ' ').trim();
   if (!title) title = basename(rel).replace(/\.md$/i, '');
   return title.slice(0, TITLE_CHARS);
@@ -128,13 +154,15 @@ async function pendingReceipts(stateDir) {
   if (!(await ownedDirectory(receipts)) || !(await ownedDirectory(queue))) return null;
   try {
     const entries = await readdir(queue, { withFileTypes: true });
-    return entries.filter(entry => entry.isFile() && entry.name.endsWith('.json')).length;
-  } catch { return null; }
+    return entries.filter((entry) => entry.isFile() && entry.name.endsWith('.json')).length;
+  } catch {
+    return null;
+  }
 }
 /**
  * Deterministic session-start card built from the wiki log and the receipts queue.
  * Returns '' when there is nothing to report or when anything fails.
- * @param {{vaultPath:string,stateDir?:string,now?:Date,maxChars?:number}} options
+ * @param {{vaultPath?:string,stateDir?:string,now?:Date,maxChars?:number}} options
  * @returns {Promise<string>}
  */
 export async function buildRecap({ vaultPath, stateDir, now = new Date(), maxChars = 800 } = {}) {
@@ -149,7 +177,11 @@ export async function buildRecap({ vaultPath, stateDir, now = new Date(), maxCha
       if (pages.length >= MAX_PAGES) break;
       const head = await readPageHead(vaultReal, candidate.path);
       if (head === null) continue;
-      pages.push({ date: new Date(candidate.time).toISOString().slice(0, 10), title: titleOf(head, candidate.path), path: candidate.path });
+      pages.push({
+        date: new Date(candidate.time).toISOString().slice(0, 10),
+        title: titleOf(head, candidate.path),
+        path: candidate.path,
+      });
     }
     const pending = stateDir ? await pendingReceipts(stateDir) : null;
     if (!pages.length && !(pending > 0)) return '';
@@ -160,7 +192,12 @@ export async function buildRecap({ vaultPath, stateDir, now = new Date(), maxCha
     }
     if (pending !== null) lines.push(`Pending review candidates: ${pending}`);
     let card = redact(lines.join('\n'));
-    while (card.length > maxChars && lines.length > 1) { lines.pop(); card = redact(lines.join('\n')); }
+    while (card.length > maxChars && lines.length > 1) {
+      lines.pop();
+      card = redact(lines.join('\n'));
+    }
     return card.length <= maxChars && lines.length > 1 ? card : '';
-  } catch { return ''; }
+  } catch {
+    return '';
+  }
 }

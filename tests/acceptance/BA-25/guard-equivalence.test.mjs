@@ -19,11 +19,20 @@ const SCRIPT = [
   ['wiki_lint', {}],
   ['wiki_write_page', { path: 'entities/eq-probe.md', content: page('Eq Probe', 'Eq probe evidence.') }],
   ['wiki_update_page', { path: 'entities/eq-probe.md', patch: { append: '\nAppended.' } }],
-  ['wiki_update_page', { path: 'entities/eq-probe.md', content: page('Eq Probe', 'Replaced body, see [Eq Concept](../concepts/eq-concept.md).') }],
+  [
+    'wiki_update_page',
+    {
+      path: 'entities/eq-probe.md',
+      content: page('Eq Probe', 'Replaced body, see [Eq Concept](../concepts/eq-concept.md).'),
+    },
+  ],
   ['wiki_update_page', { path: 'entities/eq-probe.md' }],
   ['wiki_create_entity', { name: 'Eq Entity', content: 'Evidence.' }],
   ['wiki_create_entity', { name: 'Eq Entity', content: 'Duplicate.' }],
-  ['wiki_create_concept', { name: 'Eq Concept', content: '---\nsummary: Concept for equivalence\ntags: [eq, check]\n---\nConcept body.' }],
+  [
+    'wiki_create_concept',
+    { name: 'Eq Concept', content: '---\nsummary: Concept for equivalence\ntags: [eq, check]\n---\nConcept body.' },
+  ],
   ['wiki_add_crosslinks', { path: 'entities/eq-probe.md' }],
   ['wiki_update_index', {}],
   ['wiki_write_page', { path: '../escape.md', content: page('Escape', 'x') }],
@@ -43,19 +52,27 @@ async function runScript(t, root) {
   for (const [name, args] of SCRIPT) {
     const r = await call(c.client, name, args);
     let body = textOf(r);
-    try { body = JSON.parse(body); } catch { /* plain error text */ }
+    try {
+      body = JSON.parse(body);
+    } catch {
+      /* plain error text */
+    }
     if (name === 'wiki_read_page' && body && typeof body === 'object') delete body.sha256; // intentional BA-25 addition
     if (name === 'wiki_status' && body && typeof body === 'object') delete body.indexAgeMs; // clock value
     replies.push({ name, isError: r.isError === true, body: normalize(body) });
   }
   const tree = {};
-  for (const path of await filesUnder(f.wikiDir)) tree[relative(f.wikiDir, path)] = (await readFile(path, 'utf8')).replace(TS, '<TS>');
+  for (const path of await filesUnder(f.wikiDir))
+    tree[relative(f.wikiDir, path)] = (await readFile(path, 'utf8')).replace(TS, '<TS>');
   return { replies, tree, f };
 }
 
 test('guard A (candidate only): the script ends with no lock file and no temporary file in the Wiki', async (t) => {
   const cand = await runScript(t, WT);
   const names = (await filesUnder(cand.f.wikiDir)).map((p) => p.split('/').at(-1));
-  assert.equal(names.some((n) => n === LOCK_NAME || n.endsWith('.tmp')), false);
+  assert.equal(
+    names.some((n) => n === LOCK_NAME || n.endsWith('.tmp')),
+    false
+  );
   assert.equal(cand.replies.filter((r) => r.isError).length >= 5, true, 'refusals present');
 });

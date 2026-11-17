@@ -34,12 +34,17 @@ async function fixture(t, { files = {}, index } = {}) {
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
   const transport = new StdioClientTransport({
-    command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe'
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
   });
   const client = new Client({ name: 'ba19-index-test', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   const indexPath = resolve(wiki, 'index.md');
   return { wiki, client, indexPath, readIndex: () => readFile(indexPath, 'utf8') };
 }
@@ -69,7 +74,7 @@ const HAND_EDITED = [
   '## Özel Bölüm',
   '',
   'Metin.',
-  ''
+  '',
 ].join('\n');
 
 // The new entity line goes after the last entry of ## entities; every other line is kept as it was.
@@ -82,7 +87,10 @@ const FILES = { 'entities/sample-01.md': page('Sample One') };
 
 test('BA19-CREATE1: wiki_create_entity keeps a hand-edited index byte for byte and adds its line under ## entities', async (t) => {
   const f = await fixture(t, { files: FILES, index: HAND_EDITED });
-  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' }), { path: 'wiki/entities/yeni-varlik.md', created: true });
+  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' }), {
+    path: 'wiki/entities/yeni-varlik.md',
+    created: true,
+  });
   assert.equal(await f.readIndex(), HAND_EDITED_AFTER_CREATE);
 });
 
@@ -96,8 +104,10 @@ test('BA19-CREATE3: wiki_create_concept adds its line under the existing lower-c
   const index = '# Wiki Index\n\nGiriş notu.\n\n## concepts\n\n- [K](concepts/k.md) — kalıcı #kavram\n\nSon not.\n';
   const f = await fixture(t, { files: { 'concepts/k.md': page('K') }, index });
   await ok(f.client, 'wiki_create_concept', { name: 'Yeni Kavram', content: 'Gövde.' });
-  assert.equal(await f.readIndex(),
-    '# Wiki Index\n\nGiriş notu.\n\n## concepts\n\n- [K](concepts/k.md) — kalıcı #kavram\n- [Yeni Kavram](concepts/yeni-kavram.md)\n\nSon not.\n');
+  assert.equal(
+    await f.readIndex(),
+    '# Wiki Index\n\nGiriş notu.\n\n## concepts\n\n- [K](concepts/k.md) — kalıcı #kavram\n- [Yeni Kavram](concepts/yeni-kavram.md)\n\nSon not.\n'
+  );
 });
 
 test('BA19-CREATE4: wiki_create_entity without an index file writes a fresh index under ## entities (folder rule)', async (t) => {
@@ -111,7 +121,7 @@ test('BA19-CREATE4: wiki_create_entity without an index file writes a fresh inde
 const PAREN_PAGES = {
   'entities/a)b.md': page('Kapanış Parantezi'),
   'entities/a(b)(c).md': page('Çift Parantez'),
-  'concepts/t(x).md': page('Başlık (özel)')
+  'concepts/t(x).md': page('Başlık (özel)'),
 };
 
 test('BA19-FRESH1: wiki_update_index without an index writes escaped destinations; a broken ")" name is one line; runs two and three change nothing', async (t) => {

@@ -30,23 +30,39 @@ function write(root, rel, text) {
   fs.writeFileSync(full, text);
 }
 function hookConfig(vault, stateDir, extra = {}) {
-  return { vault: { path: vault }, stateDir, hooks: { mode: 'normal', deadlineMs: 4700 }, retrieval: { abstainThreshold: 0 }, ...extra };
+  return {
+    vault: { path: vault },
+    stateDir,
+    hooks: { mode: 'normal', deadlineMs: 4700 },
+    retrieval: { abstainThreshold: 0 },
+    ...extra,
+  };
 }
 async function prompt(vault, stateDir, query, extra) {
-  const { stdout } = await runHook({ client: 'claude', event: 'prompt', stdin: JSON.stringify({ session_id: 's-' + query, prompt: query }), env: {}, config: hookConfig(vault, stateDir, extra), now });
+  const { stdout } = await runHook({
+    client: 'claude',
+    event: 'prompt',
+    stdin: JSON.stringify({ session_id: 's-' + query, prompt: query }),
+    env: {},
+    config: hookConfig(vault, stateDir, extra),
+    now,
+  });
   const context = JSON.parse(stdout)?.hookSpecificOutput?.additionalContext || '';
-  return { context, paths: [...context.matchAll(/\(([^()\n]+\.md)\)/g)].map(m => m[1]) };
+  return { context, paths: [...context.matchAll(/\(([^()\n]+\.md)\)/g)].map((m) => m[1]) };
 }
 function mainCheckout() {
   try {
     const common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: repo, encoding: 'utf8' }).trim();
     const root = path.resolve(repo, common, '..');
     return fs.existsSync(path.join(root, 'packages/hooks/src/index.mjs')) ? root : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
-test('wiki vault: the hook injects wiki pages only, never wiki/index.md or the root policy file', async t => {
-  const dir = temp(t), vault = path.join(dir, 'vault');
+test('wiki vault: the hook injects wiki pages only, never wiki/index.md or the root policy file', async (t) => {
+  const dir = temp(t),
+    vault = path.join(dir, 'vault');
   write(vault, 'AGENTS.md', '# Policy\nquokka habitat policy');
   write(vault, 'index.md', '# Root index\nquokka habitat catalog');
   write(vault, 'planning/p.md', '# Plan\nquokka habitat plan');
@@ -58,8 +74,9 @@ test('wiki vault: the hook injects wiki pages only, never wiki/index.md or the r
   assert.deepEqual(paths, ['wiki/notes/habitat.md'], context);
 });
 
-test('vault without wiki: the hook leaves out root navigation, policy, planning, archive, inbox and raw', async t => {
-  const dir = temp(t), vault = path.join(dir, 'vault');
+test('vault without wiki: the hook leaves out root navigation, policy, planning, archive, inbox and raw', async (t) => {
+  const dir = temp(t),
+    vault = path.join(dir, 'vault');
   write(vault, 'index.md', '# Root index\nquokka habitat catalog');
   write(vault, 'log.md', '# Log\nquokka habitat log');
   write(vault, 'CLAUDE.md', '# Agent\nquokka habitat rules');
@@ -72,16 +89,21 @@ test('vault without wiki: the hook leaves out root navigation, policy, planning,
   assert.deepEqual(paths, ['notes/habitat.md']);
 });
 
-test('config retrieval.exclude [] restores the hook legacy scope', async t => {
-  const dir = temp(t), vault = path.join(dir, 'vault');
+test('config retrieval.exclude [] restores the hook legacy scope', async (t) => {
+  const dir = temp(t),
+    vault = path.join(dir, 'vault');
   write(vault, 'index.md', '# Root index\nquokka habitat catalog');
   write(vault, 'notes/habitat.md', '# Habitat\nquokka habitat is the rocky island');
-  const { paths } = await prompt(vault, path.join(dir, 'state'), 'where does the quokka habitat live?', { retrieval: { abstainThreshold: 0, exclude: [] } });
+  const { paths } = await prompt(vault, path.join(dir, 'state'), 'where does the quokka habitat live?', {
+    retrieval: { abstainThreshold: 0, exclude: [] },
+  });
   assert.deepEqual(paths.sort(), ['index.md', 'notes/habitat.md']);
 });
 
-test('hook and MCP share one cache when they use the same state directory', async t => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+test('hook and MCP share one cache when they use the same state directory', async (t) => {
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   write(vault, 'wiki/notes/habitat.md', '# Habitat\nquokka habitat is the rocky island');
   write(vault, 'wiki/index.md', '# Catalog\nquokka habitat catalog');
   await prompt(vault, state, 'quokka habitat');
@@ -95,22 +117,42 @@ test('hook and MCP share one cache when they use the same state directory', asyn
   const [c, s] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'ba29', version: '1' });
   await Promise.all([server.connect(s), client.connect(c)]);
-  t.after(async () => { await client.close(); await server.close(); });
+  t.after(async () => {
+    await client.close();
+    await server.close();
+  });
   const result = await client.callTool({ name: 'wiki_query', arguments: { query: 'quokka habitat' } });
-  assert.deepEqual(JSON.parse(result.content[0].text).results.map(r => r.path), ['notes/habitat.md']);
-  assert.equal(fs.statSync(cache).ino + ':' + fs.readFileSync(cache, 'utf8'), before, 'the MCP server reused the hook cache without a rewrite');
+  assert.deepEqual(
+    JSON.parse(result.content[0].text).results.map((r) => r.path),
+    ['notes/habitat.md']
+  );
+  assert.equal(
+    fs.statSync(cache).ino + ':' + fs.readFileSync(cache, 'utf8'),
+    before,
+    'the MCP server reused the hook cache without a rewrite'
+  );
 });
 
-test('parity: a vault with no excluded file gives byte-identical hook output to the main checkout', async t => {
+test('parity: a vault with no excluded file gives byte-identical hook output to the main checkout', async (t) => {
   const main = mainCheckout();
-  if (!main) { t.skip('main checkout not found'); return; }
+  if (!main) {
+    t.skip('main checkout not found');
+    return;
+  }
   const mainHook = await import(pathToFileURL(path.join(main, 'packages/hooks/src/index.mjs')).href);
-  const dir = temp(t), vault = path.join(dir, 'vault');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault');
   write(vault, 'notes/habitat.md', '# Habitat\nquokka habitat is the rocky island. Quokkas eat grass.');
   write(vault, 'notes/diet.md', '# Diet\nquokka diet is mostly grass and leaves.');
   write(vault, 'projects/zed.md', '# Zed\nzebrafish project notes.');
   for (const query of ['what does the quokka eat?', 'where is the quokka habitat?', 'zebrafish project']) {
-    const input = { client: 'claude', event: 'prompt', stdin: JSON.stringify({ session_id: 'p-' + query, prompt: query }), env: {}, now };
+    const input = {
+      client: 'claude',
+      event: 'prompt',
+      stdin: JSON.stringify({ session_id: 'p-' + query, prompt: query }),
+      env: {},
+      now,
+    };
     const mine = await runHook({ ...input, config: hookConfig(vault, path.join(dir, 'state-new')) });
     const theirs = await mainHook.runHook({ ...input, config: hookConfig(vault, path.join(dir, 'state-main')) });
     assert.equal(mine.stdout, theirs.stdout, query);

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { defaultConfig, setConfigValue, unsetConfigValue } from '../../../packages/core/src/config/index.mjs';
 
-const code = expected => (error) => error.code === expected;
+const code = (expected) => (error) => error.code === expected;
 
 test('setConfigValue creates absent optional keys and missing schema objects', () => {
   const cfg = defaultConfig('lite');
@@ -43,7 +43,11 @@ test('setConfigValue validates known optional keys before returning', () => {
 });
 
 test('unsetConfigValue removes known optional keys and is idempotent when they are absent', () => {
-  const withKeys = setConfigValue(setConfigValue(defaultConfig('lite'), 'hooks.disclosure', 'progressive'), 'retrieval.exclude', ['drafts/**']);
+  const withKeys = setConfigValue(
+    setConfigValue(defaultConfig('lite'), 'hooks.disclosure', 'progressive'),
+    'retrieval.exclude',
+    ['drafts/**']
+  );
   const removed = unsetConfigValue(withKeys, 'hooks.disclosure');
   assert.equal(Object.hasOwn(removed.hooks, 'disclosure'), false);
   assert.deepEqual(removed.retrieval.exclude, ['drafts/**']);
@@ -54,10 +58,18 @@ test('unsetConfigValue removes known optional keys and is idempotent when they a
 test('unsetConfigValue refuses required, unknown and locked keys', () => {
   const cfg = defaultConfig('lite');
   const snapshot = JSON.stringify(cfg);
-  for (const key of ['schemaVersion', 'retrieval.budgetChars', 'hooks.mode', 'nope', 'hooks.nope', 'retrieval.shadow.abstainThreshold']) {
+  for (const key of [
+    'schemaVersion',
+    'retrieval.budgetChars',
+    'hooks.mode',
+    'nope',
+    'hooks.nope',
+    'retrieval.shadow.abstainThreshold',
+  ]) {
     assert.throws(() => unsetConfigValue(cfg, key), code('E_CONFIG_KEY'), key);
   }
-  for (const key of ['telemetry', 'safety.secretFilter']) assert.throws(() => unsetConfigValue(cfg, key), code('E_LOCKED_KEY'));
+  for (const key of ['telemetry', 'safety.secretFilter'])
+    assert.throws(() => unsetConfigValue(cfg, key), code('E_LOCKED_KEY'));
   assert.equal(JSON.stringify(cfg), snapshot);
 });
 
@@ -88,7 +100,13 @@ test('unsetConfigValue works on a custom profile configuration', () => {
 test('setConfigValue and unsetConfigValue reject prototype-related key segments', () => {
   const cfg = defaultConfig('lite');
   const snapshot = JSON.stringify(cfg);
-  for (const key of ['sync.options.__proto__', 'sync.options.constructor', 'sync.options.prototype', '__proto__', 'constructor.prototype']) {
+  for (const key of [
+    'sync.options.__proto__',
+    'sync.options.constructor',
+    'sync.options.prototype',
+    '__proto__',
+    'constructor.prototype',
+  ]) {
     assert.throws(() => setConfigValue(cfg, key, { polluted: true }), code('E_CONFIG_KEY'), key);
     assert.throws(() => unsetConfigValue(cfg, key), code('E_CONFIG_KEY'), key);
   }
@@ -96,11 +114,28 @@ test('setConfigValue and unsetConfigValue reject prototype-related key segments'
   assert.equal(JSON.stringify(cfg), snapshot);
 });
 
-test('CLI config set/unset handle optional keys, --plan and help usage', async t => {
-  const home = await mkdtemp(join(tmpdir(), 'ba-config-optional-')); t.after(() => rm(home, { recursive: true, force: true }));
-  const env = { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1' };
-  const run = (...args) => spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), ...args], { env, encoding: 'utf8', shell: false });
-  assert.equal(run('init', '--yes', '--vault', join(home, 'vault'), '--profile', 'lite', '--agents', 'claude-code').status, 0);
+test('CLI config set/unset handle optional keys, --plan and help usage', async (t) => {
+  const home = await mkdtemp(join(tmpdir(), 'ba-config-optional-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const env = {
+    PATH: process.env.PATH,
+    HOME: home,
+    XDG_CONFIG_HOME: join(home, 'config'),
+    XDG_DATA_HOME: join(home, 'data'),
+    XDG_STATE_HOME: join(home, 'state'),
+    BRAINATLAS_PLATFORM: 'linux',
+    BRAINATLAS_OFFLINE: '1',
+  };
+  const run = (...args) =>
+    spawnSync(process.execPath, [resolve('packages/cli/bin/brainatlas.mjs'), ...args], {
+      env,
+      encoding: 'utf8',
+      shell: false,
+    });
+  assert.equal(
+    run('init', '--yes', '--vault', join(home, 'vault'), '--profile', 'lite', '--agents', 'claude-code').status,
+    0
+  );
   const file = join(home, 'config/brainatlas/config.json');
   const before = await readFile(file, 'utf8');
   assert.equal(run('config', 'unset', 'retrieval.shadow', '--json').status, 0);
@@ -117,7 +152,11 @@ test('CLI config set/unset handle optional keys, --plan and help usage', async t
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(await readFile(file, 'utf8')).retrieval.exclude, ['drafts/**']);
   const withKeys = await readFile(file, 'utf8');
-  for (const invalid of [['hooks.disclosure', 'maybe'], ['retrieval.exclude', '"x"'], ['retrieval.exclude', '["/abs"]']]) {
+  for (const invalid of [
+    ['hooks.disclosure', 'maybe'],
+    ['retrieval.exclude', '"x"'],
+    ['retrieval.exclude', '["/abs"]'],
+  ]) {
     assert.equal(run('config', 'set', ...invalid).status, 1, invalid.join(' '));
     assert.equal(await readFile(file, 'utf8'), withKeys);
   }

@@ -28,7 +28,13 @@ export function globToRegExp(glob) {
   for (let i = 0; i < glob.length; i++) {
     const c = glob[i];
     if (c === '*' && glob[i + 1] === '*') {
-      if (glob[i + 2] === '/') { source += '(?:.*/)?'; i += 2; } else { source += '.*'; i += 1; }
+      if (glob[i + 2] === '/') {
+        source += '(?:.*/)?';
+        i += 2;
+      } else {
+        source += '.*';
+        i += 1;
+      }
     } else if (c === '*') source += '[^/]*';
     else if (c === '?') source += '[^/]';
     else source += c.replace(/[.+^${}()|[\]\\]/gu, '\\$&');
@@ -47,8 +53,13 @@ export function loadMetaPredicate(corpusDir) {
   let globs = DEFAULT_META;
   if (existsSync(file)) {
     const value = JSON.parse(readFileSync(file, 'utf8'));
-    if (!value || typeof value !== 'object' || !Array.isArray(value.meta)
-      || !value.meta.every((g) => typeof g === 'string' && g.length > 0 && g.length <= 200)) throw new Error('Invalid eval-meta');
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !Array.isArray(value.meta) ||
+      !value.meta.every((g) => typeof g === 'string' && g.length > 0 && g.length <= 200)
+    )
+      throw new Error('Invalid eval-meta');
     globs = value.meta;
   }
   const patterns = globs.map(globToRegExp);
@@ -61,10 +72,12 @@ export function isPoisonPage(frontmatter) {
 }
 
 function headingExists(body, heading) {
-  return String(body).split('\n').some((line) => {
-    const match = line.match(HEADING_LINE);
-    return Boolean(match) && match[1].trim() === heading;
-  });
+  return String(body)
+    .split('\n')
+    .some((line) => {
+      const match = line.match(HEADING_LINE);
+      return Boolean(match) && match[1].trim() === heading;
+    });
 }
 
 /**
@@ -72,8 +85,10 @@ function headingExists(body, heading) {
  * @param {object} item
  * @param {{paths: Map<string,{body:string}>, projects?: Set<string>}} context paths maps corpus-relative page paths to their body
  */
-export function validateCase(item, {paths, projects = null}) {
-  const fail = (rule) => { throw new Error(`${item?.id ?? '?'}: ${rule}`); };
+export function validateCase(item, { paths, projects = null }) {
+  const fail = (rule) => {
+    throw new Error(`${item?.id ?? '?'}: ${rule}`);
+  };
   if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('case is not an object');
   if (typeof item.id !== 'string' || !ID.test(item.id)) fail('id');
   if (typeof item.query !== 'string' || !item.query.trim()) fail('query');
@@ -86,7 +101,8 @@ export function validateCase(item, {paths, projects = null}) {
   if (item.category !== undefined && (typeof item.category !== 'string' || !item.category)) fail('category');
   if (item.poison !== undefined) fail('poison is a corpus page flag (eval_poison), not a case field');
   if (item.cwd !== undefined) {
-    if (typeof item.cwd !== 'string' || !item.cwd.startsWith('/') || item.cwd.length > 200 || USER_PATH.test(item.cwd)) fail('cwd');
+    if (typeof item.cwd !== 'string' || !item.cwd.startsWith('/') || item.cwd.length > 200 || USER_PATH.test(item.cwd))
+      fail('cwd');
   }
   if (item.project !== undefined) {
     if (typeof item.project !== 'string' || !PROJECT.test(item.project)) fail('project');
@@ -97,12 +113,15 @@ export function validateCase(item, {paths, projects = null}) {
   if (item.expectedHeading !== undefined) {
     if (typeof item.expectedHeading !== 'string' || !item.expectedHeading.trim()) fail('expectedHeading');
     if (!item.relevant.length || item.abstain === true) fail('expectedHeading only on answerable cases');
-    if (!headingExists(paths.get(item.relevant[0]).body, item.expectedHeading)) fail('expectedHeading is a heading line of relevant[0]');
+    if (!headingExists(paths.get(item.relevant[0]).body, item.expectedHeading))
+      fail('expectedHeading is a heading line of relevant[0]');
   }
   if (item.excluded !== undefined) {
-    if (!Array.isArray(item.excluded) || !item.excluded.every((p) => typeof p === 'string' && paths.has(p))) fail('excluded exists');
+    if (!Array.isArray(item.excluded) || !item.excluded.every((p) => typeof p === 'string' && paths.has(p)))
+      fail('excluded exists');
     if (item.excluded.some((p) => item.relevant.includes(p))) fail('excluded disjoint from relevant');
-    if (item.project && item.excluded.some((p) => p.startsWith(`${item.project}/`))) fail('excluded outside the case project');
+    if (item.project && item.excluded.some((p) => p.startsWith(`${item.project}/`)))
+      fail('excluded outside the case project');
   }
   if (item.requireAll !== undefined && typeof item.requireAll !== 'boolean') fail('requireAll');
   return item;

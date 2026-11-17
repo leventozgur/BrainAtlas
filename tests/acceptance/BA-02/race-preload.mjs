@@ -26,6 +26,14 @@ if (arm && target) {
   };
   const realRead = fs.readFileSync;
   const realLstat = fs.lstatSync;
-  if (op === 'read') fs.readFileSync = function (file, ...rest) { fire(file); return realRead.call(this, file, ...rest); };
-  if (op === 'lstat') fs.lstatSync = function (file, ...rest) { fire(file); return realLstat.call(this, file, ...rest); };
+  if (op === 'read')
+    fs.readFileSync = function (file, ...rest) {
+      fire(file);
+      return realRead.call(this, file, ...rest);
+    };
+  if (op === 'lstat')
+    fs.lstatSync = function (file, ...rest) {
+      fire(file);
+      return realLstat.call(this, file, ...rest);
+    };
 }

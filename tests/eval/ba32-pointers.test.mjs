@@ -70,7 +70,13 @@ test('BA-32: runHookCases progressive injects two blocks and six pointers; full 
   const cases = [{ query: 'zebrafish', relevant: ['p1.md'], category: 'ba32' }];
   const full = await runHookCases({ corpusDir, cases, now: NOW, abstainThreshold: 0 });
   assert.equal(full[0].injected.length, 9);
-  const progressive = await runHookCases({ corpusDir, cases, now: NOW, abstainThreshold: 0, disclosure: 'progressive' });
+  const progressive = await runHookCases({
+    corpusDir,
+    cases,
+    now: NOW,
+    abstainThreshold: 0,
+    disclosure: 'progressive',
+  });
   assert.deepEqual(progressive[0].injected, ['p1.md', 'p2.md', 'p3.md', 'p4.md', 'p5.md', 'p6.md', 'p7.md', 'p8.md']);
 });
 

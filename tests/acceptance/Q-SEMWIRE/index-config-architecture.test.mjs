@@ -6,13 +6,25 @@ import { mkdtemp, mkdir, cp, readFile, readdir, rm, stat, symlink, writeFile } f
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultConfig, loadConfig, saveConfig, setConfigValue, SEMANTIC_DEFAULTS, validateConfig } from '../../../packages/core/src/config/index.mjs';
+import {
+  defaultConfig,
+  loadConfig,
+  saveConfig,
+  setConfigValue,
+  SEMANTIC_DEFAULTS,
+  validateConfig,
+} from '../../../packages/core/src/config/index.mjs';
 import { resolvePaths } from '../../../packages/core/src/paths/index.mjs';
 import { main as cliMain } from '../../../packages/cli/src/index.mjs';
-import { buildSemanticIndex, createOllamaProvider, markdownChunks, readSemanticIndex, searchHybrid, updateSemanticIndex } from '../../../modules/semantic/src/index.mjs';
+import {
+  buildSemanticIndex,
+  markdownChunks,
+  readSemanticIndex,
+  searchHybrid,
+  updateSemanticIndex,
+} from '../../../modules/semantic/src/index.mjs';
 
 const repo = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
-const testRoot = dirname(fileURLToPath(import.meta.url));
 const makeSecret = () => ['sk', 'test' + 'x'.repeat(24)].join('-');
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'q-semwire-index-'));
@@ -25,48 +37,86 @@ async function fixture(t) {
 }
 const doc = (title, body) => '# ' + title + '\n' + body + '\n';
 const provider = (fingerprint, calls) => ({
-  id: 'fake', dims: 2, fingerprint,
-  embedDocuments: async texts => { calls.push([...texts]); return texts.map(() => [1, 0]); },
+  id: 'fake',
+  dims: 2,
+  fingerprint,
+  embedDocuments: async (texts) => {
+    calls.push([...texts]);
+    return texts.map(() => [1, 0]);
+  },
   embedQuery: async () => [1, 0],
 });
 
-test('incremental rebuild embeds only changed chunks, removes deleted files, and rebuilds everything on fingerprint change', async t => {
-  const f = await fixture(t), calls = [];
+test('incremental rebuild embeds only changed chunks, removes deleted files, and rebuilds everything on fingerprint change', async (t) => {
+  const f = await fixture(t),
+    calls = [];
   await writeFile(join(f.corpus, 'a.md'), doc('A', 'first distinct content'));
   await writeFile(join(f.corpus, 'b.md'), doc('B', 'second distinct content'));
   const firstProvider = provider('fingerprint-a', calls);
-  const first = await updateSemanticIndex({ corpusDir: f.corpus, stateDir: f.stateDir, provider: firstProvider, chunkMarkdown: markdownChunks });
+  const first = await updateSemanticIndex({
+    corpusDir: f.corpus,
+    stateDir: f.stateDir,
+    provider: firstProvider,
+    chunkMarkdown: markdownChunks,
+  });
   assert.equal(calls.flat().length, 2);
   assert.deepEqual(Object.keys(first.fileHashes), ['a.md', 'b.md']);
   assert.equal(await readFile(join(f.stateDir, 'semantic/index.json'), 'utf8').then(() => true), true);
   assert.equal((await stat(join(f.stateDir, 'semantic/index.json'))).mode & 0o777, 0o600);
-  assert.ok(relative(f.vault, join(f.stateDir, 'semantic/index.json')).startsWith('..' + sep), 'test index path should be outside the vault');
+  assert.ok(
+    relative(f.vault, join(f.stateDir, 'semantic/index.json')).startsWith('..' + sep),
+    'test index path should be outside the vault'
+  );
 
   calls.length = 0;
   await writeFile(join(f.corpus, 'a.md'), doc('A', 'edited one file only'));
   await rm(join(f.corpus, 'b.md'));
-  const incremental = await updateSemanticIndex({ corpusDir: f.corpus, stateDir: f.stateDir, provider: firstProvider, chunkMarkdown: markdownChunks });
+  const incremental = await updateSemanticIndex({
+    corpusDir: f.corpus,
+    stateDir: f.stateDir,
+    provider: firstProvider,
+    chunkMarkdown: markdownChunks,
+  });
   assert.deepEqual(calls, [['edited one file only']]);
   assert.deepEqual(Object.keys(incremental.fileHashes), ['a.md']);
-  assert.deepEqual([...new Set(incremental.entries.map(item => item.path))], ['a.md']);
+  assert.deepEqual([...new Set(incremental.entries.map((item) => item.path))], ['a.md']);
 
   calls.length = 0;
   await writeFile(join(f.corpus, 'c.md'), doc('C', 'third distinct content'));
-  const changedFingerprint = await updateSemanticIndex({ corpusDir: f.corpus, stateDir: f.stateDir, provider: provider('fingerprint-b', calls), chunkMarkdown: markdownChunks });
+  const changedFingerprint = await updateSemanticIndex({
+    corpusDir: f.corpus,
+    stateDir: f.stateDir,
+    provider: provider('fingerprint-b', calls),
+    chunkMarkdown: markdownChunks,
+  });
   assert.deepEqual(calls, [['edited one file only', 'third distinct content']]);
   assert.equal(changedFingerprint.providerFingerprint, 'fingerprint-b');
   assert.deepEqual(Object.keys(changedFingerprint.fileHashes), ['a.md', 'c.md']);
 });
 
-test('two concurrent updates share one embedding pass and both resolve successfully', async t => {
-  const f = await fixture(t); let calls = 0, release;
-  const gate = new Promise(resolve => { release = resolve; });
+test('two concurrent updates share one embedding pass and both resolve successfully', async (t) => {
+  const f = await fixture(t);
+  let calls = 0,
+    release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
   await writeFile(join(f.corpus, 'one.md'), doc('One', 'concurrent content'));
-  const fake = { id: 'fake', dims: 2, fingerprint: 'same', embedDocuments: async texts => { calls++; await gate; return texts.map(() => [1, 0]); } };
+  const fake = {
+    id: 'fake',
+    dims: 2,
+    fingerprint: 'same',
+    embedDocuments: async (texts) => {
+      calls++;
+      await gate;
+      return texts.map(() => [1, 0]);
+    },
+  };
   const options = { corpusDir: f.corpus, stateDir: f.stateDir, provider: fake, chunkMarkdown: markdownChunks };
-  const left = updateSemanticIndex(options), right = updateSemanticIndex(options);
+  const left = updateSemanticIndex(options),
+    right = updateSemanticIndex(options);
   assert.equal(left, right, 'concurrent callers should share the same in-flight update');
-  for (let attempt = 0; calls === 0 && attempt < 50; attempt++) await new Promise(resolve => setTimeout(resolve, 2));
+  for (let attempt = 0; calls === 0 && attempt < 50; attempt++) await new Promise((resolve) => setTimeout(resolve, 2));
   assert.equal(calls, 1);
   release();
   const [a, b] = await Promise.all([left, right]);
@@ -74,34 +124,59 @@ test('two concurrent updates share one embedding pass and both resolve successfu
   assert.equal((await readSemanticIndex(f.stateDir)).entries.length, 1);
 });
 
-test('truncated index and abandoned temporary files rebuild safely; symlinked semantic state is rejected', async t => {
-  const f = await fixture(t), calls = [];
+test('truncated index and abandoned temporary files rebuild safely; symlinked semantic state is rejected', async (t) => {
+  const f = await fixture(t),
+    calls = [];
   await writeFile(join(f.corpus, 'one.md'), doc('One', 'safe recovery content'));
   const dir = join(f.stateDir, 'semantic');
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, 'index.json'), '{"version":1');
   await writeFile(join(dir, 'index.json.tmp-abandoned'), 'partial private bytes');
   assert.equal(await readSemanticIndex(f.stateDir), null);
-  const recovered = await updateSemanticIndex({ corpusDir: f.corpus, stateDir: f.stateDir, provider: provider('recovered', calls), chunkMarkdown: markdownChunks });
+  const recovered = await updateSemanticIndex({
+    corpusDir: f.corpus,
+    stateDir: f.stateDir,
+    provider: provider('recovered', calls),
+    chunkMarkdown: markdownChunks,
+  });
   assert.equal(recovered.entries.length, 1);
   assert.equal((await readSemanticIndex(f.stateDir)).providerFingerprint, 'recovered');
-  assert.deepEqual((await readdir(dir)).filter(name => name.startsWith('index.json.tmp-')), ['index.json.tmp-abandoned']);
+  assert.deepEqual(
+    (await readdir(dir)).filter((name) => name.startsWith('index.json.tmp-')),
+    ['index.json.tmp-abandoned']
+  );
 
-  const outside = join(f.root, 'outside-state'); await mkdir(outside);
-  await rm(dir, { recursive: true, force: true }); await symlink(outside, dir);
-  await assert.rejects(updateSemanticIndex({ corpusDir: f.corpus, stateDir: f.stateDir, provider: provider('recovered', []), chunkMarkdown: markdownChunks }), error => error.code === 'E_SEMANTIC_STATE');
+  const outside = join(f.root, 'outside-state');
+  await mkdir(outside);
+  await rm(dir, { recursive: true, force: true });
+  await symlink(outside, dir);
+  await assert.rejects(
+    updateSemanticIndex({
+      corpusDir: f.corpus,
+      stateDir: f.stateDir,
+      provider: provider('recovered', []),
+      chunkMarkdown: markdownChunks,
+    }),
+    (error) => error.code === 'E_SEMANTIC_STATE'
+  );
   await assert.rejects(readFile(join(outside, 'index.json')), { code: 'ENOENT' });
 });
 
-test('corpus symlinks are not embedded and semantic artifacts stay outside the vault tree', async t => {
-  const f = await fixture(t), calls = [];
+test('corpus symlinks are not embedded and semantic artifacts stay outside the vault tree', async (t) => {
+  const f = await fixture(t),
+    calls = [];
   const marker = makeSecret();
   const outside = join(f.root, 'outside.md');
   await writeFile(outside, doc('Outside', marker));
   await writeFile(join(f.corpus, 'inside.md'), doc('Inside', 'ordinary visible content'));
   await symlink(outside, join(f.corpus, 'linked.md'));
   const before = await readdir(f.vault, { recursive: true });
-  const index = await buildSemanticIndex({ corpusDir: f.corpus, stateDir: f.stateDir, provider: provider('private-check', calls), chunkMarkdown: markdownChunks });
+  const index = await buildSemanticIndex({
+    corpusDir: f.corpus,
+    stateDir: f.stateDir,
+    provider: provider('private-check', calls),
+    chunkMarkdown: markdownChunks,
+  });
   assert.deepEqual(Object.keys(index.fileHashes), ['inside.md']);
   assert.deepEqual(calls, [['ordinary visible content']]);
   assert.ok(!JSON.stringify(index).includes(marker));
@@ -110,18 +185,56 @@ test('corpus symlinks are not embedded and semantic artifacts stay outside the v
 });
 
 test('hybrid threshold boundaries are inclusive, including minScore zero and one', async () => {
-  const pages = [{ path: 'target.md', title: 'Target', aliases: [], keywords: [], headings: [], body: 'nothing lexical', frontmatter: {} }];
-  const make = vector => searchHybrid({ query: 'unmatched', pages, entries: [{ path: 'target.md', title: 'Target', headingPath: 'Evidence', text: 'target evidence', vector }], provider: { embedQuery: async () => [1, 0] }, mode: 'semantic-primary', minSemanticScore: 0 });
+  const pages = [
+    {
+      path: 'target.md',
+      title: 'Target',
+      aliases: [],
+      keywords: [],
+      headings: [],
+      body: 'nothing lexical',
+      frontmatter: {},
+    },
+  ];
+  const make = (vector) =>
+    searchHybrid({
+      query: 'unmatched',
+      pages,
+      entries: [{ path: 'target.md', title: 'Target', headingPath: 'Evidence', text: 'target evidence', vector }],
+      provider: { embedQuery: async () => [1, 0] },
+      mode: 'semantic-primary',
+      minSemanticScore: 0,
+    });
   // PM correction: a cosine of exactly 0 means unrelated and is never a hit; an inclusive minScore of 0 admits any positive score.
   const atZero = await make([1e-6, 1]);
-  assert.ok(atZero.some(item => item.path === 'target.md'), 'a positive score passes a minScore of zero');
-  const atOne = await searchHybrid({ query: 'unmatched', pages, entries: [{ path: 'target.md', vector: [1, 0], text: 'target evidence' }], provider: { embedQuery: async () => [1, 0] }, mode: 'semantic-primary', minSemanticScore: 1 });
-  assert.ok(atOne.some(item => item.path === 'target.md'), 'a score exactly equal to one should pass an inclusive maximum threshold');
-  const justAboveOne = await searchHybrid({ query: 'unmatched', pages, entries: [{ path: 'target.md', vector: [1, 0], text: 'target evidence' }], provider: { embedQuery: async () => [1, 0] }, mode: 'semantic-primary', minSemanticScore: 1 + Number.EPSILON }).catch(() => null);
+  assert.ok(
+    atZero.some((item) => item.path === 'target.md'),
+    'a positive score passes a minScore of zero'
+  );
+  const atOne = await searchHybrid({
+    query: 'unmatched',
+    pages,
+    entries: [{ path: 'target.md', vector: [1, 0], text: 'target evidence' }],
+    provider: { embedQuery: async () => [1, 0] },
+    mode: 'semantic-primary',
+    minSemanticScore: 1,
+  });
+  assert.ok(
+    atOne.some((item) => item.path === 'target.md'),
+    'a score exactly equal to one should pass an inclusive maximum threshold'
+  );
+  const justAboveOne = await searchHybrid({
+    query: 'unmatched',
+    pages,
+    entries: [{ path: 'target.md', vector: [1, 0], text: 'target evidence' }],
+    provider: { embedQuery: async () => [1, 0] },
+    mode: 'semantic-primary',
+    minSemanticScore: 1 + Number.EPSILON,
+  }).catch(() => null);
   assert.equal(justAboveOne, null, 'invalid score thresholds are rejected');
 });
 
-test('config keeps v1 compatibility, defaults optional semantic settings, rejects invalid values, and CLI get/set work', async t => {
+test('config keeps v1 compatibility, defaults optional semantic settings, rejects invalid values, and CLI get/set work', async (t) => {
   const f = await fixture(t);
   const original = defaultConfig('custom');
   delete original.semantic;
@@ -136,19 +249,29 @@ test('config keeps v1 compatibility, defaults optional semantic settings, reject
   assert.equal(defaultConfig('full').semantic.enabled, false);
   assert.deepEqual(defaultConfig('lite').modules, []);
 
-  for (const [key, value] of [['dims', 0], ['minScore', 2], ['mode', 'x'], ['timeoutMs', -1], ['enabled', 'yes']]) {
+  for (const [key, value] of [
+    ['dims', 0],
+    ['minScore', 2],
+    ['mode', 'x'],
+    ['timeoutMs', -1],
+    ['enabled', 'yes'],
+  ]) {
     const cfg = defaultConfig('custom');
     cfg.semantic[key] = value;
     assert.equal(validateConfig(cfg).ok, false, key);
-    assert.throws(() => setConfigValue(defaultConfig('custom'), 'semantic.' + key, value), { code: 'E_CONFIG_INVALID' });
+    assert.throws(() => setConfigValue(defaultConfig('custom'), 'semantic.' + key, value), {
+      code: 'E_CONFIG_INVALID',
+    });
   }
   for (const value of [0, 1]) {
     const cfg = setConfigValue(defaultConfig('custom'), 'semantic.minScore', value);
     assert.equal(validateConfig(cfg).ok, true);
   }
-  for (const mode of ['semantic-primary', 'rrf']) assert.equal(validateConfig(setConfigValue(defaultConfig('custom'), 'semantic.mode', mode)).ok, true);
+  for (const mode of ['semantic-primary', 'rrf'])
+    assert.equal(validateConfig(setConfigValue(defaultConfig('custom'), 'semantic.mode', mode)).ok, true);
   const configSecret = makeSecret();
-  const invalidSecretConfig = defaultConfig('custom'); invalidSecretConfig.semantic.enabled = configSecret;
+  const invalidSecretConfig = defaultConfig('custom');
+  invalidSecretConfig.semantic.enabled = configSecret;
   const privateValidation = validateConfig(invalidSecretConfig);
   assert.equal(privateValidation.ok, false);
   assert.ok(!JSON.stringify(privateValidation).includes(configSecret));
@@ -167,7 +290,12 @@ test('config keeps v1 compatibility, defaults optional semantic settings, reject
   const paths = resolvePaths({ platform: 'linux', env });
   await mkdir(dirname(paths.configFile), { recursive: true });
   await writeFile(paths.configFile, JSON.stringify(defaultConfig('custom')));
-  const run = (...args) => spawnSync(process.execPath, [join(repo, 'packages/cli/bin/brainatlas.mjs'), ...args], { cwd: repo, env, encoding: 'utf8' });
+  const run = (...args) =>
+    spawnSync(process.execPath, [join(repo, 'packages/cli/bin/brainatlas.mjs'), ...args], {
+      cwd: repo,
+      env,
+      encoding: 'utf8',
+    });
   const set = run('config', 'set', 'semantic.enabled', 'true', '--json');
   assert.equal(set.status, 0, set.stderr + set.stdout);
   assert.equal(JSON.parse(await readFile(paths.configFile, 'utf8')).semantic.enabled, true);
@@ -181,12 +309,16 @@ test('config keeps v1 compatibility, defaults optional semantic settings, reject
   assert.equal(saved.schemaVersion, 1);
 });
 
-test('brainatlas semanticIndex and semanticStatus commands use injected test fetch and report only safe progress', async t => {
+test('brainatlas semanticIndex and semanticStatus commands use injected test fetch and report only safe progress', async (t) => {
   const f = await fixture(t);
   const home = join(f.root, 'cli-home');
   const env = {
-    ...process.env, HOME: home, BRAINATLAS_PLATFORM: 'linux',
-    XDG_CONFIG_HOME: join(home, 'config-home'), XDG_DATA_HOME: join(home, 'data-home'), XDG_STATE_HOME: join(home, 'state-home'),
+    ...process.env,
+    HOME: home,
+    BRAINATLAS_PLATFORM: 'linux',
+    XDG_CONFIG_HOME: join(home, 'config-home'),
+    XDG_DATA_HOME: join(home, 'data-home'),
+    XDG_STATE_HOME: join(home, 'state-home'),
   };
   const paths = resolvePaths({ platform: 'linux', env });
   const release = join(paths.releasesDir, '1.0.0');
@@ -198,14 +330,19 @@ test('brainatlas semanticIndex and semanticStatus commands use injected test fet
   await writeFile(join(f.root, 'cli-vault/wiki/cli.md'), doc('CLI', 'private cli document evidence'));
   await symlink('releases/1.0.0', paths.currentDir);
   const cfg = defaultConfig('custom');
-  cfg.modules = ['semantic']; cfg.vault.path = join(f.root, 'cli-vault');
+  cfg.modules = ['semantic'];
+  cfg.vault.path = join(f.root, 'cli-vault');
   cfg.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2 };
   await saveConfig(cfg, { paths });
 
-  const originalFetch = globalThis.fetch, originalLog = console.log;
+  const originalFetch = globalThis.fetch,
+    originalLog = console.log;
   const output = [];
-  globalThis.fetch = async (_url, options) => ({ ok: true, json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }) });
-  console.log = value => output.push(String(value));
+  globalThis.fetch = async (_url, options) => ({
+    ok: true,
+    json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }),
+  });
+  console.log = (value) => output.push(String(value));
   try {
     await cliMain(['semanticIndex'], env);
     const indexed = JSON.parse(output.pop());
@@ -230,13 +367,27 @@ test('provider endpoint allowlist covers loopback forms and rejects remotes with
   for (const baseUrl of ['http://127.0.0.1:11434', 'http://localhost:11434', 'http://[::1]:11434']) {
     assert.doesNotThrow(() => validateConfiguredProvider({ baseUrl, allowRemote: false }));
   }
-  const remotes = ['http://example.test', 'http://192.0.2.15', 'http://[2001:4860:4860::8888]', 'http://localhost.evil.test', 'http://127.0.0.1@evil.test', 'http://3232235777', 'http://0300.0250.0001.0001'];
+  const remotes = [
+    'http://example.test',
+    'http://192.0.2.15',
+    'http://[2001:4860:4860::8888]',
+    'http://localhost.evil.test',
+    'http://127.0.0.1@evil.test',
+    'http://3232235777',
+    'http://0300.0250.0001.0001',
+  ];
   for (const baseUrl of remotes) {
-    assert.throws(() => validateConfiguredProvider({ baseUrl, allowRemote: false }), error => error.code === 'E_SEMANTIC_PROVIDER' && !String(error.message + error.stack).includes(baseUrl));
+    assert.throws(
+      () => validateConfiguredProvider({ baseUrl, allowRemote: false }),
+      (error) => error.code === 'E_SEMANTIC_PROVIDER' && !String(error.message + error.stack).includes(baseUrl)
+    );
     if (!baseUrl.includes('@')) assert.doesNotThrow(() => validateConfiguredProvider({ baseUrl, allowRemote: true }));
   }
   // PM decision: URLs with embedded credentials are always rejected (secrets must not live in config or logs), even with allowRemote.
-  assert.throws(() => validateConfiguredProvider({ baseUrl: 'http://127.0.0.1@evil.test', allowRemote: true }), error => error.code === 'E_SEMANTIC_PROVIDER');
+  assert.throws(
+    () => validateConfiguredProvider({ baseUrl: 'http://127.0.0.1@evil.test', allowRemote: true }),
+    (error) => error.code === 'E_SEMANTIC_PROVIDER'
+  );
 });
 
 async function staticGraph(entry, visited = new Set()) {
@@ -245,14 +396,23 @@ async function staticGraph(entry, visited = new Set()) {
   visited.add(file);
   if (!file.endsWith('.mjs') && !file.endsWith('.js')) return visited;
   const source = await readFile(file, 'utf8');
-  const specifiers = [...source.matchAll(/(?:^|\n)\s*(?:import|export)\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/gu)].map(match => match[1]);
+  const specifiers = [
+    ...source.matchAll(/(?:^|\n)\s*(?:import|export)\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/gu),
+  ].map((match) => match[1]);
   for (const specifier of specifiers) {
     let target;
     if (specifier.startsWith('.')) target = resolve(dirname(file), specifier);
     else if (specifier === '@brainatlas/core') target = join(repo, 'packages/core/src/index.mjs');
-    else if (specifier.startsWith('@brainatlas/core/')) target = join(repo, 'packages/core/src', specifier.slice('@brainatlas/core/'.length));
+    else if (specifier.startsWith('@brainatlas/core/'))
+      target = join(repo, 'packages/core/src', specifier.slice('@brainatlas/core/'.length));
     else continue;
-    if (await stat(target).then(() => true, () => false)) await staticGraph(target, visited);
+    if (
+      await stat(target).then(
+        () => true,
+        () => false
+      )
+    )
+      await staticGraph(target, visited);
   }
   return visited;
 }
@@ -260,10 +420,14 @@ async function staticGraph(entry, visited = new Set()) {
 test('core, MCP, and hooks static import graphs remain free of semantic module code; Lite excludes it', async () => {
   for (const entry of ['packages/core/src/index.mjs', 'packages/mcp/src/index.mjs', 'packages/hooks/src/index.mjs']) {
     const graph = await staticGraph(join(repo, entry));
-    assert.ok([...graph].every(file => !file.split(sep).includes('semantic')), entry);
+    assert.ok(
+      [...graph].every((file) => !file.split(sep).includes('semantic')),
+      entry
+    );
   }
   const hookFiles = await readdir(join(repo, 'packages/hooks/src'));
-  for (const file of hookFiles.filter(file => file.endsWith('.mjs'))) assert.doesNotMatch(await readFile(join(repo, 'packages/hooks/src', file), 'utf8'), /modules[/'"]semantic/u);
+  for (const file of hookFiles.filter((file) => file.endsWith('.mjs')))
+    assert.doesNotMatch(await readFile(join(repo, 'packages/hooks/src', file), 'utf8'), /modules[/'"]semantic/u);
   const manifest = JSON.parse(await readFile(join(repo, 'modules/semantic/module.json'), 'utf8'));
   assert.ok(manifest.profiles.includes('full'));
   assert.ok(manifest.profiles.includes('custom'));
@@ -299,4 +463,3 @@ test('semantic docs and contracts describe actual defaults, command names, state
   assert.match(mcpContract, /mode:lexical\|semantic-primary\|rrf/u);
   assert.match(mcpContract, /run in the background/u);
 });
-

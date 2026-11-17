@@ -28,8 +28,13 @@ test('wiki_list_pages and wiki_status ignore symlinked pages and directories out
   config.vault.path = vault;
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe' });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
+  });
   const client = new Client({ name: 'ba14-symlist-test', version: '1.0.0' });
   await client.connect(transport);
   t.after(() => client.close());

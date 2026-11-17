@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // BA-24 independent acceptance harness. Loads the worktree MCP and the main checkout MCP side by side with the same
 // fake embedding provider (no network, no Ollama) and the same vault. Not a test file: run by ba24-acceptance.test.mjs.
-import { mkdtemp, mkdir, cp, symlink, writeFile, rm } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { mkdtemp, mkdir, cp, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,13 +11,29 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 export const WT = fileURLToPath(new URL('../../../', import.meta.url)).replace(/\/$/, '');
 // Main checkout = the common git dir's parent (the worktree shares it). BA24_MAIN_ROOT overrides it.
-export const MAIN = process.env.BA24_MAIN_ROOT || dirname(execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: WT, encoding: 'utf8' }).trim());
+export const MAIN =
+  process.env.BA24_MAIN_ROOT ||
+  dirname(
+    execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      cwd: WT,
+      encoding: 'utf8',
+    }).trim()
+  );
 export const DIMS = 8;
 
 export const SETTINGS = Object.freeze({
-  enabled: true, baseUrl: 'http://127.0.0.1:11434', model: 'ba24-fake-embed', dims: DIMS,
-  queryPrefix: 'task: search result | query: ', documentPrefix: 'title: none | text: ',
-  minScore: -1, mode: 'semantic-primary', timeoutMs: 5000, indexTimeoutMs: 120000, indexBatchSize: 32, allowRemote: false,
+  enabled: true,
+  baseUrl: 'http://127.0.0.1:11434',
+  model: 'ba24-fake-embed',
+  dims: DIMS,
+  queryPrefix: 'task: search result | query: ',
+  documentPrefix: 'title: none | text: ',
+  minScore: -1,
+  mode: 'semantic-primary',
+  timeoutMs: 5000,
+  indexTimeoutMs: 120000,
+  indexBatchSize: 32,
+  allowRemote: false,
 });
 
 // Lone surrogate (the brief's pattern; no `u` flag, so it works on UTF-16 code units).
@@ -192,30 +208,62 @@ export async function makeWorkspace() {
 export async function loadTree(name, root, ws) {
   const mcp = await import(pathToFileURL(join(root, 'packages/mcp/src/index.mjs')).href);
   const sem = await import(pathToFileURL(join(root, 'modules/semantic/src/index.mjs')).href);
-  const releasesDir = join(ws, name, 'releases'), release = join(releasesDir, 'v1'), currentDir = join(ws, name, 'current');
+  const releasesDir = join(ws, name, 'releases'),
+    release = join(releasesDir, 'v1'),
+    currentDir = join(ws, name, 'current');
   await mkdir(join(release, 'modules'), { recursive: true });
   await cp(join(root, 'modules/semantic'), join(release, 'modules/semantic'), { recursive: true });
   await symlink(join(root, 'packages'), join(release, 'packages'));
   await symlink(release, currentDir);
-  return { name, root, createServer: mcp.createServer, sem, releasesDir, currentDir, stateRoot: join(ws, name, 'state') };
+  return {
+    name,
+    root,
+    createServer: mcp.createServer,
+    sem,
+    releasesDir,
+    currentDir,
+    stateRoot: join(ws, name, 'state'),
+  };
 }
 
 export function makeConfig(ws, over = {}) {
   const { semantic = {}, ...rest } = over;
   return {
-    schemaVersion: 1, profile: 'custom', vault: { path: join(ws, 'vault') }, modules: ['semantic'], agents: [], scope: 'global',
-    retrieval: { budgetChars: 4000, abstainThreshold: 0.35 }, hooks: { mode: 'normal', deadlineMs: 1000 },
-    safety: { secretFilter: true, extraDenyGlobs: [], allow: [] }, okf: { level: 'warn' }, sync: { transport: null, options: {} },
-    telemetry: false, readOnly: true, node: { path: 'node' },
-    ...rest, semantic: { ...SETTINGS, ...semantic },
+    schemaVersion: 1,
+    profile: 'custom',
+    vault: { path: join(ws, 'vault') },
+    modules: ['semantic'],
+    agents: [],
+    scope: 'global',
+    retrieval: { budgetChars: 4000, abstainThreshold: 0.35 },
+    hooks: { mode: 'normal', deadlineMs: 1000 },
+    safety: { secretFilter: true, extraDenyGlobs: [], allow: [] },
+    okf: { level: 'warn' },
+    sync: { transport: null, options: {} },
+    telemetry: false,
+    readOnly: true,
+    node: { path: 'node' },
+    ...rest,
+    semantic: { ...SETTINGS, ...semantic },
   };
 }
 
 // Builds the semantic index with the tree's own module and the same fake provider settings the server will use.
 export async function buildIndex(tree, stateDir, ws) {
   const fetchState = { mode: 'ok' };
-  const provider = tree.sem.createOllamaProvider({ ...SETTINGS, batchSize: SETTINGS.indexBatchSize, timeoutMs: SETTINGS.indexTimeoutMs, fetchImpl: fetchWithMode(fetchState) });
-  await tree.sem.updateSemanticIndex({ corpusDir: join(ws, 'vault', 'wiki'), stateDir, provider, indexBatchSize: SETTINGS.indexBatchSize, chunkMarkdown: tree.sem.markdownChunks });
+  const provider = tree.sem.createOllamaProvider({
+    ...SETTINGS,
+    batchSize: SETTINGS.indexBatchSize,
+    timeoutMs: SETTINGS.indexTimeoutMs,
+    fetchImpl: fetchWithMode(fetchState),
+  });
+  await tree.sem.updateSemanticIndex({
+    corpusDir: join(ws, 'vault', 'wiki'),
+    stateDir,
+    provider,
+    indexBatchSize: SETTINGS.indexBatchSize,
+    chunkMarkdown: tree.sem.markdownChunks,
+  });
 }
 
 export async function startServer(tree, ws, { stateDir, over = {}, fetchState = { mode: 'ok' } }) {
@@ -235,17 +283,24 @@ export async function startServer(tree, ws, { stateDir, over = {}, fetchState = 
     return { isError: result.isError === true, text, data: result.isError ? null : JSON.parse(text) };
   };
   return {
-    fetchState, config, call,
+    fetchState,
+    config,
+    call,
     query: async (query, extra = {}) => (await call('wiki_query', { query, ...extra })).data,
     queryRaw: (query, extra = {}) => call('wiki_query', { query, ...extra }),
-    async close() { await client.close(); await server.close(); },
+    async close() {
+      await client.close();
+      await server.close();
+    },
   };
 }
 
 // Independent oracle for the section rule the BA-24 contract requires: headings of a page in order, anchors from the
 // folded title (non-letter characters removed, spaces to hyphens), `-N` suffix for repeats. Fenced code is skipped.
 export function oracleSections(content) {
-  const seen = new Set(), out = [], ancestors = [];
+  const seen = new Set(),
+    out = [],
+    ancestors = [];
   let fence = null;
   for (const raw of content.split('\n')) {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
@@ -258,11 +313,17 @@ export function oracleSections(content) {
     if (fence) continue;
     const h = line.match(/^(#{1,3})[\t ]+(.+)$/);
     if (!h) continue;
-    const level = h[1].length, title = h[2].trim();
+    const level = h[1].length,
+      title = h[2].trim();
     ancestors.length = level - 1;
     ancestors[level - 1] = title;
-    const base = /[\p{L}\p{N}]/u.test(title) ? fold(title).replace(/[^\p{L}\p{N}_\- ]/gu, '').replace(/ /g, '-') : 'section';
-    let anchor = base, n = 0;
+    const base = /[\p{L}\p{N}]/u.test(title)
+      ? fold(title)
+          .replace(/[^\p{L}\p{N}_\- ]/gu, '')
+          .replace(/ /g, '-')
+      : 'section';
+    let anchor = base,
+      n = 0;
     while (seen.has(anchor)) anchor = `${base}-${++n}`;
     seen.add(anchor);
     out.push({ heading: title, anchor, headingPath: ancestors.filter(Boolean).join(' > ') });
@@ -270,5 +331,26 @@ export function oracleSections(content) {
   return out;
 }
 
-export const QUERIES = ['probe', 'ölçüm', 'olcum notları', 'üçüncü', 'tekrarlanan', 'roket', 'başlangıç', 'baslangic', 'astral',
-  'notlar', 'hata', 'kritik', 'güncel', 'guncel durum', 'C++', 'hata kodu 404', 'roket astral', 'ağaç ölçüm', 'agac olcum', 'symbol', 'xyznomatch'];
+export const QUERIES = [
+  'probe',
+  'ölçüm',
+  'olcum notları',
+  'üçüncü',
+  'tekrarlanan',
+  'roket',
+  'başlangıç',
+  'baslangic',
+  'astral',
+  'notlar',
+  'hata',
+  'kritik',
+  'güncel',
+  'guncel durum',
+  'C++',
+  'hata kodu 404',
+  'roket astral',
+  'ağaç ölçüm',
+  'agac olcum',
+  'symbol',
+  'xyznomatch',
+];

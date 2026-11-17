@@ -40,8 +40,14 @@ function makeVault(home) {
   const deep = 'l1/l2/l3/l4/l5/l6/l7/l8/l9/l10/l11/l12/l13/l14/l15/l16';
   fs.mkdirSync(path.join(vault, deep), { recursive: true });
   fs.mkdirSync(path.join(vault, 'notes'), { recursive: true });
-  fs.writeFileSync(path.join(vault, deep, 'handler-x-13.mjs.md'), 'Reference: l12/l13/l14/l15/l16/handler-x-13.mjs for the pipeline.\n');
-  fs.writeFileSync(path.join(vault, 'notes/widgets.md'), '---\ntitle: Widgets\n---\n# Widgets\nThe widget pipeline uses E_WIDGET_TIMEOUT.\n');
+  fs.writeFileSync(
+    path.join(vault, deep, 'handler-x-13.mjs.md'),
+    'Reference: l12/l13/l14/l15/l16/handler-x-13.mjs for the pipeline.\n'
+  );
+  fs.writeFileSync(
+    path.join(vault, 'notes/widgets.md'),
+    '---\ntitle: Widgets\n---\n# Widgets\nThe widget pipeline uses E_WIDGET_TIMEOUT.\n'
+  );
   fs.writeFileSync(path.join(vault, 'notes/old.md'), '---\nstatus: superseded\n---\nOLD_ONLY_TOKEN was replaced.\n');
   return vault;
 }
@@ -49,18 +55,23 @@ function makeVault(home) {
 test('fingerprint reproduction matches the key the module writes (self-check of the reproduction)', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ba17-cache-'));
   try {
-    const vault = makeVault(home), stateDir = path.join(home, 'state');
+    const vault = makeVault(home),
+      stateDir = path.join(home, 'state');
     createSearcher({ vaultDir: vault, stateDir, now: NOW });
     const data = JSON.parse(fs.readFileSync(path.join(stateDir, 'retrieval-index.json'), 'utf8'));
     assert.equal(data.key, fingerprintKey(vault, 'retrieval-stat-v6'), 'current tag reproduces the written key');
     assert.notEqual(fingerprintKey(vault, 'retrieval-stat-v5'), data.key, 'old tag gives a different key');
-  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('a cache written under the v5 tag is rebuilt once, then reused without a rewrite', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ba17-cache-'));
   try {
-    const vault = makeVault(home), stateDir = path.join(home, 'state'), cacheFile = path.join(stateDir, 'retrieval-index.json');
+    const vault = makeVault(home),
+      stateDir = path.join(home, 'state'),
+      cacheFile = path.join(stateDir, 'retrieval-index.json');
     createSearcher({ vaultDir: vault, stateDir, now: NOW });
     const current = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
     // Same content, old schema tag in the key: the only thing that should trigger a rebuild.
@@ -71,7 +82,11 @@ test('a cache written under the v5 tag is rebuilt once, then reused without a re
     const first = createSearcher({ vaultDir: vault, stateDir, now: NOW });
     const rebuilt = fs.readFileSync(cacheFile, 'utf8');
     assert.notEqual(rebuilt, oldBytes, 'old-tag cache must be rebuilt');
-    assert.equal(JSON.parse(rebuilt).key, fingerprintKey(vault, 'retrieval-stat-v6'), 'rebuilt cache carries the v6 key');
+    assert.equal(
+      JSON.parse(rebuilt).key,
+      fingerprintKey(vault, 'retrieval-stat-v6'),
+      'rebuilt cache carries the v6 key'
+    );
 
     // Second start: same vault, cache hit, no rewrite.
     const second = createSearcher({ vaultDir: vault, stateDir, now: NOW });
@@ -89,5 +104,7 @@ test('a cache written under the v5 tag is rebuilt once, then reused without a re
     }
     // The superseded page stays out of the index (it is recorded as skipped, not searched).
     assert.equal(second.search('OLD_ONLY_TOKEN', { limit: 5, abstainThreshold: 0, asOf: NOW }).results.length, 0);
-  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });

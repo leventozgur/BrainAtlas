@@ -6,14 +6,27 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { performance } from 'node:perf_hooks';
-import { buildIndex, createSearcher, loadPages, normalizeText, search, stem } from '../../../packages/core/src/retrieval/index.mjs';
+import {
+  buildIndex,
+  createSearcher,
+  loadPages,
+  normalizeText,
+  search,
+  stem,
+} from '../../../packages/core/src/retrieval/index.mjs';
 import { runEval } from '../../../eval/run-eval.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const now = new Date('2025-01-01T00:00:00.000Z');
 const page = (file, body = 'distinctive retrieval evidence', frontmatter = {}, extra = {}) => ({
-  path: file, title: 'Distinctive Retrieval', aliases: [], keywords: [], headings: [], body, frontmatter, ...extra,
+  path: file,
+  title: 'Distinctive Retrieval',
+  aliases: [],
+  keywords: [],
+  headings: [],
+  body,
+  frontmatter,
+  ...extra,
 });
 function temp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'c2-retrieval-acceptance-'));
@@ -22,11 +35,14 @@ function temp(t) {
 }
 
 test('superseded pages are excluded by status and superseded_by; active evidence still returns', () => {
-  const index = buildIndex([
-    page('current.md', 'migration guide current'),
-    page('status-old.md', 'migration guide status old', { status: 'superseded' }),
-    page('link-old.md', 'migration guide link old', { superseded_by: 'current.md' }),
-  ], { now });
+  const index = buildIndex(
+    [
+      page('current.md', 'migration guide current'),
+      page('status-old.md', 'migration guide status old', { status: 'superseded' }),
+      page('link-old.md', 'migration guide link old', { superseded_by: 'current.md' }),
+    ],
+    { now }
+  );
   const result = search(index, 'migration guide');
   assert.ok(result.results.some((item) => item.path === 'current.md'));
   assert.ok(result.results.every((item) => !['status-old.md', 'link-old.md'].includes(item.path)));
@@ -43,10 +59,13 @@ test('stale is false immediately before and at an absolute date threshold, then 
 });
 
 test('stale handles P<n>D at the full-day boundary and reports already-expired evidence', () => {
-  const index = buildIndex([
-    page('relative.md', 'relative freshness evidence', { generated: '2025-01-01', stale_after: 'P2D' }),
-    page('expired.md', 'expired evidence', { generated: '2024-12-20', stale_after: 'P2D' }),
-  ], { now });
+  const index = buildIndex(
+    [
+      page('relative.md', 'relative freshness evidence', { generated: '2025-01-01', stale_after: 'P2D' }),
+      page('expired.md', 'expired evidence', { generated: '2024-12-20', stale_after: 'P2D' }),
+    ],
+    { now }
+  );
   const exact = search(index, 'relative freshness', { asOf: new Date('2025-01-03T00:00:00.000Z') });
   const after = search(index, 'relative freshness', { asOf: new Date('2025-01-03T00:00:00.001Z') });
   assert.equal(exact.results[0].stale, false);
@@ -127,20 +146,45 @@ test('ranking is deterministic and breaks equal scores by path', () => {
   const first = search(buildIndex(pages, { now }), 'shared evidence');
   const second = search(buildIndex(pages, { now }), 'shared evidence');
   assert.deepEqual(first, second);
-  assert.deepEqual(first.results.map((item) => item.path), ['alpha.md', 'zeta.md']);
+  assert.deepEqual(
+    first.results.map((item) => item.path),
+    ['alpha.md', 'zeta.md']
+  );
 });
 
 test('BM25F favors title evidence over body-only evidence and returns the contract fields', () => {
-  const index = buildIndex([
-    page('body.md', 'needle', {}, { title: 'Reference' }),
-    page('title.md', 'unrelated body', {}, { title: 'Needle' }),
-  ], { now });
+  const index = buildIndex(
+    [
+      page('body.md', 'needle', {}, { title: 'Reference' }),
+      page('title.md', 'unrelated body', {}, { title: 'Needle' }),
+    ],
+    { now }
+  );
   const result = search(index, 'needle');
   assert.equal(result.results[0].path, 'title.md');
   // PM update (Q-SECTION; BA-04 adds optional `supersedes`): contract v1 allows additive optional fields; the original six keys stay required.
   const resultKeys = Object.keys(result.results[0]).sort();
-  for (const required of ['path', 'score', 'snippet', 'stale', 'status', 'title']) assert.ok(resultKeys.includes(required), `missing ${required}`);
-  for (const key of resultKeys) assert.ok(['path', 'score', 'snippet', 'stale', 'status', 'title', 'heading', 'anchor', 'headingPath', 'supersedes', 'related', 'via', 'trust'].includes(key), `unexpected key ${key}`);
+  for (const required of ['path', 'score', 'snippet', 'stale', 'status', 'title'])
+    assert.ok(resultKeys.includes(required), `missing ${required}`);
+  for (const key of resultKeys)
+    assert.ok(
+      [
+        'path',
+        'score',
+        'snippet',
+        'stale',
+        'status',
+        'title',
+        'heading',
+        'anchor',
+        'headingPath',
+        'supersedes',
+        'related',
+        'via',
+        'trust',
+      ].includes(key),
+      `unexpected key ${key}`
+    );
   assert.equal(result.results[0].title, 'Needle');
   assert.equal(typeof result.results[0].score, 'number');
   assert.equal(result.results[0].stale, false);
@@ -165,7 +209,10 @@ test('superseded eval targets never appear for their queries', () => {
     const cases = JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
     for (const item of cases.filter((entry) => entry.excluded?.length)) {
       const result = search(index, item.query);
-      assert.ok(result.results.every((entry) => !item.excluded.includes(entry.path)), `${file}: ${item.query}`);
+      assert.ok(
+        result.results.every((entry) => !item.excluded.includes(entry.path)),
+        `${file}: ${item.query}`
+      );
     }
   }
 });
@@ -173,7 +220,9 @@ test('superseded eval targets never appear for their queries', () => {
 test('dev cases include varied natural multiword answerable queries', () => {
   const cases = JSON.parse(fs.readFileSync(path.join(root, 'eval/dev/cases.json'), 'utf8'));
   const answerable = cases.filter((item) => item.relevant?.length);
-  const naturalMultiword = answerable.filter((item) => item.query.trim().split(/\s+/u).length >= 3 && !/legacytoken\d/u.test(item.query));
+  const naturalMultiword = answerable.filter(
+    (item) => item.query.trim().split(/\s+/u).length >= 3 && !/legacytoken\d/u.test(item.query)
+  );
   assert.ok(naturalMultiword.length >= 10, `natural multiword answerable cases=${naturalMultiword.length}`);
 });
 
@@ -185,9 +234,22 @@ test('holdout is isolated from dev and the eval runner records its outcome', () 
   assert.equal(result.n, JSON.parse(fs.readFileSync(holdoutFile, 'utf8')).length);
 });
 
-test('brainatlas eval CLI runs an eval file and emits machine-readable metrics', { skip: 'PM: CLI wiring of `brainatlas eval` belongs to I-INSTALL (TRACKS.md C2 brief: runEval export only)' }, () => {
+test('brainatlas eval CLI runs an eval file and emits machine-readable metrics', {}, () => {
   const cli = path.join(root, 'packages/cli/bin/brainatlas.mjs');
-  const proc = spawnSync(process.execPath, [cli, 'eval', '--corpus', path.join(root, 'eval/corpus'), '--cases', path.join(root, 'eval/dev/cases.json'), '--now', now.toISOString()], { cwd: root, encoding: 'utf8' });
+  const proc = spawnSync(
+    process.execPath,
+    [
+      cli,
+      'eval',
+      '--corpus',
+      path.join(root, 'eval/corpus'),
+      '--cases',
+      path.join(root, 'eval/dev/cases.json'),
+      '--now',
+      now.toISOString(),
+    ],
+    { cwd: root, encoding: 'utf8' }
+  );
   assert.equal(proc.status, 0, proc.stderr);
   const metrics = JSON.parse(proc.stdout);
   assert.ok(metrics.n >= 40);
@@ -195,7 +257,9 @@ test('brainatlas eval CLI runs an eval file and emits machine-readable metrics',
 });
 
 test('malformed cache silently rebuilds, and source edits invalidate a warm cache', async (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   const file = path.join(vault, 'entry.md');
   fs.writeFileSync(file, '---\ntitle: Alpha\n---\nalpha evidence');
@@ -210,7 +274,10 @@ test('malformed cache silently rebuilds, and source edits invalidate a warm cach
 });
 
 test('retrieval writes cache only under the configured state directory', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state'), fakeHome = path.join(dir, 'home');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state'),
+    fakeHome = path.join(dir, 'home');
   fs.mkdirSync(vault);
   fs.mkdirSync(fakeHome);
   fs.writeFileSync(path.join(vault, 'entry.md'), 'vault evidence');
@@ -228,7 +295,11 @@ test('retrieval writes cache only under the configured state directory', (t) => 
 });
 
 test('loader ignores file, directory and root symlinks that point outside the vault', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), outsideDir = path.join(dir, 'outside-dir'), outside = path.join(dir, 'outside.md'), rootLink = path.join(dir, 'root-link');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    outsideDir = path.join(dir, 'outside-dir'),
+    outside = path.join(dir, 'outside.md'),
+    rootLink = path.join(dir, 'root-link');
   fs.mkdirSync(vault);
   fs.mkdirSync(outsideDir);
   fs.writeFileSync(outside, '---\ntitle: Secret Outside\n---\nsecret canary content');
@@ -238,9 +309,14 @@ test('loader ignores file, directory and root symlinks that point outside the va
     fs.symlinkSync(outside, path.join(vault, 'linked.md'));
     fs.symlinkSync(outsideDir, path.join(vault, 'linked-dir'));
     fs.symlinkSync(outsideDir, rootLink);
+  } catch (error) {
+    t.skip(`symlink unavailable: ${error.code}`);
+    return;
   }
-  catch (error) { t.skip(`symlink unavailable: ${error.code}`); return; }
-  assert.deepEqual(loadPages(vault).map((item) => item.path), ['inside.md']);
+  assert.deepEqual(
+    loadPages(vault).map((item) => item.path),
+    ['inside.md']
+  );
   const result = search(buildIndex(loadPages(vault), { now }), 'canary');
   assert.deepEqual(result.results, []);
   // PM correction: a symlinked vault ROOT is a legitimate user setup (root is resolved once with realpath);
@@ -254,7 +330,9 @@ test('direct page paths cannot escape the vault through ../', () => {
 });
 
 test('cached page paths cannot escape the vault through ../', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
+  const dir = temp(t),
+    vault = path.join(dir, 'vault'),
+    state = path.join(dir, 'state');
   fs.mkdirSync(vault);
   fs.writeFileSync(path.join(vault, 'inside.md'), '---\ntitle: Inside\n---\ntraversal canary');
   createSearcher({ vaultDir: vault, stateDir: state, now });
@@ -267,17 +345,25 @@ test('cached page paths cannot escape the vault through ../', (t) => {
 });
 
 test('missing vault, malformed frontmatter and corrupt index produce typed sanitized errors', (t) => {
-  const dir = temp(t), missing = path.join(dir, 'missing'), malformed = path.join(dir, 'malformed');
+  const dir = temp(t),
+    missing = path.join(dir, 'missing'),
+    malformed = path.join(dir, 'malformed');
   assert.throws(() => loadPages(missing), { code: 'E_VAULT_MISSING' });
   fs.mkdirSync(malformed);
   fs.writeFileSync(path.join(malformed, 'bad.md'), '---\ntitle: [secret-canary\n---\nbody');
-  assert.throws(() => loadPages(malformed), (error) => error.code === 'E_INVALID_INPUT' && !error.message.includes('secret-canary'));
+  assert.throws(
+    () => loadPages(malformed),
+    (error) => error.code === 'E_INVALID_INPUT' && !error.message.includes('secret-canary')
+  );
   assert.throws(() => search({}, 'query'), { code: 'E_INDEX_CORRUPT' });
 });
 
 test('invalid options and non-text input fail without echoing sensitive values', () => {
   const index = buildIndex([page('one.md')], { now });
-  assert.throws(() => search(index, 'secret-canary', { limit: -1 }), (error) => error.code === 'E_INVALID_INPUT' && !error.message.includes('secret-canary'));
+  assert.throws(
+    () => search(index, 'secret-canary', { limit: -1 }),
+    (error) => error.code === 'E_INVALID_INPUT' && !error.message.includes('secret-canary')
+  );
   assert.throws(() => search(index, 42), { code: 'E_QUERY_INVALID' });
   assert.throws(() => buildIndex({}), { code: 'E_INVALID_INPUT' });
 });
@@ -294,32 +380,25 @@ test('search emits no query or snippet logs and eval metrics omit query/body tex
     for (const [key, fn] of Object.entries(originals)) console[key] = fn;
   }
   assert.deepEqual(logged, []);
-  const metrics = runEval({ corpusDir: path.join(root, 'eval/corpus'), casesFile: path.join(root, 'eval/dev/cases.json'), now });
+  const metrics = runEval({
+    corpusDir: path.join(root, 'eval/corpus'),
+    casesFile: path.join(root, 'eval/dev/cases.json'),
+    now,
+  });
   assert.equal(JSON.stringify(metrics).includes(secret), false);
 });
 
 test('missing or invalid option boundaries are rejected', () => {
   const index = buildIndex([page('one.md')], { now });
-  for (const options of [{ limit: -1 }, { limit: 1.5 }, { budgetChars: -1 }, { budgetChars: NaN }, { abstainThreshold: 1.01 }, { asOf: '2025-01-01' }]) {
+  for (const options of [
+    { limit: -1 },
+    { limit: 1.5 },
+    { budgetChars: -1 },
+    { budgetChars: NaN },
+    { abstainThreshold: 1.01 },
+    { asOf: '2025-01-01' },
+  ]) {
     assert.throws(() => search(index, 'retrieval', options), { code: 'E_INVALID_INPUT' });
   }
   assert.deepEqual(search(index, 'retrieval', { limit: 0 }).results, []);
-});
-
-test('warm query median stays below 300 ms on a 2000-page synthetic vault', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
-  fs.mkdirSync(vault);
-  for (let i = 0; i < 2000; i++) fs.writeFileSync(path.join(vault, `${String(i).padStart(4, '0')}.md`), `---\ntitle: Topic ${i}\n---\nSynthetic common content number ${i}.`);
-  const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
-  for (let i = 0; i < 2; i++) searcher.search('topic 1234');
-  const timings = [];
-  for (let i = 0; i < 7; i++) {
-    const start = performance.now();
-    searcher.search('topic 1234');
-    timings.push(performance.now() - start);
-  }
-  timings.sort((a, b) => a - b);
-  const median = timings[Math.floor(timings.length / 2)];
-  t.diagnostic(`Warm 2000-page query median: ${median.toFixed(2)} ms`);
-  assert.ok(median < 300, `median ${median.toFixed(2)} ms`);
 });

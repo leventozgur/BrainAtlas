@@ -24,12 +24,19 @@ async function fixture(t, label) {
     XDG_STATE_HOME: join(home, 'state'),
     BRAINATLAS_PLATFORM: 'linux',
     BRAINATLAS_OFFLINE: '1',
-    PATH: process.env.PATH || '/usr/bin:/bin'
+    PATH: process.env.PATH || '/usr/bin:/bin',
   });
   const paths = resolvePaths({ platform: 'linux', env });
-  const run = (...args) => spawnSync(process.execPath, [cli, ...args, '--json'], { cwd: root, env, encoding: 'utf8', shell: false, timeout: 20_000 });
+  const run = (...args) =>
+    spawnSync(process.execPath, [cli, ...args, '--json'], {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+      shell: false,
+      timeout: 20_000,
+    });
   const config = async () => JSON.parse(await readFile(paths.configFile, 'utf8'));
-  const writeConfig = async cfg => {
+  const writeConfig = async (cfg) => {
     await mkdir(dirname(paths.configFile), { recursive: true });
     await writeFile(paths.configFile, `${JSON.stringify(cfg, null, 2)}\n`);
   };
@@ -42,7 +49,7 @@ async function fixture(t, label) {
   return { temp, home, env, paths, run, config, writeConfig, success };
 }
 
-test('init --yes reuses the vault stored by install when --vault is omitted', async t => {
+test('init --yes reuses the vault stored by install when --vault is omitted', async (t) => {
   const f = await fixture(t, 'installed-vault');
   const installedVault = join(f.temp, 'installed-vault');
   const cfg = defaultConfig('lite');
@@ -55,11 +62,14 @@ test('init --yes reuses the vault stored by install when --vault is omitted', as
   await assert.rejects(lstat(join(f.home, 'BrainAtlas')), { code: 'ENOENT' });
 });
 
-test('init --agents preserves sync and other settings byte-for-byte as JSON values', async t => {
+test('init --agents preserves sync and other settings byte-for-byte as JSON values', async (t) => {
   const f = await fixture(t, 'agents');
   const cfg = defaultConfig('full');
   cfg.vault.path = join(f.temp, 'vault');
-  cfg.sync = { transport: 'git', options: { remote: 'https://example.com/repo', branch: 'main', hostId: 'fixture-host-id' } };
+  cfg.sync = {
+    transport: 'git',
+    options: { remote: 'https://example.com/repo', branch: 'main', hostId: 'fixture-host-id' },
+  };
   cfg.okf.level = 'strict';
   cfg.hooks = { mode: 'economic', deadlineMs: 4321 };
   cfg.retrieval.budgetChars = 7654;
@@ -76,7 +86,7 @@ test('init --agents preserves sync and other settings byte-for-byte as JSON valu
   assert.deepEqual(after.agents, ['agent-a']);
 });
 
-test('init --profile full changes only profile and profile modules', async t => {
+test('init --profile full changes only profile and profile modules', async (t) => {
   const f = await fixture(t, 'profile');
   const cfg = defaultConfig('custom');
   cfg.vault.path = join(f.temp, 'vault');
@@ -90,7 +100,7 @@ test('init --profile full changes only profile and profile modules', async t => 
   const planned = f.success(['init', '--yes', '--profile', 'full', '--plan'], 'profile plan');
   assert.deepEqual(planned.config.changes, {
     profile: { from: 'custom', to: 'full' },
-    modules: { from: ['receipts'], to: ['*'] }
+    modules: { from: ['receipts'], to: ['*'] },
   });
   assert.ok(!JSON.stringify(planned).includes(f.home));
 
@@ -98,10 +108,11 @@ test('init --profile full changes only profile and profile modules', async t => 
   const after = await f.config();
   assert.equal(after.profile, 'full');
   assert.deepEqual(after.modules, ['*']);
-  for (const key of Object.keys(cfg).filter(key => !['profile', 'modules'].includes(key))) assert.deepEqual(after[key], cfg[key], key);
+  for (const key of Object.keys(cfg).filter((key) => !['profile', 'modules'].includes(key)))
+    assert.deepEqual(after[key], cfg[key], key);
 });
 
-test('init without an existing config retains default vault, profile, modules, and agents', async t => {
+test('init without an existing config retains default vault, profile, modules, and agents', async (t) => {
   const f = await fixture(t, 'defaults');
   const planned = f.success(['init', '--yes', '--plan'], 'default init plan');
   assert.equal(planned.vault.path, '~/BrainAtlas');

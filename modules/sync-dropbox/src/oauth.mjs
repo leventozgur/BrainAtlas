@@ -18,7 +18,11 @@ async function parseTokenResponse(response) {
     throw new DropboxError('E_NETWORK');
   }
   let body;
-  try { body = await response.json(); } catch { throw new DropboxError('E_AUTH'); }
+  try {
+    body = await response.json();
+  } catch {
+    throw new DropboxError('E_AUTH');
+  }
   if (typeof body?.access_token !== 'string' || !body.access_token) throw new DropboxError('E_AUTH');
   return body;
 }
@@ -31,7 +35,9 @@ async function postToken(fetchImpl, form) {
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(form).toString(),
     });
-  } catch { throw new DropboxError('E_NETWORK'); }
+  } catch {
+    throw new DropboxError('E_NETWORK');
+  }
   return parseTokenResponse(response);
 }
 
@@ -45,24 +51,44 @@ async function readCode(input) {
       if (!code || code.length > 4096) throw new DropboxError('E_ARGUMENT');
       return code;
     }
-  } catch (error) { if (error?.code === 'E_ARGUMENT') throw error; throw new DropboxError('E_ARGUMENT'); }
-  finally { lines.close(); }
+  } catch (error) {
+    if (error?.code === 'E_ARGUMENT') throw error;
+    throw new DropboxError('E_ARGUMENT');
+  } finally {
+    lines.close();
+  }
   throw new DropboxError('E_ARGUMENT');
 }
 
 function credentialsJson(value) {
   try {
     const credentials = JSON.parse(value);
-    if (typeof credentials?.accessToken !== 'string' || typeof credentials?.refreshToken !== 'string'
-        || typeof credentials?.appKey !== 'string' || !Number.isFinite(credentials.expiresAt)) throw new Error();
+    if (
+      typeof credentials?.accessToken !== 'string' ||
+      typeof credentials?.refreshToken !== 'string' ||
+      typeof credentials?.appKey !== 'string' ||
+      !Number.isFinite(credentials.expiresAt)
+    )
+      throw new Error();
     return credentials;
-  } catch { throw new DropboxError('E_AUTH'); }
+  } catch {
+    throw new DropboxError('E_AUTH');
+  }
 }
 
-/** Print the PKCE authorization URL, read a code from stdin, exchange it, and persist tokens. */
-export async function enrollDropbox({ appKey, fetch: fetchImpl = globalThis.fetch, credentialStore, stdin = process.stdin, stdout = process.stdout, now = () => Date.now(), random = randomBytes } = {}) {
+/** Print the PKCE authorization URL, read a code from stdin, exchange it, and persist tokens. @param {{appKey?:string,fetch?:Function,credentialStore?:any,stdin?:any,stdout?:any,now?:()=>number,random?:Function}} [options] */
+export async function enrollDropbox({
+  appKey,
+  fetch: fetchImpl = globalThis.fetch,
+  credentialStore,
+  stdin = process.stdin,
+  stdout = process.stdout,
+  now = () => Date.now(),
+  random = randomBytes,
+} = {}) {
   validAppKey(appKey);
-  if (typeof fetchImpl !== 'function' || !credentialStore || typeof credentialStore.set !== 'function') throw new DropboxError('E_ARGUMENT');
+  if (typeof fetchImpl !== 'function' || !credentialStore || typeof credentialStore.set !== 'function')
+    throw new DropboxError('E_ARGUMENT');
   const verifier = random(32).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
   const authorize = new URL(AUTHORIZE_URL);
@@ -90,14 +116,26 @@ export async function enrollDropbox({ appKey, fetch: fetchImpl = globalThis.fetc
     refreshToken: token.refresh_token,
     expiresAt: now() + (Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 0) * 1000,
   };
-  try { await credentialStore.set(JSON.stringify(credentials)); }
-  catch { throw new DropboxError('E_CREDENTIAL_STORE'); }
+  try {
+    await credentialStore.set(JSON.stringify(credentials));
+  } catch {
+    throw new DropboxError('E_CREDENTIAL_STORE');
+  }
   return { status: 'ENROLLED' };
 }
 
-/** Return a refresh-aware access token callback for Dropbox API requests. */
-export function createDropboxTokenProvider({ credentialStore, fetch: fetchImpl = globalThis.fetch, now = () => Date.now() } = {}) {
-  if (!credentialStore || typeof credentialStore.get !== 'function' || typeof credentialStore.set !== 'function' || typeof fetchImpl !== 'function') {
+/** Return a refresh-aware access token callback for Dropbox API requests. @param {{credentialStore?:any,fetch?:Function,now?:()=>number}} [options] */
+export function createDropboxTokenProvider({
+  credentialStore,
+  fetch: fetchImpl = globalThis.fetch,
+  now = () => Date.now(),
+} = {}) {
+  if (
+    !credentialStore ||
+    typeof credentialStore.get !== 'function' ||
+    typeof credentialStore.set !== 'function' ||
+    typeof fetchImpl !== 'function'
+  ) {
     throw new DropboxError('E_CREDENTIAL_STORE');
   }
   let current = null;
@@ -105,7 +143,11 @@ export function createDropboxTokenProvider({ credentialStore, fetch: fetchImpl =
 
   async function load() {
     let stored;
-    try { stored = await credentialStore.get(); } catch { throw new DropboxError('E_CREDENTIAL_STORE'); }
+    try {
+      stored = await credentialStore.get();
+    } catch {
+      throw new DropboxError('E_CREDENTIAL_STORE');
+    }
     if (typeof stored !== 'string' || !stored) throw new DropboxError('E_AUTH');
     current = credentialsJson(stored);
     return current;
@@ -122,18 +164,25 @@ export function createDropboxTokenProvider({ credentialStore, fetch: fetchImpl =
       version: 1,
       appKey: credentials.appKey,
       accessToken: token.access_token,
-      refreshToken: typeof token.refresh_token === 'string' && token.refresh_token ? token.refresh_token : credentials.refreshToken,
+      refreshToken:
+        typeof token.refresh_token === 'string' && token.refresh_token ? token.refresh_token : credentials.refreshToken,
       expiresAt: now() + (Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 0) * 1000,
     };
-    try { await credentialStore.set(JSON.stringify(current)); }
-    catch { throw new DropboxError('E_CREDENTIAL_STORE'); }
+    try {
+      await credentialStore.set(JSON.stringify(current));
+    } catch {
+      throw new DropboxError('E_CREDENTIAL_STORE');
+    }
     return current;
   }
 
   return async function getAccessToken() {
-    const credentials = current ?? await load();
+    const credentials = current ?? (await load());
     if (credentials.expiresAt > now() + 60_000) return credentials.accessToken;
-    if (!refreshInFlight) refreshInFlight = refresh(credentials).finally(() => { refreshInFlight = null; });
+    if (!refreshInFlight)
+      refreshInFlight = refresh(credentials).finally(() => {
+        refreshInFlight = null;
+      });
     return (await refreshInFlight).accessToken;
   };
 }

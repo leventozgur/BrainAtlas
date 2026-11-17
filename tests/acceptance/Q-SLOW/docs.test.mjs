@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { commands } from '../../../modules/semantic/src/index.mjs';
 
-const read = relative => readFile(new URL(`../../../${relative}`, import.meta.url), 'utf8');
+const read = (relative) => readFile(new URL(`../../../${relative}`, import.meta.url), 'utf8');
 
 function section(text, heading) {
   const start = text.indexOf(heading);
@@ -17,7 +17,18 @@ function section(text, heading) {
 
 test('semantic.md has a slow-machines section with the measured example, resume, both settings and partialChunks', async () => {
   const body = section(await read('docs/user/semantic.md'), '## Slow machines');
-  for (const needle of ['819', '2012', '8 GB', 'indexTimeoutMs', 'indexBatchSize', 'partialChunks', 'semanticSetup', 'idle', 'timeoutMs']) assert.ok(body.includes(needle), `semantic.md slow section lacks ${needle}`);
+  for (const needle of [
+    '819',
+    '2012',
+    '8 GB',
+    'indexTimeoutMs',
+    'indexBatchSize',
+    'partialChunks',
+    'semanticSetup',
+    'idle',
+    'timeoutMs',
+  ])
+    assert.ok(body.includes(needle), `semantic.md slow section lacks ${needle}`);
   assert.match(body, /16 minutes|16 min/u);
   assert.match(body, /0\.5 second/u);
   assert.match(body, /120000/u);
@@ -44,8 +55,12 @@ test('documented brainatlas commands in the new sections exist, and no personal 
   const real = new Set(Object.keys(commands));
   for (const file of files) {
     const text = await read(file);
-    for (const match of text.matchAll(/brainatlas (semantic[A-Za-z]+)/gu)) assert.ok(real.has(match[1]), `${file}: unknown command ${match[1]}`);
+    for (const match of text.matchAll(/brainatlas (semantic[A-Za-z]+)/gu))
+      assert.ok(real.has(match[1]), `${file}: unknown command ${match[1]}`);
   }
-  const added = [section(await read('docs/user/semantic.md'), '## Slow machines'), section(await read('docs/user/troubleshooting.md'), '## Slow or interrupted semantic indexing')].join('\n');
+  const added = [
+    section(await read('docs/user/semantic.md'), '## Slow machines'),
+    section(await read('docs/user/troubleshooting.md'), '## Slow or interrupted semantic indexing'),
+  ].join('\n');
   assert.doesNotMatch(added, /\/Users\/|\/home\/[a-z]|[\w.-]+@[\w-]+\.\w+|localhost/iu);
 });

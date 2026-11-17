@@ -13,12 +13,21 @@ const cachePath = (path) => {
 };
 
 function segmentMatch(pattern, value) {
-  let p = 0, v = 0, star = -1, retry = 0;
+  let p = 0,
+    v = 0,
+    star = -1,
+    retry = 0;
   while (v < value.length) {
-    if (p < pattern.length && (pattern[p] === '?' || pattern[p].toLowerCase() === value[v].toLowerCase())) { p += 1; v += 1; }
-    else if (pattern[p] === '*') { star = p++; retry = v; }
-    else if (star >= 0) { p = star + 1; v = ++retry; }
-    else return false;
+    if (p < pattern.length && (pattern[p] === '?' || pattern[p].toLowerCase() === value[v].toLowerCase())) {
+      p += 1;
+      v += 1;
+    } else if (pattern[p] === '*') {
+      star = p++;
+      retry = v;
+    } else if (star >= 0) {
+      p = star + 1;
+      v = ++retry;
+    } else return false;
   }
   while (pattern[p] === '*') p += 1;
   return p === pattern.length;
@@ -47,7 +56,17 @@ export function resolveSyncScope(config = {}) {
   const localOnly = options.localOnly ?? options['local-only'] ?? [];
   const deny = options.deny ?? [];
   for (const rows of [include, localOnly, deny]) {
-    if (!Array.isArray(rows) || rows.some((pattern) => typeof pattern !== 'string' || !pattern || pattern.startsWith('/') || pattern.includes('\\') || pattern.split('/').includes('..'))) {
+    if (
+      !Array.isArray(rows) ||
+      rows.some(
+        (pattern) =>
+          typeof pattern !== 'string' ||
+          !pattern ||
+          pattern.startsWith('/') ||
+          pattern.includes('\\') ||
+          pattern.split('/').includes('..')
+      )
+    ) {
       throw new SyncTransportError('E_STATE_INVALID');
     }
   }
@@ -61,14 +80,24 @@ export function isLocalOnlyFrontmatter(text) {
 }
 
 function safeRelative(path) {
-  return typeof path === 'string' && path.length > 0 && !path.startsWith('/') && !path.includes('\\') && !path.includes('\0')
-    && path.split('/').every((part) => part && part !== '.' && part !== '..');
+  return (
+    typeof path === 'string' &&
+    path.length > 0 &&
+    !path.startsWith('/') &&
+    !path.includes('\\') &&
+    !path.includes('\0') &&
+    path.split('/').every((part) => part && part !== '.' && part !== '..')
+  );
 }
 
 async function walk(root, ignoredDir, output, allowedPaths, excluded, current = root) {
   let entries;
-  try { entries = await readdir(current, { withFileTypes: true }); }
-  catch (error) { if (error?.code === 'ENOENT') return; throw error; }
+  try {
+    entries = await readdir(current, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return;
+    throw error;
+  }
   for (const entry of entries) {
     const absolute = join(current, entry.name);
     if (entry.isSymbolicLink()) continue;
@@ -80,13 +109,17 @@ async function walk(root, ignoredDir, output, allowedPaths, excluded, current = 
     } else if (entry.isFile()) {
       const path = normalize(relative(root, absolute));
       if (!safeRelative(path)) continue;
-      if (cachePath(path)) { excluded.add(path); continue; }
+      if (cachePath(path)) {
+        excluded.add(path);
+        continue;
+      }
       if (!conflictArtifact(path)) output.push({ path, absolute });
     }
   }
 }
 
 /** Collect scoped files and secret refusals without returning or persisting matching values. */
+/** @param {{vaultPath:string,stateDir?:string,config?:any}} options */
 export async function inventoryVault({ vaultPath, stateDir, config = {} }) {
   const scope = resolveSyncScope(config);
   const rootInfo = await lstat(vaultPath).catch(() => null);
@@ -106,17 +139,29 @@ export async function inventoryVault({ vaultPath, stateDir, config = {} }) {
   const seen = new Map();
   const extraDenyGlobs = Array.isArray(config?.safety?.extraDenyGlobs) ? config.safety.extraDenyGlobs : [];
   for (const { path, absolute } of candidates.sort((a, b) => a.path.localeCompare(b.path))) {
-    const denied = scanPath(path, { denyGlobs: scope.deny, extraDenyGlobs })
-      .filter((finding) => !isSafetyFindingAllowed(path, '', finding, allowed));
+    const denied = scanPath(path, { denyGlobs: scope.deny, extraDenyGlobs }).filter(
+      (finding) => !isSafetyFindingAllowed(path, '', finding, allowed)
+    );
     if (denied.length) {
       for (const finding of denied) refused.push({ path, ruleId: finding.ruleId });
       excluded.add(path);
       continue;
     }
-    if (!scope.include.some((glob) => globMatch(glob, path)) || scope.localOnly.some((glob) => globMatch(glob, path))) { excluded.add(path); continue; }
+    if (!scope.include.some((glob) => globMatch(glob, path)) || scope.localOnly.some((glob) => globMatch(glob, path))) {
+      excluded.add(path);
+      continue;
+    }
     let bytes;
-    try { bytes = await readFile(absolute); } catch (error) { if (error?.code === 'ENOENT') continue; throw error; }
-    if (isLocalOnlyFrontmatter(bytes.toString('utf8'))) { excluded.add(path); continue; }
+    try {
+      bytes = await readFile(absolute);
+    } catch (error) {
+      if (error?.code === 'ENOENT') continue;
+      throw error;
+    }
+    if (isLocalOnlyFrontmatter(bytes.toString('utf8'))) {
+      excluded.add(path);
+      continue;
+    }
     const text = bytes.toString('utf8');
     const findings = scanText(text).filter((finding) => !isSafetyFindingAllowed(path, text, finding, allowed));
     if (findings.length) {
@@ -129,8 +174,10 @@ export async function inventoryVault({ vaultPath, stateDir, config = {} }) {
       collisionGroup.push(path);
       seen.set(path.toLowerCase(), collisionGroup);
       for (const collided of collisionGroup) {
-        included.delete(collided); excluded.add(collided);
-        if (!refused.some((row) => row.path === collided && row.ruleId === 'case-collision')) refused.push({ path: collided, ruleId: 'case-collision' });
+        included.delete(collided);
+        excluded.add(collided);
+        if (!refused.some((row) => row.path === collided && row.ruleId === 'case-collision'))
+          refused.push({ path: collided, ruleId: 'case-collision' });
       }
       continue;
     }

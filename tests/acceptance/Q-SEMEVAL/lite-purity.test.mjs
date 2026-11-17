@@ -14,7 +14,7 @@ async function moduleFiles(dir) {
   const found = [];
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const absolute = path.join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...await moduleFiles(absolute));
+    if (entry.isDirectory()) found.push(...(await moduleFiles(absolute)));
     else if (entry.isFile() && entry.name.endsWith('.mjs')) found.push(absolute);
   }
   return found;
@@ -35,7 +35,9 @@ test('core static and transitive imports do not reach modules/semantic', async (
     if (visited.has(file)) continue;
     visited.add(file);
     const source = await readFile(file, 'utf8');
-    const specifiers = [...source.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*)['"]([^'"]+)['"]/gu)].map((match) => match[1]);
+    const specifiers = [...source.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*)['"]([^'"]+)['"]/gu)].map(
+      (match) => match[1]
+    );
     for (const specifier of specifiers) {
       if (!specifier.startsWith('.')) continue;
       const resolved = path.resolve(path.dirname(file), specifier);
@@ -60,7 +62,11 @@ test('default Lite and Full core startup stays semantic-off and makes no network
     if (calls !== 0 || full.semantic?.enabled === true || lite.modules.length !== 0 || result.results[0]?.path !== 'local.md') process.exit(8);
     process.stdout.write(JSON.stringify({calls, liteModules:lite.modules.length, result:result.results.length}));
   `;
-  const child = spawnSync(process.execPath, ['--input-type=module', '-e', source], { cwd: root, encoding: 'utf8', env: { ...process.env, HOME: isolatedHome, TMPDIR: isolatedHome } });
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', source], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, HOME: isolatedHome, TMPDIR: isolatedHome },
+  });
   assert.equal(child.status, 0, child.stderr);
   assert.deepEqual(JSON.parse(child.stdout), { calls: 0, liteModules: 0, result: 1 });
   assert.equal(child.stderr, '');

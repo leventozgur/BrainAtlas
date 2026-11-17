@@ -13,7 +13,8 @@ import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 export const TARGET = process.env.BA14_TARGET === 'main' ? 'main' : 'worktree';
 // Main checkout is a sibling of the worktree directory tree; it is only ever executed, never written.
-export const SERVER_ROOT = TARGET === 'main' ? resolve(process.env.BA14_MAIN_ROOT || join(ROOT, '..', '..', 'BrainAtlas')) : ROOT;
+export const SERVER_ROOT =
+  TARGET === 'main' ? resolve(process.env.BA14_MAIN_ROOT || join(ROOT, '..', '..', 'BrainAtlas')) : ROOT;
 // Runtime-built, secret-shaped fixture value (same shape the repo's privacy scanner detects).
 export const SECRET = ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-');
 
@@ -44,23 +45,38 @@ export async function startServer(t, { files = {}, links = {} } = {}) {
     args: [join(SERVER_ROOT, 'packages/mcp/bin/brainatlas-mcp.mjs')],
     cwd: SERVER_ROOT,
     env: {
-      HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'),
-      BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH || ''
+      HOME: home,
+      XDG_CONFIG_HOME: join(home, 'config'),
+      XDG_DATA_HOME: join(home, 'data'),
+      XDG_STATE_HOME: join(home, 'state'),
+      BRAINATLAS_CONFIG: configFile,
+      BRAINATLAS_VAULT: vault,
+      PATH: process.env.PATH || '',
     },
-    stderr: 'pipe'
+    stderr: 'pipe',
   });
   let stderr = '';
-  transport.stderr.on('data', (chunk) => { stderr += chunk; });
+  transport.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
   const client = new Client({ name: 'ba14-blind-acceptance', version: '1.0.0' });
   t.after(async () => {
-    try { await client.close(); } finally { await rm(dir, { recursive: true, force: true }); }
+    try {
+      await client.close();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
   await client.connect(transport);
   return { dir, home, vault, wiki, client, stderr: () => stderr };
 }
 
 export const call = (client, name, args = {}) => client.callTool({ name, arguments: args });
-export const textOf = (r) => (r.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n');
+export const textOf = (r) =>
+  (r.content || [])
+    .filter((x) => x.type === 'text')
+    .map((x) => x.text)
+    .join('\n');
 export function okJson(r) {
   assert.notEqual(r.isError, true, `unexpected refusal: ${textOf(r)}`);
   return JSON.parse(textOf(r));
@@ -88,11 +104,21 @@ export async function snapshot(dir) {
 }
 
 export async function readOrNull(path) {
-  try { return await readFile(path); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  try {
+    return await readFile(path);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
 }
 
 /** Number of log lines that record the given action (the log is append-only). */
 export async function logCount(wiki, action) {
   const raw = await readOrNull(join(wiki, 'log.md'));
-  return raw ? raw.toString('utf8').split('\n').filter((line) => line.includes(action)).length : 0;
+  return raw
+    ? raw
+        .toString('utf8')
+        .split('\n')
+        .filter((line) => line.includes(action)).length
+    : 0;
 }

@@ -12,9 +12,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 export const TARGET = process.env.BA19_TARGET === 'main' ? 'main' : 'worktree';
-export const SERVER_ROOT = TARGET === 'main'
-  ? resolve(process.env.BA19_MAIN_ROOT || join(ROOT, '..', '..', 'BrainAtlas'))
-  : ROOT;
+export const SERVER_ROOT =
+  TARGET === 'main' ? resolve(process.env.BA19_MAIN_ROOT || join(ROOT, '..', '..', 'BrainAtlas')) : ROOT;
 
 // Runtime-built secret-shaped values; they match the product's content rules but are not real credentials.
 export const SECRET_OPENAI = ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-');
@@ -59,23 +58,38 @@ export async function startServer(t, { files = {}, links = {}, wikiLink = null }
     args: [join(SERVER_ROOT, 'packages/mcp/bin/brainatlas-mcp.mjs')],
     cwd: SERVER_ROOT,
     env: {
-      HOME: home, XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'),
-      BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH || ''
+      HOME: home,
+      XDG_CONFIG_HOME: join(home, 'config'),
+      XDG_DATA_HOME: join(home, 'data'),
+      XDG_STATE_HOME: join(home, 'state'),
+      BRAINATLAS_CONFIG: configFile,
+      BRAINATLAS_VAULT: vault,
+      PATH: process.env.PATH || '',
     },
-    stderr: 'pipe'
+    stderr: 'pipe',
   });
   let stderr = '';
-  transport.stderr.on('data', (chunk) => { stderr += chunk; });
+  transport.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
   const client = new Client({ name: 'ba19-blind-acceptance', version: '1.0.0' });
   t.after(async () => {
-    try { await client.close(); } finally { await rm(dir, { recursive: true, force: true }); }
+    try {
+      await client.close();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
   await client.connect(transport);
   return { dir, home, vault, wiki, client, stderr: () => stderr };
 }
 
 export const call = (client, name, args = {}) => client.callTool({ name, arguments: args });
-export const textOf = (r) => (r.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n');
+export const textOf = (r) =>
+  (r.content || [])
+    .filter((x) => x.type === 'text')
+    .map((x) => x.text)
+    .join('\n');
 export function okJson(r) {
   assert.notEqual(r.isError, true, `unexpected refusal: ${textOf(r)}`);
   return JSON.parse(textOf(r));
@@ -109,7 +123,12 @@ export async function readIndex(f) {
 }
 
 export async function readOrNull(path) {
-  try { return await readFile(path); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  try {
+    return await readFile(path);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
 }
 
 /** Lines of `before` and `after` as a single insertion: after === before[0..k) + inserted + before[k..). Returns { at, line }. */
@@ -137,19 +156,35 @@ export function linkDestinations(text) {
     const line = lines[n].replace(/\r$/, '');
     const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
     if (fence) {
-      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && line.trim() === marker[1]) fence = null;
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && line.trim() === marker[1])
+        fence = null;
       continue;
     }
-    if (marker && !(marker[1][0] === '`' && line.slice(marker[0].length).includes('`'))) { fence = marker[1]; continue; }
+    if (marker && !(marker[1][0] === '`' && line.slice(marker[0].length).includes('`'))) {
+      fence = marker[1];
+      continue;
+    }
     for (let i = 0; i < line.length; i++) {
-      if (line[i] === '\\') { i++; continue; }
+      if (line[i] === '\\') {
+        i++;
+        continue;
+      }
       if (line[i] !== '[') continue;
       let depth = 0;
       let close = -1;
       for (let j = i + 1; j < line.length; j++) {
-        if (line[j] === '\\') { j++; continue; }
+        if (line[j] === '\\') {
+          j++;
+          continue;
+        }
         if (line[j] === '[') depth++;
-        else if (line[j] === ']') { if (depth === 0) { close = j; break; } depth--; }
+        else if (line[j] === ']') {
+          if (depth === 0) {
+            close = j;
+            break;
+          }
+          depth--;
+        }
       }
       if (close < 0 || line[close + 1] !== '(') continue;
       const dest = readDestination(line, close + 2);
@@ -163,10 +198,23 @@ function readDestination(line, start) {
   let s = '';
   for (let k = start; k < line.length; k++) {
     const c = line[k];
-    if (c === '\\' && k + 1 < line.length && /[!-/:-@[-`{-~]/.test(line[k + 1])) { s += line[k + 1]; k++; continue; }
+    if (c === '\\' && k + 1 < line.length && /[!-/:-@[-`{-~]/.test(line[k + 1])) {
+      s += line[k + 1];
+      k++;
+      continue;
+    }
     if (/\s/.test(c)) return null;
-    if (c === '(') { depth++; s += c; continue; }
-    if (c === ')') { if (depth === 0) return s; depth--; s += c; continue; }
+    if (c === '(') {
+      depth++;
+      s += c;
+      continue;
+    }
+    if (c === ')') {
+      if (depth === 0) return s;
+      depth--;
+      s += c;
+      continue;
+    }
     s += c;
   }
   return null;

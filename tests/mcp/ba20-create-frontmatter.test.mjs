@@ -32,12 +32,17 @@ async function fixture(t, { files = {} } = {}) {
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
   const transport = new StdioClientTransport({
-    command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe'
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
   });
   const client = new Client({ name: 'ba20-cfm-test', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   return { wiki, client };
 }
 
@@ -54,7 +59,7 @@ test('BA20-CFM1: create writes the content frontmatter as page frontmatter, not 
   await ok(f.client, 'wiki_create_entity', { name: 'Kısa Özet', content: CONTENT });
   const written = await readFile(resolve(f.wiki, 'entities/kisa-ozet.md'), 'utf8');
   assert.match(written, /^summary: Düz özet$/m);
-  assert.match(written, /^tags:\n  - alfa$/m);
+  assert.match(written, /^tags:\n {2}- alfa$/m);
   assert.match(written, /^title: Kısa Özet$/m, 'the title is the create name');
   assert.equal(written.split('\n---\n').length, 2, 'exactly one frontmatter block');
   assert.ok(written.endsWith('Gövde.\n'));
@@ -69,7 +74,10 @@ test('BA20-CFM2: the create line for a page with summary and tags equals the wik
   const fromUpdate = entryLines(await readFile(resolve(scanned.wiki, 'index.md'), 'utf8'));
   assert.equal(fromUpdate.length, 1);
   assert.deepEqual(fromCreate, fromUpdate);
-  assert.ok(fromCreate[0].includes(' — Düz özet #alfa'), `summary and tag expected, got ${JSON.stringify(fromCreate[0])}`);
+  assert.ok(
+    fromCreate[0].includes(' — Düz özet #alfa'),
+    `summary and tag expected, got ${JSON.stringify(fromCreate[0])}`
+  );
 });
 
 test('BA20-CFM3: create content without frontmatter keeps the body and gets the name as title', async (t) => {
@@ -78,5 +86,7 @@ test('BA20-CFM3: create content without frontmatter keeps the body and gets the 
   const written = await readFile(resolve(f.wiki, 'concepts/duz-kavram.md'), 'utf8');
   assert.match(written, /^title: Düz Kavram$/m);
   assert.ok(written.endsWith('Sadece gövde.\n'));
-  assert.deepEqual(entryLines(await readFile(resolve(f.wiki, 'index.md'), 'utf8')), ['- [Düz Kavram](concepts/duz-kavram.md)']);
+  assert.deepEqual(entryLines(await readFile(resolve(f.wiki, 'index.md'), 'utf8')), [
+    '- [Düz Kavram](concepts/duz-kavram.md)',
+  ]);
 });

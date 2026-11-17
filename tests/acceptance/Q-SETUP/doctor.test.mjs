@@ -47,10 +47,14 @@ async function runDoctor(fixture) {
   const priorExitCode = process.exitCode;
   console.log = (...values) => lines.push(values.join(' '));
   console.error = (...values) => lines.push(values.join(' '));
-  globalThis.fetch = async () => { networkCalls++; throw new Error('doctor must not use network'); };
+  globalThis.fetch = async () => {
+    networkCalls++;
+    throw new Error('doctor must not use network');
+  };
   process.exitCode = 0;
-  try { await main(['doctor', '--json'], fixture.env); }
-  finally {
+  try {
+    await main(['doctor', '--json'], fixture.env);
+  } finally {
     console.log = originalLog;
     console.error = originalError;
     globalThis.fetch = originalFetch;
@@ -60,22 +64,32 @@ async function runDoctor(fixture) {
   return { result: JSON.parse(lines[0]), networkCalls };
 }
 
-test('doctor omits the missing-index warning while semantic is disabled and stays networkless', async t => {
+test('doctor omits the missing-index warning while semantic is disabled and stays networkless', async (t) => {
   const f = await doctorFixture(t, false);
   const { result, networkCalls } = await runDoctor(f);
-  assert.deepEqual(Object.keys(result).sort(), ['checks', 'currentVersion', 'moduleHealth', 'modules', 'ok', 'profile', 'warnings'].sort());
+  assert.deepEqual(
+    Object.keys(result).sort(),
+    ['checks', 'currentVersion', 'moduleHealth', 'modules', 'ok', 'profile', 'warnings'].sort()
+  );
   assert.equal(result.currentVersion, 'doctor-fixture');
   assert.deepEqual(result.checks, { config: true, release: true });
   assert.deepEqual(result.modules, ['semantic']);
-  assert.deepEqual(result.moduleHealth, [{ name: 'semantic', enabled: false, freshness: null }], JSON.stringify(result));
+  assert.deepEqual(
+    result.moduleHealth,
+    [{ name: 'semantic', enabled: false, freshness: null }],
+    JSON.stringify(result)
+  );
   assert.ok(!result.warnings.includes('Semantic index is not available.'));
   assert.equal(networkCalls, 0);
 });
 
-test('doctor keeps the missing-index warning while semantic is enabled and preserves output keys', async t => {
+test('doctor keeps the missing-index warning while semantic is enabled and preserves output keys', async (t) => {
   const f = await doctorFixture(t, true);
   const { result, networkCalls } = await runDoctor(f);
-  assert.deepEqual(Object.keys(result).sort(), ['checks', 'currentVersion', 'moduleHealth', 'modules', 'ok', 'profile', 'warnings'].sort());
+  assert.deepEqual(
+    Object.keys(result).sort(),
+    ['checks', 'currentVersion', 'moduleHealth', 'modules', 'ok', 'profile', 'warnings'].sort()
+  );
   assert.ok(result.warnings.includes('Semantic index is not available.'), JSON.stringify(result));
   assert.deepEqual(result.moduleHealth, [{ name: 'semantic', enabled: true, freshness: null }]);
   assert.equal(networkCalls, 0);

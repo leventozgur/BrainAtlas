@@ -10,7 +10,9 @@ import { performance } from 'node:perf_hooks';
 import { loadRetrieval, NOW } from './support.mjs';
 
 const { createSearcher } = await loadRetrieval();
-const PAGES = 2000, DEPTH = 20, REPS = 3;
+const PAGES = 2000,
+  DEPTH = 20,
+  REPS = 3;
 const dirs = Array.from({ length: DEPTH - 1 }, (_, i) => `n${String(i + 1).padStart(2, '0')}`).join('/');
 const filler = 'The pipeline keeps retry state, rotates keys and records the outcome for review. '.repeat(7);
 
@@ -21,16 +23,24 @@ function makeVault(home) {
   for (let i = 0; i < PAGES; i++) {
     const name = `item-${String(i).padStart(4, '0')}-handler-x-${i % 97}.md`;
     const rel = `${dirs}/${name}`;
-    fs.writeFileSync(path.join(vault, dirs, name), `---\ntitle: Item ${i}\n---\n# Item ${i}\nE_ITEM_${i} lives in src/lib/mod-${i % 50}.mjs at v1.${i % 9}.0. Path ${rel}. ${filler}\n`);
+    fs.writeFileSync(
+      path.join(vault, dirs, name),
+      `---\ntitle: Item ${i}\n---\n# Item ${i}\nE_ITEM_${i} lives in src/lib/mod-${i % 50}.mjs at v1.${i % 9}.0. Path ${rel}. ${filler}\n`
+    );
   }
   return vault;
 }
 
-const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+};
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ba17-bench-'));
 try {
   const vault = makeVault(home);
-  const cold = [], warm = [], sizes = [];
+  const cold = [],
+    warm = [],
+    sizes = [];
   let search1 = null;
   for (let r = 0; r < REPS; r++) {
     const stateDir = path.join(home, `state-${r}`);
@@ -47,12 +57,22 @@ try {
       search1 = { reason: q.reason, top: q.results.length };
     }
   }
-  console.log(JSON.stringify({
-    checkout: process.env.BA17_LABEL ?? 'unlabeled',
-    pages: PAGES, componentsPerPath: DEPTH, reps: REPS,
-    cacheBytesMedian: median(sizes), coldBuildMsMedian: Math.round(median(cold)), warmLoadMsMedian: Math.round(median(warm)),
-    sampleSearch: search1,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        checkout: process.env.BA17_LABEL ?? 'unlabeled',
+        pages: PAGES,
+        componentsPerPath: DEPTH,
+        reps: REPS,
+        cacheBytesMedian: median(sizes),
+        coldBuildMsMedian: Math.round(median(cold)),
+        warmLoadMsMedian: Math.round(median(warm)),
+        sampleSearch: search1,
+      },
+      null,
+      2
+    )
+  );
 } finally {
   fs.rmSync(home, { recursive: true, force: true });
 }

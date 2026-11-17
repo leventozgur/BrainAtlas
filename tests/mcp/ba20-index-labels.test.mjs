@@ -14,13 +14,17 @@ import { defaultConfig } from '../../packages/core/src/config/index.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 // Double-quoted YAML scalar with \u escapes for controls, so line breaks inside a value cannot break the frontmatter.
-const yamlQuote = (value) => `"${value.replace(new RegExp('[\\\\"\\x00-\\x1f\\x7f-\\x9f\u2028\u2029]', 'g'), (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`)}"`;
+const yamlQuote = (value) =>
+  // eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
+  `"${value.replace(new RegExp('[\\\\"\\x00-\\x1f\\x7f-\\x9f\u2028\u2029]', 'g'), (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`)}"`;
 const page = (title, extra = '') => `---\ntype: entity\ntitle: ${yamlQuote(title)}\n${extra}---\nGövde.\n`;
 const hex = (ch) => `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
 // Every C0 control except the line breaks, every C1 control except U+0085 (a line break for Markdown), and DEL.
 const CONTROL_CHARS = [
-  ...Array.from({ length: 0x20 - 0x01 }, (_, i) => String.fromCodePoint(0x01 + i)).filter((ch) => ch !== '\n' && ch !== '\r'),
-  ...Array.from({ length: 0x9f - 0x7f + 1 }, (_, i) => String.fromCodePoint(0x7f + i)).filter((ch) => ch !== '\u0085')
+  ...Array.from({ length: 0x20 - 0x01 }, (_, i) => String.fromCodePoint(0x01 + i)).filter(
+    (ch) => ch !== '\n' && ch !== '\r'
+  ),
+  ...Array.from({ length: 0x9f - 0x7f + 1 }, (_, i) => String.fromCodePoint(0x7f + i)).filter((ch) => ch !== '\u0085'),
 ];
 
 async function fixture(t, { files = {}, index } = {}) {
@@ -41,12 +45,17 @@ async function fixture(t, { files = {}, index } = {}) {
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
   const transport = new StdioClientTransport({
-    command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe'
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
   });
   const client = new Client({ name: 'ba20-labels-test', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   const indexPath = resolve(wiki, 'index.md');
   return { client, indexPath, readIndex: () => readFile(indexPath, 'utf8') };
 }
@@ -71,7 +80,11 @@ test('BA20-DEST1: each C0/C1 control character, DEL and a space in a page name i
   }
   assert.equal((await ok(f.client, 'wiki_status')).indexCoveragePct, 100);
   for (let run = 2; run <= 3; run++) {
-    assert.deepEqual(await ok(f.client, 'wiki_update_index'), { indexed: names.length, added: 0, removed: 0 }, `run ${run}`);
+    assert.deepEqual(
+      await ok(f.client, 'wiki_update_index'),
+      { indexed: names.length, added: 0, removed: 0 },
+      `run ${run}`
+    );
     assert.equal(await f.readIndex(), first, `run ${run} keeps the bytes`);
   }
 });
@@ -98,7 +111,9 @@ test('BA20-LABEL1: a title with CR, LF, U+0085, U+2028, U+2029 and C0/C1 control
 });
 
 test('BA20-LABEL2: a summary with U+0085 and U+2029 stays on the entry line with single spaces', async (t) => {
-  const f = await fixture(t, { files: { 'entities/summary.md': page('Özet Sayfa', 'summary: "Özet\\u0085satır\\u2029devam"\n') } });
+  const f = await fixture(t, {
+    files: { 'entities/summary.md': page('Özet Sayfa', 'summary: "Özet\\u0085satır\\u2029devam"\n') },
+  });
   await ok(f.client, 'wiki_update_index');
   const text = await f.readIndex();
   assert.equal(text.match(/[\u0080-\u009f\u2028\u2029\r]/g), null, 'no line break or control character in the index');
@@ -114,8 +129,14 @@ test('BA20-LABEL3: a title that is empty after cleaning falls back to the file n
 
 test('BA20-LABEL4: wiki_create_entity and wiki_create_concept with line breaks in the name write one clean line each', async (t) => {
   const f = await fixture(t, {});
-  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Yeni\u2028Ad\u0001', content: 'Gövde.\n' }), { path: 'wiki/entities/yeni-ad.md', created: true });
-  assert.deepEqual(await ok(f.client, 'wiki_create_concept', { name: 'Kav\u0085ram\r\nSozu', content: 'Gövde.\n' }), { path: 'wiki/concepts/kav-ram-sozu.md', created: true });
+  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Yeni\u2028Ad\u0001', content: 'Gövde.\n' }), {
+    path: 'wiki/entities/yeni-ad.md',
+    created: true,
+  });
+  assert.deepEqual(await ok(f.client, 'wiki_create_concept', { name: 'Kav\u0085ram\r\nSozu', content: 'Gövde.\n' }), {
+    path: 'wiki/concepts/kav-ram-sozu.md',
+    created: true,
+  });
   const text = await f.readIndex();
   assert.equal(text.match(/[\u0080-\u009f\u2028\u2029\r]/g), null, 'no line break or control character in the index');
   assert.equal(text.split('\n').filter((line) => line.includes('entities/yeni-ad.md')).length, 1);

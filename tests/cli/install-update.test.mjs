@@ -3,7 +3,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { copyFile, lstat, mkdir, mkdtemp, readFile, readlink, realpath, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  realpath,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { buildRelease } from '../../release/build-release.mjs';
@@ -20,19 +32,29 @@ async function treeSnapshot(root) {
   const result = [];
   async function walk(directory) {
     for (const name of (await readdir(directory)).sort()) {
-      const file = join(directory, name); const stat = await lstat(file); const path = file.slice(root.length + 1);
+      const file = join(directory, name);
+      const stat = await lstat(file);
+      const path = file.slice(root.length + 1);
       if (stat.isSymbolicLink()) result.push([path, 'symlink', await readlink(file)]);
-      else if (stat.isDirectory()) { result.push([path, 'directory']); await walk(file); }
-      else result.push([path, 'file', (await readFile(file)).toString('base64'), stat.mode & 0o777]);
+      else if (stat.isDirectory()) {
+        result.push([path, 'directory']);
+        await walk(file);
+      } else result.push([path, 'file', (await readFile(file)).toString('base64'), stat.mode & 0o777]);
     }
   }
-  await walk(root); return result;
+  await walk(root);
+  return result;
 }
 
-test('offline install, update, doctor rollback, rollback and interrupted journal recovery use a fake HOME', async t => {
-  const work = await mkdtemp(join(tmpdir(), 'ba-install-flow-')); t.after(() => rm(work, { recursive: true, force: true }));
-  const home = join(work, "home with ' quote"); const out1 = join(work, 'v1'); const out2 = join(work, 'v2'); const out3 = join(work, 'v3');
-  await mkdir(home); const key = join(work, 'release-key');
+test('offline install, update, doctor rollback, rollback and interrupted journal recovery use a fake HOME', async (t) => {
+  const work = await mkdtemp(join(tmpdir(), 'ba-install-flow-'));
+  t.after(() => rm(work, { recursive: true, force: true }));
+  const home = join(work, "home with ' quote");
+  const out1 = join(work, 'v1');
+  const out2 = join(work, 'v2');
+  const out3 = join(work, 'v3');
+  await mkdir(home);
+  const key = join(work, 'release-key');
   execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
   const signers = join(work, 'allowed_signers');
   await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
@@ -40,21 +62,31 @@ test('offline install, update, doctor rollback, rollback and interrupted journal
   const v2 = await signedLite(out2, '0.1.0-test.2', key);
   const v3 = await signedLite(out3, '0.1.0-test.3', key);
   const env = {
-    ...cleanEnv(), HOME: home,
-    XDG_DATA_HOME: join(home, 'data'), XDG_CONFIG_HOME: join(home, 'config'), XDG_STATE_HOME: join(home, 'state'),
-    BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1', BRAINATLAS_ALLOWED_SIGNERS: signers
+    ...cleanEnv(),
+    HOME: home,
+    XDG_DATA_HOME: join(home, 'data'),
+    XDG_CONFIG_HOME: join(home, 'config'),
+    XDG_STATE_HOME: join(home, 'state'),
+    BRAINATLAS_PLATFORM: 'linux',
+    BRAINATLAS_OFFLINE: '1',
+    BRAINATLAS_ALLOWED_SIGNERS: signers,
   };
-  const install = (...args) => spawnSync('sh', [resolve('install.sh'), ...args], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
+  const install = (...args) =>
+    spawnSync('sh', [resolve('install.sh'), ...args], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
   const cliPath = resolve('packages/cli/bin/brainatlas.mjs');
-  const run = (...args) => spawnSync(process.execPath, [cliPath, ...args], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
-  const data = join(home, 'data', 'brainatlas'); const current = join(data, 'current');
+  const run = (...args) =>
+    spawnSync(process.execPath, [cliPath, ...args], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
+  const data = join(home, 'data', 'brainatlas');
+  const current = join(data, 'current');
 
   const installed = install('--from', v1, '--allowed-signers', signers, '--prefix-home', home, '--yes');
   assert.equal(installed.status, 0, installed.stderr);
   assert.equal(await readlink(current), 'releases/0.1.0-test.1');
   assert.equal(await readlink(join(home, '.local/bin/brainatlas')), join(data, 'bin/brainatlas'));
   assert.equal(await readlink(join(home, '.local/bin/ba')), join(data, 'bin/brainatlas'));
-  const status = run('status', '--json'); assert.equal(status.status, 0); assert.equal(JSON.parse(status.stdout).checks.config, true);
+  const status = run('status', '--json');
+  assert.equal(status.status, 0);
+  assert.equal(JSON.parse(status.stdout).checks.config, true);
   const metadataOffline = run('update', '--metadata-only', '--json');
   assert.equal(metadataOffline.status, 0, metadataOffline.stderr);
   assert.deepEqual(JSON.parse(metadataOffline.stdout), { status: 'unknown', reason: 'offline' });
@@ -63,70 +95,127 @@ test('offline install, update, doctor rollback, rollback and interrupted journal
   assert.equal(JSON.parse(metadataArchive.stdout).status, 'available');
   assert.equal(JSON.parse(metadataArchive.stdout).currentVersion, '0.1.0-test.1');
   assert.equal(JSON.parse(metadataArchive.stdout).offeredVersion, '0.1.0-test.2');
-  const updated = run('update', '--from', v2, '--json'); assert.equal(updated.status, 0, updated.stderr);
+  const updated = run('update', '--from', v2, '--json');
+  assert.equal(updated.status, 0, updated.stderr);
   assert.equal(await readlink(current), 'releases/0.1.0-test.2');
-  const failed = spawnSync(process.execPath, [cliPath, 'update', '--from', v3, '--json'], { cwd: resolve('.'), env: cleanEnv({ ...env, BRAINATLAS_TEST_DOCTOR_FAIL: '1' }), encoding: 'utf8', shell: false });
-  assert.equal(failed.status, 1); assert.match(failed.stderr, /E_DOCTOR_FAILED/);
+  const failed = spawnSync(process.execPath, [cliPath, 'update', '--from', v3, '--json'], {
+    cwd: resolve('.'),
+    env: cleanEnv({ ...env, BRAINATLAS_TEST_DOCTOR_FAIL: '1' }),
+    encoding: 'utf8',
+    shell: false,
+  });
+  assert.equal(failed.status, 1);
+  assert.match(failed.stderr, /E_DOCTOR_FAILED/);
   assert.equal(await readlink(current), 'releases/0.1.0-test.2');
-  const rolledBack = run('rollback', '--json'); assert.equal(rolledBack.status, 0, rolledBack.stderr);
+  const rolledBack = run('rollback', '--json');
+  assert.equal(rolledBack.status, 0, rolledBack.stderr);
   assert.equal(await readlink(current), 'releases/0.1.0-test.1');
 
-  await rm(current); await symlink('releases/0.1.0-test.3', current);
+  await rm(current);
+  await symlink('releases/0.1.0-test.3', current);
   const journalFile = join(home, 'state', 'brainatlas', 'update-journal.json');
   await mkdir(join(home, 'state', 'brainatlas'), { recursive: true });
   const journalSecret = ['ba', 'cli', randomBytes(24).toString('hex')].join('-');
-  await writeFile(journalFile, `${JSON.stringify({ schemaVersion: 1, kind: 'update', phase: 'switching', version: '0.1.0-test.3', target: 'releases/0.1.0-test.3', previous: 'releases/0.1.0-test.1', staging: null, path: join(home, 'private', 'page.md'), token: journalSecret })}\n`);
+  await writeFile(
+    journalFile,
+    `${JSON.stringify({ schemaVersion: 1, kind: 'update', phase: 'switching', version: '0.1.0-test.3', target: 'releases/0.1.0-test.3', previous: 'releases/0.1.0-test.1', staging: null, path: join(home, 'private', 'page.md'), token: journalSecret })}\n`
+  );
   const recoveryPlan = run('recover', '--plan', '--json');
-  assert.equal(recoveryPlan.status, 0, recoveryPlan.stderr); assert.ok(!recoveryPlan.stdout.includes(journalSecret));
-  const recoveryReport = JSON.parse(recoveryPlan.stdout); assert.equal(recoveryReport.journal.token, '[REDACTED]');
-  assert.ok(recoveryPlan.stdout.includes('~/private/page.md')); assert.ok(!recoveryPlan.stdout.includes(home));
-  const recovered = run('recover', '--json'); assert.equal(recovered.status, 0, recovered.stderr);
+  assert.equal(recoveryPlan.status, 0, recoveryPlan.stderr);
+  assert.ok(!recoveryPlan.stdout.includes(journalSecret));
+  const recoveryReport = JSON.parse(recoveryPlan.stdout);
+  assert.equal(recoveryReport.journal.token, '[REDACTED]');
+  assert.ok(recoveryPlan.stdout.includes('~/private/page.md'));
+  assert.ok(!recoveryPlan.stdout.includes(home));
+  const recovered = run('recover', '--json');
+  assert.equal(recovered.status, 0, recovered.stderr);
   assert.equal(JSON.parse(recovered.stdout).action, 'restored-previous-release');
   assert.equal(await readlink(current), 'releases/0.1.0-test.1');
   await assert.rejects(readFile(journalFile), { code: 'ENOENT' });
 });
 
-test('install manifest records resolved paths under a symlinked ~/.local and uninstall removes them', async t => {
-  const work = await mkdtemp(join(tmpdir(), 'ba-install-symlink-home-')); t.after(() => rm(work, { recursive: true, force: true }));
-  const home = join(work, 'home'); const localTarget = join(work, 'local-target'); const out = join(work, 'release');
-  await mkdir(home); await mkdir(localTarget); await writeFile(join(localTarget, 'sentinel'), 'keep\n');
+test('install manifest records resolved paths under a symlinked ~/.local and uninstall removes them', async (t) => {
+  const work = await mkdtemp(join(tmpdir(), 'ba-install-symlink-home-'));
+  t.after(() => rm(work, { recursive: true, force: true }));
+  const home = join(work, 'home');
+  const localTarget = join(work, 'local-target');
+  const out = join(work, 'release');
+  await mkdir(home);
+  await mkdir(localTarget);
+  await writeFile(join(localTarget, 'sentinel'), 'keep\n');
   await symlink(localTarget, join(home, '.local'));
   const resolvedLocalTarget = await realpath(localTarget);
-  const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
-  const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
+  const key = join(work, 'release-key');
+  execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
+  const signers = join(work, 'allowed_signers');
+  await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
   const archive = await signedLite(out, '0.1.0-symlink.1', key);
-  const env = cleanEnv({ HOME: home, BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1', BRAINATLAS_ALLOWED_SIGNERS: signers });
-  const install = spawnSync('sh', [resolve('install.sh'), '--from', archive, '--allowed-signers', signers, '--prefix-home', home, '--yes'], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
+  const env = cleanEnv({
+    HOME: home,
+    BRAINATLAS_PLATFORM: 'linux',
+    BRAINATLAS_OFFLINE: '1',
+    BRAINATLAS_ALLOWED_SIGNERS: signers,
+  });
+  const install = spawnSync(
+    'sh',
+    [resolve('install.sh'), '--from', archive, '--allowed-signers', signers, '--prefix-home', home, '--yes'],
+    { cwd: resolve('.'), env, encoding: 'utf8', shell: false }
+  );
   assert.equal(install.status, 0, install.stderr);
   const data = join(resolvedLocalTarget, 'share', 'brainatlas');
   const manifestPath = join(data, 'install-manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-  assert.ok(manifest.files.some(item => item.path === join(resolvedLocalTarget, 'bin', 'brainatlas')));
-  assert.ok(manifest.files.some(item => item.path.startsWith(`${data}${sep}`)));
-  assert.ok(manifest.files.every(item => !item.path.startsWith(join(home, '.local'))));
+  assert.ok(manifest.files.some((item) => item.path === join(resolvedLocalTarget, 'bin', 'brainatlas')));
+  assert.ok(manifest.files.some((item) => item.path.startsWith(`${data}${sep}`)));
+  assert.ok(manifest.files.every((item) => !item.path.startsWith(join(home, '.local'))));
 
   const cli = join(data, 'current', 'packages', 'cli', 'bin', 'brainatlas.mjs');
-  const uninstalled = spawnSync(process.execPath, [cli, 'uninstall', '--json'], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
+  const uninstalled = spawnSync(process.execPath, [cli, 'uninstall', '--json'], {
+    cwd: resolve('.'),
+    env,
+    encoding: 'utf8',
+    shell: false,
+  });
   assert.equal(uninstalled.status, 0, uninstalled.stderr);
   await assert.rejects(lstat(data), { code: 'ENOENT' });
   await assert.rejects(lstat(join(localTarget, 'bin')), { code: 'ENOENT' });
   assert.equal(await readFile(join(localTarget, 'sentinel'), 'utf8'), 'keep\n');
 });
 
-test('uninstall JSON error envelope lists the changed external managed file (home-relative)', async t => {
-  const work = await mkdtemp(join(tmpdir(), 'ba-uninstall-conflict-')); t.after(() => rm(work, { recursive: true, force: true }));
-  const home = join(work, 'home'); const out = join(work, 'release'); await mkdir(home);
-  const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
-  const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
+test('uninstall JSON error envelope lists the changed external managed file (home-relative)', async (t) => {
+  const work = await mkdtemp(join(tmpdir(), 'ba-uninstall-conflict-'));
+  t.after(() => rm(work, { recursive: true, force: true }));
+  const home = join(work, 'home');
+  const out = join(work, 'release');
+  await mkdir(home);
+  const key = join(work, 'release-key');
+  execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
+  const signers = join(work, 'allowed_signers');
+  await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
   const archive = await signedLite(out, '0.1.0-conflict.1', key);
-  const env = cleanEnv({ HOME: home, BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1', BRAINATLAS_ALLOWED_SIGNERS: signers });
-  const installed = spawnSync('sh', [resolve('install.sh'), '--from', archive, '--allowed-signers', signers, '--prefix-home', home, '--yes'], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
+  const env = cleanEnv({
+    HOME: home,
+    BRAINATLAS_PLATFORM: 'linux',
+    BRAINATLAS_OFFLINE: '1',
+    BRAINATLAS_ALLOWED_SIGNERS: signers,
+  });
+  const installed = spawnSync(
+    'sh',
+    [resolve('install.sh'), '--from', archive, '--allowed-signers', signers, '--prefix-home', home, '--yes'],
+    { cwd: resolve('.'), env, encoding: 'utf8', shell: false }
+  );
   assert.equal(installed.status, 0, installed.stderr);
   const cli = join(home, '.local', 'share', 'brainatlas', 'current', 'packages', 'cli', 'bin', 'brainatlas.mjs');
   const changedFile = join(home, '.local', 'bin', 'ba');
   const resolvedChangedFile = join(await realpath(join(home, '.local', 'bin')), 'ba');
-  await rm(changedFile); await writeFile(changedFile, 'user-owned replacement\n');
-  const uninstalled = spawnSync(process.execPath, [cli, 'uninstall', '--json'], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
+  await rm(changedFile);
+  await writeFile(changedFile, 'user-owned replacement\n');
+  const uninstalled = spawnSync(process.execPath, [cli, 'uninstall', '--json'], {
+    cwd: resolve('.'),
+    env,
+    encoding: 'utf8',
+    shell: false,
+  });
   assert.equal(uninstalled.status, 1);
   const response = JSON.parse(uninstalled.stdout.trim());
   assert.deepEqual(Object.keys(response), ['ok', 'error']);
@@ -135,24 +224,43 @@ test('uninstall JSON error envelope lists the changed external managed file (hom
   assert.equal(response.error.message, 'brainatlas command failed.');
   // PM: conflicts are listed home-relative so the user can find the changed file; no absolute HOME path on stdout.
   assert.deepEqual(Object.keys(response.error).sort(), ['code', 'conflicts', 'message']);
-  assert.equal(response.error.conflicts.length, 1); assert.ok(!response.error.conflicts[0].startsWith('/') || !resolvedChangedFile.startsWith(process.env.HOME ?? '\0'));
+  assert.equal(response.error.conflicts.length, 1);
+  assert.ok(!response.error.conflicts[0].startsWith('/') || !resolvedChangedFile.startsWith(process.env.HOME ?? '\0'));
   assert.ok(response.error.conflicts[0].endsWith(resolvedChangedFile.split('/').slice(-2).join('/')));
   assert.match(uninstalled.stderr, /E_UNINSTALL_CONFLICT/);
   assert.equal(await readFile(changedFile, 'utf8'), 'user-owned replacement\n');
 });
 
-test('install, init, update and uninstall support separate XDG roots outside HOME', async t => {
-  const work = await mkdtemp(join(tmpdir(), 'ba-xdg-external-')); t.after(() => rm(work, { recursive: true, force: true }));
-  const home = join(work, 'home'); const xdgData = join(work, 'xdg-data'); const xdgConfig = join(work, 'xdg-config'); const xdgState = join(work, 'xdg-state');
-  const output1 = join(work, 'release-1'); const output2 = join(work, 'release-2');
+test('install, init, update and uninstall support separate XDG roots outside HOME', async (t) => {
+  const work = await mkdtemp(join(tmpdir(), 'ba-xdg-external-'));
+  t.after(() => rm(work, { recursive: true, force: true }));
+  const home = join(work, 'home');
+  const xdgData = join(work, 'xdg-data');
+  const xdgConfig = join(work, 'xdg-config');
+  const xdgState = join(work, 'xdg-state');
+  const output1 = join(work, 'release-1');
+  const output2 = join(work, 'release-2');
   await mkdir(home);
-  const key = join(work, 'release-key'); execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
-  const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
-  const v1 = await signedLite(output1, '0.1.0-xdg.1', key); const v2 = await signedLite(output2, '0.1.0-xdg.2', key);
-  const env = cleanEnv({ HOME: home, XDG_DATA_HOME: xdgData, XDG_CONFIG_HOME: xdgConfig, XDG_STATE_HOME: xdgState, BRAINATLAS_PLATFORM: 'linux', BRAINATLAS_OFFLINE: '1', BRAINATLAS_ALLOWED_SIGNERS: signers });
-  const install = (...args) => spawnSync('sh', [resolve('install.sh'), ...args], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
+  const key = join(work, 'release-key');
+  execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
+  const signers = join(work, 'allowed_signers');
+  await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
+  const v1 = await signedLite(output1, '0.1.0-xdg.1', key);
+  const v2 = await signedLite(output2, '0.1.0-xdg.2', key);
+  const env = cleanEnv({
+    HOME: home,
+    XDG_DATA_HOME: xdgData,
+    XDG_CONFIG_HOME: xdgConfig,
+    XDG_STATE_HOME: xdgState,
+    BRAINATLAS_PLATFORM: 'linux',
+    BRAINATLAS_OFFLINE: '1',
+    BRAINATLAS_ALLOWED_SIGNERS: signers,
+  });
+  const install = (...args) =>
+    spawnSync('sh', [resolve('install.sh'), ...args], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
   const cli = join(xdgData, 'brainatlas', 'current', 'packages', 'cli', 'bin', 'brainatlas.mjs');
-  const run = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
+  const run = (...args) =>
+    spawnSync(process.execPath, [cli, ...args], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
 
   const installed = install('--from', v1, '--allowed-signers', signers, '--yes');
   assert.equal(installed.status, 0, installed.stderr);
@@ -160,7 +268,12 @@ test('install, init, update and uninstall support separate XDG roots outside HOM
   const initialized = run('init', '--yes', '--vault', join(home, 'vault'), '--json');
   assert.equal(initialized.status, 0, initialized.stderr);
   assert.ok(JSON.parse(initialized.stdout).vault.created.includes('wiki/index.md'));
-  assert.equal(await readFile(join(xdgConfig, 'brainatlas', 'config.json'), 'utf8').then(JSON.parse).then(config => config.vault.path), join(home, 'vault'));
+  assert.equal(
+    await readFile(join(xdgConfig, 'brainatlas', 'config.json'), 'utf8')
+      .then(JSON.parse)
+      .then((config) => config.vault.path),
+    join(home, 'vault')
+  );
   const homeAfterInit = (await treeSnapshot(home)).filter(([path]) => path !== '.local' && !path.startsWith('.local/'));
   const updated = run('update', '--from', v2, '--json');
   assert.equal(updated.status, 0, updated.stderr);
@@ -171,25 +284,44 @@ test('install, init, update and uninstall support separate XDG roots outside HOM
   for (const directory of [xdgData, xdgConfig, xdgState]) await assert.rejects(lstat(directory), { code: 'ENOENT' });
 });
 
-test('install rejects a wrong checksum and an invalid signature before creating a current release', async t => {
-  const work = await mkdtemp(join(tmpdir(), 'ba-install-reject-')); t.after(() => rm(work, { recursive: true, force: true }));
-  const out = join(work, 'release'); const key = join(work, 'release-key');
+test('install rejects a wrong checksum and an invalid signature before creating a current release', async (t) => {
+  const work = await mkdtemp(join(tmpdir(), 'ba-install-reject-'));
+  t.after(() => rm(work, { recursive: true, force: true }));
+  const out = join(work, 'release');
+  const key = join(work, 'release-key');
   execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], { env: cleanEnv(), shell: false });
-  const signers = join(work, 'allowed_signers'); await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
+  const signers = join(work, 'allowed_signers');
+  await writeFile(signers, `brainatlas-release ${(await readFile(`${key}.pub`, 'utf8')).trim()}\n`);
   const archive = await signedLite(out, '0.1.0-test.1', key);
-  const env = cleanEnv({ HOME: join(work, 'home'), XDG_DATA_HOME: join(work, 'home/data'), BRAINATLAS_PLATFORM: 'linux' });
-  const runInstall = file => spawnSync('sh', [resolve('install.sh'), '--from', file, '--allowed-signers', signers, '--prefix-home', env.HOME, '--yes'], { cwd: resolve('.'), env, encoding: 'utf8', shell: false });
-  const badHash = join(work, 'bad-hash'); await mkdir(badHash);
+  const env = cleanEnv({
+    HOME: join(work, 'home'),
+    XDG_DATA_HOME: join(work, 'home/data'),
+    BRAINATLAS_PLATFORM: 'linux',
+  });
+  const runInstall = (file) =>
+    spawnSync(
+      'sh',
+      [resolve('install.sh'), '--from', file, '--allowed-signers', signers, '--prefix-home', env.HOME, '--yes'],
+      { cwd: resolve('.'), env, encoding: 'utf8', shell: false }
+    );
+  const badHash = join(work, 'bad-hash');
+  await mkdir(badHash);
   await copyFile(archive, join(badHash, archive.split('/').at(-1)));
-  await writeFile(join(badHash, 'SHA256SUMS'), `0000000000000000000000000000000000000000000000000000000000000000  ${archive.split('/').at(-1)}\n`);
+  await writeFile(
+    join(badHash, 'SHA256SUMS'),
+    `0000000000000000000000000000000000000000000000000000000000000000  ${archive.split('/').at(-1)}\n`
+  );
   const hashResult = runInstall(join(badHash, archive.split('/').at(-1)));
-  assert.equal(hashResult.status, 1); assert.match(hashResult.stderr, /E_SHA_MISMATCH/);
+  assert.equal(hashResult.status, 1);
+  assert.match(hashResult.stderr, /E_SHA_MISMATCH/);
   assert.equal(await readlink(join(env.HOME, 'data', 'brainatlas', 'current')).catch(() => null), null);
 
-  const badSignature = join(work, 'bad-signature'); await mkdir(badSignature);
+  const badSignature = join(work, 'bad-signature');
+  await mkdir(badSignature);
   await copyFile(archive, join(badSignature, archive.split('/').at(-1)));
   await copyFile(join(out, 'SHA256SUMS'), join(badSignature, 'SHA256SUMS'));
   await writeFile(join(badSignature, 'SHA256SUMS.sig'), 'invalid signature\n');
   const signatureResult = runInstall(join(badSignature, archive.split('/').at(-1)));
-  assert.equal(signatureResult.status, 1); assert.match(signatureResult.stderr, /E_SIGNATURE_INVALID/);
+  assert.equal(signatureResult.status, 1);
+  assert.match(signatureResult.stderr, /E_SIGNATURE_INVALID/);
 });

@@ -23,18 +23,36 @@ const SETS = [
 ];
 const sha = (s) => createHash('sha256').update(s, 'utf8').digest('hex');
 const indexes = new Map();
-const indexFor = (corpus) => { if (!indexes.has(corpus)) indexes.set(corpus, retrieval.buildIndex(retrieval.loadPages(path.join(repo, corpus)), { now })); return indexes.get(corpus); };
-const out = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), asOf: now.toISOString(), sets: {} };
+const indexFor = (corpus) => {
+  if (!indexes.has(corpus))
+    indexes.set(corpus, retrieval.buildIndex(retrieval.loadPages(path.join(repo, corpus)), { now }));
+  return indexes.get(corpus);
+};
+const out = {
+  commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),
+  asOf: now.toISOString(),
+  sets: {},
+};
 for (const [key, corpus, casesFile] of SETS) {
   const cases = JSON.parse(fs.readFileSync(path.join(repo, casesFile), 'utf8'));
   const index = indexFor(corpus);
-  out.sets[key] = cases.map(c => {
+  out.sets[key] = cases.map((c) => {
     const runs = {};
     for (const threshold of [0, 0.35]) {
       const r = retrieval.search(index, c.query, { limit: 10, abstainThreshold: threshold, asOf: now });
       runs[String(threshold)] = {
-        abstained: r.abstained, reason: r.reason, truncated: r.truncated,
-        results: r.results.map(x => ({ path: x.path, score: x.score, heading: x.heading, anchor: x.anchor, headingPath: x.headingPath, snippetSha: sha(x.snippet), supersedes: x.supersedes ?? null })),
+        abstained: r.abstained,
+        reason: r.reason,
+        truncated: r.truncated,
+        results: r.results.map((x) => ({
+          path: x.path,
+          score: x.score,
+          heading: x.heading,
+          anchor: x.anchor,
+          headingPath: x.headingPath,
+          snippetSha: sha(x.snippet),
+          supersedes: x.supersedes ?? null,
+        })),
       };
     }
     return { id: c.id, query: c.query, runs };

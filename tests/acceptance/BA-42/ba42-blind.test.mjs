@@ -14,11 +14,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = resolve(HERE, '../../..');
-const MAIN = dirname(resolve(DEV, execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: DEV, encoding: 'utf8' }).trim()));
+const MAIN = dirname(
+  resolve(DEV, execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: DEV, encoding: 'utf8' }).trim())
+);
 const FIX = join(HERE, 'fixtures');
 // Scratch lives outside the repository (os.tmpdir) and is removed after the file's tests, so no run leaves files behind.
 const SCRATCH = await mkdtemp(join(tmpdir(), 'ba42-blind-'));
-after(async () => { await rm(SCRATCH, { recursive: true, force: true }); });
+after(async () => {
+  await rm(SCRATCH, { recursive: true, force: true });
+});
 const PINNED_DIGEST = '1e991a2a83de977816f17798daac21a95058ecc061f404b5259e28d4d304454f';
 const VAULT = { main: join(FIX, 'vault-main'), demo: join(FIX, 'vault-demo'), edge: join(FIX, 'vault-edge') };
 const REPO = join(FIX, 'repo-main');
@@ -26,7 +30,16 @@ const CLI = { dev: join(DEV, 'packages/cli/bin/brainatlas.mjs'), main: join(MAIN
 const HOME_DIR = join(SCRATCH, 'home');
 const SHIM_DIR = join(SCRATCH, 'shim');
 const GIT_LOG = join(SCRATCH, 'git-calls.log');
-const KINDS = ['stale', 'superseded-broken', 'broken-link', 'orphan', 'index-missing', 'index-stale', 'oversized', 'update-sprawl'];
+const KINDS = [
+  'stale',
+  'superseded-broken',
+  'broken-link',
+  'orphan',
+  'index-missing',
+  'index-stale',
+  'oversized',
+  'update-sprawl',
+];
 const LABELS = JSON.parse(await readFile(join(FIX, 'labels.json'), 'utf8'));
 const RESULTS = {};
 
@@ -34,12 +47,16 @@ const RESULTS = {};
 await mkdir(HOME_DIR, { recursive: true });
 await mkdir(SHIM_DIR, { recursive: true });
 const REAL_GIT = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
-await writeFile(join(SHIM_DIR, 'git'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${GIT_LOG}'\nexec '${REAL_GIT}' "$@"\n`, { mode: 0o755 });
+await writeFile(join(SHIM_DIR, 'git'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${GIT_LOG}'\nexec '${REAL_GIT}' "$@"\n`, {
+  mode: 0o755,
+});
 
 // ---- Helpers.
 function runCli(which, args, { cwd = DEV } = {}) {
   const r = spawnSync(process.execPath, [CLI[which], 'maintain', ...args], {
-    cwd, encoding: 'utf8', timeout: 120000,
+    cwd,
+    encoding: 'utf8',
+    timeout: 120000,
     env: { ...process.env, HOME: HOME_DIR, PATH: `${SHIM_DIR}:${process.env.PATH}`, NO_COLOR: '1' },
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
@@ -48,7 +65,10 @@ function runJson(which, args, opts) {
   const r = runCli(which, ['--json', ...args], opts);
   return { ...r, body: JSON.parse(r.stdout) };
 }
-const withoutDuration = (body) => { const { durationMs, ...rest } = body; return rest; };
+const withoutDuration = (body) => {
+  const { durationMs, ...rest } = body;
+  return rest;
+};
 const humanNormal = (text) => text.replace(/, \d+ ms\n/u, ', N ms\n');
 const gitLog = async () => (existsSync(GIT_LOG) ? readFile(GIT_LOG, 'utf8') : '');
 
@@ -62,7 +82,15 @@ async function digestOf(root) {
       if (rel === 'MANIFEST.json') continue;
       if (info.isSymbolicLink()) entries.push({ path: rel, type: 'symlink', target: await readlink(abs) });
       else if (info.isDirectory()) await walk(abs);
-      else entries.push({ path: rel, type: 'file', sha256: createHash('sha256').update(await readFile(abs)).digest('hex'), size: info.size });
+      else
+        entries.push({
+          path: rel,
+          type: 'file',
+          sha256: createHash('sha256')
+            .update(await readFile(abs))
+            .digest('hex'),
+          size: info.size,
+        });
     }
   }
   await walk(root);
@@ -79,9 +107,22 @@ async function snapshot(root) {
       const abs = join(dir, name);
       const info = await lstat(abs);
       const rel = relative(root, abs);
-      if (info.isSymbolicLink()) out.push({ rel, type: 'link', target: await readlink(abs), mtimeMs: info.mtimeMs, ino: info.ino });
-      else if (info.isDirectory()) { out.push({ rel, type: 'dir', mtimeMs: info.mtimeMs, ino: info.ino }); await walk(abs); }
-      else out.push({ rel, type: 'file', size: info.size, mtimeMs: info.mtimeMs, ino: info.ino, sha256: createHash('sha256').update(await readFile(abs)).digest('hex') });
+      if (info.isSymbolicLink())
+        out.push({ rel, type: 'link', target: await readlink(abs), mtimeMs: info.mtimeMs, ino: info.ino });
+      else if (info.isDirectory()) {
+        out.push({ rel, type: 'dir', mtimeMs: info.mtimeMs, ino: info.ino });
+        await walk(abs);
+      } else
+        out.push({
+          rel,
+          type: 'file',
+          size: info.size,
+          mtimeMs: info.mtimeMs,
+          ino: info.ino,
+          sha256: createHash('sha256')
+            .update(await readFile(abs))
+            .digest('hex'),
+        });
     }
   }
   await walk(root);
@@ -113,13 +154,15 @@ function multisetOf(pairs) {
 const actualOf = (findings) => multisetOf(findings.map((f) => [f.path, canon(f)]).filter(([, k]) => k !== null));
 const expectedOf = (items) => multisetOf(items.filter((i) => i.expect).map((i) => [i.page, i.expect]));
 const countOf = (map, page, key) => map.get(page)?.get(key) ?? 0;
-const pageEntries = (map, page) => [...(map.get(page) ?? new Map()).entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+const pageEntries = (map, page) =>
+  [...(map.get(page) ?? new Map()).entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 const unexpectedOf = (actual, expected) => {
   const out = [];
-  for (const [page, m] of actual) for (const [key, n] of m) {
-    const extra = n - countOf(expected, page, key);
-    if (extra > 0) out.push({ page, key, extra });
-  }
+  for (const [page, m] of actual)
+    for (const [key, n] of m) {
+      const extra = n - countOf(expected, page, key);
+      if (extra > 0) out.push({ page, key, extra });
+    }
   return out;
 };
 const nonStale = (findings) => findings.filter((f) => f.kind !== 'stale-source' && f.kind !== 'stale-symbol');
@@ -134,14 +177,22 @@ test('fixtures are frozen: manifest digest equals the pinned value and every ent
   assert.deepEqual(now.entries, manifest.entries);
   const regular = (await digestOf(REPO)).entries.filter((e) => e.type === 'file');
   assert.ok(regular.length >= 20, `repository has ${regular.length} regular files`);
-  assert.ok(regular.some((e) => e.path.split('/').length >= 3), 'repository has nested subdirectories');
-  const pages = (await readdir(join(FIX, 'vault-main', 'wiki'), { recursive: true })).filter((n) => n.endsWith('.md') && !n.endsWith('index.md') && !n.endsWith('log.md'));
+  assert.ok(
+    regular.some((e) => e.path.split('/').length >= 3),
+    'repository has nested subdirectories'
+  );
+  const pages = (await readdir(join(FIX, 'vault-main', 'wiki'), { recursive: true })).filter(
+    (n) => n.endsWith('.md') && !n.endsWith('index.md') && !n.endsWith('log.md')
+  );
   assert.ok(pages.length >= 60, `main vault has ${pages.length} content pages`);
 });
 
 test('instrument self-check: the git shim logs a git call made from a child process', async () => {
   await rm(GIT_LOG, { force: true });
-  spawnSync('git', ['--version'], { encoding: 'utf8', env: { ...process.env, PATH: `${SHIM_DIR}:${process.env.PATH}` } });
+  spawnSync('git', ['--version'], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${SHIM_DIR}:${process.env.PATH}` },
+  });
   assert.ok((await gitLog()).includes('--version'), 'shim did not log');
   await rm(GIT_LOG, { force: true });
 });
@@ -159,8 +210,18 @@ test('H1 detection: >= 25 broken references on a >= 60 page vault, detection rat
   const detected = broken.length - missed.length;
   const rate = detected / broken.length;
   const byCategory = {};
-  for (const i of broken) { byCategory[i.category] ??= { total: 0, detected: 0 }; byCategory[i.category].total++; if (countOf(actual, i.page, i.expect) >= 1) byCategory[i.category].detected++; }
-  RESULTS.h1 = { broken: broken.length, detected, rate: Number(rate.toFixed(3)), byCategory, missed: missed.map((i) => ({ id: i.id, page: i.page, expect: i.expect })) };
+  for (const i of broken) {
+    byCategory[i.category] ??= { total: 0, detected: 0 };
+    byCategory[i.category].total++;
+    if (countOf(actual, i.page, i.expect) >= 1) byCategory[i.category].detected++;
+  }
+  RESULTS.h1 = {
+    broken: broken.length,
+    detected,
+    rate: Number(rate.toFixed(3)),
+    byCategory,
+    missed: missed.map((i) => ({ id: i.id, page: i.page, expect: i.expect })),
+  };
   assert.ok(rate >= 0.9, `detection rate ${rate}`);
 });
 
@@ -187,13 +248,25 @@ test('H2 false positives: >= 50 valid references, false-positive rate <= 5%', ()
 
 // ---- Hypothesis 3: guard rails.
 test('H3 read-only: vault, repo, HOME snapshot are unchanged by --repo and non-repo runs, and git is never called', async () => {
-  const before = { main: await snapshot(VAULT.main), demo: await snapshot(VAULT.demo), edge: await snapshot(VAULT.edge), repo: await snapshot(REPO), home: await snapshot(HOME_DIR) };
+  const before = {
+    main: await snapshot(VAULT.main),
+    demo: await snapshot(VAULT.demo),
+    edge: await snapshot(VAULT.edge),
+    repo: await snapshot(REPO),
+    home: await snapshot(HOME_DIR),
+  };
   for (const v of [VAULT.main, VAULT.demo, VAULT.edge]) {
     runJson('dev', ['--vault', v, '--repo', REPO]);
     runJson('dev', ['--vault', v]);
   }
   runJson('dev', ['--vault', VAULT.main, '--repo', REPO, '--repo', REPO]);
-  const after = { main: await snapshot(VAULT.main), demo: await snapshot(VAULT.demo), edge: await snapshot(VAULT.edge), repo: await snapshot(REPO), home: await snapshot(HOME_DIR) };
+  const after = {
+    main: await snapshot(VAULT.main),
+    demo: await snapshot(VAULT.demo),
+    edge: await snapshot(VAULT.edge),
+    repo: await snapshot(REPO),
+    home: await snapshot(HOME_DIR),
+  };
   assert.deepEqual(after, before);
   assert.equal(await gitLog(), '', 'the product invoked git');
 });
@@ -239,8 +312,14 @@ test('H3 no file content: findings, human output and receipt candidates carry no
   const report = await mod.runMaintenance(VAULT.main, { repo: REPO });
   const candidates = mod.receiptCandidates(report.findings);
   const text = JSON.stringify(candidates) + mod.formatMaintenance(report);
-  assert.ok(candidates.some((c) => c.title.startsWith('Maintenance review: stale-source')), 'receipt candidate for stale-source');
-  assert.ok(candidates.some((c) => c.title.startsWith('Maintenance review: stale-symbol')), 'receipt candidate for stale-symbol');
+  assert.ok(
+    candidates.some((c) => c.title.startsWith('Maintenance review: stale-source')),
+    'receipt candidate for stale-source'
+  );
+  assert.ok(
+    candidates.some((c) => c.title.startsWith('Maintenance review: stale-symbol')),
+    'receipt candidate for stale-symbol'
+  );
   assert.ok(!markers.test(text), 'receipt candidate or human text leaks body text');
   RESULTS.h3Leak = { jsonBytes: json.length, candidates: candidates.map((c) => c.title) };
 });
@@ -269,7 +348,9 @@ test('edge: a file reported missing through both sources and symbols is reported
 
 test('edge: with-repo page in vault-edge reports only the missing source, and the valid commit reference passes', () => {
   const r = runJson('dev', ['--vault', VAULT.edge, '--repo', REPO]);
-  const hits = r.body.findings.filter((f) => f.path === 'wiki/services/with-repo.md').map((f) => `${f.kind}|${f.detail}`);
+  const hits = r.body.findings
+    .filter((f) => f.path === 'wiki/services/with-repo.md')
+    .map((f) => `${f.kind}|${f.detail}`);
   assert.deepEqual(hits, ['stale-source|repo file not found: services/gone.ts']);
 });
 
@@ -310,14 +391,30 @@ test('edge: a symlinked directory on the path is not followed', async () => {
   await symlink('services', join(repo, 'alias'));
   const vault = join(work, 'vault');
   await cp(VAULT.main, vault, { recursive: true });
-  await writeFile(join(vault, 'wiki/services/dirlink.md'), [
-    '---', 'type: entity', `generated: '2026-11-01T00:00:00Z'`, 'status: proposed', 'sources:',
-    "  - 'repo:alias/billing/invoice.ts'", 'verified: []', `stale_after: '2099-12-31'`, 'symbols:',
-    "  - {path: 'alias/billing/invoice.ts', name: 'calcTax'}", '---', '', 'Body.', '',
-  ].join('\n'));
+  await writeFile(
+    join(vault, 'wiki/services/dirlink.md'),
+    [
+      '---',
+      'type: entity',
+      `generated: '2026-11-01T00:00:00Z'`,
+      'status: proposed',
+      'sources:',
+      "  - 'repo:alias/billing/invoice.ts'",
+      'verified: []',
+      `stale_after: '2099-12-31'`,
+      'symbols:',
+      "  - {path: 'alias/billing/invoice.ts', name: 'calcTax'}",
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n')
+  );
   const r = runJson('dev', ['--vault', vault, '--repo', repo]);
   // The added page is not listed in the index, so baseline orphan and index-missing findings also appear; only stale kinds are checked here.
-  const hits = nonBaseline(r.body.findings).filter((f) => f.path === 'wiki/services/dirlink.md').map((f) => `${f.kind}|${f.detail}`);
+  const hits = nonBaseline(r.body.findings)
+    .filter((f) => f.path === 'wiki/services/dirlink.md')
+    .map((f) => `${f.kind}|${f.detail}`);
   assert.deepEqual(hits, ['stale-source|repo file not found: alias/billing/invoice.ts']);
 });
 

@@ -10,9 +10,19 @@ import { resolveHostId } from './host-id.mjs';
 function engineFor(ctx = {}) {
   const vaultPath = ctx.config?.vault?.path;
   const stateDir = ctx.paths?.stateDir;
-  if (typeof vaultPath !== 'string' || typeof stateDir !== 'string') throw new BrainAtlasError('E_MODULE_CONTEXT', 'Sync context is incomplete.');
-  const transport = ctx.transport ?? ctx.core?.syncTransport ?? ctx.core?.transport ?? ctx.config?.sync?.options?.transport;
-  return createSyncEngine({ vaultPath, stateDir, config: ctx.config, transport, env: ctx.env ?? process.env, hostId: ctx.hostId, logger: ctx.logger });
+  if (typeof vaultPath !== 'string' || typeof stateDir !== 'string')
+    throw new BrainAtlasError('E_MODULE_CONTEXT', 'Sync context is incomplete.');
+  const transport =
+    ctx.transport ?? ctx.core?.syncTransport ?? ctx.core?.transport ?? ctx.config?.sync?.options?.transport;
+  return createSyncEngine({
+    vaultPath,
+    stateDir,
+    config: ctx.config,
+    transport,
+    env: ctx.env ?? process.env,
+    hostId: ctx.hostId,
+    logger: ctx.logger,
+  });
 }
 
 function actionFrom(args) {
@@ -33,8 +43,14 @@ async function dispatch(ctx, args = {}) {
     if (Array.isArray(args)) {
       for (let index = 1; index < args.length; index++) {
         const argument = args[index];
-        if (argument === '--peer') { peer = args[index + 1]; break; }
-        if (typeof argument === 'string' && argument.startsWith('--peer=')) { peer = argument.slice('--peer='.length); break; }
+        if (argument === '--peer') {
+          peer = args[index + 1];
+          break;
+        }
+        if (typeof argument === 'string' && argument.startsWith('--peer=')) {
+          peer = argument.slice('--peer='.length);
+          break;
+        }
         if (typeof argument === 'string' && !argument.startsWith('-') && peer === undefined) peer = argument;
       }
     }
@@ -46,7 +62,8 @@ async function dispatch(ctx, args = {}) {
     const paths = Array.isArray(args)
       ? positional.filter((value) => value !== '--all' && value !== '--json')
       : (args.paths ?? (args.path ? [args.path] : positional));
-    if (all && (Array.isArray(paths) ? paths.length > 0 : Boolean(paths))) throw new BrainAtlasError('E_ARGUMENT', 'Use sync approve <path> or sync approve --all.');
+    if (all && (Array.isArray(paths) ? paths.length > 0 : Boolean(paths)))
+      throw new BrainAtlasError('E_ARGUMENT', 'Use sync approve <path> or sync approve --all.');
     return engine.approveDeletes(all ? { all: true } : paths);
   }
   if (action === 'pause') return engine.pause();
@@ -55,13 +72,14 @@ async function dispatch(ctx, args = {}) {
 }
 
 export async function activate(ctx) {
-  if (!ctx || !ctx.config || !ctx.paths) throw new BrainAtlasError('E_MODULE_CONTEXT', 'Sync module context is incomplete.');
+  if (!ctx || !ctx.config || !ctx.paths)
+    throw new BrainAtlasError('E_MODULE_CONTEXT', 'Sync module context is incomplete.');
   return;
 }
 
 function syncCommand(argsOrContext, contextOrArgs) {
-  const firstIsContext = argsOrContext && typeof argsOrContext === 'object'
-    && argsOrContext.config && argsOrContext.paths;
+  const firstIsContext =
+    argsOrContext && typeof argsOrContext === 'object' && argsOrContext.config && argsOrContext.paths;
   const ctx = firstIsContext ? argsOrContext : contextOrArgs;
   const args = firstIsContext ? contextOrArgs : argsOrContext;
   return dispatch(ctx, args ?? {});
@@ -70,9 +88,12 @@ function syncCommand(argsOrContext, contextOrArgs) {
 export const commands = Object.freeze({
   sync: syncCommand,
   schedule: (argsOrContext, contextOrArgs) => {
-    const firstIsContext = argsOrContext && typeof argsOrContext === 'object'
-      && argsOrContext.config && argsOrContext.paths;
-    return scheduleCommand(firstIsContext ? contextOrArgs ?? {} : argsOrContext ?? {}, firstIsContext ? argsOrContext : contextOrArgs);
+    const firstIsContext =
+      argsOrContext && typeof argsOrContext === 'object' && argsOrContext.config && argsOrContext.paths;
+    return scheduleCommand(
+      firstIsContext ? (contextOrArgs ?? {}) : (argsOrContext ?? {}),
+      firstIsContext ? argsOrContext : contextOrArgs
+    );
   },
   status: (ctx) => dispatch(ctx, { action: 'status' }),
   run: (ctx) => dispatch(ctx, { action: 'run' }),
@@ -99,7 +120,20 @@ export const help = Object.freeze({
   }),
 });
 
-export { createSyncEngine, classifySyncError, SYNC_ERROR_CODES, createMemoryTransport, SyncTransportError, ConflictError,
-  planScheduler, planSchedulerUninstall, mergeCanonicalPath, mergeIndexThreeWay, mergeLogThreeWay,
-  inventoryVault, resolveSyncScope, globMatch };
+export {
+  createSyncEngine,
+  classifySyncError,
+  SYNC_ERROR_CODES,
+  createMemoryTransport,
+  SyncTransportError,
+  ConflictError,
+  planScheduler,
+  planSchedulerUninstall,
+  mergeCanonicalPath,
+  mergeIndexThreeWay,
+  mergeLogThreeWay,
+  inventoryVault,
+  resolveSyncScope,
+  globMatch,
+};
 export { resolveHostId };

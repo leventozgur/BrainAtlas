@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added Prettier as a development-only formatter (`npm run format`, `npm run format:check`): the JavaScript sources are formatted once with the shared `.prettierrc.json`, CI runs `npm run format:check` after `npm run typecheck`, and the supply-chain guard allows the pinned dev-only root `prettier`; no formatting or behaviour change beyond whitespace, and no release archive changes.
+- Added TypeScript `checkJs` type checking without a build or emit: `npm run typecheck` runs `tsc -p tsconfig.json` over the product code, CI runs it after `npm run lint`, and the supply-chain guard allows the pinned dev-only roots `typescript` and `@types/node`; no runtime dependency and no release archive changes.
+- Added ESLint (flat config) as a development-only tool: `npm run lint` is lint-clean, CI runs it after `npm run guard`, and the supply-chain guard allows the pinned dev-only roots `eslint`, `@eslint/js` and `globals`; no runtime dependency and no release archive changes.
+- Added `npm run release:verify -- --dir <folder>` (`scripts/release-verify.mjs`) to check a built release folder's required files, checksums, allowed signers copy, signature, distribution contents and version, and to run a clean install with `brainatlas doctor`.
+- Wall-clock latency tests (hook startup p95, session-start p95, warm query medians, scanner and CLI timing bounds) moved to `tests/perf/` and a new `npm run test:perf`; `npm test` no longer runs them, and a separate non-blocking `perf` CI job runs them so machine load cannot fail the main test job.
 - `brainatlas config set` now writes optional keys that the config schema defines but the current file omits (for example `hooks.disclosure` and `retrieval.exclude`), and the new `brainatlas config unset KEY [--plan]` removes a known optional key; unknown, required and locked keys keep failing with `E_CONFIG_KEY`/`E_LOCKED_KEY`.
 
 ## 0.1.0-rc.12 — 2026-11-17

@@ -10,7 +10,24 @@ import { DEV, ROOT, runNode, tempDir, removeDir, listDir } from './helpers.mjs';
 
 const SUITE = join(ROOT, 'eval', 'ba-suite.mjs');
 // BA-27: hookRealistic, longpage, temporal, poison, realDocs (new dev sets) and grepBaseline are added top-level keys; no other key changed.
-const TOP_KEYS = ['cases', 'natural', 'xling', 'identifier', 'currentState', 'multihop', 'nearNegative', 'hook', 'scale', 'meta', 'hookRealistic', 'longpage', 'temporal', 'poison', 'realDocs', 'grepBaseline'];
+const TOP_KEYS = [
+  'cases',
+  'natural',
+  'xling',
+  'identifier',
+  'currentState',
+  'multihop',
+  'nearNegative',
+  'hook',
+  'scale',
+  'meta',
+  'hookRealistic',
+  'longpage',
+  'temporal',
+  'poison',
+  'realDocs',
+  'grepBaseline',
+];
 const TIMING_KEYS = new Set(['latencyMs', 'indexBuildMs', 'durationMs', 'scale']);
 const strip = (value) => JSON.parse(JSON.stringify(value, (k, v) => (TIMING_KEYS.has(k) ? undefined : v)));
 const count = (file) => JSON.parse(readFileSync(join(DEV, file), 'utf8')).length;
@@ -18,8 +35,13 @@ const EXTENDED = ['sectionHitRate', 'sectionCases', 'requireAllRate', 'requireAl
 
 const sandbox = () => ({ home: tempDir('suite-home'), tmp: tempDir('suite-tmp'), work: tempDir('suite-work') });
 const dirs = [];
-function own(sb) { dirs.push(sb.home, sb.tmp, sb.work); return sb; }
-process.on('exit', () => { for (const d of dirs) removeDir(d); });
+function own(sb) {
+  dirs.push(sb.home, sb.tmp, sb.work);
+  return sb;
+}
+process.on('exit', () => {
+  for (const d of dirs) removeDir(d);
+});
 
 function runSuite(sb, outName) {
   const out = join(sb.work, outName);
@@ -33,8 +55,16 @@ function runSuite(sb, outName) {
 
 let runA;
 let runB;
-const getRunA = () => (runA ??= (() => { const sb = own(sandbox()); return { sb, ...runSuite(sb, 'a.json') }; })());
-const getRunB = () => (runB ??= (() => { const sb = own(sandbox()); return { sb, ...runSuite(sb, 'b.json') }; })());
+const getRunA = () =>
+  (runA ??= (() => {
+    const sb = own(sandbox());
+    return { sb, ...runSuite(sb, 'a.json') };
+  })());
+const getRunB = () =>
+  (runB ??= (() => {
+    const sb = own(sandbox());
+    return { sb, ...runSuite(sb, 'b.json') };
+  })());
 
 test('ba-suite: exit 0, prints only a fixed status line, writes the required top-level keys', () => {
   const { res, out, netLog } = getRunA();
@@ -119,15 +149,20 @@ test('ba-suite --scale wiring: scale block carries sizes and the required timing
   try {
     const suite = await runBaSuite({ scale: true, scaleOptions: { sizes: [40] } });
     assert.ok(suite.scale && Array.isArray(suite.scale.sizes), 'scale.sizes');
-    assert.deepEqual(suite.scale.sizes.map((x) => x.n), [40]);
+    assert.deepEqual(
+      suite.scale.sizes.map((x) => x.n),
+      [40]
+    );
     const row = suite.scale.sizes[0];
-    for (const f of ['buildIndexMs', 'createSearcherColdMs', 'createSearcherWarmMs']) assert.equal(typeof row[f], 'number');
+    for (const f of ['buildIndexMs', 'createSearcherColdMs', 'createSearcherWarmMs'])
+      assert.equal(typeof row[f], 'number');
     for (const f of ['searchMs', 'hookMs', 'hybridOverheadMs']) {
       assert.ok(Number.isFinite(row[f].p50) && Number.isFinite(row[f].p95), f);
       assert.ok(row[f].count >= 20, `${f}.count`);
     }
     assert.deepEqual(listDir(tmp), [], 'scale temp dirs removed');
   } finally {
-    if (prev === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = prev;
+    if (prev === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = prev;
   }
 });

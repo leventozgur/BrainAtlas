@@ -2,15 +2,16 @@
 // BA-00 blind acceptance: format, label and corpus-contract audit of the new dev sets and eval/corpus-ba.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { CORPUS_BA, DEV } from './helpers.mjs';
 import { buildIndex, loadPages, search } from '../../../packages/core/src/retrieval/index.mjs';
 
-const walk = (dir) => readdirSync(dir).flatMap((name) => {
-  const p = join(dir, name);
-  return statSync(p).isDirectory() ? walk(p) : [p];
-});
+const walk = (dir) =>
+  readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name);
+    return statSync(p).isDirectory() ? walk(p) : [p];
+  });
 const pages = walk(CORPUS_BA).filter((f) => f.endsWith('.md'));
 const pageRel = (abs) => relative(CORPUS_BA, abs).split('\\').join('/');
 const pageText = new Map(pages.map((f) => [pageRel(f), readFileSync(f, 'utf8')]));
@@ -23,7 +24,17 @@ const SETS = {
   multihop: { file: 'multihop-cases.json', category: 'multihop' },
   nearNegative: { file: 'near-negative-cases.json', category: 'near-negative' },
 };
-const ALLOWED_KEYS = new Set(['id', 'category', 'query', 'relevant', 'abstain', 'excluded', 'expectedHeading', 'requireAll', 'trToEn']);
+const ALLOWED_KEYS = new Set([
+  'id',
+  'category',
+  'query',
+  'relevant',
+  'abstain',
+  'excluded',
+  'expectedHeading',
+  'requireAll',
+  'trToEn',
+]);
 
 test('corpus: every page has frontmatter with title, status and a quoted date-only generated value', () => {
   assert.equal(pages.length, 43);
@@ -59,7 +70,11 @@ test('corpus: synthetic content only (no e-mail, URL, IP, absolute home path or 
     assert.doesNotMatch(text, /https?:\/\//, `${rel}: URL`);
     assert.doesNotMatch(text, /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, `${rel}: IP`);
     assert.doesNotMatch(text, /\/Users\/|\/home\//, `${rel}: absolute path`);
-    assert.doesNotMatch(text, /sk-[A-Za-z0-9]{8,}|AKIA[0-9A-Z]{12,}|ghp_|-----BEGIN|password\s*[:=]/i, `${rel}: secret-like`);
+    assert.doesNotMatch(
+      text,
+      /sk-[A-Za-z0-9]{8,}|AKIA[0-9A-Z]{12,}|ghp_|-----BEGIN|password\s*[:=]/i,
+      `${rel}: secret-like`
+    );
   }
 });
 
@@ -86,7 +101,11 @@ test('format: ids unique and valid, allowed keys only, categories match their se
 
 test('format: TR and EN queries are mixed (each language 30-70% of new-set queries)', () => {
   const all = Object.values(SETS).flatMap(({ file }) => loadSet(file).map((c) => c.query));
-  const tr = all.filter((q) => /[çğıöşüÇĞİÖŞÜ]|\b(nedir|hangi|nasıl|kaç|neden|ne zaman|hatası|nöbet|ve|ile|için|mı|mi|mu|mü|ne|nerede|çalışan|sürüm|sonra)\b/iu.test(q)).length;
+  const tr = all.filter((q) =>
+    /[çğıöşüÇĞİÖŞÜ]|\b(nedir|hangi|nasıl|kaç|neden|ne zaman|hatası|nöbet|ve|ile|için|mı|mi|mu|mü|ne|nerede|çalışan|sürüm|sonra)\b/iu.test(
+      q
+    )
+  ).length;
   const ratio = tr / all.length;
   assert.ok(ratio >= 0.3 && ratio <= 0.7, `TR ratio ${ratio.toFixed(2)} over ${all.length} queries`);
 });
@@ -99,9 +118,18 @@ test('identifier: 12 positive (token appears in query and relevant page) and 12 
   assert.equal(abstains.length, 12);
   // Positive identifiers and their expected token, taken from the query text.
   const positiveTokens = {
-    'ident-01': 'E_WIDGET_TIMEOUT', 'ident-02': 'E_QUEUE_LOCKED', 'ident-03': 'E_ORCHARD_AUTH_EXPIRED', 'ident-04': 'a1b2c3d',
-    'ident-05': 'rc.11', 'ident-06': 'src/lib/widget.mjs', 'ident-07': 'LarkspurClient.flushBatch', 'ident-08': '--drain-timeout',
-    'ident-09': 'TIDEWATER_STALE_GRACE', 'ident-10': 'OrchardClient.resumeStream', 'ident-11': 'ERR_BASIL_LOCK_STALE', 'ident-12': 'ADR-009',
+    'ident-01': 'E_WIDGET_TIMEOUT',
+    'ident-02': 'E_QUEUE_LOCKED',
+    'ident-03': 'E_ORCHARD_AUTH_EXPIRED',
+    'ident-04': 'a1b2c3d',
+    'ident-05': 'rc.11',
+    'ident-06': 'src/lib/widget.mjs',
+    'ident-07': 'LarkspurClient.flushBatch',
+    'ident-08': '--drain-timeout',
+    'ident-09': 'TIDEWATER_STALE_GRACE',
+    'ident-10': 'OrchardClient.resumeStream',
+    'ident-11': 'ERR_BASIL_LOCK_STALE',
+    'ident-12': 'ADR-009',
   };
   for (const c of positives) {
     const token = positiveTokens[c.id];
@@ -110,9 +138,18 @@ test('identifier: 12 positive (token appears in query and relevant page) and 12 
     assert.ok(pageText.get(c.relevant[0]).includes(token), `${c.id}: ${token} not in ${c.relevant[0]}`);
   }
   const abstainTokens = {
-    'ident-13': 'E_WIDGET_QUOTA_FULL', 'ident-14': 'E_QUEUE_REPLAY_OVERFLOW', 'ident-15': 'E_ORCHARD_AUTH_REVOKED', 'ident-16': 'f9e8d7c',
-    'ident-17': 'rc.12', 'ident-18': 'src/lib/gizmo.mjs', 'ident-19': 'OrchardClient.rotateCursor', 'ident-20': '--drain-retries',
-    'ident-21': 'TIDEWATER_MAX_STALE_AGE_HOURS', 'ident-22': 'LarkspurClient.purgeTopic', 'ident-23': 'E_BASIL_CONFIG_CYCLE', 'ident-24': 'ERR_TIDEWATER_QUORUM_LOST',
+    'ident-13': 'E_WIDGET_QUOTA_FULL',
+    'ident-14': 'E_QUEUE_REPLAY_OVERFLOW',
+    'ident-15': 'E_ORCHARD_AUTH_REVOKED',
+    'ident-16': 'f9e8d7c',
+    'ident-17': 'rc.12',
+    'ident-18': 'src/lib/gizmo.mjs',
+    'ident-19': 'OrchardClient.rotateCursor',
+    'ident-20': '--drain-retries',
+    'ident-21': 'TIDEWATER_MAX_STALE_AGE_HOURS',
+    'ident-22': 'LarkspurClient.purgeTopic',
+    'ident-23': 'E_BASIL_CONFIG_CYCLE',
+    'ident-24': 'ERR_TIDEWATER_QUORUM_LOST',
   };
   for (const c of abstains) {
     const token = abstainTokens[c.id];
@@ -126,17 +163,28 @@ test('current-state: expectedHeading is an exact heading line in the relevant pa
   for (const c of loadSet('current-state-cases.json')) {
     if (c.expectedHeading === undefined) continue;
     const text = pageText.get(c.relevant[0]);
-    const headings = text.split('\n').filter((l) => /^#{1,6} /.test(l)).map((l) => l.replace(/^#{1,6} /, ''));
-    assert.ok(headings.includes(c.expectedHeading), `${c.id}: "${c.expectedHeading}" not a heading in ${c.relevant[0]}`);
+    const headings = text
+      .split('\n')
+      .filter((l) => /^#{1,6} /.test(l))
+      .map((l) => l.replace(/^#{1,6} /, ''));
+    assert.ok(
+      headings.includes(c.expectedHeading),
+      `${c.id}: "${c.expectedHeading}" not a heading in ${c.relevant[0]}`
+    );
   }
 });
 
 test('current-state: a superseded page is never a relevant answer; its replacement is', () => {
   const superseded = [...pageText].filter(([, t]) => /^status: superseded$/m.test(t)).map(([rel]) => rel);
-  assert.deepEqual(superseded.sort(), ['decisions/adr-002-cache-invalidation.md', 'decisions/adr-004-queue-ordering.md', 'decisions/adr-007-search-backend.md']);
+  assert.deepEqual(superseded.sort(), [
+    'decisions/adr-002-cache-invalidation.md',
+    'decisions/adr-004-queue-ordering.md',
+    'decisions/adr-007-search-backend.md',
+  ]);
   for (const set of ['current-state-cases.json', 'multihop-cases.json']) {
     for (const c of loadSet(set)) {
-      for (const p of c.relevant) assert.ok(!superseded.includes(p), `${c.id}: superseded page ${p} listed as relevant`);
+      for (const p of c.relevant)
+        assert.ok(!superseded.includes(p), `${c.id}: superseded page ${p} listed as relevant`);
     }
   }
 });
@@ -161,7 +209,10 @@ test('multihop: 2-3 relevant pages, requireAll true, and the relevant pages are 
       const cur = queue.shift();
       for (const other of nodes) {
         if (seen.has(other)) continue;
-        if (linksOf(cur).has(other) || linksOf(other).has(cur)) { seen.add(other); queue.push(other); }
+        if (linksOf(cur).has(other) || linksOf(other).has(cur)) {
+          seen.add(other);
+          queue.push(other);
+        }
       }
     }
     assert.equal(seen.size, nodes.length, `${c.id}: relevant pages not link-connected`);
@@ -178,10 +229,20 @@ test('near-negative: every query is abstain with empty relevant (answer absence 
 test('retrieval: superseded pages never appear in results for any new-set query or ADR probe', () => {
   const now = new Date('2026-11-10T00:00:00Z');
   const index = buildIndex(loadPages(CORPUS_BA), { now });
-  const superseded = new Set(['decisions/adr-002-cache-invalidation.md', 'decisions/adr-004-queue-ordering.md', 'decisions/adr-007-search-backend.md']);
+  const superseded = new Set([
+    'decisions/adr-002-cache-invalidation.md',
+    'decisions/adr-004-queue-ordering.md',
+    'decisions/adr-007-search-backend.md',
+  ]);
   const queries = [
-    ...['identifier-cases.json', 'current-state-cases.json', 'multihop-cases.json', 'near-negative-cases.json'].flatMap((f) => loadSet(f).map((c) => c.query)),
-    'ADR-002 cache invalidation decision', 'ADR-004 queue ordering', 'ADR-007 search backend', 'cache invalidation', 'queue ordering',
+    ...['identifier-cases.json', 'current-state-cases.json', 'multihop-cases.json', 'near-negative-cases.json'].flatMap(
+      (f) => loadSet(f).map((c) => c.query)
+    ),
+    'ADR-002 cache invalidation decision',
+    'ADR-004 queue ordering',
+    'ADR-007 search backend',
+    'cache invalidation',
+    'queue ordering',
   ];
   for (const q of queries) {
     const res = search(index, q, { limit: 10, asOf: now, abstainThreshold: 0 });

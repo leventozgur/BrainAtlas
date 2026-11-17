@@ -33,12 +33,17 @@ async function fixture(t, { files = {}, index } = {}) {
   const configFile = resolve(home, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
   const transport = new StdioClientTransport({
-    command: process.execPath, args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')], cwd: root,
-    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' }, stderr: 'pipe'
+    command: process.execPath,
+    args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
+    cwd: root,
+    env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+    stderr: 'pipe',
   });
   const client = new Client({ name: 'ba20-slug-test', version: '1.0.0' });
   await client.connect(transport);
-  t.after(async () => { await client.close(); });
+  t.after(async () => {
+    await client.close();
+  });
   const indexPath = resolve(wiki, 'index.md');
   return { wiki, client, indexPath, readIndex: () => readFile(indexPath, 'utf8') };
 }
@@ -59,7 +64,12 @@ async function refused(client, name, args) {
 
 /** Names of everything directly inside a Wiki folder (empty when the folder is missing). */
 async function listDir(dir) {
-  try { return await readdir(dir); } catch (error) { if (error?.code === 'ENOENT') return []; throw error; }
+  try {
+    return await readdir(dir);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
 }
 
 test('BA20-SLUG1: wiki_create_entity with a name that has no ASCII letter or digit is refused; no hidden page, no index', async (t) => {
@@ -88,6 +98,9 @@ test('BA20-SLUG3: a single dot and a dash-only name are refused the same way', a
 
 test('BA20-SLUG4: a name with at least one ASCII letter or digit is still created (control characters are dropped from the slug)', async (t) => {
   const f = await fixture(t, {});
-  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Ad\u0001', content: 'Gövde.\n' }), { path: 'wiki/entities/ad.md', created: true });
+  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Ad\u0001', content: 'Gövde.\n' }), {
+    path: 'wiki/entities/ad.md',
+    created: true,
+  });
   assert.deepEqual(await listDir(resolve(f.wiki, 'entities')), ['ad.md']);
 });

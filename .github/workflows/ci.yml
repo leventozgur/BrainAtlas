@@ -21,3 +21,20 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run guard
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run format:check
+  # Wall-clock latency budgets (tests/perf/). Isolated from `test` so machine load cannot fail the main suite;
+  # continue-on-error keeps it advisory and it never blocks a merge on its own.
+  perf:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm run test:perf

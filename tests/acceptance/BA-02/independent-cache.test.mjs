@@ -12,7 +12,20 @@ import { searchHybrid } from '../../../modules/semantic/src/hybrid.mjs';
 
 const ASOF = new Date('2026-02-01T00:00:00Z');
 const OPTS = { limit: 5, abstainThreshold: 0, asOf: ASOF };
-const QUERIES = ['alpha', 'bravo charlie', 'zephyr', 'quokka', 'legacy', 'delta echo', 'title', 'notes', 'alpha quokka', 'roadmap', 'added', 'latemarker'];
+const QUERIES = [
+  'alpha',
+  'bravo charlie',
+  'zephyr',
+  'quokka',
+  'legacy',
+  'delta echo',
+  'title',
+  'notes',
+  'alpha quokka',
+  'roadmap',
+  'added',
+  'latemarker',
+];
 const canon = (x) => JSON.stringify(x);
 
 function tmpdir(t) {
@@ -22,29 +35,47 @@ function tmpdir(t) {
 }
 function fixture(t) {
   const home = tmpdir(t);
-  const vault = path.join(home, 'vault'), wiki = path.join(vault, 'wiki'), stateDir = path.join(home, 'state');
-  fs.mkdirSync(path.join(wiki, 'notes'), { recursive: true }); fs.mkdirSync(stateDir, { recursive: true });
+  const vault = path.join(home, 'vault'),
+    wiki = path.join(vault, 'wiki'),
+    stateDir = path.join(home, 'state');
+  fs.mkdirSync(path.join(wiki, 'notes'), { recursive: true });
+  fs.mkdirSync(stateDir, { recursive: true });
   fs.writeFileSync(path.join(wiki, 'alpha.md'), '---\ntitle: Alpha\n---\n# Alpha\nalpha bravo charlie notes\n');
   fs.writeFileSync(path.join(wiki, 'delta.md'), '# Delta\ndelta echo foxtrot\n');
-  fs.writeFileSync(path.join(wiki, 'legacy.md'), '---\ntitle: Old\nstatus: superseded\nsuperseded_by: wiki/alpha.md\n---\n# Old\nlegacy zephyr\n');
+  fs.writeFileSync(
+    path.join(wiki, 'legacy.md'),
+    '---\ntitle: Old\nstatus: superseded\nsuperseded_by: wiki/alpha.md\n---\n# Old\nlegacy zephyr\n'
+  );
   fs.writeFileSync(path.join(wiki, 'z.md'), '---\ntitle: Zed\naliases: [quokka]\n---\n## Sec\nalpha quokka wombat\n');
-  fs.writeFileSync(path.join(wiki, 'notes', 'deep.md'), '---\nkeywords: [zephyr, title]\nstatus: active\n---\n# Deep Notes\nzephyr notes about proto\n');
+  fs.writeFileSync(
+    path.join(wiki, 'notes', 'deep.md'),
+    '---\nkeywords: [zephyr, title]\nstatus: active\n---\n# Deep Notes\nzephyr notes about proto\n'
+  );
   return { home, vault, wiki, stateDir, cache: path.join(stateDir, 'retrieval-index.json') };
 }
-const freshPaths = (wiki) => loadPages(wiki).map((p) => p.path).sort();
+const freshPaths = (wiki) =>
+  loadPages(wiki)
+    .map((p) => p.path)
+    .sort();
 // Fresh-install reference over the vault, no cache involved.
 function reference(wiki) {
   const index = buildIndex(loadPages(wiki), { now: ASOF });
   return QUERIES.map((q) => canon(search(index, q, OPTS)));
 }
-function resultsOf(searcher) { return QUERIES.map((q) => canon(searcher.search(q, OPTS))); }
+function resultsOf(searcher) {
+  return QUERIES.map((q) => canon(searcher.search(q, OPTS)));
+}
 // The on-disk cache must record exactly the walked page set, as indexed (docs) or skipped, with no duplicates.
 function assertCachePartition(f) {
   const d = JSON.parse(fs.readFileSync(f.cache, 'utf8'));
   const indexed = d.index.docs.map((doc) => doc.page.path);
   assert.equal(new Set(indexed).size, indexed.length, 'indexed paths are unique');
   assert.equal(new Set(d.skipped).size, d.skipped.length, 'skipped paths are unique');
-  assert.equal(indexed.some((p) => d.skipped.includes(p)), false, 'no page is both indexed and skipped');
+  assert.equal(
+    indexed.some((p) => d.skipped.includes(p)),
+    false,
+    'no page is both indexed and skipped'
+  );
   assert.deepEqual([...indexed, ...d.skipped].sort(), freshPaths(f.wiki), 'cache partition equals the walked page set');
 }
 // Build a valid cache, apply a forged mutation to its parsed form, and keep the key.
@@ -54,26 +85,101 @@ function forgeCache(f, mutate) {
   mutate(d);
   fs.writeFileSync(f.cache, JSON.stringify(d));
 }
-const docEntry = (d, p) => d.index.docs.find((doc) => doc.page.path === p);
 
 // ---- (a) page-set mismatch forgeries: rebuild, fresh-install results, rewritten consistent cache ----
 const PAGE_SET_CASES = [
-  ['missing page: z.md dropped from docs and not listed as skipped', (d) => { d.index.docs.splice(d.index.docs.findIndex((x) => x.page.path === 'z.md'), 1); }],
-  ['extra page: ghost.md (absent on disk) added to docs', (d) => {
-    d.index.docs.push({ page: { path: 'ghost.md', title: 'Ghost', aliases: [], keywords: [], headings: [], body: 'ghost text', frontmatter: {} }, lengths: [1, 0, 0, 2] });
-  }],
-  ['superseded page absent from skipped (legacy.md unlisted)', (d) => { d.skipped = d.skipped.filter((p) => p !== 'legacy.md'); }],
-  ['duplicate path in skipped (legacy.md twice)', (d) => { d.skipped.push('legacy.md'); }],
-  ['skipped lists an indexed page (alpha.md)', (d) => { d.skipped.push('alpha.md'); }],
-  ['skipped lists a page absent on disk (ghost.md)', (d) => { d.skipped.push('ghost.md'); }],
-  ['skipped lists an absolute path', (d) => { d.skipped.push('/etc/passwd'); }],
-  ['skipped lists a traversal path', (d) => { d.skipped.push('../outside.md'); }],
-  ['superseded page placed into docs', (d) => {
-    d.index.docs.push({ page: { path: 'legacy.md', title: 'Old', aliases: [], keywords: [], headings: ['Old'], body: 'legacy zephyr\n', frontmatter: { title: 'Old', status: 'superseded', superseded_by: 'wiki/alpha.md' } }, lengths: [1, 0, 0, 2] });
-    d.skipped = d.skipped.filter((p) => p !== 'legacy.md');
-  }],
-  ['skipped is an object, not an array', (d) => { d.skipped = { 0: 'legacy.md' }; }],
-  ['skipped missing entirely', (d) => { delete d.skipped; }],
+  [
+    'missing page: z.md dropped from docs and not listed as skipped',
+    (d) => {
+      d.index.docs.splice(
+        d.index.docs.findIndex((x) => x.page.path === 'z.md'),
+        1
+      );
+    },
+  ],
+  [
+    'extra page: ghost.md (absent on disk) added to docs',
+    (d) => {
+      d.index.docs.push({
+        page: {
+          path: 'ghost.md',
+          title: 'Ghost',
+          aliases: [],
+          keywords: [],
+          headings: [],
+          body: 'ghost text',
+          frontmatter: {},
+        },
+        lengths: [1, 0, 0, 2],
+      });
+    },
+  ],
+  [
+    'superseded page absent from skipped (legacy.md unlisted)',
+    (d) => {
+      d.skipped = d.skipped.filter((p) => p !== 'legacy.md');
+    },
+  ],
+  [
+    'duplicate path in skipped (legacy.md twice)',
+    (d) => {
+      d.skipped.push('legacy.md');
+    },
+  ],
+  [
+    'skipped lists an indexed page (alpha.md)',
+    (d) => {
+      d.skipped.push('alpha.md');
+    },
+  ],
+  [
+    'skipped lists a page absent on disk (ghost.md)',
+    (d) => {
+      d.skipped.push('ghost.md');
+    },
+  ],
+  [
+    'skipped lists an absolute path',
+    (d) => {
+      d.skipped.push('/etc/passwd');
+    },
+  ],
+  [
+    'skipped lists a traversal path',
+    (d) => {
+      d.skipped.push('../outside.md');
+    },
+  ],
+  [
+    'superseded page placed into docs',
+    (d) => {
+      d.index.docs.push({
+        page: {
+          path: 'legacy.md',
+          title: 'Old',
+          aliases: [],
+          keywords: [],
+          headings: ['Old'],
+          body: 'legacy zephyr\n',
+          frontmatter: { title: 'Old', status: 'superseded', superseded_by: 'wiki/alpha.md' },
+        },
+        lengths: [1, 0, 0, 2],
+      });
+      d.skipped = d.skipped.filter((p) => p !== 'legacy.md');
+    },
+  ],
+  [
+    'skipped is an object, not an array',
+    (d) => {
+      d.skipped = { 0: 'legacy.md' };
+    },
+  ],
+  [
+    'skipped missing entirely',
+    (d) => {
+      delete d.skipped;
+    },
+  ],
 ];
 for (const [name, mutate] of PAGE_SET_CASES) {
   test(`(a) page-set mismatch rebuilds: ${name}`, (t) => {
@@ -104,7 +210,11 @@ test('(a) symlinked directory inside the wiki is never indexed or snapshotted', 
   fs.symlinkSync(outside, path.join(f.wiki, 'linked'));
   const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   const snap = s.snapshot();
-  assert.equal(snap.pages.some((p) => p.path.startsWith('linked/')), false, 'snapshot pages exclude the symlinked directory');
+  assert.equal(
+    snap.pages.some((p) => p.path.startsWith('linked/')),
+    false,
+    'snapshot pages exclude the symlinked directory'
+  );
   assert.deepEqual(resultsOf(s), reference(f.wiki));
   assert.equal(s.search('latemarker', OPTS).results.length, 0);
   assertCachePartition(f);
@@ -118,7 +228,10 @@ test('(a) truncated cache file and cache with an out-of-range posting id: rebuil
   const s1 = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   assert.deepEqual(resultsOf(s1), reference(f.wiki));
   assertCachePartition(f);
-  forgeCache(f, (d) => { const flat = d.index.postings[Object.keys(d.index.postings)[0]]; flat[0] = 10 ** 9; });
+  forgeCache(f, (d) => {
+    const flat = d.index.postings[Object.keys(d.index.postings)[0]];
+    flat[0] = 10 ** 9;
+  });
   const s2 = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   assert.deepEqual(resultsOf(s2), reference(f.wiki));
   assertCachePartition(f);
@@ -126,12 +239,23 @@ test('(a) truncated cache file and cache with an out-of-range posting id: rebuil
 
 // ---- (b) snapshot() + searchHybrid equals a fresh build after outside changes ----
 const ENTRY_QUERIES = ['alpha', 'zephyr', 'legacy', 'added', 'latemarker', 'delta echo', 'title', 'roadmap'];
-function vectorFor(i) { const a = (i * 0.7) % 3.1; return [Math.cos(a), Math.sin(a)]; }
+function vectorFor(i) {
+  const a = (i * 0.7) % 3.1;
+  return [Math.cos(a), Math.sin(a)];
+}
 function hybridArgs(pages, paths, query) {
   const entries = paths.map((p, i) => ({ path: p, vector: vectorFor(i), text: p, headingPath: '' }));
-  return { query, pages, entries, provider: { fingerprint: 'ba02-ind', embedQuery: async () => [1, 0] }, asOf: ASOF, limit: 5 };
+  return {
+    query,
+    pages,
+    entries,
+    provider: { fingerprint: 'ba02-ind', embedQuery: async () => [1, 0] },
+    asOf: ASOF,
+    limit: 5,
+  };
 }
-const norm = (r) => canon({ results: [...r], fallbackReason: r.fallbackReason ?? null, abstained: r.abstained ?? null });
+const norm = (r) =>
+  canon({ results: [...r], fallbackReason: r.fallbackReason ?? null, abstained: r.abstained ?? null });
 async function assertHybridMatchesFresh(f, snap, label) {
   const pages = loadPages(f.wiki);
   const paths = pages.map((p) => p.path);
@@ -150,7 +274,10 @@ test('(b) snapshot after cache hit, outside add, delete, supersede and rename (n
   const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   fs.writeFileSync(path.join(f.wiki, 'added.md'), '---\ntitle: Added\n---\n# Added\nlatemarker zephyr\n');
   fs.rmSync(path.join(f.wiki, 'delta.md'));
-  fs.writeFileSync(path.join(f.wiki, 'alpha.md'), '---\ntitle: Alpha\nstatus: superseded\nsuperseded_by: wiki/added.md\n---\n# Alpha\nalpha bravo charlie notes\n');
+  fs.writeFileSync(
+    path.join(f.wiki, 'alpha.md'),
+    '---\ntitle: Alpha\nstatus: superseded\nsuperseded_by: wiki/added.md\n---\n# Alpha\nalpha bravo charlie notes\n'
+  );
   fs.renameSync(path.join(f.wiki, 'z.md'), path.join(f.wiki, 'zz.md'));
   await assertHybridMatchesFresh(f, s.snapshot(), 'no-refresh');
 });
@@ -160,7 +287,10 @@ test('(b) snapshot before and after refreshIfChanged across add, delete, superse
   await assertHybridMatchesFresh(f, s.snapshot(), 'initial');
   fs.writeFileSync(path.join(f.wiki, 'added.md'), '# Added\nlatemarker zephyr\n');
   fs.unlinkSync(path.join(f.wiki, 'notes', 'deep.md'));
-  fs.writeFileSync(path.join(f.wiki, 'delta.md'), '---\nstatus: superseded\nsuperseded_by: wiki/added.md\n---\n# Delta\ndelta echo foxtrot\n');
+  fs.writeFileSync(
+    path.join(f.wiki, 'delta.md'),
+    '---\nstatus: superseded\nsuperseded_by: wiki/added.md\n---\n# Delta\ndelta echo foxtrot\n'
+  );
   assert.equal(s.refreshIfChanged(), true);
   await assertHybridMatchesFresh(f, s.snapshot(), 'after-refresh');
   assertCachePartition(f);
@@ -182,8 +312,17 @@ test('(b) snapshot without a refresh after an outside change: pages and index ag
   s.snapshot();
   fs.writeFileSync(path.join(f.wiki, 'added.md'), '# Added\nlatemarker only\n');
   const snap = s.snapshot();
-  const indexable = (p) => String(p.frontmatter?.status || '').toLowerCase() !== 'superseded' && !Object.hasOwn(p.frontmatter || {}, 'superseded_by');
-  assert.deepEqual(snap.pages.filter(indexable).map((p) => p.path).sort(), snap.index.docs.map((d) => d.page.path).sort(), 'pages and index describe the same state');
+  const indexable = (p) =>
+    String(p.frontmatter?.status || '').toLowerCase() !== 'superseded' &&
+    !Object.hasOwn(p.frontmatter || {}, 'superseded_by');
+  assert.deepEqual(
+    snap.pages
+      .filter(indexable)
+      .map((p) => p.path)
+      .sort(),
+    snap.index.docs.map((d) => d.page.path).sort(),
+    'pages and index describe the same state'
+  );
   assert.equal(s.refreshIfChanged(), true, 'the change is only picked up by refreshIfChanged');
   assert.equal(s.search('latemarker', OPTS).results[0].path, 'added.md');
 });

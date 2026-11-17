@@ -10,8 +10,10 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
 
-const WORKER = process.env.BA16_WORKER_MODULE || fileURLToPath(new URL('../../../packages/hooks/src/worker.mjs', import.meta.url));
-const HOOK = process.env.BA16_HOOK_MODULE || fileURLToPath(new URL('../../../packages/hooks/src/index.mjs', import.meta.url));
+const WORKER =
+  process.env.BA16_WORKER_MODULE || fileURLToPath(new URL('../../../packages/hooks/src/worker.mjs', import.meta.url));
+const HOOK =
+  process.env.BA16_HOOK_MODULE || fileURLToPath(new URL('../../../packages/hooks/src/index.mjs', import.meta.url));
 const { runHook } = await import(pathToFileURL(HOOK).href);
 const NOW = new Date('2026-11-10T00:00:00Z');
 const EXCERPT_LIMIT = 4002;
@@ -25,8 +27,12 @@ const EMOJI = '\u{1F600}'; // U+1F600 is a surrogate pair (D83D DE00) in UTF-16.
 async function fixture(t, pages) {
   const root = await mkdtemp(join(tmpdir(), 'ba16-surr-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const home = join(root, 'home'), vault = join(root, 'vault'), state = join(root, 'state');
-  await mkdir(home); await mkdir(vault); await mkdir(state);
+  const home = join(root, 'home'),
+    vault = join(root, 'vault'),
+    state = join(root, 'state');
+  await mkdir(home);
+  await mkdir(vault);
+  await mkdir(state);
   for (const [name, body] of Object.entries(pages)) await writeFile(join(vault, name), body);
   return { root, home, vault, state, env: { HOME: home } };
 }
@@ -40,8 +46,14 @@ function runWorker(f, query) {
   };
   return new Promise((resolve, reject) => {
     const worker = new Worker(pathToFileURL(WORKER), { workerData });
-    worker.once('message', value => { void worker.terminate(); value.error ? reject(new Error('worker error')) : resolve(value.results); });
-    worker.once('error', error => { void worker.terminate(); reject(error); });
+    worker.once('message', (value) => {
+      void worker.terminate();
+      value.error ? reject(new Error('worker error')) : resolve(value.results);
+    });
+    worker.once('error', (error) => {
+      void worker.terminate();
+      reject(error);
+    });
     worker.once('exit', () => reject(new Error('worker exited without a message')));
   });
 }
@@ -49,8 +61,20 @@ function runWorker(f, query) {
 async function ask(f, prompt, { budget, session }) {
   const retrieval = { abstainThreshold: 0 };
   if (budget !== undefined) retrieval.budgetChars = budget;
-  const config = { vault: { path: f.vault }, stateDir: f.state, hooks: { mode: 'normal', deadlineMs: 4700 }, retrieval };
-  const res = await runHook({ client: 'claude', event: 'prompt', stdin: JSON.stringify({ session_id: session, prompt }), env: f.env, config, now: NOW });
+  const config = {
+    vault: { path: f.vault },
+    stateDir: f.state,
+    hooks: { mode: 'normal', deadlineMs: 4700 },
+    retrieval,
+  };
+  const res = await runHook({
+    client: 'claude',
+    event: 'prompt',
+    stdin: JSON.stringify({ session_id: session, prompt }),
+    env: f.env,
+    config,
+    now: NOW,
+  });
   const context = res.stdout && res.stdout !== '{}' ? JSON.parse(res.stdout).hookSpecificOutput.additionalContext : '';
   return { stdout: res.stdout, exitCode: res.exitCode, context };
 }
@@ -59,7 +83,7 @@ async function ask(f, prompt, { budget, session }) {
 // "# Emoji" + "\n" and the body starts "zebrafish " (18 chars), so 3983 ASCII letters put the pair at 4001.
 const BOUNDARY_BODY = '# Emoji\nzebrafish ' + 'a'.repeat(3983) + EMOJI.repeat(3) + ' tail';
 
-test('worker: a snippet cut at 4002 that would split a surrogate pair ends on a whole code point', async t => {
+test('worker: a snippet cut at 4002 that would split a surrogate pair ends on a whole code point', async (t) => {
   const f = await fixture(t, { 'emoji.md': BOUNDARY_BODY });
   const results = await runWorker(f, 'zebrafish');
   assert.equal(results.length, 1, 'expected the single fixture page');
@@ -71,35 +95,40 @@ test('worker: a snippet cut at 4002 that would split a surrogate pair ends on a 
   assert.ok(snippet.startsWith('# Emoji\nzebrafish aaa'), 'excerpt lost its opening');
 });
 
-test('worker: an emoji fully inside the cap is kept intact', async t => {
+test('worker: an emoji fully inside the cap is kept intact', async (t) => {
   const f = await fixture(t, { 'emoji.md': '# Emoji\nzebrafish ' + 'a'.repeat(100) + EMOJI + ' tail' });
   const [result] = await runWorker(f, 'zebrafish');
   assert.ok(result.snippet.includes(EMOJI), 'emoji inside the cap was dropped');
   assert.doesNotMatch(result.snippet, LONE_SURROGATE);
 });
 
-test('worker: a key that straddles the 4002 cut is redacted whole, never partially leaked', async t => {
+test('worker: a key that straddles the 4002 cut is redacted whole, never partially leaked', async (t) => {
   // "# Ops\nzebrafish " is 16 chars; the space keeps a word boundary before the key, which starts at snippet
   // index 3987 and runs past 4002. An excerpt-first cut would keep "sk-ant-Zx9Qw3" unredacted.
   const f = await fixture(t, { 'ops.md': '# Ops\nzebrafish ' + 'a'.repeat(3970) + ' ' + SECRET + ' rotate weekly.' });
   const [result] = await runWorker(f, 'zebrafish');
   assert.ok(!result.snippet.includes(SECRET), 'full secret in worker output');
   assert.ok(!result.snippet.includes('sk-ant-'), 'secret prefix leaked past the cut');
-  for (let i = 0; i + 4 <= TAIL.length; i++) assert.ok(!result.snippet.includes(TAIL.slice(i, i + 4)), `key fragment "${TAIL.slice(i, i + 4)}" leaked`);
+  for (let i = 0; i + 4 <= TAIL.length; i++)
+    assert.ok(!result.snippet.includes(TAIL.slice(i, i + 4)), `key fragment "${TAIL.slice(i, i + 4)}" leaked`);
   assert.doesNotMatch(result.snippet, LONE_SURROGATE);
 });
 
-test('hook: the injected context never contains a lone surrogate, across budgets and the boundary page', async t => {
+test('hook: the injected context never contains a lone surrogate, across budgets and the boundary page', async (t) => {
   const f = await fixture(t, { 'emoji.md': BOUNDARY_BODY });
   for (const budget of [undefined, 4002, 4001, 3000, 1000, 300, 120]) {
     const r = await ask(f, 'zebrafish', { budget, session: `surr-${budget ?? 'default'}` });
     assert.doesNotMatch(r.context, LONE_SURROGATE, `budget ${budget}: lone surrogate in context`);
     assert.ok(r.stdout.length <= EXCERPT_LIMIT, `budget ${budget}: stdout ${r.stdout.length}`);
-    if (r.context) assert.ok(r.context.startsWith('Emoji (emoji.md)'), `budget ${budget}: ${JSON.stringify(r.context.slice(0, 40))}`);
+    if (r.context)
+      assert.ok(
+        r.context.startsWith('Emoji (emoji.md)'),
+        `budget ${budget}: ${JSON.stringify(r.context.slice(0, 40))}`
+      );
   }
 });
 
-test('hook: a surrogate pair fully inside the budget is injected without damage', async t => {
+test('hook: a surrogate pair fully inside the budget is injected without damage', async (t) => {
   const f = await fixture(t, { 'emoji-short.md': '# Emoji Short\nzebrafish note ' + EMOJI.repeat(2) + ' end.' });
   const r = await ask(f, 'zebrafish', { session: 'surr-short' });
   assert.ok(r.context.includes(EMOJI.repeat(2)), `pair missing: ${JSON.stringify(r.context)}`);

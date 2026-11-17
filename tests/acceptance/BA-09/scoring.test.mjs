@@ -9,18 +9,33 @@ import { loadCandidate, loadMain, makeVault, removeDir, page, record, NOW, repoR
 
 const rt = await loadCandidate();
 let main;
-before(async () => { main = await loadMain(); });
+before(async () => {
+  main = await loadMain();
+});
 after(() => main?.dispose());
 
 const QUERY = 'zephyr quorum ledger';
 const BODY = 'zephyr quorum ledger reconciliation notes for the north archive.';
 const VERIFIED = `status: confirmed\n${record({})}`;
 const WEAK = 'status: proposed\n';
-const search = (lib, dir, query = QUERY, options = {}) => lib.search(lib.buildIndex(lib.loadPages(dir), { now: NOW }), query, { limit: 20, abstainThreshold: 0, asOf: NOW, ...options });
+const search = (lib, dir, query = QUERY, options = {}) =>
+  lib.search(lib.buildIndex(lib.loadPages(dir), { now: NOW }), query, {
+    limit: 20,
+    abstainThreshold: 0,
+    asOf: NOW,
+    ...options,
+  });
 const scoreOf = (result, file) => result.results.find((r) => r.path === file)?.score;
 
 test('verified scores are 1.5 times and weak scores 0.9 times the neutral score of the same text', () => {
-  const dir = makeVault({ 'n.md': page({ body: BODY }), 'v.md': page({ fm: VERIFIED, body: BODY }), 'w.md': page({ fm: WEAK, body: BODY }) }, 'ba09-mult-');
+  const dir = makeVault(
+    {
+      'n.md': page({ body: BODY }),
+      'v.md': page({ fm: VERIFIED, body: BODY }),
+      'w.md': page({ fm: WEAK, body: BODY }),
+    },
+    'ba09-mult-'
+  );
   try {
     const out = search(rt, dir);
     const n = scoreOf(out, 'n.md');
@@ -33,16 +48,33 @@ test('verified scores are 1.5 times and weak scores 0.9 times the neutral score 
 });
 
 test('ranking puts verified first, neutral next and weak last when the text is identical', () => {
-  const dir = makeVault({ 'n.md': page({ body: BODY }), 'v.md': page({ fm: VERIFIED, body: BODY }), 'w.md': page({ fm: WEAK, body: BODY }) }, 'ba09-order-');
+  const dir = makeVault(
+    {
+      'n.md': page({ body: BODY }),
+      'v.md': page({ fm: VERIFIED, body: BODY }),
+      'w.md': page({ fm: WEAK, body: BODY }),
+    },
+    'ba09-order-'
+  );
   try {
-    assert.deepEqual(search(rt, dir).results.map((r) => r.path), ['v.md', 'n.md', 'w.md']);
+    assert.deepEqual(
+      search(rt, dir).results.map((r) => r.path),
+      ['v.md', 'n.md', 'w.md']
+    );
   } finally {
     removeDir(dir);
   }
 });
 
 test('the weight is applied after the lexical score, so the same text gives the same lexical score as main', () => {
-  const dir = makeVault({ 'n.md': page({ body: BODY }), 'v.md': page({ fm: VERIFIED, body: BODY }), 'w.md': page({ fm: WEAK, body: BODY }) }, 'ba09-lex-');
+  const dir = makeVault(
+    {
+      'n.md': page({ body: BODY }),
+      'v.md': page({ fm: VERIFIED, body: BODY }),
+      'w.md': page({ fm: WEAK, body: BODY }),
+    },
+    'ba09-lex-'
+  );
   try {
     const mainOut = search(main.retrieval, dir);
     const n = scoreOf(mainOut, 'n.md');
@@ -74,21 +106,30 @@ test('abstention uses the pre-weight best score: a weak page answers at the neut
     assert.equal(verifiedAbove.reason, 'below_threshold');
     assert.deepEqual(verifiedAbove.results, []);
   } finally {
-    removeDir(neutralDir); removeDir(weakDir); removeDir(verifiedDir);
+    removeDir(neutralDir);
+    removeDir(weakDir);
+    removeDir(verifiedDir);
   }
 });
 
 test('a neutral page in a mixed corpus keeps main score exactly, and no trust key appears on it', () => {
-  const dir = makeVault({
-    'n.md': page({ body: BODY }),
-    'v.md': page({ fm: VERIFIED, body: `${BODY} extra words` }),
-    'w.md': page({ fm: WEAK, body: `${BODY} other words` }),
-  }, 'ba09-mixed-');
+  const dir = makeVault(
+    {
+      'n.md': page({ body: BODY }),
+      'v.md': page({ fm: VERIFIED, body: `${BODY} extra words` }),
+      'w.md': page({ fm: WEAK, body: `${BODY} other words` }),
+    },
+    'ba09-mixed-'
+  );
   try {
-    const cand = search(rt, dir), mainOut = search(main.retrieval, dir);
+    const cand = search(rt, dir),
+      mainOut = search(main.retrieval, dir);
     const mainScores = new Map(mainOut.results.map((r) => [r.path, r.score]));
     const neutral = cand.results.filter((r) => !Object.hasOwn(r, 'trust'));
-    assert.deepEqual(neutral.map((r) => r.path), ['n.md']);
+    assert.deepEqual(
+      neutral.map((r) => r.path),
+      ['n.md']
+    );
     for (const r of neutral) assert.equal(r.score, mainScores.get(r.path), `${r.path} score equals main`);
     assert.equal(cand.results.find((r) => r.path === 'v.md').trust, 'verified');
     assert.equal(cand.results.find((r) => r.path === 'w.md').trust, 'weak');
@@ -101,14 +142,22 @@ test('a neutral page in a mixed corpus keeps main score exactly, and no trust ke
 // with a string `query`. Corpora without any provenance must answer exactly like main, including every result field.
 const CORPORA = [
   { corpus: 'eval/corpus', cases: ['eval/dev/cases.json'] },
-  { corpus: 'eval/corpus-ba', cases: ['eval/dev/identifier-cases.json', 'eval/dev/current-state-cases.json', 'eval/dev/multihop-cases.json', 'eval/dev/near-negative-cases.json'] },
+  {
+    corpus: 'eval/corpus-ba',
+    cases: [
+      'eval/dev/identifier-cases.json',
+      'eval/dev/current-state-cases.json',
+      'eval/dev/multihop-cases.json',
+      'eval/dev/near-negative-cases.json',
+    ],
+  },
   { corpus: 'eval/corpus-graph', cases: ['eval/dev/multihop-hard-cases.json'] },
 ];
 function queriesFrom(file) {
   const full = path.join(repoRoot, file);
   if (!fs.existsSync(full)) return [];
   const data = JSON.parse(fs.readFileSync(full, 'utf8'));
-  return (Array.isArray(data) ? data : data.cases ?? []).map((c) => c.query).filter((q) => typeof q === 'string');
+  return (Array.isArray(data) ? data : (data.cases ?? [])).map((c) => c.query).filter((q) => typeof q === 'string');
 }
 test('corpora without provenance answer exactly like main: path, score, snippet and every other field', () => {
   let compared = 0;
@@ -117,13 +166,18 @@ test('corpora without provenance answer exactly like main: path, score, snippet 
     if (!fs.existsSync(dir)) continue;
     const indexCand = rt.buildIndex(rt.loadPages(dir), { now: NOW });
     const indexMain = main.retrieval.buildIndex(main.retrieval.loadPages(dir), { now: NOW });
-    assert.ok(indexCand.docs.every((d) => d.trust === 'neutral'), `${corpus} has no provenance`);
-    for (const file of cases) for (const query of queriesFrom(file)) {
-      const opts = { limit: 10, abstainThreshold: 0.35, asOf: NOW };
-      const a = rt.search(indexCand, query, opts), b = main.retrieval.search(indexMain, query, opts);
-      assert.deepEqual(a, b, `${corpus} / ${file} / ${query}`);
-      compared++;
-    }
+    assert.ok(
+      indexCand.docs.every((d) => d.trust === 'neutral'),
+      `${corpus} has no provenance`
+    );
+    for (const file of cases)
+      for (const query of queriesFrom(file)) {
+        const opts = { limit: 10, abstainThreshold: 0.35, asOf: NOW };
+        const a = rt.search(indexCand, query, opts),
+          b = main.retrieval.search(indexMain, query, opts);
+        assert.deepEqual(a, b, `${corpus} / ${file} / ${query}`);
+        compared++;
+      }
   }
   assert.ok(compared >= 20, `compared ${compared} queries`);
 });

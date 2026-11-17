@@ -11,16 +11,25 @@ import { reciprocalRank } from './metrics.mjs';
 /**
  * @param {{corpusDir:string,casesFile:string,now:Date,abstainThreshold:number}} options
  */
-export function bm25Fair({corpusDir, casesFile, now, abstainThreshold}) {
+export function bm25Fair({ corpusDir, casesFile, now, abstainThreshold }) {
   const cases = JSON.parse(readFileSync(casesFile, 'utf8'));
   if (!Array.isArray(cases)) throw new Error('Invalid cases');
-  const index = buildIndex(loadPages(corpusDir), {now});
-  let answerable = 0, recall = 0, reciprocal = 0, abstainN = 0, abstained = 0, returned = 0;
+  const index = buildIndex(loadPages(corpusDir), { now });
+  let answerable = 0,
+    recall = 0,
+    reciprocal = 0,
+    abstainN = 0,
+    abstained = 0,
+    returned = 0;
   for (const item of cases) {
     const relevant = Array.isArray(item?.relevant) ? item.relevant : [];
     const abstain = Boolean(item?.abstain || !relevant.length);
-    let result = null;
-    try { result = search(index, item.query, {limit: 10, asOf: now, abstainThreshold}); } catch { result = null; }
+    let result;
+    try {
+      result = search(index, item.query, { limit: 10, asOf: now, abstainThreshold });
+    } catch {
+      result = null;
+    }
     const results = result?.results || [];
     if (abstain) {
       abstainN++;

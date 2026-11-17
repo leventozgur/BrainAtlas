@@ -11,18 +11,27 @@ import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 
 const [rootArg, mode, pagesArg = '2000', queriesArg = '30', passesArg = '3'] = process.argv.slice(2);
-if (!rootArg || !['old', 'new'].includes(mode)) { console.error('usage'); process.exit(2); }
+if (!rootArg || !['old', 'new'].includes(mode)) {
+  console.error('usage');
+  process.exit(2);
+}
 const root = resolve(rootArg);
-const { loadPages, buildIndex, createSearcher } = await import(join(root, 'packages/core/src/retrieval/index.mjs'));
+const { loadPages, createSearcher } = await import(join(root, 'packages/core/src/retrieval/index.mjs'));
 const { searchHybrid } = await import(join(root, 'modules/semantic/src/hybrid.mjs'));
 const { writeSyntheticCorpus, fixedVectors } = await import(join(root, 'eval/lib/synthetic-corpus.mjs'));
 const { percentile } = await import(join(root, 'eval/lib/metrics.mjs'));
 
-const n = Number(pagesArg), qn = Math.max(30, Number(queriesArg)), passes = Number(passesArg), seed = 1, DIMS = 8;
+const n = Number(pagesArg),
+  qn = Math.max(30, Number(queriesArg)),
+  passes = Number(passesArg),
+  seed = 1,
+  DIMS = 8;
 const base = mkdtempSync(join(tmpdir(), 'ba02-hybrid-'));
 try {
-  const vault = join(base, 'vault'), stateDir = join(base, 'state');
-  mkdirSync(vault); mkdirSync(stateDir);
+  const vault = join(base, 'vault'),
+    stateDir = join(base, 'state');
+  mkdirSync(vault);
+  mkdirSync(stateDir);
   const { paths, queries } = writeSyntheticCorpus(vault, { pages: n, seed, queryCount: qn });
   const vectors = fixedVectors(seed, n, DIMS);
   const entries = paths.map((path, i) => ({ path, vector: vectors[i], text: path, headingPath: '' }));
@@ -48,11 +57,34 @@ try {
       const start = performance.now();
       const out = await runOnce(q);
       times.push(performance.now() - start);
-      if (p === 0) digest.update(JSON.stringify([...out].map((r) => [r.path, r.rrfScore, r.semanticScore ?? null, r.score ?? null, r.snippet ?? null, r.sourceRanks ?? null])) + '\n');
+      if (p === 0)
+        digest.update(
+          JSON.stringify(
+            [...out].map((r) => [
+              r.path,
+              r.rrfScore,
+              r.semanticScore ?? null,
+              r.score ?? null,
+              r.snippet ?? null,
+              r.sourceRanks ?? null,
+            ])
+          ) + '\n'
+        );
     }
   }
-  console.log(JSON.stringify({ root, mode, pages: n, queries: qn, passes, count: times.length,
-    p50: percentile(times, 0.5), p95: percentile(times, 0.95), resultDigest: digest.digest('hex').slice(0, 16) }));
+  console.log(
+    JSON.stringify({
+      root,
+      mode,
+      pages: n,
+      queries: qn,
+      passes,
+      count: times.length,
+      p50: percentile(times, 0.5),
+      p95: percentile(times, 0.95),
+      resultDigest: digest.digest('hex').slice(0, 16),
+    })
+  );
 } finally {
   rmSync(base, { recursive: true, force: true });
 }

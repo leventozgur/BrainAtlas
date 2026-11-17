@@ -49,7 +49,10 @@ const TWO_PAGES = {
 };
 
 function freshSearch(vault, state) {
-  return createSearcher({ vaultDir: vault, stateDir: state, now }).search('E_WIDGET_TIMEOUT', { limit: 10, abstainThreshold: 0 });
+  return createSearcher({ vaultDir: vault, stateDir: state, now }).search('E_WIDGET_TIMEOUT', {
+    limit: 10,
+    abstainThreshold: 0,
+  });
 }
 
 test('a cache written with the previous schema tag is rebuilt, and the rebuilt cache equals a clean one', (t) => {
@@ -78,25 +81,56 @@ test('after the one rebuild a current cache is reused on the next start', (t) =>
   const data = JSON.parse(fs.readFileSync(w.cache, 'utf8'));
   data.index.docs[0].page.title = 'REUSED-FROM-CACHE';
   fs.writeFileSync(w.cache, JSON.stringify(data));
-  const r = createSearcher({ vaultDir: w.vault, stateDir: w.state, now }).search('E_WIDGET_TIMEOUT', { limit: 10, abstainThreshold: 0 });
-  assert.equal(r.results[0].title, 'REUSED-FROM-CACHE', 'a current-schema cache with a matching key should be used, not rebuilt');
+  const r = createSearcher({ vaultDir: w.vault, stateDir: w.state, now }).search('E_WIDGET_TIMEOUT', {
+    limit: 10,
+    abstainThreshold: 0,
+  });
+  assert.equal(
+    r.results[0].title,
+    'REUSED-FROM-CACHE',
+    'a current-schema cache with a matching key should be used, not rebuilt'
+  );
 });
 
 test('a cache whose exact identifier postings are malformed is rebuilt, and results match a fresh build', (t) => {
   // Two documents share E_WIDGET_TIMEOUT, so the valid postings are [0, 1].
   const variants = {
-    'exact is null': (e) => { e.index.exact = null; },
-    'exact is an array': (e) => { e.index.exact = []; },
-    'exact is a string': (e) => { e.index.exact = 'x'; },
-    'exact is missing': (e) => { delete e.index.exact; },
-    'posting is not an array': (e) => { e.index.exact.e_widget_timeout = 'abc'; },
-    'posting list is empty': (e) => { e.index.exact.e_widget_timeout = []; },
-    'id out of range (high)': (e) => { e.index.exact.e_widget_timeout = [0, 2]; },
-    'id out of range (negative)': (e) => { e.index.exact.e_widget_timeout = [-1, 0]; },
-    'duplicate id': (e) => { e.index.exact.e_widget_timeout = [0, 0]; },
-    'unsorted ids': (e) => { e.index.exact.e_widget_timeout = [1, 0]; },
-    'non-integer id': (e) => { e.index.exact.e_widget_timeout = [0, 0.5]; },
-    'string id': (e) => { e.index.exact.e_widget_timeout = ['0', '1']; },
+    'exact is null': (e) => {
+      e.index.exact = null;
+    },
+    'exact is an array': (e) => {
+      e.index.exact = [];
+    },
+    'exact is a string': (e) => {
+      e.index.exact = 'x';
+    },
+    'exact is missing': (e) => {
+      delete e.index.exact;
+    },
+    'posting is not an array': (e) => {
+      e.index.exact.e_widget_timeout = 'abc';
+    },
+    'posting list is empty': (e) => {
+      e.index.exact.e_widget_timeout = [];
+    },
+    'id out of range (high)': (e) => {
+      e.index.exact.e_widget_timeout = [0, 2];
+    },
+    'id out of range (negative)': (e) => {
+      e.index.exact.e_widget_timeout = [-1, 0];
+    },
+    'duplicate id': (e) => {
+      e.index.exact.e_widget_timeout = [0, 0];
+    },
+    'unsorted ids': (e) => {
+      e.index.exact.e_widget_timeout = [1, 0];
+    },
+    'non-integer id': (e) => {
+      e.index.exact.e_widget_timeout = [0, 0.5];
+    },
+    'string id': (e) => {
+      e.index.exact.e_widget_timeout = ['0', '1'];
+    },
   };
   for (const [name, mutate] of Object.entries(variants)) {
     const w = workspace(t, TWO_PAGES);
@@ -118,8 +152,14 @@ test('valid exact postings with a matching key are accepted without a rebuild (c
   const data = JSON.parse(fs.readFileSync(w.cache, 'utf8'));
   data.index.docs[1].page.title = 'CONTROL';
   fs.writeFileSync(w.cache, JSON.stringify(data));
-  const r = createSearcher({ vaultDir: w.vault, stateDir: w.state, now }).search('E_WIDGET_TIMEOUT', { limit: 10, abstainThreshold: 0 });
-  assert.ok(r.results.some(x => x.title === 'CONTROL'), 'a structurally valid cache is reused');
+  const r = createSearcher({ vaultDir: w.vault, stateDir: w.state, now }).search('E_WIDGET_TIMEOUT', {
+    limit: 10,
+    abstainThreshold: 0,
+  });
+  assert.ok(
+    r.results.some((x) => x.title === 'CONTROL'),
+    'a structurally valid cache is reused'
+  );
 });
 
 test('observation: an in-range but wrong exact posting is accepted (diagnostic only, documented threat model)', (t) => {
@@ -128,7 +168,12 @@ test('observation: an in-range but wrong exact posting is accepted (diagnostic o
   const data = JSON.parse(fs.readFileSync(w.cache, 'utf8'));
   data.index.exact.e_widget_timeout = [1];
   fs.writeFileSync(w.cache, JSON.stringify(data));
-  const r = createSearcher({ vaultDir: w.vault, stateDir: w.state, now }).search('E_WIDGET_TIMEOUT', { limit: 10, abstainThreshold: 0 });
-  t.diagnostic(`fake in-range exact [1] -> first result ${r.results[0]?.path}; contract: content is not validated, accepted risk`);
+  const r = createSearcher({ vaultDir: w.vault, stateDir: w.state, now }).search('E_WIDGET_TIMEOUT', {
+    limit: 10,
+    abstainThreshold: 0,
+  });
+  t.diagnostic(
+    `fake in-range exact [1] -> first result ${r.results[0]?.path}; contract: content is not validated, accepted risk`
+  );
   assert.ok(Array.isArray(r.results));
 });
