@@ -1,0 +1,3 @@
+# Formatting-only commits; use: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# BA-A4e: Prettier reformat
+57e2d830da7db3c9ae0b9fadc89ab54bc77e44a9
