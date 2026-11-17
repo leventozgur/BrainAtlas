@@ -6,7 +6,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { performance } from 'node:perf_hooks';
 import { buildIndex, createSearcher, loadPages, normalizeText, search, stem } from '../../../packages/core/src/retrieval/index.mjs';
 import { runEval } from '../../../eval/run-eval.mjs';
 
@@ -304,22 +303,4 @@ test('missing or invalid option boundaries are rejected', () => {
     assert.throws(() => search(index, 'retrieval', options), { code: 'E_INVALID_INPUT' });
   }
   assert.deepEqual(search(index, 'retrieval', { limit: 0 }).results, []);
-});
-
-test('warm query median stays below 300 ms on a 2000-page synthetic vault', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
-  fs.mkdirSync(vault);
-  for (let i = 0; i < 2000; i++) fs.writeFileSync(path.join(vault, `${String(i).padStart(4, '0')}.md`), `---\ntitle: Topic ${i}\n---\nSynthetic common content number ${i}.`);
-  const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
-  for (let i = 0; i < 2; i++) searcher.search('topic 1234');
-  const timings = [];
-  for (let i = 0; i < 7; i++) {
-    const start = performance.now();
-    searcher.search('topic 1234');
-    timings.push(performance.now() - start);
-  }
-  timings.sort((a, b) => a - b);
-  const median = timings[Math.floor(timings.length / 2)];
-  t.diagnostic(`Warm 2000-page query median: ${median.toFixed(2)} ms`);
-  assert.ok(median < 300, `median ${median.toFixed(2)} ms`);
 });

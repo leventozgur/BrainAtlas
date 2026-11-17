@@ -2,7 +2,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { performance } from 'node:perf_hooks';
 import { scanText, scanPath, redact, fingerprintSafetyFinding, isSafetyFindingAllowed } from '../../../packages/core/src/safety/index.mjs';
 import { expandFixture, metrics } from './metrics.mjs';
 const fixtures = new URL('./fixtures/', import.meta.url);
@@ -65,12 +64,4 @@ test('fingerprints identify content bytes and path findings without exposing mat
   const pathFingerprint = fingerprintSafetyFinding('secret.md', '', pathFinding);
   assert.deepEqual(pathFingerprint, { path: 'secret.md', ruleId: 'denied-path' });
   assert.equal(isSafetyFindingAllowed('secret.md', '', pathFinding, [pathFingerprint]), true);
-});
-test('one megabyte and adversarial input remain bounded', () => {
-  const inputs = ['ordinary words '.repeat(70000), 'a'.repeat(1024 * 1024), ('a='.repeat(350000))];
-  for (const text of inputs) {
-    const start = performance.now();
-    scanText(text);
-    assert.ok(performance.now() - start < 200, 'scan exceeded 200 ms');
-  }
 });

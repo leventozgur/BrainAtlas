@@ -154,37 +154,6 @@ test('twenty synthetic sessions across claude, copilot and gemini startup each p
   assert.ok(filled >= 18, `filled ${filled}/20`);
 });
 
-test('cold session-start stays under 300 ms p95 with a 5 MB log', async t => {
-  const f = await vaultFixture(t);
-  // Built in one pass with a running byte count, so the fixture stays linear in size.
-  const lines = [];
-  let bytes = 0;
-  for (let i = 0; bytes < 5 * 1024 * 1024; i++) {
-    const line = logLine('2020-01-01T00:00:00.000Z', { action: 'update-page', path: `wiki/entities/old-${i % 500}.md` });
-    lines.push(line);
-    bytes += line.length + 1;
-  }
-  lines.push(logLine(new Date(Date.now() - 3600_000).toISOString(), { action: 'update-page', path: 'wiki/entities/fresh.md' }));
-  await mkdir(join(f.vault, 'wiki', 'entities'), { recursive: true });
-  await writeFile(join(f.vault, 'wiki', 'entities', 'fresh.md'), '# Fresh cold page\n');
-  await writeFile(join(f.vault, 'wiki', 'log.md'), lines.join('\n') + '\n');
-  const env = { PATH: process.env.PATH, HOME: f.root, XDG_CONFIG_HOME: join(f.root, 'config'), XDG_STATE_HOME: join(f.root, 'xdg-state'), XDG_DATA_HOME: join(f.root, 'data') };
-  const paths = resolvePaths({ env });
-  await mkdir(dirname(paths.configFile), { recursive: true });
-  const config = defaultConfig('lite'); config.vault.path = f.vault; config.retrieval.abstainThreshold = 0;
-  await writeFile(paths.configFile, JSON.stringify(config));
-  const measure = () => Array.from({ length: 20 }, () => {
-    const begin = performance.now();
-    const r = spawnSync(process.execPath, [BIN, 'claude', 'session-start'], { input: '{}', env, encoding: 'utf8' });
-    assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /Fresh cold page/);
-    return performance.now() - begin;
-  }).sort((a, b) => a - b)[18];
-  let p95 = measure();
-  for (let round = 1; round < 3 && p95 >= 300; round++) p95 = Math.min(p95, measure());
-  assert.ok(p95 < 300, `p95 ${p95} ms`);
-});
-
 test('a UTF-8 BOM at the start of wiki/log.md does not hide the first machine entry', async t => {
   const f = await vaultFixture(t, {
     pages: { 'wiki/entities/first.md': '# First Page\n' },

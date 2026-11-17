@@ -134,23 +134,6 @@ test('fix1 vs main: the query pass adds no finding on query-shaped clean content
   assert.deepEqual(extra, []);
 });
 
-test('fix1 ReDoS guard: adversarial query strings complete quickly (not a p95 measurement)', (t) => {
-  const cases = {
-    manyPairs: 'https://a.example/?' + 'a='.repeat(60000),
-    longKey: '?' + 'k'.repeat(200000) + '=',
-    longAmp: '&x=' + 'y'.repeat(200000),
-    semiPairs: '?a=b;'.repeat(50000),
-    keyNoEq: '?' + 'sifre'.repeat(30000),
-  };
-  for (const [name, text] of Object.entries(cases)) {
-    const start = Date.now();
-    safety.scanText(text);
-    const ms = Date.now() - start;
-    t.diagnostic(`${name}: ${text.length} chars, ${ms} ms`);
-    assert.ok(ms < 3000, `${name} took ${ms} ms`);
-  }
-});
-
 test('fix1 Turkish case: ŞİFRE/PAROLA/DB_ŞİFRE mixed and lower case keys all match, values are not echoed in the finding', () => {
   for (const key of ['ŞİFRE', 'şifre', 'Şifre', 'ŞIFRE', 'PAROLA', 'parola', 'DB_ŞİFRE', 'db_parola']) {
     const text = `${key}: ${V}`;

@@ -142,18 +142,6 @@ test('contact redaction leaves versions, dates, ids and hashes alone', () => {
   assert.equal(redact(text, { personal: true }), text);
 });
 
-test('BA-26 patterns stay bounded on long adversarial runs (secret and output paths)', () => {
-  // Generous bound: the check is against super-linear backtracking, not a benchmark.
-  const inputs = ['a_'.repeat(50000), 'ado_'.repeat(20000), 'a@' + 'a.'.repeat(20000), 'sv=2021-06-08'.repeat(5000),
-    'Authorization: Bearer '.repeat(3000), 'AccountKey='.repeat(8000), 'TR12'.repeat(10000), 'AKIA'.repeat(20000)];
-  for (const text of inputs) {
-    const start = performance.now();
-    scanText(text);
-    redact(text, { personal: true });
-    assert.ok(performance.now() - start < 1000, `slow input starting ${text.slice(0, 20)}`);
-  }
-});
-
 // fix1: query-string and matrix parameters after a URL scheme, and upper-case Turkish keys with dotted capital İ.
 test('fix1: a Turkish secret in a URL query string is a finding; the scheme does not hide it', () => {
   const value = ['Xq7r', 'T2mP', '9kL4', 'zB8w'].join('');

@@ -621,27 +621,6 @@ test('20 synthetic sessions with recent changes all produce a card of at most 80
   assert.equal(filled, 20);
 });
 
-// ---------- acceptance 4: 5 MB log p95 ----------
-
-test('session-start p95 is at most 300 ms with a 5 MB log.md (20 runs)', async t => {
-  const s = await session(t);
-  await writeFile(join(s.vault, 'wiki/entities/big.md'), fmPage('Big Log Page'));
-  const filler = `- ${'human line of ordinary notes '.repeat(4)}`;
-  const block = Array.from({ length: Math.ceil((5 * 1024 * 1024) / (filler.length + 1)) }, () => filler).join('\n');
-  await writeFile(join(s.wiki, 'log.md'), `${block}\n${entry(msAgo(0.1), 'wiki/entities/big.md')}\n`);
-  const durations = [];
-  for (let i = 0; i < 20; i++) {
-    const started = process.hrtime.bigint();
-    const out = hook(s, 'claude', 'session-start', JSON.stringify({ session_id: `p${i}` }));
-    durations.push(Number(process.hrtime.bigint() - started) / 1e6);
-    assert.equal(out.status, 0);
-    assert.match(out.stdout, /Big Log Page/);
-  }
-  durations.sort((a, b) => a - b);
-  const p95 = durations[Math.ceil(0.95 * durations.length) - 1];
-  assert.ok(p95 <= 300, `p95 ${p95.toFixed(1)} ms`);
-});
-
 // BA-01-F4 (medium, fixed in fix2): a page path containing a control character must drop the entry; a
 // title's control characters become single spaces. The JSON escape keeps the raw path inside the log line.
 const CONTROL_PATH_VARIANTS = {

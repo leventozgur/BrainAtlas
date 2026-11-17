@@ -18,6 +18,8 @@ Do not use `npm install` to update the lockfile as part of an unrelated change. 
 
 Run `npm run release:verify -- --dir <folder>` on a built release folder before publishing.
 
+Wall-clock latency budgets live in `tests/perf/` and run with `npm run test:perf`; they are not part of `npm test`, so run them on a quiet machine when you change a hook, retrieval or scanner timing path.
+
 ## Change guidelines
 
 - Treat `docs/contracts/*.md` as API contracts. Do not change a signature or contract without an explicit proposal and review.

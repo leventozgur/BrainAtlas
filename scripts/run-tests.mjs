@@ -17,8 +17,13 @@ async function walk(dir) {
 }
 const root = resolve(new URL('..', import.meta.url).pathname);
 const filter = process.argv[2];
+const perfDir = join(root, 'tests', 'perf') + sep;
+const inPerf = (file) => file.startsWith(perfDir);
 let files = (await walk(join(root, 'tests'))).sort();
-if (filter) files = files.filter((file) => file.slice(root.length + 1).startsWith(filter));
+if (filter === 'perf') files = files.filter(inPerf); // `npm run test:perf`: only the wall-clock latency suite.
+else if (filter) files = files.filter((file) => file.slice(root.length + 1).startsWith(filter));
+// Timing tests live in tests/perf/ and run only in the separate `perf` CI job, never in the default suite.
+else files = files.filter((file) => !inPerf(file));
 if (!files.length) { console.error('No test files found'); process.exit(1); }
 const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...files], { cwd: root, stdio: 'inherit' });
 process.exit(result.status ?? 1);

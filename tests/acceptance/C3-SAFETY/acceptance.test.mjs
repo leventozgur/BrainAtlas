@@ -4,7 +4,6 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { performance } from 'node:perf_hooks';
 import test from 'node:test';
 import { scanPath, scanText, redact } from '../../../packages/core/src/safety/index.mjs';
 import { boundaryExamples, negativeHoldout, positiveHoldout } from './fixtures/holdout.mjs';
@@ -140,21 +139,4 @@ test('scanner output and errors do not log secrets or touch HOME, symlink target
   assert.deepEqual(await readdir(isolatedHome), [], 'scanner created a file in isolated HOME');
   assert.equal(await readFile(outsideFile, 'utf8'), 'synthetic sentinel remains unchanged\n', 'scanner modified an outside sentinel');
   assert.ok((await readdir(sandbox)).includes('linked-outside'), 'test symlink disappeared unexpectedly');
-});
-
-test('scanner stays within the ReDoS and 1 MB latency limits', (t) => {
-  const adversarialInputs = ['a'.repeat(100_000), 'aaaa='.repeat(20_000), '='.repeat(100_000)];
-  const adversarialStart = performance.now();
-  for (const text of adversarialInputs) scanText(text);
-  const adversarialMs = performance.now() - adversarialStart;
-  t.diagnostic(`three 100 KB adversarial scans=${adversarialMs.toFixed(2)} ms (limit < 500 ms)`);
-  assert.ok(adversarialMs < 500, `100 KB adversarial scans exceeded 500 ms (${adversarialMs.toFixed(1)} ms)`);
-
-  const largeText = 'ordinary documentation line without credentials\n'.repeat(22_000);
-  assert.ok(largeText.length >= 1_000_000, 'large scan fixture is smaller than 1 MB');
-  const largeStart = performance.now();
-  scanText(largeText);
-  const largeMs = performance.now() - largeStart;
-  t.diagnostic(`1 MB scan=${largeMs.toFixed(2)} ms (limit < 200 ms)`);
-  assert.ok(largeMs < 200, `1 MB scan exceeded 200 ms (${largeMs.toFixed(1)} ms)`);
 });

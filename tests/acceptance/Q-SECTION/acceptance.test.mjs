@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { buildIndex, createSearcher, loadPages, normalizeText, search, stem } from '../../../packages/core/src/retrieval/index.mjs';
 import { runEval } from '../../../eval/run-eval.mjs';
@@ -329,26 +328,6 @@ test('natural-case top-1 snippet stem coverage does not regress and reaches 0.9 
   assert.ok(denominator > 0);
   assert.ok(after >= before, `coverage regressed from ${beforeHits}/${denominator} to ${afterHits}/${denominator}`);
   assert.ok(after >= 0.9, `new snippet stem coverage=${after} (${afterHits}/${denominator})`);
-});
-
-test('2000-page warm queries stay under 300 ms with section selection enabled', (t) => {
-  const dir = temp(t), vault = path.join(dir, 'vault'), state = path.join(dir, 'state');
-  fs.mkdirSync(vault);
-  for (let i = 0; i < 2000; i++) {
-    fs.writeFileSync(path.join(vault, `${String(i).padStart(4, '0')}.md`), `---\ntitle: Topic ${i}\n---\n# Overview\ncommon synthetic evidence ${i}\n## Detail\nquerytarget ${i}`);
-  }
-  const searcher = createSearcher({ vaultDir: vault, stateDir: state, now });
-  for (let i = 0; i < 2; i++) searcher.search('querytarget 1234');
-  const timings = [];
-  for (let i = 0; i < 7; i++) {
-    const start = performance.now();
-    searcher.search('querytarget 1234');
-    timings.push(performance.now() - start);
-  }
-  timings.sort((a, b) => a - b);
-  const median = timings[Math.floor(timings.length / 2)];
-  t.diagnostic(`Q-SECTION warm 2000-page median: ${median.toFixed(2)} ms`);
-  assert.ok(median < 300, `median ${median.toFixed(2)} ms`);
 });
 
 test('temporary HOME, logs, metrics, traversal, symlink, malformed input, and errors stay contained', (t) => {
