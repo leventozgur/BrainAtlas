@@ -6,6 +6,15 @@ import { loadConfig, vaultId } from '@brainatlas/core';
 import { recordCreatedDirectories, missingDirectories } from '../install-manifest.mjs';
 import { formatMaintenance, receiptCandidates, runMaintenance } from '../maintain.mjs';
 import { applyCompaction, formatCompaction, planCompaction } from '../compact.mjs';
+import { applyFix, formatFix, planFix } from '../maintain-fix.mjs';
+import { runWeeklyMaintenance, weeklyReminder } from '../maintain-weekly.mjs';
+import {
+  acceptProposal,
+  formatProposalResult,
+  listProposals,
+  rejectProposal,
+  showProposal,
+} from '../synthesis/review.mjs';
 import { formatUsage, isFeedbackVerdict, recordFeedback, usageSummary } from '../usage.mjs';
 import {
   error,
@@ -138,10 +147,95 @@ export async function compact({ flag, value, plan, json, output, paths, env }) {
   return;
 }
 
-export async function maintain({ flag, value, json, output, paths, env }) {
+export async function maintain({ args, flag, value, json, plan, output, paths, env, dependencies }) {
   const requested = value('--vault');
   const repo = value('--repo');
   const queue = flag('--queue');
+  const fix = flag('--fix');
+  const sources = flag('--sources');
+  const weekly = flag('--weekly');
+  const proposals = value('--proposals');
+  if (args.includes('--schedule'))
+    throw error(
+      'E_ARGUMENT',
+      'maintain does not support --schedule; run "brainatlas maintain --weekly" from your own scheduler.'
+    );
+  if (proposals !== undefined) {
+    if (weekly || fix || queue || sources || repo !== undefined) {
+      throw error(
+        'E_ARGUMENT',
+        'maintain --proposals cannot be combined with --weekly, --fix, --queue, --sources or --repo.'
+      );
+    }
+    const tokens = [];
+    for (let index = args.indexOf('--proposals') + 1; index < args.length; index++) {
+      const token = args[index];
+      if (token === '--json') continue;
+      if (token === '--vault') {
+        index++;
+        continue;
+      }
+      if (token.startsWith('--'))
+        throw error('E_ARGUMENT', 'maintain --proposals accepts list, show <id>, accept <id> or reject <id>.');
+      tokens.push(token);
+    }
+    const action = tokens.shift();
+    if (!['list', 'show', 'accept', 'reject'].includes(action)) {
+      throw error('E_ARGUMENT', 'maintain --proposals requires list, show <id>, accept <id> or reject <id>.');
+    }
+    if ((action === 'list' && tokens.length) || (action !== 'list' && tokens.length !== 1)) {
+      throw error('E_ARGUMENT', 'maintain --proposals list takes no id; show, accept and reject take exactly one id.');
+    }
+    const vaultPath =
+      requested === undefined ? (await loadConfig({ paths, env, readOnly: true })).vault.path : requested;
+    const stateDir = join(paths.stateDir, vaultId(resolve(vaultPath)));
+    const now = new Date();
+    let result;
+    if (action === 'list') result = await listProposals({ stateDir, now });
+    else if (action === 'show') result = await showProposal({ vault: vaultPath, stateDir, id: tokens[0], now, env });
+    else if (action === 'accept')
+      result = await acceptProposal({ vault: vaultPath, stateDir, id: tokens[0], now, env });
+    else result = await rejectProposal({ stateDir, id: tokens[0] });
+    output(json ? result : formatProposalResult(result));
+    return;
+  }
+  if (weekly) {
+    if (fix || queue || sources || repo !== undefined)
+      throw error('E_ARGUMENT', 'maintain --weekly cannot be combined with --fix, --queue, --sources or --repo.');
+    const cfg =
+      requested === undefined
+        ? await loadConfig({ paths, env, readOnly: true })
+        : await loadConfig({ paths, env, readOnly: true }).catch(() => null);
+    const vaultPath = requested ?? cfg.vault.path;
+    const configured = Boolean(cfg) && resolve(vaultPath) === resolve(cfg.vault.path);
+    const queued = configured ? (candidates) => queueMaintenanceReceipt({ config: cfg, paths, env, candidates }) : null;
+    const { snapshot, text } = await runWeeklyMaintenance(vaultPath, {
+      paths,
+      env,
+      queue: queued,
+      config: cfg,
+      runCommand: dependencies?.runCommand,
+      configuredVault: configured,
+    });
+    output(json ? snapshot : text);
+    return;
+  }
+  if (fix) {
+    const apply = flag('--apply');
+    if (queue) throw error('E_ARGUMENT', 'maintain --fix cannot be combined with --queue.');
+    if (repo !== undefined) throw error('E_ARGUMENT', 'maintain --fix cannot be combined with --repo.');
+    if (plan === apply) throw error('E_ARGUMENT', 'maintain --fix requires exactly one of --plan or --apply.');
+    const vaultPath =
+      requested === undefined ? (await loadConfig({ paths, env, readOnly: true })).vault.path : requested;
+    const result = plan ? await planFix(vaultPath, { sources }) : await applyFix(vaultPath, { sources });
+    if (json) {
+      output(result);
+      return;
+    }
+    console.log(formatFix(result));
+    return;
+  }
+  if (sources) throw error('E_ARGUMENT', 'maintain --sources requires --fix.');
   const cfg = requested === undefined || queue ? await loadConfig({ paths, env }) : null;
   if (queue && requested !== undefined && resolve(requested) !== resolve(cfg.vault.path))
     throw error('E_ARGUMENT', '--queue only works with the configured vault.');
@@ -152,16 +246,23 @@ export async function maintain({ flag, value, json, output, paths, env }) {
       ? await queueMaintenanceReceipt({ config: cfg, paths, env, candidates })
       : { queued: false, reason: 'no-findings' };
   }
+  const reminder = requested === undefined && cfg ? await weeklyReminder({ paths, vaultPath: cfg.vault.path }) : null;
   if (json) {
+    if (reminder) report.weekly = { lastRun: reminder.lastRun, overdue: true };
     output(report);
     return;
   }
   const text = formatMaintenance(report);
-  if (queue)
-    output(
-      `${text}\n${report.queue.queued ? `Queued ${report.queue.candidates} review candidate(s) for receipts review.` : `Nothing queued (${report.queue.reason}).`}`
-    );
-  else output(text);
+  const lines = queue
+    ? [
+        text,
+        report.queue.queued
+          ? `Queued ${report.queue.candidates} review candidate(s) for receipts review.`
+          : `Nothing queued (${report.queue.reason}).`,
+      ]
+    : [text];
+  if (reminder) lines.push(reminder.line);
+  output(lines.join('\n'));
   return;
 }
 
