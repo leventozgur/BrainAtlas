@@ -239,7 +239,9 @@ async function doctorResult(paths, env) {
             try {
               const semantic = entries.get('semantic');
               const index = await semantic?.readSemanticIndex?.(paths.stateDir);
-              freshness = index ? await semantic.measureIndexFreshness({ corpusDir: cfg.vault.path, index }) : null;
+              freshness = index
+                ? await semantic.measureIndexFreshness({ corpusDir: join(cfg.vault.path, 'wiki'), index })
+                : null;
               if (!index) warnings.push('Semantic index is not available.');
             } catch {
               warnings.push('Semantic index freshness is unavailable.');
