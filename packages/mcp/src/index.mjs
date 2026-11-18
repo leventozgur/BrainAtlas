@@ -15,6 +15,7 @@ import { pageSlug } from './slug.mjs';
 import * as wiki from '@llmwiki/core';
 const TOOL_LIMIT = 20_000;
 const descriptions = {
+  // BA-57: the list carries the synthesized flag; the one-line base description is pinned verbatim by the BA-53 test.
   wiki_query: 'Search verified Wiki evidence and return ranked snippets; compact omits the snippets.',
   wiki_read_page: 'Read a bounded Wiki page, or one of its sections by anchor.',
   wiki_read_index: 'Read the bounded Wiki index.',
@@ -713,15 +714,22 @@ export function createServer(options) {
           const original = answer.results.find((row) => row.path === item.path);
           const section = sections.get(item.path) ?? pageSection(item, queryTerms) ?? chunkSection(item);
           const chunkHeading = item.headingPath?.split(' > ').at(-1) || null;
+          // BA-57: the flag comes from the section object; a chunk-only heading has no section, so it is never flagged.
+          const synthesized = section?.synthesized === true;
           const sectionFields = section
-            ? { heading: section.heading, anchor: section.anchor, headingPath: section.headingPath }
+            ? {
+                heading: section.heading,
+                anchor: section.anchor,
+                headingPath: section.headingPath,
+                ...(synthesized ? { synthesized: true } : {}),
+              }
             : chunkHeading
               ? { heading: chunkHeading, anchor: null, headingPath: item.headingPath }
               : {};
           // Code-point safe: a cut never leaves a lone surrogate (core prefixKeepingPairs, as BA-17 in the core).
           const snippet = core.prefixKeepingPairs(String(item.snippet ?? ''), Math.max(0, budget));
           budget -= snippet.length;
-          return {
+          const row = {
             ...original,
             path: item.path,
             title: item.title,
@@ -733,6 +741,9 @@ export function createServer(options) {
             status: item.status,
             ...sectionFields,
           };
+          // A synthesized section is presented neutrally: a verified page's trust is dropped from that row.
+          if (synthesized && row.trust === 'verified') delete row.trust;
+          return row;
         });
         return { results: stripSnippets(normalized), abstained: false, semantic: { used: true }, mode: settings.mode };
       } catch (error) {
