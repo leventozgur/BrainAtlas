@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- BA-53: new opt-in `retrieval.pullLowConfidence` (default off) returns below-threshold `wiki_query` results flagged `lowConfidence` instead of an empty list, in MCP and `brainatlas wiki query`; the hook path is unchanged.
+- BA-53: `retrieval.pullLowConfidence` now defaults to on, so below-threshold `wiki_query` results are returned flagged `lowConfidence` instead of an empty list, in MCP and `brainatlas wiki query`; an explicit `false` restores the old empty-on-abstain behaviour, and the hook path is unchanged.
 
 - Added Prettier as a development-only formatter (`npm run format`, `npm run format:check`): the JavaScript sources are formatted once with the shared `.prettierrc.json`, CI runs `npm run format:check` after `npm run typecheck`, and the supply-chain guard allows the pinned dev-only root `prettier`; no formatting or behaviour change beyond whitespace, and no release archive changes.
 
