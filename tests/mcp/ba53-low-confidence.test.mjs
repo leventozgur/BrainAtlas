@@ -89,15 +89,28 @@ async function queryDescription(f, config) {
   });
 }
 
-test('key absent: a below-threshold query keeps the unchanged abstained response', async (t) => {
+test('key false: a below-threshold query keeps the pre-BA-53 abstained response', async (t) => {
   const f = await fixture(t);
   const weak = measured(f, WEAK);
   assert.equal(weak.abstained.reason, 'below_threshold');
   assert.ok(weak.all.results.length > 0);
+  assert.deepEqual(await ask(f, configFor(f, false), { query: WEAK }), { results: [], abstained: true });
+});
+
+test('key absent: behaves like true and returns the low-confidence rows', async (t) => {
+  const f = await fixture(t);
+  const weak = measured(f, WEAK);
+  assert.equal(weak.abstained.reason, 'below_threshold');
   const absent = await ask(f, configFor(f), { query: WEAK });
-  const off = await ask(f, configFor(f, false), { query: WEAK });
-  assert.deepEqual(absent, { results: [], abstained: true });
-  assert.equal(JSON.stringify(absent), JSON.stringify(off));
+  assert.deepEqual(absent, await ask(f, configFor(f, true), { query: WEAK }));
+  assert.deepEqual(Object.keys(absent), ['results', 'abstained', 'lowConfidence']);
+  assert.equal(absent.abstained, true);
+  assert.equal(absent.lowConfidence, true);
+  assert.deepEqual(
+    absent.results.map((row) => row.path),
+    weak.all.results.map((row) => row.path)
+  );
+  for (const row of absent.results) assert.equal(row.lowConfidence, true);
 });
 
 test('key true + below_threshold: the rows are flagged and abstained stays true', async (t) => {
@@ -155,11 +168,11 @@ test('key true + compact: only the snippet drops and lowConfidence stays last', 
   assert.equal(compact.lowConfidence, true);
 });
 
-test('the extra description sentence appears only when the key is true', async (t) => {
+test('the extra description sentence appears unless the key is false', async (t) => {
   const f = await fixture(t);
-  assert.equal(await queryDescription(f, configFor(f)), BASE_DESCRIPTION);
-  assert.equal(await queryDescription(f, configFor(f, false)), BASE_DESCRIPTION);
+  assert.equal(await queryDescription(f, configFor(f)), `${BASE_DESCRIPTION} ${EXTRA_SENTENCE}`);
   assert.equal(await queryDescription(f, configFor(f, true)), `${BASE_DESCRIPTION} ${EXTRA_SENTENCE}`);
+  assert.equal(await queryDescription(f, configFor(f, false)), BASE_DESCRIPTION);
 });
 
 test('the wiki CLI returns the same low-confidence object as the MCP tool', async (t) => {

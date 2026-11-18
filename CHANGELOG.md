@@ -3,9 +3,12 @@
 ## Unreleased
 
 - Documentation fixes: the comparison tables in both READMEs are replaced by a sourced related-work list, the READMEs carry the measured semantic numbers, the safety contract carries the measured BA-26 result, the hook deadline wording matches the code, vulnerability reporting is private, and the Turkish README gains a user-guides section.
+
 - Fixed `brainatlas status`/`doctor` semantic index freshness being measured against the vault root instead of `wiki/` (stale was always 0 and missing counted every vault Markdown file).
+
 - BA-54: `brainatlas maintain --repo DIR` now verifies the `@<commit>` suffix of `repo:` sources with read-only git and reports `unknown-commit`, `source-drift` (the file changed between the commit and `HEAD`; uncommitted changes are ignored) and `unverifiable` (no git, not a work tree, unresolved `HEAD`, shallow clone or timeout) as new finding kinds; they appear in the report, the human output and `--queue` but not in `counts`. See `docs/user/maintain.md`.
-- BA-53: new opt-in `retrieval.pullLowConfidence` (default off) returns below-threshold `wiki_query` results flagged `lowConfidence` instead of an empty list, in MCP and `brainatlas wiki query`; the hook path is unchanged.
+
+- BA-53: `retrieval.pullLowConfidence` now defaults to on, so below-threshold `wiki_query` results are returned flagged `lowConfidence` instead of an empty list, in MCP and `brainatlas wiki query`; an explicit `false` restores the old empty-on-abstain behaviour, and the hook path is unchanged.
 
 - Added Prettier as a development-only formatter (`npm run format`, `npm run format:check`): the JavaScript sources are formatted once with the shared `.prettierrc.json`, CI runs `npm run format:check` after `npm run typecheck`, and the supply-chain guard allows the pinned dev-only root `prettier`; no formatting or behaviour change beyond whitespace, and no release archive changes.
 

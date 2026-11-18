@@ -535,10 +535,10 @@ export function createServer(options) {
     }
     scheduleUpdate();
   };
-  // BA-53: the low-confidence sentence is advertised only when retrieval.pullLowConfidence is on; with the key absent or
-  // false the tool list is byte-identical.
+  // BA-53: the low-confidence sentence is advertised unless retrieval.pullLowConfidence is explicitly false; with the key
+  // absent (the default) or true the tool list carries the sentence, and only an explicit false restores the old one.
   const descriptionFor = (name) =>
-    name === 'wiki_query' && config.retrieval?.pullLowConfidence === true
+    name === 'wiki_query' && config.retrieval?.pullLowConfidence !== false
       ? `${descriptions.wiki_query} Results marked lowConfidence scored below the abstain threshold; treat them as weak evidence and verify before relying on them.`
       : descriptions[name];
   const tool = (name, schema, handler) =>
@@ -623,12 +623,12 @@ export function createServer(options) {
       });
       // BA-32: compact drops only the `snippet` key from every result; all other keys, values and their order are unchanged.
       const stripSnippets = (rows) => (compact === true ? rows.map(({ snippet, ...rest }) => rest) : rows);
-      // BA-53: opt-in pull-side low confidence. Only a below-threshold abstention is re-run with no threshold, on the same
-      // searcher snapshot (no refresh), so limit, budget and excluded paths stay identical. Other abstain reasons and
-      // non-abstained answers never produce low-confidence rows.
+      // BA-53: pull-side low confidence, on unless retrieval.pullLowConfidence is explicitly false. Only a below-threshold
+      // abstention is re-run with no threshold, on the same searcher snapshot (no refresh), so limit, budget and excluded
+      // paths stay identical. Other abstain reasons and non-abstained answers never produce low-confidence rows.
       const lowConfidenceAnswer = () => {
         if (
-          config.retrieval?.pullLowConfidence !== true ||
+          config.retrieval?.pullLowConfidence === false ||
           answer.abstained !== true ||
           answer.reason !== 'below_threshold'
         )
