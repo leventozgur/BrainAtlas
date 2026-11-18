@@ -80,6 +80,26 @@ export async function semanticHits({
     const trustByPath = new Map(
       docs.filter(({ trust }) => trust === 'verified' || trust === 'weak').map(({ page, trust }) => [page.path, trust])
     );
+    // BA-57: the lexical answer of the same query carries the section flag. A hybrid hit is flagged only when it carries
+    // `synthesized` itself or when its own heading/anchor/headingPath is the synthesized lexical row's one; a different
+    // section of the same page keeps its trust. Hybrid hits from the semantic module carry only `headingPath`, so its last
+    // `' > '` segment is compared with the section heading as well.
+    const lexicalRows = /** @type {any[]} */ (lexical);
+    const synthesizedRows = new Map(
+      lexicalRows.filter((result) => result.synthesized === true).map((result) => [result.path, result])
+    );
+    const synthesizedHit = (item) => {
+      if (item.synthesized === true) return true;
+      const row = synthesizedRows.get(item.path);
+      if (!row) return false;
+      if (typeof item.anchor === 'string' && item.anchor !== '' && item.anchor === row.anchor) return true;
+      if (typeof item.heading === 'string' && item.heading !== '' && item.heading === row.heading) return true;
+      if (typeof item.headingPath !== 'string' || item.headingPath === '') return false;
+      return (
+        item.headingPath === row.headingPath ||
+        (typeof row.heading === 'string' && row.heading !== '' && item.headingPath.split(' > ').at(-1) === row.heading)
+      );
+    };
     // The semantic index is built over the Wiki folder (`wiki/`), while the hook's lexical corpus is the vault root.
     const entries = index.entries.flatMap((entry) => {
       const path = [`wiki/${entry.path}`, entry.path].find((candidate) => pagePaths.has(candidate));
@@ -101,8 +121,14 @@ export async function semanticHits({
     // Abstention keeps the lexical list, as the MCP path does.
     if (hits.abstained) return { results: lexical };
     const results = hits.map((item) => {
+      const synthesized = synthesizedHit(item);
       const trust = item.trust ?? trustByPath.get(item.path);
-      return prepare({ ...item, ...(trust === 'verified' || trust === 'weak' ? { trust } : {}) });
+      const row = { ...item, ...(trust === 'verified' || trust === 'weak' ? { trust } : {}) };
+      if (synthesized) {
+        row.synthesized = true;
+        if (row.trust === 'verified') delete row.trust;
+      }
+      return prepare(row);
     });
     return { results };
   })().catch((error) => ({

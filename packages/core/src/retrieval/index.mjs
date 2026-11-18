@@ -644,6 +644,17 @@ function headingTime(title) {
 }
 // "Current state", "Güncel durum" or "Current" in the heading marks the section as the present state of its topic.
 const currentMarker = /\bcurrent\b|\bguncel durum\b/u;
+// BA-57: the opening marker of a current-state block written by `maintain --proposals accept`. The block is model-written and
+// human-approved, so it is not verified evidence: detection is by this marker only, never by the heading text.
+const synthesizedMarker = '<!-- brainatlas:current-state -->';
+/** True when the first non-blank line of the section is the synthesized-block marker. Fence lines are ordinary lines here. */
+function isSynthesized(lines) {
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed) return trimmed === synthesizedMarker;
+  }
+  return false;
+}
 // Sections are deliberately derived at query time, after the ranking is final.
 // Date-aware choice (BA-04): among sections whose term score reaches DATED_SECTION_SHARE of the best score, a section
 // whose heading is "current" wins, then the newest dated heading not after asOf, then the higher score, then the earlier
@@ -652,12 +663,17 @@ const currentMarker = /\bcurrent\b|\bguncel durum\b/u;
 const DATED_SECTION_SHARE = 0.6;
 // The H1–H3 sections of a body, in document order, with the split and anchor rule shared by bestSection and pageSections
 // (BA-32). Fenced code blocks are opaque, and a repeated heading gets a `-N` suffix. A section keeps its raw heading line
-// and raw body lines; text before the first heading is not a section.
+// and raw body lines; text before the first heading is not a section. `synthesized` is present and true only for a section
+// whose first non-blank line is the accepted current-state marker (BA-57).
+/**
+ * @typedef {{heading:string,anchor:string,headingPath:string,headingLine:string,lines:string[],time:number|null,isCurrent:boolean,synthesized?:true}} Section
+ */
 function splitSections(body) {
   const lines = body.split('\n'),
-    sections = [],
     ancestors = [],
     used = new Set();
+  /** @type {Section[]} */
+  const sections = [];
   let current = null,
     fenceLength = 0,
     fenceChar = null;
@@ -705,11 +721,14 @@ function splitSections(body) {
     };
     sections.push(current);
   }
+  // BA-57: `synthesized: true` only on a marked section, so every other section keeps its previous shape.
+  for (const section of sections) if (isSynthesized(section.lines)) Object.assign(section, { synthesized: true });
   return sections;
 }
 /**
- * The H1–H3 sections of a page body in document order, as `{heading, anchor, headingPath, text}`. `text` is the heading
- * line plus the section lines, trimmed — exactly the string bestSection returns for that section (BA-32).
+ * The H1–H3 sections of a page body in document order, as `{heading, anchor, headingPath, text}` (plus `synthesized: true`
+ * on a marked synthesized block). `text` is the heading line plus the section lines, trimmed — exactly the string
+ * bestSection returns for that section (BA-32).
  */
 export function pageSections(body) {
   return splitSections(body).map((section) => ({
@@ -717,6 +736,7 @@ export function pageSections(body) {
     anchor: section.anchor,
     headingPath: section.headingPath,
     text: [section.headingLine, ...section.lines].join('\n').trim(),
+    ...(section.synthesized === true ? { synthesized: true } : {}),
   }));
 }
 export function bestSection(body, terms, index, asOf) {
@@ -872,8 +892,11 @@ export function search(index, query, options = {}) {
     if (related.length) result.related = related;
     if (via) result.via = via;
     // Optional (BA-09): `verified` or `weak` for pages with provenance; absent for neutral pages.
+    // BA-57: a synthesized (model-written, human-approved) section is presented neutrally, so a verified page's trust is
+    // omitted for that result; `weak` stays `weak` because the page itself is unconfirmed.
     const trust = index.docs[id].trust;
-    if (trust === 'verified' || trust === 'weak') result.trust = trust;
+    if (section?.synthesized === true) Object.assign(result, { synthesized: true });
+    if (trust === 'weak' || (trust === 'verified' && section?.synthesized !== true)) result.trust = trust;
     // Optional (BA-26): `never` for restricted pages (sensitivity personal or inject never); absent otherwise.
     if (index.docs[id].restricted === true) result.inject = 'never';
     return result;

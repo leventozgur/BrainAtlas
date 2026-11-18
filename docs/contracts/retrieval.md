@@ -107,6 +107,16 @@ const answer = search(index, 'vault backup', {limit:3,budgetChars:1200});
 
 **Cache.** Each indexed document stores its `trust`. `decodeCache` recomputes the class from the cached frontmatter and rejects a cache whose stored class is missing or different; such a cache is rebuilt once. The schema tag stays `retrieval-stat-v6`. As with the other cache checks, this is structural validation under the threat model below.
 
+## Synthesized sections (BA-57 addition, contract version 1)
+
+**Detection.** A section is synthesized when its first non-blank line, trimmed, is exactly `<!-- brainatlas:current-state -->`: the opening marker of the "current state" block that `maintain --proposals accept` writes after human approval. Detection uses the marker only, never the heading text. Fenced code blocks stay opaque, so a marker inside a fence is not a section start and never flags a section.
+
+**Result field.** When the chosen section is synthesized, the result carries `synthesized: true`. If the page's trust is `verified`, that result omits `trust`, because a model-written, human-approved summary is not verified evidence; a `weak` page keeps `trust: 'weak'`. Results whose section is not synthesized keep exactly their previous shape, so a corpus without such a block returns byte-identical results and no page gains the key. `inject: 'never'` is unchanged.
+
+**Unchanged.** Section choice, scores, order, the trust factor and the BA-04 dated/current preference are not affected: this addition changes presentation only.
+
+**Section listing.** `pageSections` returns `{heading, anchor, headingPath, text}` and adds `synthesized: true` only on a synthesized section; other entries keep their previous shape.
+
 ## Restricted pages (BA-26 additions, contract version 1)
 
 **Class.** A page is restricted when its frontmatter has `sensitivity` equal to `personal` or `inject` equal to `never` (both matched case-insensitively after trimming). Restricted pages are indexed and searched like any other page: `search` and the MCP `wiki_query` and `wiki_read_page` paths return them unchanged.
