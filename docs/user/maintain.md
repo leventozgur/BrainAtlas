@@ -214,3 +214,31 @@ JSON object is reported as `E_LEDGER_CORRUPT` and is never overwritten. A `--vau
 `{ran: false, reason: "not-configured-vault"}` without calling the command.
 This phase never writes inside the vault: the page text is only sent to the command and the proposal is only stored.
 
+## Reviewing current-state proposals (`maintain --proposals`)
+
+Stored proposals are reviewed with `brainatlas maintain --proposals list|show <id>|accept <id>|reject <id> [--vault PATH] [--json]`.
+The command reads the per-vault proposal store under `<stateDir>/<vaultId>/synthesis/proposals/`; `--vault` only changes which
+vault is reviewed, not where the records live.
+
+- `list` marks records whose `expiresAt` has passed as `expired` and prints the remaining open records, newest first: `id`,
+  `page`, `batch`, `createdAt`, `expiresAt`, `shadow` and the gate status. It never prints page or proposal text.
+- `show <id>` prints the delta summary first (dropped sentences, changed numbers, lost caveats, block words, conflicts), then the
+  rendered block and a unified diff recomputed from the current page. If the page hash no longer equals the record's `baseHash`,
+  the record becomes `invalidated` and the result carries `reason: "page-changed"`; the command still exits 0.
+- `reject <id>` only sets the record status to `rejected`.
+- `accept <id>` refuses with `E_PROPOSAL_STATE` unless the record is open, with `E_PROPOSAL_SHADOW` for a shadow record, with
+  `E_PROPOSAL_EXPIRED` when it has expired, with `E_PROPOSAL_STALE` (and marks it `invalidated`) when the page changed, and with
+  `E_CONFLICTED_COPY` when the page folder or `wiki/archive/` contains a conflicted copy. Otherwise it takes the Wiki write lock,
+  re-reads and re-checks the page, runs the `--keep 3` compaction (a compaction error refuses the apply) and the five gates on the
+  exact texts, records the retrieval rank of the title and up to four keyword queries, writes the archive and then the page
+  atomically, and verifies both by reading them back. A failing pre-apply Core lint refuses with `E_APPLY_CHECK`; a mismatch after
+  writing restores the originals and fails with `E_APPLY_VERIFY`. After the write, Core lint, the OKF page check and the retrieval
+  ranks (top ten, no more than two places worse) are compared with the pre-apply baseline; any regression restores both files,
+  sets the record to `reverted` and fails with `E_APPLY_REGRESSION` naming only the failing checks. Any other post-write error
+  (including a failing `appendLog`) also restores both files before the original error is rethrown; if a restore step itself fails
+  the command reports `E_APPLY_RESTORE_FAILED` with file names only. A successful apply appends one content-free `synthesis-accept`
+  entry to `wiki/log.md`, sets the record to `accepted`, and leaves the page frontmatter `status` unchanged except that conflicts
+  set it to `disputed`.
+
+No model is called in this phase, and `maintain --weekly` keeps its read-only behaviour.
+

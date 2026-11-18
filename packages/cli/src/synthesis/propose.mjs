@@ -143,7 +143,7 @@ function pageSections(lines) {
  * is and the archive is unchanged, which is always safe for the gates.
  * @returns {Promise<{pageText: string, archiveText: string}>}
  */
-async function withCompaction(root, page, pageText, planned) {
+export async function withCompaction(root, page, pageText, planned) {
   const lines = pageText.split('\n');
   const moved = Array.isArray(planned?.moved) ? planned.moved : [];
   const archiveRel = `wiki/archive/${page.slice('wiki/'.length).replace(/\.md$/u, '').replaceAll('/', '--')}-history.md`;
@@ -173,7 +173,7 @@ async function withCompaction(root, page, pageText, planned) {
 }
 
 /** Replaces the frontmatter `status` with `disputed`, adding the line when the page has no status yet. */
-function withDisputed(text) {
+export function withDisputed(text) {
   const lines = text.split('\n');
   if (lines[0] !== '---') return text;
   let end = -1;

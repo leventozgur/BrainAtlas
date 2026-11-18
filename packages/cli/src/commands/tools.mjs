@@ -8,6 +8,7 @@ import { formatMaintenance, receiptCandidates, runMaintenance } from '../maintai
 import { applyCompaction, formatCompaction, planCompaction } from '../compact.mjs';
 import { applyFix, formatFix, planFix } from '../maintain-fix.mjs';
 import { runWeeklyMaintenance, weeklyReminder } from '../maintain-weekly.mjs';
+import { acceptProposal, formatProposalResult, listProposals, rejectProposal, showProposal } from '../synthesis/review.mjs';
 import { formatUsage, isFeedbackVerdict, recordFeedback, usageSummary } from '../usage.mjs';
 import { error, readCurrent, currentReleaseDir, managedRoots, enabledModuleEntries, moduleContext, activateEnabledModules } from './shared.mjs';
 
@@ -102,7 +103,38 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
   const fix = flag('--fix');
   const sources = flag('--sources');
   const weekly = flag('--weekly');
+  const proposals = value('--proposals');
   if (args.includes('--schedule')) throw error('E_ARGUMENT', 'maintain does not support --schedule; run "brainatlas maintain --weekly" from your own scheduler.');
+  if (proposals !== undefined) {
+    if (weekly || fix || queue || sources || repo !== undefined) {
+      throw error('E_ARGUMENT', 'maintain --proposals cannot be combined with --weekly, --fix, --queue, --sources or --repo.');
+    }
+    const tokens = [];
+    for (let index = args.indexOf('--proposals') + 1; index < args.length; index++) {
+      const token = args[index];
+      if (token === '--json') continue;
+      if (token === '--vault') { index++; continue; }
+      if (token.startsWith('--')) throw error('E_ARGUMENT', 'maintain --proposals accepts list, show <id>, accept <id> or reject <id>.');
+      tokens.push(token);
+    }
+    const action = tokens.shift();
+    if (!['list', 'show', 'accept', 'reject'].includes(action)) {
+      throw error('E_ARGUMENT', 'maintain --proposals requires list, show <id>, accept <id> or reject <id>.');
+    }
+    if ((action === 'list' && tokens.length) || (action !== 'list' && tokens.length !== 1)) {
+      throw error('E_ARGUMENT', 'maintain --proposals list takes no id; show, accept and reject take exactly one id.');
+    }
+    const vaultPath = requested === undefined ? (await loadConfig({ paths, env, readOnly: true })).vault.path : requested;
+    const stateDir = join(paths.stateDir, vaultId(resolve(vaultPath)));
+    const now = new Date();
+    let result;
+    if (action === 'list') result = await listProposals({ stateDir, now });
+    else if (action === 'show') result = await showProposal({ vault: vaultPath, stateDir, id: tokens[0], now, env });
+    else if (action === 'accept') result = await acceptProposal({ vault: vaultPath, stateDir, id: tokens[0], now, env });
+    else result = await rejectProposal({ stateDir, id: tokens[0] });
+    output(json ? result : formatProposalResult(result));
+    return;
+  }
   if (weekly) {
     if (fix || queue || sources || repo !== undefined) throw error('E_ARGUMENT', 'maintain --weekly cannot be combined with --fix, --queue, --sources or --repo.');
     const cfg = requested === undefined

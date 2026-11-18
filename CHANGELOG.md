@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-48 phase B3: new `brainatlas maintain --proposals list|show <id>|accept <id>|reject <id> [--vault PATH] [--json]` reviews stored "current state" proposals. `show` prints the delta, block and a fresh unified diff; `accept` re-runs the gates under the Wiki write lock, applies the same `--keep 3` compaction, verifies both written files, restores them when a lint, OKF or retrieval check regresses, and records one content-free `synthesis-accept` log entry. See `docs/user/maintain.md`.
+
 - BA-48 phase B2: `maintain --weekly` can generate "current state" proposals with an external model command under weekly call and USD caps, in `shadow` mode by default (`maintain.synthesis.mode`). Proposals are stored under `<stateDir>/<vaultId>/synthesis/` for review only — the vault is never written, no background process is started, and a failing model step never fails the weekly run. See `docs/contracts/config.md` and `docs/user/maintain.md`.
 
 - `brainatlas maintain --weekly`: one read-only weekly run that writes a content-free snapshot (report counts, fix plan counts, compaction candidates) to `<stateDir>/<vaultId>/maintenance/weekly-YYYY-MM-DD.json`, keeps the newest 12 snapshots and optionally queues review candidates; plain `maintain` prints one reminder line when the vault's last weekly run is more than 8 days old. BrainAtlas installs no OS scheduler; run `brainatlas maintain --weekly` from your own scheduler (launchd, a systemd user timer or cron) if you want it automated. Nothing in the vault is ever written; no LLM and no network. See docs/user/maintain.md.

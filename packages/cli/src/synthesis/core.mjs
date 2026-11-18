@@ -676,5 +676,16 @@ export function createStore(stateDir) {
     return new Set(records.filter(record => record.status === 'open').map(record => record.batch)).size;
   }
 
-  return { save, list, get, markReviewed, openPaths, unreviewedBatches };
+  /** Overwrites the review status of an existing record (for example `invalidated` or `reverted`). */
+  async function setStatus(id, status) {
+    if (typeof id !== 'string' || !PROPOSAL_ID.test(id)) throw failure('E_ARGUMENT', 'invalid proposal id');
+    if (typeof status !== 'string' || !status) throw failure('E_ARGUMENT', 'status must be a non-empty string');
+    const record = await get(id);
+    if (!record) throw failure('E_NOT_FOUND', 'proposal not found');
+    record.status = status;
+    await atomicWriteFile(fileOf(id), `${JSON.stringify(record, null, 2)}\n`);
+    return record;
+  }
+
+  return { save, list, get, markReviewed, setStatus, openPaths, unreviewedBatches };
 }
