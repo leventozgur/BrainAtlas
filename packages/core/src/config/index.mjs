@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number}},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
 /** @type {object} */
 export const CONFIG_SCHEMA = {
@@ -46,6 +46,8 @@ export const CONFIG_SCHEMA = {
         budgetChars: { type: 'integer', minimum: 1 },
         abstainThreshold: { type: 'number', minimum: 0, maximum: 1 },
         exclude: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 200 }, uniqueItems: true },
+        // BA-53: pull-side only; the hook path is unaffected.
+        pullLowConfidence: { type: 'boolean' },
         shadow: {
           type: 'object',
           required: ['abstainThreshold'],

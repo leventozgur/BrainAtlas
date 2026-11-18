@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-53: new opt-in `retrieval.pullLowConfidence` (default off) returns below-threshold `wiki_query` results flagged `lowConfidence` instead of an empty list, in MCP and `brainatlas wiki query`; the hook path is unchanged.
+
 - Added Prettier as a development-only formatter (`npm run format`, `npm run format:check`): the JavaScript sources are formatted once with the shared `.prettierrc.json`, CI runs `npm run format:check` after `npm run typecheck`, and the supply-chain guard allows the pinned dev-only root `prettier`; no formatting or behaviour change beyond whitespace, and no release archive changes.
 
 - BA-48 phase B3: new `brainatlas maintain --proposals list|show <id>|accept <id>|reject <id> [--vault PATH] [--json]` reviews stored "current state" proposals. `show` prints the delta, block and a fresh unified diff; `accept` re-runs the gates under the Wiki write lock, applies the same `--keep 3` compaction, verifies both written files, restores them when a lint, OKF or retrieval check regresses, and records one content-free `synthesis-accept` log entry. See `docs/user/maintain.md`.
