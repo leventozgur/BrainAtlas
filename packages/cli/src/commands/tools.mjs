@@ -111,7 +111,9 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
     const vaultPath = requested ?? cfg.vault.path;
     const configured = Boolean(cfg) && resolve(vaultPath) === resolve(cfg.vault.path);
     const queued = configured ? candidates => queueMaintenanceReceipt({ config: cfg, paths, env, candidates }) : null;
-    const { snapshot, text } = await runWeeklyMaintenance(vaultPath, { paths, env, queue: queued });
+    const { snapshot, text } = await runWeeklyMaintenance(vaultPath, {
+      paths, env, queue: queued, config: cfg, runCommand: dependencies?.runCommand, configuredVault: configured
+    });
     output(json ? snapshot : text);
     return;
   }

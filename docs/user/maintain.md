@@ -187,3 +187,30 @@ line when `last-weekly.json` exists for that vault and its `ranAt` is more than 
 carries `weekly: {lastRun, overdue: true}` in exactly that case. A vault that never ran `--weekly` gets no reminder, and
 `--vault` runs never do. The check only reads the state directory: it starts no background process and writes nothing.
 
+## Current-state proposals (`maintain.synthesis`)
+
+`maintain --weekly` can ask an external model command for a "current state" proposal per selected page. It is off by
+default; enable it with `brainatlas config set maintain.synthesis.mode shadow` (or `on`) and give it an argv command, for
+example `brainatlas config set maintain.synthesis.command '["claude","-p","--model","claude-haiku-5-5"]'`. The command
+receives the fixed English prompt on stdin and must print one JSON object matching the phase B1 proposal schema; a Claude
+Code `--output-format json` envelope with a `result` string is accepted too. Only a transport failure (a thrown error, a
+timeout or a non-zero exit) is retried, once, with the same command.
+
+The step runs after the read-only weekly steps and honours the weekly budget: `maxCallsPerWeek` calls and
+`maxUsdPerWeek` estimated dollars (`usdPer1kTokens` per 1000 estimated tokens, `timeoutMs` per call). The ledger lives at
+`<stateDir>/<vaultId>/synthesis/ledger.json` keyed by ISO week (`{"<YYYY-Www>": {calls, estUsd}}`). Two unreviewed proposal
+batches pause the model step (`review-backlog`). At most `pagesPerWeek` pages are picked, skipping pages that already have
+an open proposal or were edited in the last seven days, and the page plus its archive are truncated to
+`maxInputChars` (archive first); a page that does not fit alone is skipped as `too-large`.
+
+Every proposal is saved for review under `<stateDir>/<vaultId>/synthesis/proposals/`; a shadow record carries
+`shadow: true`. Gate failures are stored as `gate-failed`, unparsable or schema-invalid output as `rejected-schema` (with
+`proposal: null` and only the truncated schema errors), and neither is reviewable. `maintain --weekly --json` adds
+`synthesis: {ran, reason?, batch, proposals: [{id, page, status, failures}], ledger}` to the snapshot and one queue
+candidate, `Current-state proposals: <n> page(s)`, when at least one stored proposal is open: `n` counts only `open`
+records and the sources are their page paths, so `gate-failed` and `rejected-schema` records are never queued. A failing
+synthesis step is recorded as `{ran: false, reason: "error", code}` and never fails the weekly run; a ledger that is not a
+JSON object is reported as `E_LEDGER_CORRUPT` and is never overwritten. A `--vault` outside the configured vault records
+`{ran: false, reason: "not-configured-vault"}` without calling the command.
+This phase never writes inside the vault: the page text is only sent to the command and the proposal is only stored.
+

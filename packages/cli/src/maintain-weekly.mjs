@@ -8,6 +8,7 @@ import { vaultId } from '@brainatlas/core';
 import { planCompaction } from './compact.mjs';
 import { planFix } from './maintain-fix.mjs';
 import { receiptCandidates, runMaintenance } from './maintain.mjs';
+import { proposeCurrentState, synthesisSettings } from './synthesis/propose.mjs';
 
 /** Snapshots kept per vault; older `weekly-YYYY-MM-DD.json` files are deleted. */
 export const WEEKLY_KEEP = 12;
@@ -106,10 +107,13 @@ async function writeWeeklyState(directory, snapshot) {
 /**
  * One read-only weekly run: the maintenance report, the fix plan and a compaction plan per oversized page. `queue` is
  * the receipts hook of the CLI, or null when the vault is not the configured vault. A queue failure never fails the run.
- * @param {string} vault @param {{paths:any,env:any,queue?:(candidates:any[])=>Promise<any>,now?:Date}} options
+ * In `maintain.synthesis.mode` `shadow` or `on` the external model step runs last; its errors are recorded, never thrown.
+ * `configuredVault: false` (a `--vault` outside the configured vault) records `not-configured-vault` instead of calling it.
+ * @param {string} vault @param {{paths:any,env:any,queue?:(candidates:any[])=>Promise<any>,now?:Date,config?:any,runCommand?:Function,dependencies?:{runCommand?:Function},configuredVault?:boolean}} options
  */
 export async function runWeeklyMaintenance(vault, options = /** @type {any} */ ({})) {
-  const { paths, queue = null, now = new Date() } = options;
+  const { paths, queue = null, now = new Date(), config = null } = options;
+  const runCommand = options.runCommand ?? options.dependencies?.runCommand;
   if (typeof vault !== 'string' || !vault) throw failure('E_VAULT_MISSING', 'Vault is missing or not a directory.');
   const report = await runMaintenance(vault, { now });
   const fix = await planFix(vault, { sources: false, now });
@@ -123,7 +127,29 @@ export async function runWeeklyMaintenance(vault, options = /** @type {any} */ (
       compact.push({ page, error: typeof cause?.code === 'string' ? cause.code : 'E_COMPACTION' });
     }
   }
+  let synthesis = null;
+  if (['shadow', 'on'].includes(synthesisSettings(config).mode)) {
+    if (options.configuredVault === false) synthesis = { ran: false, reason: 'not-configured-vault' };
+    else {
+      try {
+        synthesis = await proposeCurrentState({
+          vault, config, stateDir: join(paths.stateDir, vaultId(resolve(vault))), now, runCommand, env: options.env
+        });
+      } catch (cause) {
+        synthesis = { ran: false, reason: 'error', code: typeof cause?.code === 'string' ? cause.code : 'E_SYNTHESIS' };
+      }
+    }
+  }
   const candidates = weeklyCandidates(report, fix, compact);
+  const proposals = synthesis?.ran && Array.isArray(synthesis.proposals) ? synthesis.proposals : [];
+  const openProposals = proposals.filter(item => item?.status === 'open');
+  if (openProposals.length) {
+    candidates.push({
+      title: `Current-state proposals: ${openProposals.length} page(s)`,
+      summary: `${openProposals.length} open current-state proposal(s) from the external model are waiting for review; nothing was written to the vault.`,
+      sources: openProposals.map(item => item.page).slice(0, CANDIDATE_SOURCES)
+    });
+  }
   const compactionCandidates = compact.filter(item => !item.error && item.moved > 0).length;
   let queued;
   if (queue === null) queued = { queued: false, reason: 'not-configured-vault' };
@@ -139,7 +165,8 @@ export async function runWeeklyMaintenance(vault, options = /** @type {any} */ (
     counts: report.counts,
     fix: { changes: fix.changes.length, counts: fix.counts, unfixed: fix.unfixed.length },
     compact,
-    queue: queued
+    queue: queued,
+    ...(synthesis ? { synthesis } : {})
   };
   await writeWeeklyState(weeklyDirectory(paths, vault), snapshot);
   return { snapshot, text: formatWeekly(snapshot, report.findings.length, compactionCandidates, queued) };

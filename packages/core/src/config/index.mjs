@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number}},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number}},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
 /** @type {object} */
 export const CONFIG_SCHEMA = {
@@ -27,6 +27,16 @@ export const CONFIG_SCHEMA = {
     okf: { type: 'object', required: ['level'], properties: { level: { type: 'string', enum: ['warn','strict'] } }, additionalProperties: false },
     sync: { type: 'object', required: ['transport','options'], properties: { transport: { type: ['string','null'] }, options: { type: 'object' } }, additionalProperties: false },
     semantic: { type: 'object', properties: { enabled: { type: 'boolean' }, baseUrl: { type: 'string', minLength: 1 }, model: { type: 'string', minLength: 1 }, dims: { type: 'integer', minimum: 1 }, queryPrefix: { type: 'string' }, documentPrefix: { type: 'string' }, minScore: { type: 'number', minimum: -1, maximum: 1 }, mode: { type: 'string', enum: ['semantic-primary','rrf'] }, timeoutMs: { type: 'integer', minimum: 1 }, indexTimeoutMs: { type: 'integer', minimum: 1 }, indexBatchSize: { type: 'integer', minimum: 1, maximum: 64 }, allowRemote: { type: 'boolean' } }, additionalProperties: false },
+    maintain: { type: 'object', properties: { synthesis: { type: 'object', properties: {
+      mode: { type: 'string', enum: ['off','shadow','on'] },
+      command: { type: 'array', items: { type: 'string' } },
+      pagesPerWeek: { type: 'integer', minimum: 1, maximum: 3 },
+      maxInputChars: { type: 'integer', minimum: 1000, maximum: 200000 },
+      maxCallsPerWeek: { type: 'integer', minimum: 1, maximum: 10 },
+      maxUsdPerWeek: { type: 'number', minimum: 0, maximum: 20 },
+      usdPer1kTokens: { type: 'number', minimum: 0, maximum: 1 },
+      timeoutMs: { type: 'integer', minimum: 10000, maximum: 600000 }
+    }, additionalProperties: false } }, additionalProperties: false },
     telemetry: { const: false }, readOnly: { type: 'boolean' }, node: { type: 'object', required: ['path'], properties: { path: { type: 'string' } }, additionalProperties: false }
   }
 };

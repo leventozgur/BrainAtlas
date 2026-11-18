@@ -611,7 +611,8 @@ export function createStore(stateDir) {
       expiresAt: new Date(created + PROPOSAL_TTL_MS).toISOString(),
       status,
       proposal: record.proposal,
-      gates: record.gates
+      gates: record.gates,
+      ...(typeof record.shadow === 'boolean' ? { shadow: record.shadow } : {})
     };
     await atomicWriteFile(fileOf(id), `${JSON.stringify(stored, null, 2)}\n`);
     return stored;
