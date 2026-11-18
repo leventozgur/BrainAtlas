@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-54: `brainatlas maintain --repo DIR` now verifies the `@<commit>` suffix of `repo:` sources with read-only git and reports `unknown-commit`, `source-drift` (the file changed between the commit and `HEAD`; uncommitted changes are ignored) and `unverifiable` (no git, not a work tree, unresolved `HEAD`, shallow clone or timeout) as new finding kinds; they appear in the report, the human output and `--queue` but not in `counts`. See `docs/user/maintain.md`.
+
 - Added Prettier as a development-only formatter (`npm run format`, `npm run format:check`): the JavaScript sources are formatted once with the shared `.prettierrc.json`, CI runs `npm run format:check` after `npm run typecheck`, and the supply-chain guard allows the pinned dev-only root `prettier`; no formatting or behaviour change beyond whitespace, and no release archive changes.
 
 - BA-48 phase B3: new `brainatlas maintain --proposals list|show <id>|accept <id>|reject <id> [--vault PATH] [--json]` reviews stored "current state" proposals. `show` prints the delta, block and a fresh unified diff; `accept` re-runs the gates under the Wiki write lock, applies the same `--keep 3` compaction, verifies both written files, restores them when a lint, OKF or retrieval check regresses, and records one content-free `synthesis-accept` log entry. See `docs/user/maintain.md`.

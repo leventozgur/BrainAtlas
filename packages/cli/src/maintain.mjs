@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 // `brainatlas maintain`: read-only Wiki maintenance report. Nothing here writes to the vault or to a `--repo` working tree.
+import { execFile } from 'node:child_process';
 import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { join, posix, resolve } from 'node:path';
 import { checkPage, loadPagesDetailed, parseFrontmatter } from '@brainatlas/core';
@@ -16,8 +17,16 @@ export const KINDS = Object.freeze([
 ]);
 // BA-23: `invalid-frontmatter` is reported in findings, the human output and receipt candidates. It is not a key of `counts`:
 // `counts` keeps the KINDS keys that the BA-12 acceptance contract pins. BA-42 adds `stale-source` and `stale-symbol`
-// (only with `--repo`) the same way.
-export const FINDING_KINDS = Object.freeze([...KINDS, 'invalid-frontmatter', 'stale-source', 'stale-symbol']);
+// (only with `--repo`), and BA-54 adds `unknown-commit`, `source-drift` and `unverifiable`, the same way.
+export const FINDING_KINDS = Object.freeze([
+  ...KINDS,
+  'invalid-frontmatter',
+  'stale-source',
+  'stale-symbol',
+  'unknown-commit',
+  'source-drift',
+  'unverifiable',
+]);
 export const LIMITS = Object.freeze({ oversizedWords: 3000, updateSprawl: 6 });
 const SKIP_ROOT = new Set(['wiki/index.md', 'wiki/log.md']);
 // Same wikilink and Markdown link shapes as the retrieval link graph (packages/core/src/retrieval), copied because that
@@ -212,12 +221,14 @@ async function unreadableWikiPages(root) {
   return loadPagesDetailed(join(root, 'wiki')).skipped.map((rel) => `wiki/${rel}`);
 }
 
-// ---- BA-42: code attribution (`--repo DIR`). Filesystem reads only: no git, no network, no symlink is followed, and commit
-// hashes are not verified. Findings carry repository-relative paths and symbol names, never file content.
+// ---- BA-42: code attribution (`--repo DIR`). No symlink is followed and findings carry repository-relative paths and
+// symbol names, never file content. BA-54 verifies `@<commit>` suffixes with read-only git calls; nothing is written.
 const COMMIT_SUFFIX = /^[0-9a-f]{7,64}$/iu;
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 const SYMBOL_NAME_LIMIT = 200;
 const REJECTED_REPO_PATH = 'repo path is not a file path inside the repository';
+const GIT_TIMEOUT_MS = 5000;
+const COMMIT_DISPLAY = 7;
 
 /** The repository working tree as a real directory, or E_REPO_MISSING. */
 async function repoDirectory(repo) {
@@ -280,15 +291,111 @@ async function repoFileText(repoRoot, rel, cache) {
 }
 
 /**
- * The path part of a `repo:` entry. `repo:<path>@<commit>` strips the suffix only when it is 7 to 64 hexadecimal digits
- * (any case). Any other text after the last `@`, such as a branch name, stays part of the path. Commits are not verified.
- * Returns null for entries that are not `repo:` references.
+ * The path part and the optional commit of a `repo:` entry. `repo:<path>@<commit>` strips the suffix only when it is 7 to
+ * 64 hexadecimal digits (any case); the commit is then lower-cased. Any other text after the last `@`, such as a branch
+ * name, stays part of the path. Returns null for entries that are not `repo:` references.
+ * @param {unknown} entry
+ * @returns {{path:string, commit:string|null}|null}
  */
-function repoSourcePath(entry) {
+function repoSourceRef(entry) {
   if (typeof entry !== 'string' || !entry.startsWith('repo:')) return null;
   const ref = entry.slice('repo:'.length).trim();
   const at = ref.lastIndexOf('@');
-  return at > 0 && COMMIT_SUFFIX.test(ref.slice(at + 1)) ? ref.slice(0, at) : ref;
+  if (at > 0 && COMMIT_SUFFIX.test(ref.slice(at + 1)))
+    return { path: ref.slice(0, at), commit: ref.slice(at + 1).toLowerCase() };
+  return { path: ref, commit: null };
+}
+
+/**
+ * One `git` call inside `repoRoot`. Never throws. `code` is the numeric exit code of a non-zero exit (null when git is
+ * missing or the call failed before exiting), and `timeout` is true when the 5 s limit killed it. The environment keeps
+ * `process.env` and only adds the two variables that make git quiet and read-only.
+ * @param {string} repoRoot
+ * @param {string[]} args
+ * @returns {Promise<{ok:boolean, out:string, code:number|null, timeout:boolean}>}
+ */
+const gitCall = (repoRoot, args) =>
+  new Promise((done) => {
+    execFile(
+      'git',
+      ['-C', repoRoot, ...args],
+      {
+        env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' },
+        timeout: GIT_TIMEOUT_MS,
+        maxBuffer: 1024 * 1024,
+        windowsHide: true,
+      },
+      (error, stdout) => {
+        if (!error) return done({ ok: true, out: String(stdout ?? ''), code: 0, timeout: false });
+        done({
+          ok: false,
+          out: String(stdout ?? ''),
+          code: typeof error.code === 'number' ? error.code : null,
+          timeout: error.killed === true || Boolean(error.signal),
+        });
+      }
+    );
+  });
+
+/**
+ * @typedef {{checkCommit:(commit:string)=>Promise<'exists'|'missing'|'unverifiable'>, checkDrift:(commit:string, path:string)=>Promise<'same'|'drift'|'unverifiable'>}} GitVerifier
+ */
+
+/**
+ * Lazily probed git state of `repoRoot`, shared by every page of one maintain run. No process starts until the first
+ * commit-bearing source asks. The probe runs once (`rev-parse --is-inside-work-tree`, `rev-parse --verify HEAD^{commit}`,
+ * `rev-parse --is-shallow-repository`); then `cat-file` runs once per distinct commit and `diff` once per distinct
+ * (commit, path). Nothing is ever written.
+ * @param {string} repoRoot
+ * @returns {GitVerifier}
+ */
+function gitVerifier(repoRoot) {
+  /** @type {Promise<{ok:boolean, shallow:boolean}>|null} */
+  let probe = null;
+  /** @type {Map<string, Promise<'exists'|'missing'|'unverifiable'>>} */
+  const commits = new Map();
+  /** @type {Map<string, Promise<'same'|'drift'|'unverifiable'>>} */
+  const diffs = new Map();
+  const probed = () => {
+    probe ??= (async () => {
+      const inside = await gitCall(repoRoot, ['rev-parse', '--is-inside-work-tree']);
+      if (!inside.ok || inside.timeout || inside.out.trim() !== 'true') return { ok: false, shallow: false };
+      const head = await gitCall(repoRoot, ['rev-parse', '--verify', 'HEAD^{commit}']);
+      if (!head.ok || head.timeout) return { ok: false, shallow: false };
+      const shallow = await gitCall(repoRoot, ['rev-parse', '--is-shallow-repository']);
+      if (shallow.timeout) return { ok: false, shallow: false };
+      return { ok: true, shallow: shallow.ok && shallow.out.trim() === 'true' };
+    })();
+    return probe;
+  };
+  const checkCommit = (commit) => {
+    const pending = commits.get(commit);
+    if (pending) return pending;
+    const created = (async () => {
+      const state = await probed();
+      if (!state.ok) return 'unverifiable';
+      const exists = await gitCall(repoRoot, ['cat-file', '-e', `${commit}^{commit}`]);
+      if (exists.timeout) return 'unverifiable';
+      if (exists.ok) return 'exists';
+      return state.shallow ? 'unverifiable' : 'missing';
+    })();
+    commits.set(commit, created);
+    return created;
+  };
+  const checkDrift = (commit, path) => {
+    const key = `${commit}\u0000${path}`;
+    const pending = diffs.get(key);
+    if (pending) return pending;
+    const created = (async () => {
+      const result = await gitCall(repoRoot, ['diff', '--quiet', commit, 'HEAD', '--', path]);
+      if (result.ok) return 'same';
+      if (result.timeout) return 'unverifiable';
+      return result.code === 1 ? 'drift' : 'unverifiable';
+    })();
+    diffs.set(key, created);
+    return created;
+  };
+  return { checkCommit, checkDrift };
 }
 
 /**
@@ -324,23 +431,26 @@ function containsWord(text, name) {
 }
 
 /**
- * Repository checks for one page: its `repo:` sources (stale-source) and its `symbols:` list (stale-symbol when the file
- * exists and the name is not in it, stale-source when the file does not). Each finding is reported once per page.
+ * Repository checks for one page: its `repo:` sources (stale-source, plus BA-54 commit findings) and its `symbols:` list
+ * (stale-symbol when the file exists and the name is not in it, stale-source when the file does not). Each finding is
+ * reported once per page.
+ * @param {{path:string, data:object}} page
+ * @param {string} repoRoot
+ * @param {Map<string, string|null>} cache
+ * @param {(kind:string, path:string, detail:string)=>void} add
+ * @param {GitVerifier} git
  */
-async function checkCodeReferences(page, repoRoot, cache, add) {
+async function checkCodeReferences(page, repoRoot, cache, add, git) {
   const reported = new Set();
-  const staleSource = (key, detail) => {
-    if (!reported.has(key)) {
-      reported.add(key);
-      add('stale-source', page.path, detail);
-    }
+  const once = (key, kind, detail) => {
+    if (reported.has(key)) return;
+    reported.add(key);
+    add(kind, page.path, detail);
   };
-  const staleSymbol = (key, detail) => {
-    if (!reported.has(key)) {
-      reported.add(key);
-      add('stale-symbol', page.path, detail);
-    }
-  };
+  const staleSource = (key, detail) => once(key, 'stale-source', detail);
+  const staleSymbol = (key, detail) => once(key, 'stale-symbol', detail);
+  const unverifiable = (commit) =>
+    once(`unverifiable:${commit}`, 'unverifiable', `commit cannot be verified: ${commit.slice(0, COMMIT_DISPLAY)}`);
   const resolveRef = async (rel) => {
     const norm = repoRelativePath(rel);
     if (norm === null) {
@@ -356,8 +466,29 @@ async function checkCodeReferences(page, repoRoot, cache, add) {
   };
   const sources = Array.isArray(page.data.sources) ? page.data.sources : [];
   for (const entry of sources) {
-    const rel = repoSourcePath(entry);
-    if (rel !== null) await resolveRef(rel);
+    const ref = repoSourceRef(entry);
+    if (ref === null) continue;
+    const found = await resolveRef(ref.path);
+    if (ref.commit === null) continue;
+    // BA-54: the commit is checked even when the path is rejected or missing; drift needs both a commit and a real file.
+    const status = await git.checkCommit(ref.commit);
+    if (status === 'unverifiable') {
+      unverifiable(ref.commit);
+      continue;
+    }
+    if (status === 'missing') {
+      once(`unknown:${ref.commit}`, 'unknown-commit', `commit not found: ${ref.commit.slice(0, COMMIT_DISPLAY)}`);
+      continue;
+    }
+    if (found === null) continue;
+    const drift = await git.checkDrift(ref.commit, found.norm);
+    if (drift === 'drift')
+      once(
+        `drift:${ref.commit}:${found.norm}`,
+        'source-drift',
+        `changed since ${ref.commit.slice(0, COMMIT_DISPLAY)}: ${short(found.norm)}`
+      );
+    else if (drift === 'unverifiable') unverifiable(ref.commit);
   }
   if (!Array.isArray(page.data.symbols)) return;
   for (const entry of page.data.symbols) {
@@ -377,8 +508,8 @@ async function checkCodeReferences(page, repoRoot, cache, add) {
  * Read-only maintenance scan of the Wiki under `vault`. Returns findings `{kind, path, detail}` (detail holds only counts,
  * paths, field names or short link targets, never page bodies), counts per kind, the number of content pages scanned
  * (wiki/index.md and wiki/log.md excluded) and the duration. Nothing is written.
- * With `repo` (BA-42), `sources` `repo:` entries and `symbols:` are also checked against that working tree; without it no
- * repository is read.
+ * With `repo` (BA-42), `sources` `repo:` entries and `symbols:` are also checked against that working tree, and BA-54
+ * verifies a commit suffix with read-only git; without `repo` no repository is read and no git process runs.
  */
 /** @param {string} vault @param {{now?:Date,repo?:string}} [options] */
 export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
@@ -524,10 +655,12 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
       add('update-sprawl', path, `${dated} dated Update sections (threshold ${LIMITS.updateSprawl})`);
   }
 
-  // stale-source and stale-symbol: only with `repo`. Files are read, never written; symlinks are not followed.
+  // stale-source and stale-symbol: only with `repo`. Files are read, never written; symlinks are not followed. BA-54
+  // verifies the `@<commit>` suffix of `repo:` sources with read-only git calls; no process runs without such a source.
   if (repoRoot !== null) {
     const cache = new Map();
-    for (const path of content) await checkCodeReferences(pages.get(path), repoRoot, cache, add);
+    const git = gitVerifier(repoRoot);
+    for (const path of content) await checkCodeReferences(pages.get(path), repoRoot, cache, add, git);
   }
 
   findings.sort(

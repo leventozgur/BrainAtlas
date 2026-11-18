@@ -10,9 +10,9 @@ brainatlas maintain --fix (--plan | --apply) [--sources] [--vault PATH] [--json]
 ```
 
 - `--vault PATH`: scan this vault. Without it, the configured vault is scanned.
-- `--repo DIR`: also check code references against the working tree at `DIR`. Only the files are read: no git command
-  runs and nothing is written. Without `--repo`, no repository is read. A missing or non-directory `DIR` fails with
-  `E_REPO_MISSING`.
+- `--repo DIR`: also check code references against the working tree at `DIR`. Only the files are read and only read-only
+  git commands run (to verify a commit suffix): nothing is written and no network is used. Without `--repo`, no repository
+  is read and no git process starts. A missing or non-directory `DIR` fails with `E_REPO_MISSING`.
 - `--json`: print one JSON object: `{ok, findings, counts, pages, durationMs}`. Errors use the usual shape
   `{ok:false, error:{code, message}}`.
 - `--queue`: add one review candidate per finding kind to the receipts queue, for approval with `brainatlas review`.
@@ -36,9 +36,12 @@ page content.
 | `update-sprawl` | The page has 6 or more dated `Update` or `Güncelleme` headings. |
 | `stale-source` | Only with `--repo`: a `sources` entry `repo:<path>[@<commit>]`, or the file of a `symbols:` entry, is not a regular file in the repository. |
 | `stale-symbol` | Only with `--repo`: a `symbols:` name is not found, as a whole word, in its repository file. |
+| `unknown-commit` | Only with `--repo`: the commit of a `repo:<path>@<commit>` source does not exist in the repository. |
+| `source-drift` | Only with `--repo`: the file of a `repo:<path>@<commit>` source changed between that commit and `HEAD`. |
+| `unverifiable` | Only with `--repo`: the commit cannot be checked — git is missing, `DIR` is not a work tree, `HEAD` does not resolve, the clone is shallow or a git call timed out. |
 
-`stale-source` and `stale-symbol` appear in `findings`, the human output and `--queue` receipt candidates, not in
-`counts`. `counts` keeps the same keys as before.
+`stale-source`, `stale-symbol`, `unknown-commit`, `source-drift` and `unverifiable` appear in `findings`, the human output
+and `--queue` receipt candidates, not in `counts`. `counts` keeps the same keys as before.
 
 For an `oversized` page, `brainatlas compact` moves its older dated sections verbatim into
 `wiki/archive/<name>-history.md` (see [compact](compact.md)).
@@ -46,9 +49,19 @@ For an `oversized` page, `brainatlas compact` moves its older dated sections ver
 ### Code references (`--repo`)
 
 - `sources: ["repo:src/total.mjs"]` and `sources: ["repo:src/total.mjs@<commit>"]` both check `src/total.mjs`. The
-  commit is **not verified** (no git runs). The suffix is removed only when it is 7 to 64 hexadecimal digits, in any
-  case. Other text after the last `@`, such as a branch name, stays part of the path, so `repo:src/a.mjs@main` reports
-  `stale-source`. Write the path without that suffix.
+  suffix is removed only when it is 7 to 64 hexadecimal digits, in any case. Other text after the last `@`, such as a
+  branch name, stays part of the path, so `repo:src/a.mjs@main` reports `stale-source`. Write the path without that
+  suffix.
+- A commit suffix is verified with read-only git (`execFile`, no shell, 5 s per call): an existing commit is accepted, a
+  commit that is not in the repository is `unknown-commit`, and a changed file is `source-drift` with `changed since
+  <7 chars>: <path>`. Drift compares the commit with `HEAD` only, so uncommitted working-tree changes are ignored. A
+  source without a commit never starts git.
+- Git must be installed and `DIR` must be a work tree whose `HEAD` resolves; otherwise every checked commit is
+  `unverifiable` (`commit cannot be verified: <7 chars>`) and no `unknown-commit` or `source-drift` is reported. A
+  shallow clone (such as `git clone --depth 1`) also gives `unverifiable` for a commit it does not contain, and any git
+  call that times out is unverifiable too. Nothing is written: no checkout, no fetch, no network.
+- A missing or rejected path still gets its `stale-source` and its commit is still checked, but drift is not checked for
+  it. One page reports at most one finding per kind, commit and path; one commit used for several paths is checked once.
 - A path is checked as a regular file, one component at a time. A symlink anywhere on the way is not followed, so it is
   reported as missing. A directory is not a file.
 - A path that is absolute, has a backslash or a drive letter, contains a `..` segment, ends with `/`, or is empty is
