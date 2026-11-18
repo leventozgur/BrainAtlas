@@ -8,6 +8,8 @@
 - An MCP server with bounded read and retrieval tools, status and lint, and controlled writes when read-only mode is off.
 - Agent adapters that preview and manage only their owned configuration, with trust review steps.
 
+BrainAtlas is designed for coding agents, but the vault does not restrict content type: non-project notes work too.
+
 BrainAtlas is not a hosted knowledge service, a general-purpose agent, or a guarantee that an agent follows retrieved evidence. It does not send telemetry. The secret filter is always enabled and cannot be disabled. Core configuration sets telemetry to false. See [Security](SECURITY.md).
 
 ## Profiles
@@ -17,7 +19,7 @@ BrainAtlas is not a hosted knowledge service, a general-purpose agent, or a guar
 | Lite | Core only; no optional modules | Secret filtering enabled; telemetry off. Recommended starting profile. |
 | Full | Core plus modules marked for Full in the selected release | Optional modules include sync, semantic retrieval, receipts, and strict OKF-inspired checks. Availability depends on release contents. |
 
-Semantic retrieval is experimental, opt-in, uses local Ollama, and is off by default; a measured difference was observed in cross-language retrieval. See [Retrieval](docs/user/retrieval.md) and [Semantic retrieval](docs/user/semantic.md) for details. Folder sync is experimental. Review module status before enabling optional functionality.
+Semantic retrieval is experimental, opt-in, uses local Ollama, and is off by default; on the independent semantic holdout v2 (`wiki_query`, EmbeddingGemma), TR→EN rose from 0/10 to 8/10 and EN→TR from 2/10 to 8/10, while difficult near-topic negatives were not improved (2/10 abstained before and after). See [Retrieval](docs/user/retrieval.md) and [Semantic retrieval](docs/user/semantic.md) for details. Folder sync is experimental. Review module status before enabling optional functionality.
 
 ## Supported agents
 
@@ -88,16 +90,13 @@ Vault and state are local. BrainAtlas has no telemetry. The secret filter scans 
 
 See [Security](SECURITY.md), [Sync](docs/user/sync.md), and the [contracts](docs/contracts/).
 
-## Comparison (as of 2026-11)
+## Comparison and related work
 
-This is a high-level comparison of project types, not a feature benchmark. Verify current product details and upstream documentation before publishing or making a tool choice.
+BrainAtlas does not publish feature comparisons with other tools because their features change and were not independently verified.
 
-| Project/type | General approach | BrainAtlas distinction |
-|---|---|---|
-| claude-mem | Persistent memory/context for Claude Code | BrainAtlas is designed for multiple coding agents, a local Markdown evidence vault, and MCP-based retrieval. **Verify current feature details before publishing.** |
-| basic-memory | Markdown-based knowledge management with agent integrations | BrainAtlas focuses on coding-agent evidence retrieval, controlled writes, privacy filters, and agent adapters. **Verify current feature details before publishing.** |
-| Karpathy-style LLM wiki setups | LLM-maintained Wiki or notes, often built from scripts and prompts | BrainAtlas packages a structured local Wiki, retrieval interfaces, safety checks, and release/update tooling. Implementations vary; verify before publishing. |
-| avenoxbeyin | Reference project named in the development brief | Public identity and capabilities are not verifiable from this offline repository. **Verify before publishing; no comparative claims made.** |
+- The LLM Wiki pattern popularised by Andrej Karpathy: the idea of an LLM-maintained Wiki or note collection, with no code from that work used here.
+- Microsoft llmwiki core (vendored in this repository, MIT; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)).
+- avenoxbeyin (https://github.com/avenoxai/avenoxbeyin): design patterns only (BM25 `k1=1.5` and `b=0.75`, vault-id hash pattern, release and installation patterns), MIT, no code copied; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
 
 ## User guides
 

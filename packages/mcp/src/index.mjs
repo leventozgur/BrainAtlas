@@ -535,8 +535,14 @@ export function createServer(options) {
     }
     scheduleUpdate();
   };
+  // BA-53: the low-confidence sentence is advertised unless retrieval.pullLowConfidence is explicitly false; with the key
+  // absent (the default) or true the tool list carries the sentence, and only an explicit false restores the old one.
+  const descriptionFor = (name) =>
+    name === 'wiki_query' && config.retrieval?.pullLowConfidence !== false
+      ? `${descriptions.wiki_query} Results marked lowConfidence scored below the abstain threshold; treat them as weak evidence and verify before relying on them.`
+      : descriptions[name];
   const tool = (name, schema, handler) =>
-    server.registerTool(name, { description: descriptions[name], inputSchema: schema.shape }, async (args) => {
+    server.registerTool(name, { description: descriptionFor(name), inputSchema: schema.shape }, async (args) => {
       try {
         return textResult(await handler(args));
       } catch (error) {
@@ -617,7 +623,29 @@ export function createServer(options) {
       });
       // BA-32: compact drops only the `snippet` key from every result; all other keys, values and their order are unchanged.
       const stripSnippets = (rows) => (compact === true ? rows.map(({ snippet, ...rest }) => rest) : rows);
-      const lexical = { results: stripSnippets(answer.results), abstained: answer.abstained };
+      // BA-53: pull-side low confidence, on unless retrieval.pullLowConfidence is explicitly false. Only a below-threshold
+      // abstention is re-run with no threshold, on the same searcher snapshot (no refresh), so limit, budget and excluded
+      // paths stay identical. Other abstain reasons and non-abstained answers never produce low-confidence rows.
+      const lowConfidenceAnswer = () => {
+        if (
+          config.retrieval?.pullLowConfidence === false ||
+          answer.abstained !== true ||
+          answer.reason !== 'below_threshold'
+        )
+          return null;
+        const weak = searcher.search(query, {
+          limit: count,
+          budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT),
+          abstainThreshold: 0,
+        });
+        if (!weak.results.length) return null;
+        return {
+          results: stripSnippets(weak.results.map((row) => ({ ...row, lowConfidence: true }))),
+          abstained: true,
+          lowConfidence: true,
+        };
+      };
+      const lexical = lowConfidenceAnswer() ?? { results: stripSnippets(answer.results), abstained: answer.abstained };
       if (!semanticEnabled) return lexical;
       const fallback = (reason) => ({ ...lexical, semantic: { used: false, fallbackReason: reason }, mode: 'lexical' });
       try {

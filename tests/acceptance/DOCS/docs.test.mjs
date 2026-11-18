@@ -180,18 +180,30 @@ test('experimental and unverified integration limitations are disclosed in both 
     assert(!patterns.every((p) => p.test('unqualified claims')));
   }
 });
-test('comparison table keeps unverifiable claims marked for verification', () => {
+test('comparison sections keep claims sourced and cite related work', () => {
+  const forbidden = [
+    'verify before publishing',
+    'verify current',
+    'development brief',
+    'not verifiable',
+    'yayın öncesi doğrulayın',
+    "brief'inde",
+    'doğrulanamıyor',
+  ];
   for (const file of ['README.md', 'README.tr.md']) {
     const text = docs.find((d) => d.file === file).text;
-    for (const name of ['claude-mem', 'basic-memory', 'Karpathy', 'avenoxbeyin']) {
+    const lower = text.toLowerCase();
+    for (const phrase of forbidden) assert.ok(!lower.includes(phrase), `${file}: ${phrase} must be gone`);
+    for (const name of ['claude-mem', 'basic-memory', 'avenoxbeyin']) {
       const row = text
         .split('\n')
         .find((line) => line.startsWith('|') && line.toLowerCase().includes(name.toLowerCase()));
-      assert.ok(
-        row && /verify before publishing|verify current|yayın öncesi doğrulayın|yayın öncesi doğrulayın/i.test(row),
-        `${file}: ${name} must remain qualified pending sourcing`
-      );
+      assert.equal(row, undefined, `${file}: ${name} must not appear in a table row`);
     }
+    const mention = text
+      .split('\n')
+      .find((line) => line.toLowerCase().includes('avenoxbeyin') && line.includes('THIRD_PARTY_NOTICES'));
+    assert.ok(mention, `${file}: avenoxbeyin must be sourced from THIRD_PARTY_NOTICES`);
   }
 });
 test('online quickstart points to the GitHub Releases channel and the signing key fingerprint', () => {

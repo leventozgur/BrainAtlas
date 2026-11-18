@@ -20,7 +20,7 @@ export function runHook(input);
 
 ## Output and errors
 
-Output is at most 4002 characters (Codex at most 1400). The deadline is 4700 ms; timeout fails open with empty output and exit code 0.
+Output is at most 4002 characters (Codex at most 1400). The deadline is the `hooks.deadlineMs` setting (the generated default config sets 1000 ms), clamped to at most 4700 ms; when the setting is absent, 4700 ms applies. A timeout fails open with empty output and exit code 0.
 
 Prompt blocks are packed one result at a time. The hook sends retrieval no cumulative snippet budget and each excerpt is at most 4002 characters (the worker redacts, then caps it). A block is `Title (path)` followed by its excerpt. The header line must fit whole; if it does not, that block and every later one are dropped. An excerpt that does not fit is cut and ends with `…`, and at least one character of excerpt must fit, so a block with page text is never injected header-only. A page is recorded in the session's `seen` state only when its header line was injected. The effective cap is the same as before: 4002 normal, 1500 economic, 1400 Codex, or `retrieval.budgetChars` when that is smaller. Metrics (JSONL `stateDir/metrics/hooks.jsonl`, mode 0600) contain only `ts`, `client`, `event`, `mode`, `durationMs`, `chars`, `results`, `outcome` (`ok|empty|deadline|error`), `session` (first 16 hex of sha256(session_id)) — never prompt text, page paths or the raw session id.
 
