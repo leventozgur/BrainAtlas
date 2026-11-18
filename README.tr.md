@@ -8,6 +8,8 @@
 - Sınırlı okuma ve retrieval araçları, durum ve lint kontrolleri ve salt okunur mod kapalıyken kontrollü yazma sunan MCP sunucusu.
 - Yalnızca kendi yönettiği yapılandırmayı önizleyip uygulayan, güven inceleme adımları olan ajan adaptörleri.
 
+BrainAtlas kodlama ajanları için tasarlanmıştır, ancak kasa içerik türünü kısıtlamaz: proje dışı notlar da çalışır.
+
 BrainAtlas barındırılan bir bilgi servisi veya ajanın kanıtı izleyeceği garantisi değildir. Telemetri göndermez. Gizli bilgi filtresi daima açıktır ve devre dışı bırakılamaz. Güvenlik modeli için [Security](SECURITY.md) belgesine bakın.
 
 ## Profiller
@@ -17,7 +19,7 @@ BrainAtlas barındırılan bir bilgi servisi veya ajanın kanıtı izleyeceği g
 | Lite | Yalnızca çekirdek; isteğe bağlı modül yok | Gizli bilgi filtresi açık, telemetri kapalı. Başlangıç için önerilir. |
 | Full | Seçilen sürümde Full için işaretli modüller ve çekirdek | İsteğe bağlı modüller senkronizasyon, semantik retrieval, makbuzlar ve sıkı OKF esinli kontrolleri içerir. Kullanılabilirlik sürüme bağlıdır. |
 
-Semantik retrieval deneysel, isteğe bağlı, yerel Ollama kullanır ve varsayılan olarak kapalıdır; diller arası retrieval'da ölçülen bir fark görülmüştür. Ayrıntılar: [Retrieval](docs/user/retrieval.md) ve [Semantik retrieval](docs/user/semantic.md). Klasör senkronizasyonu deneysel durumdadır.
+Semantik retrieval deneysel, isteğe bağlı, yerel Ollama kullanır ve varsayılan olarak kapalıdır; bağımsız semantik holdout v2'de (`wiki_query`, EmbeddingGemma) TR→EN 0/10'dan 8/10'a, EN→TR 2/10'dan 8/10'a yükselmiş, zor yakın konulu negatiflerde iyileşme olmamıştır (önce ve sonra 2/10 çekimser). Ayrıntılar: [Retrieval](docs/user/retrieval.md) ve [Semantik retrieval](docs/user/semantic.md). Klasör senkronizasyonu deneysel durumdadır.
 
 ## Desteklenen ajanlar
 
@@ -84,13 +86,25 @@ Doğrulanmış arşivden `brainatlas update --from <archive>` ile güncelleyin. 
 
 Kasa ve durum verileri yereldir. Telemetri yoktur. Desteklenen yazmalardan önce içerik gizli bilgi filtresinden geçer; filtre kapatılamaz. İsteğe bağlı senkronizasyon yalnızca yapılandırıldığında veri aktarır. Ayrıntılar: [SECURITY.md](SECURITY.md), [senkronizasyon kılavuzu](docs/user/sync.md).
 
-## Karşılaştırma (2026-11 itibarıyla)
+## Karşılaştırma ve ilgili çalışmalar
 
-Bu tablo genel yaklaşımı karşılaştırır, performans ölçümü değildir. Yayınlamadan önce ürünlerin güncel özelliklerini ve kaynaklarını doğrulayın.
+BrainAtlas, diğer araçların özellikleri değiştiği ve bağımsız olarak doğrulanmadığı için özellik karşılaştırması yayımlamaz.
 
-| Araç/tür | Genel yaklaşım | BrainAtlas farkı |
-|---|---|---|
-| claude-mem | Claude Code için kalıcı bellek/bağlam | BrainAtlas çoklu ajan, yerel Markdown kanıt kasası ve MCP retrieval odaklıdır. Güncel özellikleri yayın öncesi doğrulayın. |
-| basic-memory | Ajan entegrasyonlu Markdown bilgi yönetimi | BrainAtlas kodlama ajanları için kanıt retrieval'ı, kontrollü yazma ve gizlilik filtrelerine odaklanır. Güncel özellikleri yayın öncesi doğrulayın. |
-| Karpathy tarzı LLM Wiki kurulumları | Betik ve promptlarla yönetilen Wiki/notlar | BrainAtlas yapılandırılmış yerel Wiki, retrieval arayüzleri, güvenlik kontrolleri ve sürüm araçları sunar. Kurulumlar farklılık gösterir; yayın öncesi doğrulayın. |
-| avenoxbeyin | Geliştirme brief'inde anılan referans | Kimliği ve yetenekleri çevrimdışı depodan doğrulanamıyor. Yayın öncesi doğrulayın; karşılaştırmalı iddia yoktur. |
+- Andrej Karpathy'nin popülerleştirdiği LLM Wiki yaklaşımı: LLM tarafından bakımı yapılan bir Wiki veya not koleksiyonu fikri; bu çalışmadan kod kullanılmamıştır.
+- Microsoft llmwiki core (bu depoda vendor'lanmış, MIT; bkz. [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)).
+- avenoxbeyin (https://github.com/avenoxai/avenoxbeyin): yalnızca tasarım desenleri (BM25 `k1=1.5` ve `b=0.75`, vault-id hash deseni, sürüm ve kurulum desenleri), MIT, kod kopyalanmamıştır; bkz. [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+
+## Kullanıcı rehberleri
+
+- [Sürümleri kurma ve doğrulama](docs/user/install.md)
+- [Ajan entegrasyonları ve güven incelemesi](docs/user/agents.md)
+- [Retrieval davranışı ve ölçülen kalite](docs/user/retrieval.md)
+- [OKF esinli metadata](docs/user/okf.md)
+- [Senkronizasyon davranışı](docs/user/sync.md)
+- [Bakım raporu](docs/user/maintain.md)
+- [Salt okunur Wiki CLI (`brainatlas wiki`)](docs/user/wiki-cli.md)
+- [CLI kanalı (MCP ve hook yerine talimatlar)](docs/user/cli-channel.md)
+- [Uzun sayfaları sıkıştırma](docs/user/compact.md)
+- [Kullanım özeti ve geri bildirim](docs/user/usage.md)
+- [Anlamsal retrieval (deneysel)](docs/user/semantic.md)
+- [Sorun giderme](docs/user/troubleshooting.md)
