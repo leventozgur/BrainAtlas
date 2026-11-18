@@ -6,6 +6,8 @@
 
 - BA-56: the current-state synthesis path (`maintain --weekly` with `maintain.synthesis.mode` `shadow`/`on` and `maintain --proposals accept`) now keeps restricted pages (`sensitivity: personal` / `inject: never`) away from the model, secret-scans the prompt and the model output and skips the page with `unsafe-input`/`unsafe-output` (rule ids only), writes proposal records and the ledger with mode `0600` inside `0700` directories, skips the model with reason `offline` when `BRAINATLAS_OFFLINE=1`, and refuses `maintain --proposals accept` outside the configured vault with `E_NOT_CONFIGURED_VAULT`. See `docs/user/maintain.md`.
 
+- BA-57: an accepted `maintain --proposals` "current state" block is detected by its `<!-- brainatlas:current-state -->` marker and presented as synthesized: `synthesized: true` in `search`/`pageSections`, no `trust: 'verified'` on that result, `[synthesized]` in hook title and pointer lines, and the same field through MCP `wiki_query` (lexical and hybrid); ranking is unchanged.
+
 - Documentation fixes: the comparison tables in both READMEs are replaced by a sourced related-work list, the READMEs carry the measured semantic numbers, the safety contract carries the measured BA-26 result, the hook deadline wording matches the code, vulnerability reporting is private, and the Turkish README gains a user-guides section.
 
 - Fixed `brainatlas status`/`doctor` semantic index freshness being measured against the vault root instead of `wiki/` (stale was always 0 and missing counted every vault Markdown file).

@@ -73,8 +73,10 @@ async function withoutRestrictedRecap(text, vault) {
 // refused (null, and the caller stops). The excerpt is cut to the room left and ends with an ellipsis.
 function packBlock(client, event, context, item, cap) {
   const fits = (text) => envelope(client, event, text).length <= cap;
-  // Weak (proposed or disputed) pages get a short marker before the path; the line still ends with the path.
-  const marked = item.trust === 'weak' ? `${item.title} [unverified]` : item.title;
+  // Weak (proposed or disputed) pages get a short marker before the path; a synthesized block (BA-57) adds its own marker
+  // after it. The line still ends with the path.
+  const marker = `${item.trust === 'weak' ? ' [unverified]' : ''}${item.synthesized === true ? ' [synthesized]' : ''}`;
+  const marked = item.title + marker;
   const base = context + (context ? '\n\n' : '') + redact(`${marked} (${item.path})`, REDACT_OUTPUT);
   if (!fits(base)) return null;
   const snippet = redact(item.snippet, REDACT_OUTPUT);
@@ -114,10 +116,10 @@ const clipSnippet = (item, cut, limit) =>
     : item;
 const withAnchor = (item) =>
   typeof item.anchor === 'string' && item.anchor ? { ...item, path: `${item.path}#${item.anchor}` } : item;
-// `- Title › Heading [unverified] (path#anchor)`; heading, marker and anchor appear only when they exist.
+// `- Title › Heading [unverified] [synthesized] (path#anchor)`; heading, markers and anchor appear only when they exist.
 function pointerLine(item) {
   const heading = typeof item.heading === 'string' && item.heading ? ` › ${item.heading}` : '';
-  const marker = item.trust === 'weak' ? ' [unverified]' : '';
+  const marker = `${item.trust === 'weak' ? ' [unverified]' : ''}${item.synthesized === true ? ' [synthesized]' : ''}`;
   const anchor = typeof item.anchor === 'string' && item.anchor ? `#${item.anchor}` : '';
   return `- ${item.title}${heading}${marker} (${item.path}${anchor})`;
 }

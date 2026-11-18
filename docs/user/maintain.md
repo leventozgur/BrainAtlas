@@ -265,6 +265,8 @@ vault is reviewed, not where the records live.
   entry to `wiki/log.md`, sets the record to `accepted`, and leaves the page frontmatter `status` unchanged except that conflicts
   set it to `disputed`.
 
+Accepted blocks are labelled `[synthesized]` in search results and hook output: the block is model-written and human-approved, not verified evidence, so a `confirmed` page's `verified` trust is not shown for that section even though the page keeps it.
+
 No model is called in this phase itself. Since phase B2, `maintain --weekly` can call the configured model command when
 `maintain.synthesis.mode` is `shadow` or `on`, but `--weekly` still never writes the vault.
 
