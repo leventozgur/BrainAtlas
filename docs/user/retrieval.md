@@ -42,6 +42,10 @@ BrainAtlas searches the `wiki/` folder of a vault when it exists, otherwise the 
 
 The default `retrieval.abstainThreshold` is 0.35. Scores are compressed with a square root, making this default meaningful for natural-language queries. If you set a custom threshold, use the square root of its previous value to preserve equivalent strictness: for example, an old value of 0.5 maps to ≈0.71; an old value of 0.25 maps to 0.5.
 
+## Low-confidence results (opt-in)
+
+By default a pull query (`wiki_query` in MCP, `brainatlas wiki query`) returns no rows when the best score is below the abstain threshold. Set `retrieval.pullLowConfidence: true` to get those below-threshold rows back, marked `lowConfidence: true` per row and at the top level, while `abstained` stays `true`; treat them as weak evidence and verify before relying on them. Only this pull path changes: the prompt hook (push) returns exactly the same output with the key on or off, and other abstain reasons (`identifier-not-found`, `no_match`, `empty-query`) still return no rows. The key is off by default and is not written by `defaultConfig`; enable it with `brainatlas config set retrieval.pullLowConfidence true`.
+
 ## Measured retrieval quality
 
 These measurements use synthetic data and small sample sizes; they are directional, not a broad production guarantee.  Measured by the maintainers in November 2026 with the repository evaluation tools.
