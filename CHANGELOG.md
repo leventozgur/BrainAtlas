@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Documentation fixes: the comparison tables in both READMEs are replaced by a sourced related-work list, the READMEs carry the measured semantic numbers, the safety contract carries the measured BA-26 result, the hook deadline wording matches the code, vulnerability reporting is private, and the Turkish README gains a user-guides section.
-
+- Fixed `brainatlas status`/`doctor` semantic index freshness being measured against the vault root instead of `wiki/` (stale was always 0 and missing counted every vault Markdown file).
 - Added Prettier as a development-only formatter (`npm run format`, `npm run format:check`): the JavaScript sources are formatted once with the shared `.prettierrc.json`, CI runs `npm run format:check` after `npm run typecheck`, and the supply-chain guard allows the pinned dev-only root `prettier`; no formatting or behaviour change beyond whitespace, and no release archive changes.
 
 - BA-48 phase B3: new `brainatlas maintain --proposals list|show <id>|accept <id>|reject <id> [--vault PATH] [--json]` reviews stored "current state" proposals. `show` prints the delta, block and a fresh unified diff; `accept` re-runs the gates under the Wiki write lock, applies the same `--keep 3` compaction, verifies both written files, restores them when a lint, OKF or retrieval check regresses, and records one content-free `synthesis-accept` log entry. See `docs/user/maintain.md`.
