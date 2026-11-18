@@ -14,6 +14,6 @@
 
 ## Open notice items
 
-- `THIRD_PARTY_NOTICES:5` has unresolved `TODO(PM)` to confirm the design-pattern source URL and copyright line. The notice names “avenoxbeyin” and says patterns only/no copied code, but source attribution remains unverified.
+- `THIRD_PARTY_NOTICES:5` has unresolved `TODO(PM)` to confirm the design-pattern source URL and copyright line. The notice names “avenoxbeyin” and says patterns only/no copied code, but source attribution remains unverified. Resolved (2026-11-18): THIRD_PARTY_NOTICES no longer contains a TODO.
 - `THIRD_PARTY_NOTICES:6` is stale after this audit and should be updated to point to the completed license inventory and clarify release attribution handling.
 - `THIRD_PARTY_NOTICES:4` correctly points to the vendored MIT license. Vendored `NOTICE` also contains upstream contributor contact metadata; its line locations were listed as email-class privacy matches in the pre-release privacy scan.

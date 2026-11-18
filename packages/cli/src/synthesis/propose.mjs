@@ -472,7 +472,7 @@ async function proposeOneTarget(context, page) {
 
 /**
  * Generates current-state proposals for at most `pagesPerWeek` pages, strictly under the weekly budget, and stores
- * them for review. Shadow mode (the default when enabled) only stores records: the vault is never written.
+ * them for review. The mode defaults to `off`; shadow mode only stores records: the vault is never written.
  * @param {{vault:string, config?:any, stateDir:string, now?:Date, runCommand?:Function, env?:Record<string,string|undefined>}} options
  * @returns {Promise<any>}
  */

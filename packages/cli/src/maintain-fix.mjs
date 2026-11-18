@@ -6,7 +6,7 @@ import { lstat, readFile, readdir, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { appendLog, atomicWriteFile, parseFrontmatter } from '@brainatlas/core';
+import { appendLog, atomicWriteFile, parseFrontmatter, scanText } from '@brainatlas/core';
 import {
   buildNameIndex,
   indexEntries,
@@ -496,6 +496,19 @@ async function planIndex(root, content, pages, files, unfixed) {
   for (const path of content) {
     const rel = path.slice('wiki/'.length);
     if (indexed.has(rel)) continue;
+    const line = indexLine(pages.get(path), rel);
+    // A page title or summary that matches a safety rule never reaches the index: only the rule ids are reported.
+    const findings = scanText(line);
+    if (findings.length) {
+      const ruleIds = [...new Set(findings.map((item) => item.ruleId))].sort();
+      unfixed.push({
+        kind: 'index-missing',
+        path,
+        detail: `index line not written: secret filter (${ruleIds.join(',')})`,
+        reason: 'secret-filter',
+      });
+      continue;
+    }
     const folder = rel.includes('/') ? rel.split('/')[0] : '';
     let key = folder ? capitalize(folder) : '#unsorted';
     let anchor = anchors.get(key) ?? null;
@@ -516,7 +529,6 @@ async function planIndex(root, content, pages, files, unfixed) {
         anchors.set(key, anchor);
       }
     }
-    const line = indexLine(pages.get(path), rel);
     const [entry] = insertAfter(file, anchor, [line]);
     recordChange(file, 'index-missing', entry, null, line);
     anchors.set(key, entry);

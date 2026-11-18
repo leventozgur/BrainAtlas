@@ -265,5 +265,6 @@ vault is reviewed, not where the records live.
   entry to `wiki/log.md`, sets the record to `accepted`, and leaves the page frontmatter `status` unchanged except that conflicts
   set it to `disputed`.
 
-No model is called in this phase, and `maintain --weekly` keeps its read-only behaviour.
+No model is called in this phase itself. Since phase B2, `maintain --weekly` can call the configured model command when
+`maintain.synthesis.mode` is `shadow` or `on`, but `--weekly` still never writes the vault.
 
