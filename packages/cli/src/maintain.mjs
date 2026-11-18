@@ -31,7 +31,8 @@ const INDEX_CATEGORY_LINE = /^##\s+(.+)$/;
 const FENCE_OPEN = /^(`{3,}|~{3,})/;
 
 const finding = (kind, path, detail) => ({ kind, path, detail });
-const keyOf = (text) =>
+// Exported for `maintain --fix` (packages/cli/src/maintain-fix.mjs), which reuses the report's exact scanning rules.
+export const keyOf = (text) =>
   String(text)
     .normalize('NFKD')
     .replace(/\p{M}+/gu, '')
@@ -40,7 +41,7 @@ const keyOf = (text) =>
 const short = (value, limit = 120) => String(value).replace(/\s+/g, ' ').slice(0, limit);
 
 /** Vault root as a real directory. Symlinked pages and directories are never followed below it. */
-async function vaultRoot(vault) {
+export async function vaultRoot(vault) {
   let root;
   try {
     root = await realpath(resolve(vault));
@@ -53,7 +54,7 @@ async function vaultRoot(vault) {
   return root;
 }
 
-async function isRegularFile(root, rel) {
+export async function isRegularFile(root, rel) {
   try {
     const info = await lstat(join(root, rel));
     return info.isFile() && !info.isSymbolicLink();
@@ -62,14 +63,14 @@ async function isRegularFile(root, rel) {
   }
 }
 
-async function readOptionalText(root, rel) {
+export async function readOptionalText(root, rel) {
   if (!(await isRegularFile(root, rel))) return null;
   const text = await readFile(join(root, rel), 'utf8');
   return text.length ? text : null;
 }
 
 /** Every Markdown file under wiki/, vault-relative, sorted. Symlinks are skipped; a symlinked wiki/ counts as absent. */
-async function listWikiMarkdown(root) {
+export async function listWikiMarkdown(root) {
   const wiki = await lstat(join(root, 'wiki')).catch(() => null);
   if (!wiki || !wiki.isDirectory() || wiki.isSymbolicLink()) return [];
   const out = [];
@@ -87,7 +88,7 @@ async function listWikiMarkdown(root) {
 }
 
 /** The body with fenced and inline code removed, line structure kept (same rule as the retrieval link graph). */
-function withoutCode(body) {
+export function withoutCode(body) {
   let out = '',
     fenceLength = 0,
     fenceChar = null;
@@ -153,7 +154,7 @@ function indexLineInfo(line) {
   return path ? { entryPath: posix.normalize(path) } : {};
 }
 /** Entries of an index text: wiki-relative local targets (entries are relative to wiki/, as in the MCP coverage check). */
-function indexEntries(content) {
+export function indexEntries(content) {
   const entries = [];
   let fence = null;
   for (const line of content.split('\n')) {
@@ -175,7 +176,7 @@ function indexEntries(content) {
 }
 
 /** Superseded-by and wikilink/Markdown link resolution against the scanned Wiki pages. */
-function buildNameIndex(pagePaths, pages) {
+export function buildNameIndex(pagePaths, pages) {
   const byPath = new Map(),
     byName = new Map();
   const add = (map, key, path) => {
@@ -195,7 +196,7 @@ function buildNameIndex(pagePaths, pages) {
   }
   return { byPath, byName };
 }
-function resolveWikiName(index, name) {
+export function resolveWikiName(index, name) {
   const pathHits = index.byPath.get(name);
   if (pathHits && pathHits.size === 1) return { target: [...pathHits][0] };
   const nameHits = index.byName.get(name);

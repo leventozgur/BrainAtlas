@@ -34,7 +34,7 @@ const helpDescriptions = Object.freeze({
     'Copy vault content into a new vault. bodyHashMatch compares wiki page bodies except wiki/log.md; logPrefixPreserved confirms the exact source log bytes prefix the target log; logAppendedEntries is the number of migration log entries appended.',
   adopt: 'Inspect existing agent setup and propose adoption.',
   maintain:
-    'Read-only Wiki maintenance report (stale, broken, orphan and oversized pages); writes nothing unless --queue.',
+    'Wiki maintenance report (read-only unless --queue); --fix (--plan | --apply) [--sources] repairs index lines, archived links and source lists; --weekly writes a read-only snapshot; --proposals reviews stored current-state proposals.',
   compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).',
   usage: 'Summarize hook metrics for the last days or record feedback.',
   wiki: 'Read-only Wiki tools from the shell (same results as the MCP read tools).',
@@ -58,7 +58,8 @@ const helpUsages = Object.freeze({
   mcp: 'brainatlas mcp',
   migrate: 'brainatlas migrate --from OLD_VAULT --to NEW_VAULT [--plan] [--json]',
   adopt: 'brainatlas adopt --plan [--json]',
-  maintain: 'brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR]',
+  maintain:
+    'brainatlas maintain [--json] [--vault PATH] [--queue] [--repo DIR] | brainatlas maintain --fix (--plan | --apply) [--sources] [--vault PATH] [--json] | brainatlas maintain --weekly [--vault PATH] [--json] | brainatlas maintain --proposals list|show <id>|accept <id>|reject <id> [--vault PATH] [--json]',
   compact:
     'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]',
   usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful',
