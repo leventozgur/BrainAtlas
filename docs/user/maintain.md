@@ -227,6 +227,18 @@ JSON object is reported as `E_LEDGER_CORRUPT` and is never overwritten. A `--vau
 `{ran: false, reason: "not-configured-vault"}` without calling the command.
 This phase never writes inside the vault: the page text is only sent to the command and the proposal is only stored.
 
+### Data sent to the model
+
+Pages marked `sensitivity: personal` or `inject: never` in their frontmatter (trimmed, case-insensitive) are never sent:
+they are dropped before target selection and never charge the ledger, and the run reports `excluded: <count>` when it
+dropped at least one page. The built prompt and the model's stdout are scanned for secrets before use: a finding skips
+the page as `unsafe-input` (no call, nothing stored, no ledger charge) or `unsafe-output` (the call stays charged,
+nothing is stored, not even a `rejected-schema` record), and the skip lists only the sorted rule ids, never the matched
+text. Proposal records and the ledger are written with mode `0600` inside `0700` directories. With `BRAINATLAS_OFFLINE=1`
+the model step is skipped entirely (`{ran: false, reason: "offline"}`) and the weekly run still finishes normally. The
+model command inherits the full environment of the `brainatlas` process; it is not filtered. `maintain --proposals accept`
+refuses a vault that is not the configured vault with `E_NOT_CONFIGURED_VAULT` before reading any proposal.
+
 ## Reviewing current-state proposals (`maintain --proposals`)
 
 Stored proposals are reviewed with `brainatlas maintain --proposals list|show <id>|accept <id>|reject <id> [--vault PATH] [--json]`.

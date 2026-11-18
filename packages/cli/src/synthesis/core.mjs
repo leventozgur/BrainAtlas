@@ -3,7 +3,7 @@
 // output schema validation, the five blocking gates, the current-state block renderer and the proposal store live here.
 // Pure helpers take `now`/`date` arguments; nothing in this module calls a model, writes a vault page or reads the clock.
 import { createHash } from 'node:crypto';
-import { lstat, readdir, readFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { atomicWriteFile, parseFrontmatter } from '@brainatlas/core';
 import { listWikiMarkdown, vaultRoot, withoutCode } from '../maintain.mjs';
@@ -658,14 +658,21 @@ async function readRecord(file) {
 }
 
 /**
- * The proposal store under `<stateDir>/synthesis/proposals`. Records are written atomically and contain no page text
- * beyond the proposal itself. `now` is always an explicit argument; the store never reads the clock.
+ * The proposal store under `<stateDir>/synthesis/proposals`. Records are written atomically with mode 0600 inside a
+ * directory created with mode 0700 and contain no page text beyond the proposal itself. `now` is always an explicit
+ * argument; the store never reads the clock.
  * @param {string} stateDir
  */
 export function createStore(stateDir) {
   if (typeof stateDir !== 'string' || !stateDir) throw failure('E_ARGUMENT', 'stateDir must be a directory path');
   const directory = join(stateDir, 'synthesis', 'proposals');
   const fileOf = (id) => join(directory, `${id}.json`);
+
+  /** Creates the store directories with mode 0700, then overwrites one record with mode 0600. */
+  async function writeRecord(record) {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await atomicWriteFile(fileOf(record.id), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
+  }
 
   async function save(record) {
     if (!isObject(record)) throw failure('E_ARGUMENT', 'proposal record must be an object');
@@ -696,7 +703,7 @@ export function createStore(stateDir) {
       gates: record.gates,
       ...(typeof record.shadow === 'boolean' ? { shadow: record.shadow } : {}),
     };
-    await atomicWriteFile(fileOf(id), `${JSON.stringify(stored, null, 2)}\n`);
+    await writeRecord(stored);
     return stored;
   }
 
@@ -726,7 +733,7 @@ export function createStore(stateDir) {
       const expires = timeOf(record.expiresAt);
       if (expires === null || expires > now) continue;
       record.status = 'expired';
-      await atomicWriteFile(fileOf(record.id), `${JSON.stringify(record, null, 2)}\n`);
+      await writeRecord(record);
     }
     records.sort(
       (left, right) =>
@@ -748,7 +755,7 @@ export function createStore(stateDir) {
     if (!record) throw failure('E_NOT_FOUND', 'proposal not found');
     if (record.status !== 'open') throw failure('E_PROPOSAL_STATE', 'only an open proposal can be reviewed');
     record.status = verdict;
-    await atomicWriteFile(fileOf(id), `${JSON.stringify(record, null, 2)}\n`);
+    await writeRecord(record);
     return record;
   }
 
@@ -769,7 +776,7 @@ export function createStore(stateDir) {
     const record = await get(id);
     if (!record) throw failure('E_NOT_FOUND', 'proposal not found');
     record.status = status;
-    await atomicWriteFile(fileOf(id), `${JSON.stringify(record, null, 2)}\n`);
+    await writeRecord(record);
     return record;
   }
 

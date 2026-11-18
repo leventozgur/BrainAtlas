@@ -3,9 +3,9 @@
 // only; this module never writes inside the vault and never starts a background process. The model command is injected
 // in tests and defaults to one `spawn` (shell:false) call whose stdin is the prompt.
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
-import { atomicWriteFile, runCommand as defaultRunCommand } from '@brainatlas/core';
+import { mkdir, readFile, stat } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { atomicWriteFile, parseFrontmatter, runCommand as defaultRunCommand, scanText } from '@brainatlas/core';
 import { planCompaction } from '../compact.mjs';
 import { runMaintenance, vaultRoot } from '../maintain.mjs';
 import {
@@ -308,6 +308,48 @@ const ledgerEntry = (ledger, week) =>
 const estimatedUsd = (promptChars, usdPer1kTokens) =>
   (Math.ceil((promptChars + ESTIMATE_OVERHEAD_CHARS) / CHARS_PER_TOKEN) / 1000) * usdPer1kTokens;
 
+/** Writes the ledger with mode 0600, creating `<stateDir>/synthesis` with mode 0700 first. */
+async function writeLedger(file, ledger) {
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  await atomicWriteFile(file, `${JSON.stringify(ledger, null, 2)}\n`, { mode: 0o600 });
+}
+
+/**
+ * The same rule as `restrictedOf` in the retrieval index: `sensitivity: personal` or `inject: never`, both trimmed and
+ * lower-cased. A restricted page is searchable but never leaves the vault.
+ */
+function restrictedOf(frontmatter) {
+  const source = frontmatter || {};
+  const sensitivity = typeof source.sensitivity === 'string' ? source.sensitivity.trim().toLowerCase() : '';
+  const inject = typeof source.inject === 'string' ? source.inject.trim().toLowerCase() : '';
+  return sensitivity === 'personal' || inject === 'never';
+}
+
+/**
+ * Splits a `scorePages` result into the pages the model may see and the count of pages dropped before target selection.
+ * A restricted page, an unreadable file and unparsable frontmatter all fail closed (excluded).
+ * @param {string} root @param {Array<{path: string}>} scored
+ * @returns {Promise<{allowed: Array<{path: string}>, excluded: number}>}
+ */
+async function withoutRestricted(root, scored) {
+  const allowed = [];
+  let excluded = 0;
+  for (const entry of scored) {
+    const text = await readFile(join(root, entry.path), 'utf8').catch(() => null);
+    let restricted = true;
+    if (text !== null) {
+      const parsed = parseFrontmatter(text);
+      restricted = parsed.errors.length > 0 || restrictedOf(parsed.data);
+    }
+    if (restricted) excluded++;
+    else allowed.push(entry);
+  }
+  return { allowed, excluded };
+}
+
+/** Sorted, de-duplicated rule ids of a `scanText` result; the matched text and offsets never leave this module. */
+const ruleIdsOf = (findings) => [...new Set(findings.map((finding) => finding.ruleId))].sort();
+
 /** A schema failure record, in the same shape as a `runGates` result. */
 const schemaFailure = (detail) => ({
   ok: false,
@@ -316,8 +358,9 @@ const schemaFailure = (detail) => ({
 });
 
 /**
- * One target page: read it, plan the compaction, build the prompt, call the model under the budget and save the record.
- * `outcome` is `{budget:true}` when the weekly budget stops the run, otherwise `{proposal}` or `{skipped}`.
+ * One target page: read it, plan the compaction, build the prompt, scan the prompt for secrets, call the model under
+ * the budget, scan the answer and only then save the record. `outcome` is `{budget:true}` when the weekly budget stops
+ * the run, otherwise `{proposal}` or `{skipped}`.
  */
 async function proposeOneTarget(context, page) {
   const { root, vault, store, settings, now, run, env, ledger, week, ledgerFile, batch, mode } = context;
@@ -334,6 +377,10 @@ async function proposeOneTarget(context, page) {
   const sanitizedArchive =
     sanitizedArchiveRaw.length > archiveBudget ? sanitizedArchiveRaw.slice(0, archiveBudget) : sanitizedArchiveRaw;
   const prompt = buildPrompt({ page, pageText: sanitizedPage, archiveText: sanitizedArchive });
+  const inputFindings = scanText(prompt);
+  if (inputFindings.length) {
+    return { skipped: { page, reason: 'unsafe-input', ruleIds: ruleIdsOf(inputFindings) } };
+  }
 
   let result = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -355,7 +402,7 @@ async function proposeOneTarget(context, page) {
       }
     };
     const outcome = await attemptCall();
-    await atomicWriteFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+    await writeLedger(ledgerFile, ledger);
     if (outcome && outcome.code === 0) {
       result = outcome;
       break;
@@ -363,6 +410,12 @@ async function proposeOneTarget(context, page) {
     // Transport failure (thrown error, timeout, non-zero exit): retried exactly once, never with another model.
   }
   if (!result) return { skipped: { page, reason: 'transport-failure' } };
+
+  // The call happened (and stays charged) but an unsafe answer is never parsed or stored.
+  const outputFindings = scanText(typeof result.stdout === 'string' ? result.stdout : '');
+  if (outputFindings.length) {
+    return { skipped: { page, reason: 'unsafe-output', ruleIds: ruleIdsOf(outputFindings) } };
+  }
 
   const parsed = parseProposalOutput(result.stdout);
   let schema = parsed === null ? { ok: false, errors: ['stdout contains no JSON object'] } : validateProposal(parsed);
@@ -431,6 +484,9 @@ export async function proposeCurrentState(options = /** @type {any} */ ({})) {
   if (!settings.command.length || typeof settings.command[0] !== 'string' || !settings.command[0]) {
     return { ran: false, reason: 'not-configured' };
   }
+  if (options.env?.BRAINATLAS_OFFLINE === '1' || process.env.BRAINATLAS_OFFLINE === '1') {
+    return { ran: false, reason: 'offline' };
+  }
 
   const store = createStore(stateDir);
   if ((await store.unreviewedBatches({ now })) >= 2) return { ran: false, reason: 'review-backlog' };
@@ -438,13 +494,14 @@ export async function proposeCurrentState(options = /** @type {any} */ ({})) {
   const root = await vaultRoot(vault);
   const report = await runMaintenance(vault, { now });
   const scored = await scorePages(vault, { now, report });
+  const { allowed, excluded } = await withoutRestricted(root, scored);
   const openPaths = await store.openPaths({ now });
   const recent = new Set();
   for (const entry of scored) {
     const info = await stat(join(root, entry.path)).catch(() => null);
     if (info && now.getTime() - info.mtimeMs <= RECENT_EDIT_MS) recent.add(entry.path);
   }
-  const targets = selectTargets(scored, {
+  const targets = selectTargets(allowed, {
     now,
     maxPages: settings.pagesPerWeek,
     openProposalPaths: openPaths,
@@ -490,6 +547,7 @@ export async function proposeCurrentState(options = /** @type {any} */ ({})) {
     batch,
     proposals,
     ledger,
+    ...(excluded ? { excluded } : {}),
     ...(skipped.length ? { skipped } : {}),
     ...(reason ? { reason } : {}),
   };

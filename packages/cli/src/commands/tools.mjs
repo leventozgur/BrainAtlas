@@ -186,8 +186,17 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
     if ((action === 'list' && tokens.length) || (action !== 'list' && tokens.length !== 1)) {
       throw error('E_ARGUMENT', 'maintain --proposals list takes no id; show, accept and reject take exactly one id.');
     }
-    const vaultPath =
-      requested === undefined ? (await loadConfig({ paths, env, readOnly: true })).vault.path : requested;
+    let vaultPath;
+    if (action === 'accept') {
+      // Accept is the only proposal action that writes the vault: it only ever writes the configured vault.
+      const cfg = await loadConfig({ paths, env, readOnly: true }).catch(() => null);
+      const target = requested ?? cfg?.vault?.path;
+      if (!cfg || !target || resolve(target) !== resolve(cfg.vault.path))
+        throw error('E_NOT_CONFIGURED_VAULT', 'maintain --proposals accept only writes to the configured vault.');
+      vaultPath = target;
+    } else {
+      vaultPath = requested === undefined ? (await loadConfig({ paths, env, readOnly: true })).vault.path : requested;
+    }
     const stateDir = join(paths.stateDir, vaultId(resolve(vaultPath)));
     const now = new Date();
     let result;
