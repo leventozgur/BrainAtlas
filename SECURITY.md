@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities through the repository security policy. **Contact details are intentionally not specified in this checkout; see repository security policy.** Avoid including live credentials or private user data in reports.
+Please report suspected vulnerabilities privately through GitHub private vulnerability reporting on the repository (Security tab → "Report a vulnerability"). Do not open public issues for vulnerabilities. Avoid including live credentials or private user data in reports.
 
 ## Threat model summary
 
