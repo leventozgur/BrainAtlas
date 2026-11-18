@@ -167,6 +167,23 @@ const unexpectedOf = (actual, expected) => {
 };
 const nonStale = (findings) => findings.filter((f) => f.kind !== 'stale-source' && f.kind !== 'stale-symbol');
 const nonBaseline = (findings) => findings.filter((f) => f.kind === 'stale-source' || f.kind === 'stale-symbol');
+// BA-54 changed this contract: `maintain --repo` now verifies the `@<commit>` suffix of `repo:` sources with read-only git,
+// so `unknown-commit`, `source-drift` and `unverifiable` can appear next to the BA-42 kinds. The fixtures' commits are
+// synthetic, so `unknown-commit`/`unverifiable` are expected; these kinds are still never keys of `counts`.
+const BA54_KINDS = ['unknown-commit', 'source-drift', 'unverifiable'];
+const withoutBa54 = (findings) => findings.filter((f) => !BA54_KINDS.includes(f.kind));
+// BA-54: with `--repo` and a commit-bearing source the product may only run these read-only git subcommands.
+const READ_ONLY_GIT_SUBCOMMANDS = new Set(['rev-parse', 'cat-file', 'diff']);
+function assertOnlyReadOnlyGit(log, label) {
+  for (const line of log.split('\n').filter(Boolean)) {
+    const args = line.trim().split(/\s+/u);
+    const at = args.indexOf('-C');
+    assert.ok(at >= 0 && at + 2 < args.length, `${label}: unexpected git invocation: ${line}`);
+    const subcommand = args[at + 2];
+    assert.ok(READ_ONLY_GIT_SUBCOMMANDS.has(subcommand), `${label}: not a read-only subcommand: ${line}`);
+    if (subcommand === 'diff') assert.ok(args.includes('--quiet'), `${label}: diff without --quiet: ${line}`);
+  }
+}
 
 // ---- Fixture freeze.
 test('fixtures are frozen: manifest digest equals the pinned value and every entry still matches', async () => {
@@ -247,7 +264,10 @@ test('H2 false positives: >= 50 valid references, false-positive rate <= 5%', ()
 });
 
 // ---- Hypothesis 3: guard rails.
-test('H3 read-only: vault, repo, HOME snapshot are unchanged by --repo and non-repo runs, and git is never called', async () => {
+// BA-54 changed this contract: `--repo` runs on a vault with `@<commit>` sources do call read-only git (`rev-parse`,
+// `cat-file`, `diff --quiet`). Runs without `--repo`, and `--repo` runs on a vault with no commit-bearing source, still
+// start no git process at all. The read-only snapshots stay byte-identical in every case.
+test('H3 read-only: vault, repo, HOME snapshot are unchanged by --repo and non-repo runs; git is only read-only', async () => {
   const before = {
     main: await snapshot(VAULT.main),
     demo: await snapshot(VAULT.demo),
@@ -255,11 +275,23 @@ test('H3 read-only: vault, repo, HOME snapshot are unchanged by --repo and non-r
     repo: await snapshot(REPO),
     home: await snapshot(HOME_DIR),
   };
-  for (const v of [VAULT.main, VAULT.demo, VAULT.edge]) {
-    runJson('dev', ['--vault', v, '--repo', REPO]);
-    runJson('dev', ['--vault', v]);
+  // vault-main and vault-edge carry `repo:<path>@<commit>` sources; vault-demo has none.
+  const commitBearing = new Set(['main', 'edge']);
+  for (const [v, vault] of Object.entries(VAULT)) {
+    await rm(GIT_LOG, { force: true });
+    runJson('dev', ['--vault', vault, '--repo', REPO]);
+    const repoLog = await gitLog();
+    if (commitBearing.has(v)) {
+      assert.ok(repoLog.length > 0, `${v}: commit-bearing sources must be checked with git`);
+      assertOnlyReadOnlyGit(repoLog, `${v} --repo`);
+    } else assert.equal(repoLog, '', `${v}: the product invoked git`);
+    await rm(GIT_LOG, { force: true });
+    runJson('dev', ['--vault', vault]);
+    assert.equal(await gitLog(), '', `${v} without --repo: the product invoked git`);
   }
+  await rm(GIT_LOG, { force: true });
   runJson('dev', ['--vault', VAULT.main, '--repo', REPO, '--repo', REPO]);
+  assertOnlyReadOnlyGit(await gitLog(), 'main repeated --repo');
   const after = {
     main: await snapshot(VAULT.main),
     demo: await snapshot(VAULT.demo),
@@ -268,7 +300,6 @@ test('H3 read-only: vault, repo, HOME snapshot are unchanged by --repo and non-r
     home: await snapshot(HOME_DIR),
   };
   assert.deepEqual(after, before);
-  assert.equal(await gitLog(), '', 'the product invoked git');
 });
 
 test('H3 no --repo: findings, counts and pages equal main on three vaults (JSON and human output)', () => {
@@ -287,13 +318,20 @@ test('H3 no --repo: findings, counts and pages equal main on three vaults (JSON 
   assert.equal(rows[0].findings, 0, 'vault-main has no baseline findings');
 });
 
+// BA-54 changed this contract: `counts` must still equal a run without `--repo`; the new commit kinds are compared away
+// because they are expected on this fixture repository, whose commits are synthetic.
 test('H3 counts are unchanged by --repo and the new kinds stay out of counts', () => {
   for (const v of ['main', 'demo', 'edge']) {
     const without = runJson('dev', ['--vault', VAULT[v]]);
     const withRepo = runJson('dev', ['--vault', VAULT[v], '--repo', REPO]);
     assert.deepEqual(Object.keys(withRepo.body.counts), KINDS);
     assert.deepEqual(withRepo.body.counts, without.body.counts, `${v} counts`);
-    assert.deepEqual(nonStale(withRepo.body.findings), nonStale(without.body.findings), `${v} baseline findings`);
+    assert.deepEqual(
+      nonStale(withoutBa54(withRepo.body.findings)),
+      nonStale(withoutBa54(without.body.findings)),
+      `${v} baseline findings`
+    );
+    for (const kind of BA54_KINDS) assert.ok(!Object.hasOwn(withRepo.body.counts, kind), `${v} counts has ${kind}`);
   }
 });
 
@@ -346,9 +384,11 @@ test('edge: a file reported missing through both sources and symbols is reported
   assert.equal(hits.length, 1);
 });
 
+// BA-54 changed this contract: the fixture commit `a1b2c3d` is synthetic, so `unknown-commit` is expected here and is
+// filtered out; the stale-source assertion is unchanged.
 test('edge: with-repo page in vault-edge reports only the missing source, and the valid commit reference passes', () => {
   const r = runJson('dev', ['--vault', VAULT.edge, '--repo', REPO]);
-  const hits = r.body.findings
+  const hits = withoutBa54(r.body.findings)
     .filter((f) => f.path === 'wiki/services/with-repo.md')
     .map((f) => `${f.kind}|${f.detail}`);
   assert.deepEqual(hits, ['stale-source|repo file not found: services/gone.ts']);
