@@ -12,6 +12,7 @@ import * as lifecycle from './commands/lifecycle.mjs';
 import * as setup from './commands/setup.mjs';
 import * as configCommands from './commands/config.mjs';
 import * as tools from './commands/tools.mjs';
+import { agentCommand } from './commands/agent.mjs';
 import { dispatchModuleCommand } from './commands/sync.mjs';
 export { hookCommandFor } from './commands/tools.mjs';
 
@@ -23,6 +24,7 @@ const helpDescriptions = Object.freeze({
   config: 'Read or change BrainAtlas configuration.',
   safety: 'Review and manage fingerprinted safety allowances.',
   module: 'List, add, or remove installed modules.',
+  agent: 'List, add, remove an agent or switch its channel.',
   uninstall: 'Remove BrainAtlas while preserving the vault.',
   update: 'Install or inspect a release update.',
   rollback: 'Switch to a previous release.',
@@ -49,6 +51,8 @@ const helpUsages = Object.freeze({
   safety:
     'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]',
   module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
+  agent:
+    'brainatlas agent list [--json] | agent add <agent> [--channel mcp|cli] [--plan] | agent remove <agent> [--plan] | agent set <agent> --channel mcp|cli [--plan]',
   uninstall: 'brainatlas uninstall [--plan]',
   update: 'brainatlas update --from ARCHIVE [--plan] | --check',
   rollback: 'brainatlas rollback [--to VERSION] [--plan]',
@@ -166,6 +170,7 @@ async function showHelp(topic, { paths, env, output, json }) {
 // command === 'update', command === 'rollback', command === 'recover', command === 'eval'
 // command === 'hook', command === 'mcp', command === 'migrate', command === 'adopt'
 // command === 'maintain', command === 'compact', command === 'usage', command === 'wiki'
+// command === 'agent'
 const dispatch = Object.freeze({
   init: setup.init,
   install: lifecycle.install,
@@ -174,6 +179,7 @@ const dispatch = Object.freeze({
   config: configCommands.configCommand,
   safety: configCommands.safety,
   module: configCommands.moduleCommand,
+  agent: agentCommand,
   uninstall: lifecycle.uninstall,
   update: lifecycle.update,
   rollback: lifecycle.rollback,

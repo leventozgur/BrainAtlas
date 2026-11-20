@@ -1,18 +1,12 @@
 // SPDX-License-Identifier: MIT
-import { mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import * as core from '@brainatlas/core';
 import { CHANNEL_AGENTS, defaultConfig, effectiveChannel, loadConfig } from '@brainatlas/core';
-import {
-  recordManagedWrite,
-  recordCreatedDirectories,
-  missingDirectories,
-  snapshotPath,
-} from '../install-manifest.mjs';
 import { adoptPlan, migrateVault } from '../migrate.mjs';
-import { adapterConfig, error, exists, managedRoots, saveTrackedConfig, redactOutput } from './shared.mjs';
+import { error, exists, saveTrackedConfig, redactOutput } from './shared.mjs';
+import { installAdapter } from './adapters.mjs';
 
 const vaultInitDirectories = [
   'wiki/entities',
@@ -179,93 +173,13 @@ export async function init({ flag, value, plan, output, paths, env }) {
     for (const agent of original.agents || [])
       if (effectiveChannel(original, agent) !== effectiveChannel(cfg, agent))
         throw error('E_CHANNEL_SWITCH', 'Run brainatlas uninstall before changing the channel.');
-  const adapterRoot = fileURLToPath(new URL('../../../adapters/', import.meta.url));
-  let available = [];
-  try {
-    available = await readdir(adapterRoot);
-  } catch {
-    /* a missing adapters directory means no adapters are available */
-  }
   if (cfg.agents.some((a) => !/^[a-z0-9-]+$/.test(a))) throw error('E_AGENT_UNKNOWN', 'Invalid agent adapter name.');
   const warnings = [];
   const plannedAdapters = [];
   for (const agent of cfg.agents) {
-    if (!available.includes(agent)) {
-      warnings.push(`Adapter ${agent} is unavailable.`);
-      continue;
-    }
-    try {
-      const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
-      const ctx = {
-        env,
-        config: adapterConfig(cfg, agent),
-        paths,
-        scope: cfg.scope,
-        nodePath: process.execPath,
-        shimPath: paths.binPath,
-        now: new Date(),
-      };
-      if (typeof adapter.plan !== 'function') {
-        warnings.push(`Adapter ${agent} has no planner.`);
-        continue;
-      }
-      const changes = await adapter.plan(ctx);
-      plannedAdapters.push({ agent, changes });
-      if (!plan && typeof adapter.apply === 'function') {
-        const before = new Map();
-        const beforeNames = new Map();
-        const createdDirectories = [];
-        for (const change of changes?.changes || []) {
-          const target = resolve(change.file);
-          before.set(change.file, await snapshotPath(target));
-          const parent = dirname(target);
-          createdDirectories.push(...(await missingDirectories(parent, env.HOME, managedRoots(paths, env))));
-          if (!beforeNames.has(parent))
-            beforeNames.set(
-              parent,
-              new Set(
-                await readdir(parent).catch((cause) => {
-                  if (cause.code === 'ENOENT') return [];
-                  throw cause;
-                })
-              )
-            );
-        }
-        if (changes?.trustReviewRequired && typeof adapter.trustReview === 'function') await adapter.trustReview(ctx);
-        await adapter.apply(changes, ctx);
-        for (const change of changes?.changes || []) {
-          const file = resolve(change.file);
-          await recordManagedWrite(paths, file, {
-            before: before.get(change.file),
-            after: await snapshotPath(file),
-            owner: agent,
-            role: 'adapter-config',
-          });
-        }
-        for (const change of changes?.changes || []) {
-          const target = resolve(change.file);
-          const parent = dirname(target);
-          const known = beforeNames.get(parent) || new Set();
-          for (const file of await readdir(parent).catch(() => [])) {
-            if (file.startsWith(`${basename(target)}.bak.`) && !known.has(file)) {
-              const backup = join(parent, file);
-              await recordManagedWrite(paths, backup, {
-                before: null,
-                after: await snapshotPath(backup),
-                owner: agent,
-                role: 'adapter-backup',
-              });
-            }
-          }
-        }
-        if (createdDirectories.length)
-          await recordCreatedDirectories(paths, createdDirectories, env.HOME, managedRoots(paths, env));
-      } else if (!plan) warnings.push(`Adapter ${agent} has no apply operation.`);
-    } catch (e) {
-      if (e.code === 'E_NOT_IMPLEMENTED' || e.code === 'ERR_MODULE_NOT_FOUND')
-        warnings.push(`Adapter ${agent} is unavailable.`);
-      else throw e;
-    }
+    const result = await installAdapter({ agent, cfg, paths, env, plan });
+    if (result.warning) warnings.push(result.warning);
+    if (plan && result.changes !== undefined) plannedAdapters.push({ agent, changes: result.changes });
   }
   const vaultPath = resolve(cfg.vault.path);
   const vaultSummary = { path: vaultPath, created: await missingVaultInitPaths(vaultPath) };
