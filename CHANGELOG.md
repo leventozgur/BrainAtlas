@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.0-rc.13 — 2026-11-21
+
+Per-agent channel and agent management, plus a fix for the dead semantic hook path in installed Full releases. The default install (MCP + hooks) is unchanged, and without a `channels` entry every file written is byte-identical to rc.12. Also ships the work merged since rc.12: `maintain --weekly` and synthesis review (BA-48), identifier and provenance retrieval fixes, and the corrected `status` semantic freshness count (BA-50).
+
 - BA-61 (phase 3): adapter `detect(env)` (contract v2) is now evidence-based and returns `{detected, evidence}` from home directories and `PATH` commands (read-only, no absolute paths); `brainatlas agent list` shows `detected`/`evidence` and `init` without agents suggests `detectedAgents` (never installs automatically).
 
 - BA-61 (phase 2): `brainatlas agent list | add | remove | set` adds, removes or switches the `mcp`/`cli` channel of one agent after installation without `uninstall` and without touching the other agents (`E_AGENT_SWITCH` when a switch fails and the previous channel is restored).
