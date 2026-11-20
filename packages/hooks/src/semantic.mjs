@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import { packageRootFromUrl } from '../../core/src/paths/index.mjs';
 
 // The semantic step runs inside the retrieval worker after the lexical search. It has its own budget, so a slow or
 // unavailable provider can never consume the whole prompt deadline; on any failure the caller keeps the BM25 list.
@@ -21,8 +22,7 @@ export function semanticRequested(config) {
  * The path is built from this file's location, so it stays inside the release that contains this hook.
  */
 export function semanticEntryUrl() {
-  const root = fileURLToPath(new URL('../../../', import.meta.url));
-  return pathToFileURL(join(root, 'modules', 'semantic', 'src', 'index.mjs')).href;
+  return pathToFileURL(join(packageRootFromUrl(import.meta.url), 'modules', 'semantic', 'src', 'index.mjs')).href;
 }
 
 /**

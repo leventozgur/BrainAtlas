@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
-import { join, posix } from 'node:path';
+import { join, posix, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BrainAtlasError } from '../util/errors.mjs';
 
 /** @typedef {{dataDir:string,configFile:string,stateDir:string,installManifest:string,releasesDir:string,currentDir:string,binPath:string}} ResolvedPaths */
@@ -43,4 +44,29 @@ export function vaultId(absPath) {
   if (typeof absPath !== 'string' || !absPath || !absPath.startsWith('/'))
     throw new BrainAtlasError('E_VAULT_PATH', 'Vault path must be absolute.');
   return createHash('sha256').update(absPath).digest('hex').slice(0, 16);
+}
+
+/**
+ * Root of the release or workspace that contains a BrainAtlas package file, from path segments only.
+ * `node_modules/@brainatlas/<name>/` (installed copy) or `packages/<name>/` (workspace); the last occurrence wins.
+ * @param {string|URL} fileUrl @returns {string}
+ */
+export function packageRootFromUrl(fileUrl) {
+  const bad = (why) => new BrainAtlasError('E_PACKAGE_ROOT', `Cannot determine the package root: ${why}.`);
+  let path;
+  try {
+    if (typeof fileUrl !== 'string' && !(fileUrl instanceof URL)) throw bad('input must be a file URL');
+    path = fileURLToPath(fileUrl);
+  } catch (error) {
+    throw error?.code === 'E_PACKAGE_ROOT' ? error : bad('input must be a file URL');
+  }
+  const segs = path.split(sep === '/' ? '/' : /[\\/]/);
+  let cut = -1;
+  for (let i = 0; i < segs.length; i += 1) {
+    const installed = segs[i] === 'node_modules' && segs[i + 1] === '@brainatlas' && segs[i + 2] && i + 3 < segs.length;
+    const workspace = segs[i] === 'packages' && segs[i + 1] && i + 2 < segs.length;
+    if (installed || workspace) cut = i;
+  }
+  if (cut < 0) throw bad('no package directory in the path');
+  return segs.slice(0, cut).join(sep) || sep;
 }
