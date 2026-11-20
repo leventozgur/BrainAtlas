@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import * as core from '@brainatlas/core';
-import { defaultConfig, loadConfig } from '@brainatlas/core';
+import { CHANNEL_AGENTS, defaultConfig, effectiveChannel, loadConfig } from '@brainatlas/core';
 import {
   recordManagedWrite,
   recordCreatedDirectories,
@@ -12,7 +12,7 @@ import {
   snapshotPath,
 } from '../install-manifest.mjs';
 import { adoptPlan, migrateVault } from '../migrate.mjs';
-import { error, exists, managedRoots, saveTrackedConfig, redactOutput } from './shared.mjs';
+import { adapterConfig, error, exists, managedRoots, saveTrackedConfig, redactOutput } from './shared.mjs';
 
 const vaultInitDirectories = [
   'wiki/entities',
@@ -82,13 +82,32 @@ export async function adopt({ plan, output, env }) {
   return;
 }
 
+/** @param {string} text @returns {Record<string,'mcp'|'cli'>} */
+function parseChannelPairs(text) {
+  /** @type {Record<string, 'mcp' | 'cli'>} */
+  const pairs = {};
+  for (const raw of text.split(',')) {
+    const parts = raw.split('=').map((part) => part.trim());
+    if (parts.length !== 2 || !parts[0] || !parts[1])
+      throw error('E_ARGUMENT', 'Channel must be mcp, cli or a list of <agent>=<mcp|cli> pairs.');
+    const [agent, channel] = parts;
+    if (!CHANNEL_AGENTS.includes(agent)) throw error('E_ARGUMENT', `Channel agent ${agent} is not a known adapter.`);
+    if (channel !== 'mcp' && channel !== 'cli') throw error('E_ARGUMENT', `Channel for ${agent} must be mcp or cli.`);
+    if (Object.hasOwn(pairs, agent)) throw error('E_ARGUMENT', `Channel for ${agent} is given more than once.`);
+    pairs[agent] = channel;
+  }
+  return pairs;
+}
+
 export async function init({ flag, value, plan, output, paths, env }) {
   const requestedVault = value('--vault');
   const requestedProfile = value('--profile');
   const requestedAgents = value('--agents');
   const requestedChannel = value('--channel');
-  if (requestedChannel !== undefined && !['mcp', 'cli'].includes(requestedChannel))
-    throw error('E_ARGUMENT', 'Channel must be mcp or cli.');
+  const channelPairs =
+    requestedChannel !== undefined && !['mcp', 'cli'].includes(requestedChannel)
+      ? parseChannelPairs(requestedChannel)
+      : null;
   const configExists = await exists(paths.configFile);
   const original = configExists ? await loadConfig({ paths, env }) : null;
   let vault = requestedVault;
@@ -142,16 +161,24 @@ export async function init({ flag, value, plan, output, paths, env }) {
       cfg.agents = next;
     }
   }
-  if (requestedChannel !== undefined) {
+  if (channelPairs) {
+    for (const agent of Object.keys(channelPairs))
+      if (!cfg.agents.includes(agent)) throw error('E_ARGUMENT', `Channel agent ${agent} is not an installed agent.`);
+    const before = original?.channels ?? null;
+    const after = { ...cfg.channels, ...channelPairs };
+    cfg.channels = after;
+    recordChange('channels', before, after);
+  } else if (requestedChannel !== undefined) {
     const before = original?.channel ?? null;
     const after = requestedChannel === 'cli' ? 'cli' : null;
-    const effective = (channel) => (channel === 'cli' ? 'cli' : 'mcp');
-    if (original && (original.agents || []).length && effective(before) !== effective(after))
-      throw error('E_CHANNEL_SWITCH', 'Run brainatlas uninstall before changing the channel.');
     recordChange('channel', before, after);
     if (after === 'cli') cfg.channel = 'cli';
     else delete cfg.channel;
   }
+  if (requestedChannel !== undefined && original)
+    for (const agent of original.agents || [])
+      if (effectiveChannel(original, agent) !== effectiveChannel(cfg, agent))
+        throw error('E_CHANNEL_SWITCH', 'Run brainatlas uninstall before changing the channel.');
   const adapterRoot = fileURLToPath(new URL('../../../adapters/', import.meta.url));
   let available = [];
   try {
@@ -171,7 +198,7 @@ export async function init({ flag, value, plan, output, paths, env }) {
       const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
       const ctx = {
         env,
-        config: cfg,
+        config: adapterConfig(cfg, agent),
         paths,
         scope: cfg.scope,
         nodePath: process.execPath,

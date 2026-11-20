@@ -42,7 +42,7 @@ Ayarlar BrainAtlas yapılandırma dosyasındadır (macOS'ta `~/Library/Applicati
 | Anlamsal retrieval (Full, deneysel) | kapalı | `brainatlas config set semantic.enabled true` / `false`; yerel Ollama gerekir | [Anlamsal retrieval](docs/user/semantic.md) |
 | Arama kapsamı | varsa `wiki/`; kök gezinme sayfaları hariç | `brainatlas config set retrieval.exclude '["drafts/**"]'`; `[]` hiçbir şeyi hariç tutmaz; `brainatlas config unset retrieval.exclude` varsayılana döner | [Retrieval](docs/user/retrieval.md) |
 | MCP yazma araçları | açık | `brainatlas config set readOnly true` yalnızca okuma araçlarını bırakır; `false` yazmayı geri açar | [Sözleşmeler](docs/contracts/) |
-| MCP ve hook yerine kabuk | kapalı (varsayılan kanal MCP) | `brainatlas init --channel cli`; mevcut kurulumu değiştirmek için önce `brainatlas uninstall` | [CLI kanalı](docs/user/cli-channel.md) |
+| MCP ve hook yerine kabuk | kapalı (varsayılan kanal MCP) | `brainatlas init --channel cli` veya ajan başına `--channel claude-code=cli,kiro=mcp`; mevcut kurulumu değiştirmek için önce `brainatlas uninstall` | [CLI kanalı](docs/user/cli-channel.md) |
 | Klasör veya Git senkronu (Full, deneysel) | kapalı | `sync.transport` ile yapılandırılır; açmadan önce rehbere bakın | [Sync](docs/user/sync.md) |
 | Telemetri ve gizli bilgi filtresi | kapalı / açık, kilitli | Değiştirilemez (`E_LOCKED_KEY`) | [Güvenlik](SECURITY.md) |
 

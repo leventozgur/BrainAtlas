@@ -3,13 +3,26 @@ import { lstat, readlink, realpath } from 'node:fs/promises';
 import { dirname, join, resolve, relative, sep, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as core from '@brainatlas/core';
-import { saveConfig, discoverModules, resolveModuleOrder, redact } from '@brainatlas/core';
+import { effectiveChannel, saveConfig, discoverModules, resolveModuleOrder, redact } from '@brainatlas/core';
 import {
   recordManagedWrite,
   recordCreatedDirectories,
   missingDirectories,
   snapshotPath,
 } from '../install-manifest.mjs';
+
+/**
+ * BA-61: the config an adapter sees. Identical to `cfg` unless a per-agent channel entry exists.
+ * @param {any} cfg @param {string} agent
+ */
+export function adapterConfig(cfg, agent) {
+  const map = cfg?.channels;
+  if (!map || typeof map !== 'object' || !Object.hasOwn(map, agent)) return cfg;
+  const copy = { ...cfg };
+  if (effectiveChannel(cfg, agent) === 'cli') copy.channel = 'cli';
+  else delete copy.channel;
+  return copy;
+}
 
 export const error = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details });
 export const validVersion = (value) =>

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-61 (phase 1): per-agent channel in configuration. `init --channel claude-code=cli,kiro=mcp` stores an optional `channels` map (the global `channel` stays the default for other agents), `effectiveChannel(config, agent)` is exported from core, `status` adds `agentChannels`, `config set/unset channels...` is rejected with `E_CHANNEL_SWITCH`, and without `channels` every written file is byte-identical to before.
+
 - BA-58: documentation, test and consistency fixes for BA-48: the synthesis mode default is documented as `off` with `shadow` as the first review step, the `--weekly` wording matches the configured model step (the vault is still never written), `maintain --fix` skips an index line whose title or summary matches a safety rule and reports `secret-filter` with rule ids only, and the review tests cover `E_APPLY_VERIFY` and the retrieval rollback.
 
 - BA-56: the current-state synthesis path (`maintain --weekly` with `maintain.synthesis.mode` `shadow`/`on` and `maintain --proposals accept`) now keeps restricted pages (`sensitivity: personal` / `inject: never`) away from the model, secret-scans the prompt and the model output and skips the page with `unsafe-input`/`unsafe-output` (rule ids only), writes proposal records and the ledger with mode `0600` inside `0700` directories, skips the model with reason `offline` when `BRAINATLAS_OFFLINE=1`, and refuses `maintain --proposals accept` outside the configured vault with `E_NOT_CONFIGURED_VAULT`. See `docs/user/maintain.md`.

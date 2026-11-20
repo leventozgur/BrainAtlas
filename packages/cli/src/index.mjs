@@ -41,7 +41,7 @@ const helpDescriptions = Object.freeze({
   help: 'Show built-in and active module commands.',
 });
 const helpUsages = Object.freeze({
-  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--channel mcp|cli] [--plan] [--json]',
+  init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--channel mcp|cli|<agent>=<mcp|cli>,...] [--plan] [--json]',
   install: 'brainatlas install [--finalize]',
   status: 'brainatlas status [--json]',
   doctor: 'brainatlas doctor [--json]',

@@ -44,7 +44,7 @@ Settings live in the BrainAtlas configuration file (`~/Library/Application Suppo
 | Semantic retrieval (Full, experimental) | off | `brainatlas config set semantic.enabled true` / `false`; needs local Ollama | [Semantic retrieval](docs/user/semantic.md) |
 | Search scope | `wiki/` when present; root navigation pages excluded | `brainatlas config set retrieval.exclude '["drafts/**"]'`; `[]` excludes nothing; `brainatlas config unset retrieval.exclude` restores the default | [Retrieval](docs/user/retrieval.md) |
 | MCP write tools | on | `brainatlas config set readOnly true` leaves only the read tools; `false` restores writes | [Contracts](docs/contracts/) |
-| Shell instead of MCP and hooks | off (default channel is MCP) | `brainatlas init --channel cli`; to switch an existing install run `brainatlas uninstall` first | [CLI channel](docs/user/cli-channel.md) |
+| Shell instead of MCP and hooks | off (default channel is MCP) | `brainatlas init --channel cli` or per agent `--channel claude-code=cli,kiro=mcp`; to switch an existing install run `brainatlas uninstall` first | [CLI channel](docs/user/cli-channel.md) |
 | Folder or Git sync (Full, experimental) | off | Configured with `sync.transport`; see the guide before enabling | [Sync](docs/user/sync.md) |
 | Telemetry and secret filter | off / on, locked | Cannot be changed (`E_LOCKED_KEY`) | [Security](SECURITY.md) |
 

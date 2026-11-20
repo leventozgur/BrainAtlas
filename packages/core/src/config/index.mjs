@@ -3,7 +3,25 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',channels?:{'claude-code'?:'mcp'|'cli',codex?:'mcp'|'cli','copilot-vscode'?:'mcp'|'cli','gemini-cli'?:'mcp'|'cli',kiro?:'mcp'|'cli'},vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+
+/** Adapter names that may carry a per-agent channel (BA-61). */
+export const CHANNEL_AGENTS = Object.freeze(['claude-code', 'codex', 'copilot-vscode', 'gemini-cli', 'kiro']);
+
+/**
+ * BA-61: the channel an agent uses. A per-agent `channels` entry wins over the global `channel`.
+ * @param {{channel?:unknown,channels?:unknown}|null|undefined} config
+ * @param {string} agent
+ * @returns {'mcp'|'cli'}
+ */
+export function effectiveChannel(config, agent) {
+  const map = config && typeof config === 'object' ? config.channels : undefined;
+  if (map && typeof map === 'object' && !Array.isArray(map) && Object.hasOwn(map, agent)) {
+    const value = map[agent];
+    if (value === 'mcp' || value === 'cli') return value;
+  }
+  return config && typeof config === 'object' && config.channel === 'cli' ? 'cli' : 'mcp';
+}
 
 /** @type {object} */
 export const CONFIG_SCHEMA = {
@@ -30,6 +48,12 @@ export const CONFIG_SCHEMA = {
     schemaVersion: { type: 'integer', enum: [1] },
     profile: { type: 'string', enum: ['lite', 'full', 'custom'] },
     channel: { type: 'string', enum: ['mcp', 'cli'] },
+    // BA-61: optional per-agent override of `channel`.
+    channels: {
+      type: 'object',
+      properties: Object.fromEntries(CHANNEL_AGENTS.map((name) => [name, { type: 'string', enum: ['mcp', 'cli'] }])),
+      additionalProperties: false,
+    },
     vault: {
       type: 'object',
       required: ['path'],

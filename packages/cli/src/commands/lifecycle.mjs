@@ -3,7 +3,7 @@ import { access, chmod, lstat, mkdir, readdir, readFile, rename, rm, symlink, wr
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { defaultConfig, loadConfig, validateConfig } from '@brainatlas/core';
+import { defaultConfig, effectiveChannel, loadConfig, validateConfig } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from '../archive.mjs';
 import {
   managePath,
@@ -18,6 +18,7 @@ import {
 } from '../install-manifest.mjs';
 import { installedSyncSchedule } from './sync.mjs';
 import {
+  adapterConfig,
   error,
   validVersion,
   managedRoots,
@@ -184,7 +185,7 @@ async function doctorResult(paths, env) {
             (
               await adapter.doctor({
                 env,
-                config: cfg,
+                config: adapterConfig(cfg, agent),
                 paths,
                 scope: cfg.scope,
                 nodePath: cfg.node.path,
@@ -275,7 +276,7 @@ async function removeAdapters(cfg, paths, env) {
       }
       const ctx = {
         env,
-        config: cfg,
+        config: adapterConfig(cfg, agent),
         paths,
         scope: cfg.scope,
         nodePath: cfg.node.path,
@@ -290,7 +291,10 @@ async function removeAdapters(cfg, paths, env) {
         try {
           return await adapter.plan(ctx);
         } catch (cause) {
-          if (cfg.channel === 'cli' && (cause?.reason === 'skill-file' || cause?.code === 'E_CHANNEL_SWITCH'))
+          if (
+            effectiveChannel(cfg, agent) === 'cli' &&
+            (cause?.reason === 'skill-file' || cause?.code === 'E_CHANNEL_SWITCH')
+          )
             return { changes: [] };
           throw cause;
         }
@@ -513,7 +517,16 @@ export async function install({ args, flag, plan, output, paths, env }) {
 export async function status({ command, output, paths, env }) {
   const result = await doctorResult(paths, env);
   const current = await readCurrent(paths);
-  output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null });
+  if (command === 'status') {
+    const cfg = await loadConfig({ paths, env }).catch(() => null);
+    // A config that cannot be loaded gives null, not {}: an empty object would read as "no agents".
+    const agentChannels = cfg
+      ? Object.fromEntries(
+          (Array.isArray(cfg.agents) ? cfg.agents : []).map((name) => [name, effectiveChannel(cfg, name)])
+        )
+      : null;
+    output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null, agentChannels });
+  } else output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null });
   if (command === 'doctor' && !result.ok) process.exitCode = 1;
   return;
 }
