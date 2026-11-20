@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 import { mkdir, readFile, readdir, writeFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { BrainAtlasError } from '../util/errors.mjs';
+import { packageRootFromUrl } from '../paths/index.mjs';
 import { atomicWriteFile, resolveSafePath } from '../util/index.mjs';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../');
+const root = packageRootFromUrl(import.meta.url);
 const markdown = (s) => (typeof s === 'string' ? s : String(s ?? ''));
 const validRel = (s) =>
   typeof s === 'string' &&
