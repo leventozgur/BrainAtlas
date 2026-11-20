@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- BA-61 (phase 3): adapter `detect(env)` (contract v2) is now evidence-based and returns `{detected, evidence}` from home directories and `PATH` commands (read-only, no absolute paths); `brainatlas agent list` shows `detected`/`evidence` and `init` without agents suggests `detectedAgents` (never installs automatically).
+
+- BA-61 (phase 2): `brainatlas agent list | add | remove | set` adds, removes or switches the `mcp`/`cli` channel of one agent after installation without `uninstall` and without touching the other agents (`E_AGENT_SWITCH` when a switch fails and the previous channel is restored).
+
+- BA-61 (phase 1): per-agent channel in configuration. `init --channel claude-code=cli,kiro=mcp` stores an optional `channels` map (the global `channel` stays the default for other agents), `effectiveChannel(config, agent)` is exported from core, `status` adds `agentChannels`, `config set/unset channels...` is rejected with `E_CHANNEL_SWITCH`, and without `channels` every written file is byte-identical to before.
+
 - BA-59: the prompt hook and core vault templates now find the release root from an installed `node_modules/@brainatlas/<name>/` copy (new `packageRootFromUrl`), so an installed Full release no longer records `semantic: "fallback:module-missing"`.
 
 - BA-58: documentation, test and consistency fixes for BA-48: the synthesis mode default is documented as `off` with `shadow` as the first review step, the `--weekly` wording matches the configured model step (the vault is still never written), `maintain --fix` skips an index line whose title or summary matches a safety rule and reports `secret-filter` with rule ids only, and the review tests cover `E_APPLY_VERIFY` and the retrieval rollback.

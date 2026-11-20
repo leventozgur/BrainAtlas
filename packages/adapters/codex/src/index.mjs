@@ -3,7 +3,7 @@ import { readFileSync, realpathSync, lstatSync, readlinkSync } from 'node:fs';
 import { readFile, access, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { atomicWriteFile, BrainAtlasError, resolvePaths } from '@brainatlas/core';
+import { atomicWriteFile, BrainAtlasError, detectEvidence, resolvePaths } from '@brainatlas/core';
 
 export const id = 'codex';
 export const displayName = 'Codex CLI';
@@ -668,9 +668,15 @@ function assertNoMcp(ctx, p) {
   if (hooks && managedHooks(hooks, ctx).length) err('E_CHANNEL_SWITCH', CHANNEL_SWITCH);
 }
 
-/** @param {Record<string,unknown>} env @returns {boolean} */
-export function detect(env = {}) {
-  return typeof env.HOME === 'string' && !!env.HOME;
+/** @param {Record<string,any> | null | undefined} env @returns {{detected: boolean, evidence: string[]}} */
+export function detect(env) {
+  const home = env?.CODEX_HOME;
+  const override = typeof home === 'string' && path.isAbsolute(home);
+  return detectEvidence({
+    env,
+    dirs: override ? [{ path: home, label: '$CODEX_HOME' }] : ['.codex'],
+    commands: ['codex'],
+  });
 }
 
 /** @param {Record<string,any>} ctx */

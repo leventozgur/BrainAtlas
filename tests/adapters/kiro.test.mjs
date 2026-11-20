@@ -43,8 +43,15 @@ async function snapshot(root) {
 }
 
 test('detect requires injected HOME; plan is pure and describes MCP, steering, and hook', async () => {
-  assert.equal(adapter.detect({ HOME: '/fake/home' }), true);
-  assert.equal(adapter.detect({}), false);
+  const detectHome = await mkdtemp(join(tmpdir(), 'brainatlas-detect-'));
+  try {
+    assert.deepEqual(adapter.detect({ HOME: detectHome }), { detected: false, evidence: [] });
+    await mkdir(join(detectHome, '.kiro'));
+    assert.deepEqual(adapter.detect({ HOME: detectHome }), { detected: true, evidence: ['~/.kiro'] });
+    assert.deepEqual(adapter.detect({}), { detected: false, evidence: [] });
+  } finally {
+    await rm(detectHome, { recursive: true, force: true });
+  }
   const home = await fixture('empty');
   try {
     const ctx = makeCtx(home),

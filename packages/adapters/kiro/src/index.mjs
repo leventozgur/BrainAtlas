@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile, unlink, mkdir, access, lstat } from 'node:fs/promises';
 import { join, resolve, dirname, isAbsolute, sep } from 'node:path';
-import { atomicWriteFile, resolvePaths } from '@brainatlas/core';
+import { atomicWriteFile, detectEvidence, resolvePaths } from '@brainatlas/core';
 
 export const id = 'kiro';
 export const displayName = 'Kiro';
@@ -144,9 +144,9 @@ async function readRecord(ctx, file) {
   }
 }
 
-/** @param {Record<string,unknown>} env @returns {boolean} */
-export function detect(env = {}) {
-  return typeof env.HOME === 'string' && !!env.HOME;
+/** @param {Record<string,any> | null | undefined} env @returns {{detected: boolean, evidence: string[]}} */
+export function detect(env) {
+  return detectEvidence({ env, dirs: ['.kiro'], commands: ['kiro'] });
 }
 async function assertNoMcp(ctx, locations) {
   // Tolerant read: a BOM or an unreadable document means "no BrainAtlas entry" because

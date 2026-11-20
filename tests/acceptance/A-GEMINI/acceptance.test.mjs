@@ -134,8 +134,11 @@ test('file symlink does not alter outside target', async (t) => {
 });
 test('doctor, detection and trust review distinguish states and identify Gemini', async (t) => {
   const x = await setup(t);
-  assert.equal(a.detect({ HOME: x.home }), false);
-  assert.equal(a.detect({ HOME: x.home, GEMINI_CLI: '1' }), true);
+  assert.deepEqual(a.detect({ HOME: x.home, GEMINI_CLI: '1' }), { detected: false, evidence: [] });
+  const detectHome = await mkdtemp(join(tmpdir(), 'brainatlas-detect-'));
+  t.after(() => rm(detectHome, { recursive: true, force: true }));
+  await mkdir(join(detectHome, '.gemini'));
+  assert.deepEqual(a.detect({ HOME: detectHome }), { detected: true, evidence: ['~/.gemini'] });
   let d = await a.doctor(x.ctx);
   assert.equal(d.checks.find((c) => c.id === 'registered').ok, false);
   await a.apply(a.plan(x.ctx), x.ctx);

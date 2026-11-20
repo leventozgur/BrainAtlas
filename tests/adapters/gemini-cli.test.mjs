@@ -31,8 +31,10 @@ async function cleanup(base) {
 test('detect and plan are explicit; plan does not write', async (t) => {
   const x = await setup();
   t.after(() => cleanup(x.base));
-  assert.equal(adapter.detect({ HOME: x.ctx.env.HOME, GEMINI_CLI: '1' }), true);
-  assert.equal(adapter.detect({ HOME: x.ctx.env.HOME }), false);
+  assert.deepEqual(adapter.detect({ HOME: x.ctx.env.HOME, GEMINI_CLI: '1' }), { detected: false, evidence: [] });
+  await mkdir(join(x.ctx.env.HOME, '.gemini'));
+  assert.deepEqual(adapter.detect({ HOME: x.ctx.env.HOME }), { detected: true, evidence: ['~/.gemini'] });
+  await rm(join(x.ctx.env.HOME, '.gemini'), { recursive: true });
   const p = adapter.plan(x.ctx);
   assert.equal(p.changes.length, 2);
   assert.equal(p.trustReviewRequired, true);

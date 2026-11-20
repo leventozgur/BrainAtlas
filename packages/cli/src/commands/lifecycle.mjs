@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 import { access, chmod, lstat, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { defaultConfig, loadConfig, validateConfig } from '@brainatlas/core';
+import { defaultConfig, effectiveChannel, loadConfig, validateConfig } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from '../archive.mjs';
 import {
   managePath,
@@ -17,6 +16,7 @@ import {
   removeCreatedDirectories,
 } from '../install-manifest.mjs';
 import { installedSyncSchedule } from './sync.mjs';
+import { adapterHealth, removeAdapter } from './adapters.mjs';
 import {
   error,
   validVersion,
@@ -175,30 +175,10 @@ async function doctorResult(paths, env) {
   const warnings = [];
   const moduleHealth = [];
   if (checks.release && cfg.agents?.length) {
-    const adapterRoot = fileURLToPath(new URL('../../../adapters/', import.meta.url));
     for (const agent of cfg.agents) {
-      try {
-        const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
-        if (typeof adapter.doctor === 'function')
-          checks[`adapter:${agent}`] = Boolean(
-            (
-              await adapter.doctor({
-                env,
-                config: cfg,
-                paths,
-                scope: cfg.scope,
-                nodePath: cfg.node.path,
-                shimPath: paths.binPath,
-                now: new Date(),
-              })
-            )?.ok
-          );
-        else warnings.push(`Adapter ${agent} has no health check.`);
-      } catch (cause) {
-        if (cause?.code === 'ERR_MODULE_NOT_FOUND' || cause?.code === 'E_NOT_IMPLEMENTED')
-          warnings.push(`Adapter ${agent} is unavailable.`);
-        else checks[`adapter:${agent}`] = false;
-      }
+      const health = await adapterHealth({ agent, cfg, paths, env });
+      if (health.warning) warnings.push(health.warning);
+      else checks[`adapter:${agent}`] = health.ok;
     }
   }
   if (checks.release && cfg.modules?.length) {
@@ -264,88 +244,10 @@ async function doctorResult(paths, env) {
   };
 }
 async function removeAdapters(cfg, paths, env) {
-  const adapterRoot = fileURLToPath(new URL('../../../adapters/', import.meta.url));
   const warnings = [];
   for (const agent of cfg.agents || []) {
-    try {
-      const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
-      if (typeof adapter.remove !== 'function') {
-        warnings.push(`Adapter ${agent} has no remove operation.`);
-        continue;
-      }
-      const ctx = {
-        env,
-        config: cfg,
-        paths,
-        scope: cfg.scope,
-        nodePath: cfg.node.path,
-        shimPath: paths.binPath,
-        now: new Date(),
-      };
-      // An init-time conflict (for example a pre-existing skill file) must not stop uninstall:
-      // removal reaches the adapter so it can report E_MANAGED_BLOCK_EDITED or restore user bytes.
-      // A user's MCP entry or hook must not block removing the cli-channel files either.
-      const planForRemoval = async () => {
-        if (typeof adapter.plan !== 'function') return { changes: [] };
-        try {
-          return await adapter.plan(ctx);
-        } catch (cause) {
-          if (cfg.channel === 'cli' && (cause?.reason === 'skill-file' || cause?.code === 'E_CHANNEL_SWITCH'))
-            return { changes: [] };
-          throw cause;
-        }
-      };
-      const planned = await planForRemoval();
-      const managed = new Map();
-      const manifest = await readInstallManifest(paths);
-      for (const entry of manifest.files) {
-        if (entry.owners?.includes(agent)) managed.set(entry.path, await snapshotPath(entry.path));
-      }
-      for (const change of planned?.changes || []) {
-        const file = resolve(change.file);
-        if (!managed.has(file)) managed.set(file, await snapshotPath(file));
-      }
-      const knownNames = new Map();
-      for (const file of managed.keys()) {
-        const parent = dirname(file);
-        if (!knownNames.has(parent))
-          knownNames.set(
-            parent,
-            new Set(
-              await readdir(parent).catch((cause) => {
-                if (cause.code === 'ENOENT') return [];
-                throw cause;
-              })
-            )
-          );
-      }
-      await adapter.remove(ctx);
-      for (const [file, before] of managed) {
-        const after = await snapshotPath(file);
-        if (before?.sha256 !== after?.sha256 || before?.kind !== after?.kind || before?.mode !== after?.mode) {
-          await recordManagedWrite(paths, file, { before, after, owner: agent });
-        }
-        const parent = dirname(file);
-        const known = knownNames.get(parent) || new Set();
-        for (const name of await readdir(parent).catch((cause) => {
-          if (cause.code === 'ENOENT') return [];
-          throw cause;
-        })) {
-          if (!name.startsWith(`${basename(file)}.bak.`) || known.has(name)) continue;
-          const backup = join(parent, name);
-          await recordManagedWrite(paths, backup, {
-            before: null,
-            after: await snapshotPath(backup),
-            owner: agent,
-            role: 'adapter-backup',
-          });
-        }
-      }
-    } catch (cause) {
-      if (cause?.code === 'E_NOT_IMPLEMENTED' || cause?.code === 'ERR_MODULE_NOT_FOUND')
-        warnings.push(`Adapter ${agent} is unavailable.`);
-      else throw cause;
-    }
+    const result = await removeAdapter({ agent, cfg, paths, env });
+    if (result.warning) warnings.push(result.warning);
   }
   return warnings;
 }
@@ -513,7 +415,16 @@ export async function install({ args, flag, plan, output, paths, env }) {
 export async function status({ command, output, paths, env }) {
   const result = await doctorResult(paths, env);
   const current = await readCurrent(paths);
-  output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null });
+  if (command === 'status') {
+    const cfg = await loadConfig({ paths, env }).catch(() => null);
+    // A config that cannot be loaded gives null, not {}: an empty object would read as "no agents".
+    const agentChannels = cfg
+      ? Object.fromEntries(
+          (Array.isArray(cfg.agents) ? cfg.agents : []).map((name) => [name, effectiveChannel(cfg, name)])
+        )
+      : null;
+    output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null, agentChannels });
+  } else output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null });
   if (command === 'doctor' && !result.ok) process.exitCode = 1;
   return;
 }

@@ -44,9 +44,17 @@ async function snapshot(root) {
   return result;
 }
 
-test('detect and contract metadata', () => {
-  assert.equal(adapter.detect({ HOME: '/user', CLAUDE_CODE: '1' }), true);
-  assert.equal(adapter.detect({ HOME: '/user' }), false);
+test('detect and contract metadata', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'brainatlas-detect-'));
+  try {
+    assert.deepEqual(adapter.detect({ HOME: home, CLAUDE_CODE: '1' }), { detected: false, evidence: [] });
+    await mkdir(join(home, '.claude'));
+    await writeFile(join(home, '.claude.json'), '{}');
+    assert.deepEqual(adapter.detect({ HOME: home }), { detected: true, evidence: ['~/.claude', '~/.claude.json'] });
+    assert.deepEqual(adapter.detect(undefined), { detected: false, evidence: [] });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
   assert.equal(adapter.id, 'claude-code');
 });
 

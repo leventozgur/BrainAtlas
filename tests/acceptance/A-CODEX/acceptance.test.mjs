@@ -168,8 +168,12 @@ test('trust review identifies Codex and supplies steps; detect handles absent ho
   assert.match(review.client, /codex/i);
   assert.ok(review.steps.length);
   assert.match(review.steps.join(' '), /codex/i);
-  assert.equal(adapter.detect({ HOME: f.home }), true);
-  assert.equal(adapter.detect({}), false);
+  const detectHome = await mkdtemp(path.join(os.tmpdir(), 'brainatlas-detect-'));
+  t.after(() => rm(detectHome, { recursive: true, force: true }));
+  assert.deepEqual(adapter.detect({ HOME: detectHome }), { detected: false, evidence: [] });
+  await mkdir(path.join(detectHome, '.codex'));
+  assert.deepEqual(adapter.detect({ HOME: detectHome }), { detected: true, evidence: ['~/.codex'] });
+  assert.deepEqual(adapter.detect({}), { detected: false, evidence: [] });
 });
 test('unrelated edits survive removal', async (t) => {
   const f = await fixture(t);

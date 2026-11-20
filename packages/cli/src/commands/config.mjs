@@ -355,6 +355,8 @@ export async function configCommand({ args, plan, output, paths, env, markRedact
     output(result);
     return;
   }
+  if ((action === 'set' || action === 'unset') && (key === 'channels' || key?.startsWith('channels.')))
+    throw error('E_CHANNEL_SWITCH', "Use brainatlas init --channel <agent>=<mcp|cli> to change an agent's channel.");
   if (action === 'set') {
     if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key))
       throw error('E_CONFIG_KEY', 'Invalid configuration key.');
