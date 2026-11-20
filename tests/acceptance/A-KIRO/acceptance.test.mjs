@@ -58,8 +58,12 @@ for (const scope of ['global', 'vault'])
     test(`${scope}/${platform}: absent files, idempotence, isolation and health`, async (t) => {
       const f = await setup(t, scope, platform);
       await put(f.ctx.shimPath, 'shim');
-      assert.equal(kiro.detect({ HOME: f.home }), true);
-      assert.equal(kiro.detect({}), false);
+      const detectHome = await mkdtemp(join(tmpdir(), 'brainatlas-detect-'));
+      t.after(() => rm(detectHome, { recursive: true, force: true }));
+      assert.deepEqual(kiro.detect({ HOME: detectHome }), { detected: false, evidence: [] });
+      await mkdir(join(detectHome, '.kiro'));
+      assert.deepEqual(kiro.detect({ HOME: detectHome }), { detected: true, evidence: ['~/.kiro'] });
+      assert.deepEqual(kiro.detect({}), { detected: false, evidence: [] });
       assert.equal((await kiro.doctor(f.ctx)).checks.find((c) => c.id === 'registered').ok, false);
       const p = await kiro.plan(f.ctx);
       assert.equal(p.changes.length, 3);

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { writeFile, unlink } from 'node:fs/promises';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, isAbsolute, sep } from 'node:path';
-import { atomicWriteFile, BrainAtlasError, resolvePaths } from '@brainatlas/core';
+import { atomicWriteFile, BrainAtlasError, detectEvidence, resolvePaths } from '@brainatlas/core';
 
 export const id = 'copilot-vscode';
 export const displayName = 'GitHub Copilot for VS Code';
@@ -234,9 +234,18 @@ function collect(ctx) {
   if (ic) changes.push(ic);
   return changes;
 }
+/** @param {Record<string,any> | null | undefined} env @returns {{detected: boolean, evidence: string[]}} */
 export function detect(env) {
-  if (typeof env?.COPILOT_HOME === 'string' && env.COPILOT_HOME) return existsSync(env.COPILOT_HOME);
-  return typeof env?.HOME === 'string' && Boolean(env.HOME) && existsSync(join(env.HOME, '.copilot'));
+  const home = env?.COPILOT_HOME;
+  const override = typeof home === 'string' && isAbsolute(home);
+  return detectEvidence({
+    env,
+    dirs: override ? [{ path: home, label: '$COPILOT_HOME' }] : ['.copilot'],
+    globs: [
+      { dir: '.vscode/extensions', prefix: 'github.copilot' },
+      { dir: '.vscode-insiders/extensions', prefix: 'github.copilot' },
+    ],
+  });
 }
 /** @param {Record<string,any>} ctx */
 export function plan(ctx) {

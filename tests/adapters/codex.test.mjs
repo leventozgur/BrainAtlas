@@ -53,8 +53,15 @@ async function makeHome(name) {
 }
 
 test('detect uses injected HOME and trust review names Codex CLI', async () => {
-  assert.equal(adapter.detect({ HOME: '/home/you' }), true);
-  assert.equal(adapter.detect({}), false);
+  const home = await mkdtemp(path.join(os.tmpdir(), 'brainatlas-detect-'));
+  try {
+    assert.deepEqual(adapter.detect({ HOME: home }), { detected: false, evidence: [] });
+    await mkdir(path.join(home, '.codex'));
+    assert.deepEqual(adapter.detect({ HOME: home }), { detected: true, evidence: ['~/.codex'] });
+    assert.deepEqual(adapter.detect({}), { detected: false, evidence: [] });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
   assert.deepEqual(await adapter.trustReview({}), {
     required: true,
     client: 'Codex CLI',

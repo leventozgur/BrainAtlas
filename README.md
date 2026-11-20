@@ -45,7 +45,7 @@ Settings live in the BrainAtlas configuration file (`~/Library/Application Suppo
 | Search scope | `wiki/` when present; root navigation pages excluded | `brainatlas config set retrieval.exclude '["drafts/**"]'`; `[]` excludes nothing; `brainatlas config unset retrieval.exclude` restores the default | [Retrieval](docs/user/retrieval.md) |
 | MCP write tools | on | `brainatlas config set readOnly true` leaves only the read tools; `false` restores writes | [Contracts](docs/contracts/) |
 | Shell instead of MCP and hooks | off (default channel is MCP) | `brainatlas init --channel cli` or per agent `--channel claude-code=cli,kiro=mcp`; to change the channel of an installed agent later use `brainatlas agent set <agent> --channel mcp\|cli` | [CLI channel](docs/user/cli-channel.md) |
-| Add, remove or switch one agent | per `init --agents` | `brainatlas agent list`; `brainatlas agent add <agent> [--channel mcp\|cli] [--plan]`; `brainatlas agent remove <agent> [--plan]` | [Agent setup](docs/user/agents.md) |
+| Add, remove or switch one agent | per `init --agents` | `brainatlas agent list` (shows detected agents); `brainatlas agent add <agent> [--channel mcp\|cli] [--plan]`; `brainatlas agent remove <agent> [--plan]` | [Agent setup](docs/user/agents.md) |
 | Folder or Git sync (Full, experimental) | off | Configured with `sync.transport`; see the guide before enabling | [Sync](docs/user/sync.md) |
 | Telemetry and secret filter | off / on, locked | Cannot be changed (`E_LOCKED_KEY`) | [Security](SECURITY.md) |
 

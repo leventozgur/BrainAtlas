@@ -9,3 +9,4 @@ export * from './checkpoint/index.mjs';
 export * from './safety/index.mjs';
 export * from './retrieval/index.mjs';
 export * from './util/index.mjs';
+export * from './util/detect.mjs';

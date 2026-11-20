@@ -6,7 +6,7 @@ import * as core from '@brainatlas/core';
 import { CHANNEL_AGENTS, defaultConfig, effectiveChannel, loadConfig } from '@brainatlas/core';
 import { adoptPlan, migrateVault } from '../migrate.mjs';
 import { error, exists, saveTrackedConfig, redactOutput } from './shared.mjs';
-import { installAdapter } from './adapters.mjs';
+import { detectAdapter, installAdapter } from './adapters.mjs';
 
 const vaultInitDirectories = [
   'wiki/entities',
@@ -187,6 +187,9 @@ export async function init({ flag, value, plan, output, paths, env }) {
     await initializeVault(vaultPath);
     await saveTrackedConfig(cfg, paths, env);
   }
+  const detectedAgents = [];
+  if (cfg.agents.length === 0)
+    for (const agent of CHANNEL_AGENTS) if ((await detectAdapter({ agent, env })).detected) detectedAgents.push(agent);
   output({
     action: 'init',
     configFile: paths.configFile,
@@ -194,6 +197,7 @@ export async function init({ flag, value, plan, output, paths, env }) {
     vault: vaultSummary,
     warnings,
     adapters: plan ? plannedAdapters.map((item) => redactOutput(item.changes, env.HOME)) : undefined,
+    detectedAgents: cfg.agents.length === 0 ? detectedAgents : undefined,
   });
   return;
 }

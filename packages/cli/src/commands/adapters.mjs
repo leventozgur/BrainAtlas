@@ -22,6 +22,22 @@ const listNames = (directory) =>
   });
 
 /**
+ * Evidence-based detection of one adapter. A load failure means not detected.
+ * @param {{agent: string, env: any}} options
+ * @returns {Promise<{detected: boolean, evidence: string[]}>}
+ */
+export async function detectAdapter({ agent, env }) {
+  try {
+    const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
+    const result = adapter.detect(env);
+    if (result && typeof result.detected === 'boolean' && Array.isArray(result.evidence)) return result;
+  } catch {
+    /* an adapter that cannot be loaded or probed is not detected */
+  }
+  return { detected: false, evidence: [] };
+}
+
+/**
  * Plan (and unless `plan` is set, apply) the install of one adapter.
  * @param {{agent: string, cfg: any, paths: any, env: any, plan?: boolean}} options
  * @returns {Promise<{changes?: any, warning?: string}>}

@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { cleanEnv } from './clean-env.mjs';
@@ -33,7 +33,7 @@ const withoutBackups = (files) => Object.fromEntries(Object.entries(files).filte
 const pick = (files, prefixes) =>
   Object.fromEntries(Object.entries(files).filter(([name]) => prefixes.some((prefix) => name.startsWith(prefix))));
 
-async function fixture(t) {
+async function fixture(t, extraPath) {
   const base = await mkdtemp(join(tmpdir(), 'ba61a-'));
   t.after(() => rm(base, { recursive: true, force: true }));
   const home = join(base, 'home');
@@ -49,7 +49,7 @@ async function fixture(t) {
     XDG_STATE_HOME: join(home, 'state'),
     BRAINATLAS_PLATFORM: 'linux',
     BRAINATLAS_OFFLINE: '1',
-    PATH: process.env.PATH || '/usr/bin:/bin',
+    PATH: extraPath ?? (process.env.PATH || '/usr/bin:/bin'),
   });
   const configFile = join(home, 'config', 'brainatlas', 'config.json');
   const json = (...args) => {
@@ -81,6 +81,14 @@ async function fixture(t) {
   return { home, vault, configFile, json, ok, fail };
 }
 
+/** A temp bin directory holding only a `node` symlink: the whole PATH of a controlled test. */
+async function controlledBin(t) {
+  const bin = await mkdtemp(join(tmpdir(), 'ba61-bin-'));
+  t.after(() => rm(bin, { recursive: true, force: true }));
+  await symlink(process.execPath, join(bin, 'node'));
+  return bin;
+}
+
 const exists = (file) =>
   stat(file).then(
     () => true,
@@ -90,7 +98,7 @@ const CLAUDE = ['.claude', 'CLAUDE.md', '.claude.json'];
 const KIRO = ['.kiro'];
 
 test('list reports installed agents, channels and health', async (t) => {
-  const f = await fixture(t);
+  const f = await fixture(t, await controlledBin(t));
   f.ok(...MIXED, '--vault', f.vault, '--channel', 'claude-code=cli');
   const before = await tree(f.home);
   const value = f.ok('agent', 'list');
@@ -104,7 +112,14 @@ test('list reports installed agents, channels and health', async (t) => {
   assert.equal(by['claude-code'].channel, 'cli');
   assert.equal(by.kiro.channel, 'mcp');
   assert.equal(typeof by.kiro.healthy, 'boolean');
-  assert.deepEqual(by.codex, { agent: 'codex', installed: false, channel: null, healthy: null });
+  assert.deepEqual(by.codex, {
+    agent: 'codex',
+    installed: false,
+    channel: null,
+    healthy: null,
+    detected: false,
+    evidence: [],
+  });
   assert.deepEqual(await tree(f.home), before);
 });
 
@@ -275,4 +290,42 @@ test('failed switch restores the previous channel and keeps the config', async (
   assert.equal(await readFile(f.configFile, 'utf8'), config);
   assert.ok(await exists(join(f.home, '.claude.json')));
   assert.deepEqual(pick(withoutBackups(await tree(f.home)), CLAUDE), pick(before, CLAUDE));
+});
+
+test('list shows evidence-based detection from HOME and PATH', async (t) => {
+  const bin = await controlledBin(t);
+  await writeFile(join(bin, 'claude'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const f = await fixture(t, bin);
+  await mkdir(join(f.home, '.kiro'));
+  const before = await tree(f.home);
+  const by = Object.fromEntries(f.ok('agent', 'list').agents.map((a) => [a.agent, a]));
+  assert.deepEqual(by.kiro.evidence, ['~/.kiro']);
+  assert.equal(by.kiro.detected, true);
+  assert.deepEqual(by['claude-code'].evidence, ['PATH:claude']);
+  assert.equal(by['claude-code'].detected, true);
+  assert.deepEqual(by.codex, {
+    agent: 'codex',
+    installed: false,
+    channel: null,
+    healthy: null,
+    detected: false,
+    evidence: [],
+  });
+  assert.equal(by.kiro.installed, false);
+  assert.deepEqual(await tree(f.home), before);
+});
+
+test('init suggests detectedAgents only without agents and never installs them', async (t) => {
+  const bin = await controlledBin(t);
+  await writeFile(join(bin, 'claude'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const f = await fixture(t, bin);
+  await mkdir(join(f.home, '.kiro'));
+  const planned = f.ok('init', '--yes', '--plan', '--vault', f.vault);
+  assert.deepEqual(planned.detectedAgents, ['claude-code', 'kiro']);
+  const real = f.ok('init', '--yes', '--vault', f.vault);
+  assert.deepEqual(real.detectedAgents, ['claude-code', 'kiro']);
+  assert.deepEqual(JSON.parse(await readFile(f.configFile, 'utf8')).agents, []);
+  assert.equal(await exists(join(f.home, '.claude')), false);
+  const withAgents = f.ok('init', '--yes', '--agents', 'kiro', '--vault', f.vault);
+  assert.equal('detectedAgents' in withAgents, false);
 });

@@ -117,10 +117,10 @@ for (const platform of ['linux', 'darwin'])
   }
 test('missing files, health, trust and detection', async (t) => {
   const s = await setup(t);
-  assert.equal(a.detect({ HOME: s.home }), false);
+  assert.deepEqual(a.detect({ HOME: s.home }), { detected: false, evidence: [] });
   assert.equal((await a.doctor(s.ctx)).checks.find((x) => x.id === 'registered').ok, false);
   await a.apply(a.plan(s.ctx), s.ctx);
-  assert.equal(a.detect({ HOME: s.home }), true);
+  assert.deepEqual(a.detect({ HOME: s.home }), { detected: true, evidence: ['~/.copilot'] });
   assert.equal((await a.doctor(s.ctx)).checks.find((x) => x.id === 'registered').ok, true);
   const trust = await a.trustReview(s.ctx);
   assert.match(trust.client, /Copilot.*VS Code/i);

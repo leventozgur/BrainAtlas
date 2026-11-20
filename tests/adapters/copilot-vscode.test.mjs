@@ -41,10 +41,10 @@ async function exists(path) {
 
 test('detect uses injected HOME and Copilot configuration directory', async (t) => {
   const home = await temp(t);
-  assert.equal(adapter.detect({ HOME: home }), false);
+  assert.deepEqual(adapter.detect({ HOME: home }), { detected: false, evidence: [] });
   await mkdir(join(home, '.copilot'));
-  assert.equal(adapter.detect({ HOME: home }), true);
-  assert.equal(adapter.detect({}), false);
+  assert.deepEqual(adapter.detect({ HOME: home }), { detected: true, evidence: ['~/.copilot'] });
+  assert.deepEqual(adapter.detect({}), { detected: false, evidence: [] });
 });
 
 for (const fixture of ['empty', 'existing']) {

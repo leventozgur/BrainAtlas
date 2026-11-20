@@ -3,7 +3,7 @@ import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CHANNEL_AGENTS, effectiveChannel, loadConfig } from '@brainatlas/core';
-import { adapterHealth, installAdapter, removeAdapter } from './adapters.mjs';
+import { adapterHealth, detectAdapter, installAdapter, removeAdapter } from './adapters.mjs';
 import { error, exists, redactOutput, saveTrackedConfig } from './shared.mjs';
 
 const CHANNELS = ['mcp', 'cli'];
@@ -90,11 +90,14 @@ export async function agentCommand({ args, paths, env, output, plan, value }) {
     for (const name of CHANNEL_AGENTS) {
       const installed = cfg.agents.includes(name);
       const health = installed ? await adapterHealth({ agent: name, cfg, paths, env }) : null;
+      const { detected, evidence } = await detectAdapter({ agent: name, env });
       agents.push({
         agent: name,
         installed,
         channel: installed ? effectiveChannel(cfg, name) : null,
         healthy: installed ? (health?.ok ?? false) : null,
+        detected,
+        evidence,
       });
     }
     output({ action: 'agent-list', agents });

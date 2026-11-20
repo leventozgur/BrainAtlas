@@ -86,7 +86,7 @@ for (const doc of ['config', 'module', 'adapter', 'transport', 'hook-io', 'retri
   test(`sözleşme ${doc}: gerekli bölümler`, async () => {
     const text = await readFile(join(root, 'docs/contracts', doc + '.md'), 'utf8');
     for (const pattern of [
-      /contract-version:\s*1\b/,
+      doc === 'adapter' ? /contract-version:\s*2\b/ : /contract-version:\s*1\b/,
       /## Purpose/i,
       /## Function signatures/i,
       /## Input/i,

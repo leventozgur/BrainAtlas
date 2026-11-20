@@ -1,5 +1,5 @@
 ---
-contract-version: 1
+contract-version: 2
 ---
 # Agent adapter contract
 
@@ -10,7 +10,7 @@ Detect an agent installation, preview integration edits, apply/remove owned chan
 ## Function signatures
 
 ```js
-/** @param {Record<string,unknown>} env @returns {boolean} */
+/** @param {Record<string,unknown>} env @returns {{detected:boolean,evidence:string[]}} */
 export function detect(env);
 /** @param {AdapterContext} ctx @returns {PlanResult} */
 export function plan(ctx);
@@ -23,6 +23,8 @@ export function doctor(ctx);
 /** @param {AdapterContext} ctx @returns {Promise<object>} */
 export function trustReview(ctx);
 ```
+
+`detect` is evidence-only, read-only and uses no network; the evidence strings never contain absolute paths.
 
 `AdapterContext` is `{env,config,paths,scope,nodePath,shimPath,now}`. `PlanResult` is `{changes:Array<{file:string,kind:'create'|'modify'|'delete',before:string|null,after:string|null,ownership:'marked-block'|'json-key'|'toml-table'|'whole-file'}>,warnings:string[],trustReviewRequired:boolean}`.
 

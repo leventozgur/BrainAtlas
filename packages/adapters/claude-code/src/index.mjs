@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir, unlink, stat, rmdir } from 'node:fs/promises';
 import { readFileSync as readSync } from 'node:fs';
 import { join, isAbsolute, dirname } from 'node:path';
-import { atomicWriteFile, resolvePaths, BrainAtlasError } from '@brainatlas/core';
+import { atomicWriteFile, detectEvidence, resolvePaths, BrainAtlasError } from '@brainatlas/core';
 
 export const id = 'claude-code';
 export const displayName = 'Claude Code';
@@ -292,16 +292,9 @@ function changesFor(ctx, current) {
     });
   return changes;
 }
+/** @param {Record<string,any> | null | undefined} env @returns {{detected: boolean, evidence: string[]}} */
 export function detect(env) {
-  return Boolean(
-    env &&
-    typeof env === 'object' &&
-    env.HOME &&
-    (env.CLAUDE_CODE === '1' ||
-      env.CLAUDE_CODE_ENTRYPOINT ||
-      env.CLAUDE_SESSION_ID ||
-      env.PATH?.split(':').some((p) => p.endsWith('/.claude/local')))
-  );
+  return detectEvidence({ env, dirs: ['.claude'], files: ['.claude.json'], commands: ['claude'] });
 }
 export function plan(ctx) {
   homeOf(ctx);

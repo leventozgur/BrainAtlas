@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir, unlink, stat } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import { atomicWriteFile, resolvePaths, BrainAtlasError } from '@brainatlas/core';
+import { atomicWriteFile, detectEvidence, resolvePaths, BrainAtlasError } from '@brainatlas/core';
 
 export const id = 'gemini-cli';
 export const displayName = 'Gemini CLI';
@@ -456,12 +456,9 @@ function changes(ctx, values) {
     });
   return result;
 }
+/** @param {Record<string,any> | null | undefined} env @returns {{detected: boolean, evidence: string[]}} */
 export function detect(env) {
-  return Boolean(
-    env &&
-    typeof env.HOME === 'string' &&
-    (env.GEMINI_CLI === '1' || env.GEMINI_CLI_ENTRYPOINT || env.GEMINI_SESSION_ID)
-  );
+  return detectEvidence({ env, dirs: ['.gemini'], commands: ['gemini'] });
 }
 export function plan(ctx) {
   home(ctx);
