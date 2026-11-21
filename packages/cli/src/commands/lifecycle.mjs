@@ -421,6 +421,19 @@ export async function install({ args, flag, plan, output, paths, env }) {
   throw error('E_ARGUMENT', 'Command arguments are invalid.');
 }
 
+/** Inputs of the health summary, shared by `status --summary` and `brainatlas ui`. */
+export async function summaryInputs({ paths, env }) {
+  const doctor = await doctorResult(paths, env);
+  const current = await readCurrent(paths);
+  const config = await loadConfig({ paths, env }).catch(() => null);
+  const agentChannels = config
+    ? Object.fromEntries(
+        (Array.isArray(config.agents) ? config.agents : []).map((name) => [name, effectiveChannel(config, name)])
+      )
+    : null;
+  return { doctor, currentVersion: current?.slice('releases/'.length) ?? null, config, agentChannels };
+}
+
 export async function status({ command, flag, json, output, paths, env }) {
   const result = await doctorResult(paths, env);
   const current = await readCurrent(paths);
