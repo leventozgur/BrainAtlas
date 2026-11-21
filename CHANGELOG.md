@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- BA-48A2: new optional Full/Custom module `maintain-schedule` (`brainatlas maintain-schedule install|status|remove [--day] [--hour]`) installs a weekly launchd agent or systemd user timer for `maintain --weekly`. It owns only its two files (hash-recorded, never overwrites unmanaged or edited files), `uninstall` removes it, and the Lite build is unchanged.
+- BA-64: `brainatlas ui [--no-open] [--json]` serves a local panel on 127.0.0.1 (random port, per-run token, Host/Origin checks) with the status summary, agent channels and scalar settings. Changes show a plan first and apply separately through the same handlers as `agent set` and `config set`; blocked keys and read-only installations are refused. See `docs/user/ui.md`.
 - BA-62: `brainatlas status --summary [--json]` prints one read-only health view (version, profile, modules, agent channels, hook mode, semantic state and recent hook use, last sync, OKF error/warning counts, `maintain` findings by kind). It adds a flag only; the existing `status`, `doctor`, `wiki lint`, `okf check` and `maintain` outputs are unchanged.
 - `safety.secretFilter` can now be set to `false` in the custom profile (it stays locked in Lite and Full, and switching an opted-out config to those profiles is refused with `E_LOCKED_KEY`). Off means writes are no longer refused for secret-like content: MCP page writes and crosslink titles, `checkpoint` with `secretFilter: false` and the `maintain --fix` index line skip `scanText`. Path deny rules, output redaction (hooks, recap, CLI, receipts) and the sync and synthesis scans are unchanged. `doctor` and `config set` warn while it is off. New core export `secretFilterEnabled(config)`.
 
