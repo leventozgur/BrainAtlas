@@ -187,9 +187,20 @@ printed.
 
 ## Running it on a schedule
 
-BrainAtlas installs no scheduler of its own: `--schedule` is not a `maintain` option and fails with `E_ARGUMENT`. To run
-the weekly check automatically, schedule the command yourself, for example with a launch agent on macOS, a systemd user
-timer on Linux or `cron`:
+The core CLI (and the Lite profile) installs no scheduler: `--schedule` is not a `maintain` option and fails with
+`E_ARGUMENT`. In the Full or Custom profile the optional `maintain-schedule` module installs a weekly user timer (a launch
+agent on macOS, a systemd user timer on Linux) that runs `maintain --weekly`:
+
+```sh
+brainatlas maintain-schedule install [--day sun..sat] [--hour 0..23] [--plan] [--json]   # default: mon, 09:00
+brainatlas maintain-schedule status [--json]
+brainatlas maintain-schedule remove [--plan]
+```
+
+It writes only its own two files (one plist, or a `.service` and `.timer`) under your home directory, records their
+hashes, and `remove` (and `brainatlas uninstall`) deletes a file only while it still matches that record; a file you
+edited is kept. `install` refuses to overwrite a scheduler file it did not create. Otherwise, or on Lite, schedule the
+command yourself, for example with a launch agent, a systemd user timer or `cron`:
 
 ```text
 <binPath> maintain --weekly

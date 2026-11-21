@@ -97,3 +97,32 @@ export async function installedSyncSchedule(action, { paths, env, config: cfg, d
     ctx
   );
 }
+
+/**
+ * Remove the weekly maintain timer owned by the optional maintain-schedule module, when it is installed.
+ * @param {string} action @param {{paths:any,env:any,config:any,dependencies?:{plan?:boolean}}} options
+ */
+export async function installedMaintainSchedule(action, { paths, env, config: cfg, dependencies = {} }) {
+  let current;
+  try {
+    current = await readCurrent(paths);
+  } catch {
+    return null;
+  }
+  const releaseDir = currentReleaseDir(paths, current);
+  if (!releaseDir) return null;
+  let manifest;
+  try {
+    manifest = (await discoverModules(releaseDir)).find((item) => item.name === 'maintain-schedule');
+  } catch {
+    return null;
+  }
+  if (!manifest) return null;
+  const entry = await loadInstalledModuleEntry(releaseDir, manifest);
+  const entries = new Map([[manifest.name, entry]]);
+  const ctx = moduleContext(cfg, paths, env, entries, [manifest], dependencies);
+  await entry.activate(ctx);
+  const run = entry.commands?.['maintain-schedule'];
+  if (typeof run !== 'function') return null;
+  return run([action, ...(dependencies.plan ? ['--plan'] : [])], ctx);
+}

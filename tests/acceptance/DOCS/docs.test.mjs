@@ -32,7 +32,8 @@ for (const moduleName of await readdir(resolve(root, 'modules'))) {
   }
   const block = source.match(/export const commands\s*=\s*(?:Object\.freeze\()?\{([\s\S]*?)\n\}\)?;/);
   if (block)
-    for (const m of block[1].matchAll(/^\s{2}(?:async\s+)?([A-Za-z][\w-]*)\s*[(:]/gm)) moduleCommands.add(m[1]);
+    for (const m of block[1].matchAll(/^\s{2}(?:async\s+)?['"]?([A-Za-z][\w-]*)['"]?\s*[(:]/gm))
+      moduleCommands.add(m[1]);
 }
 function referencedCommands(text) {
   return [...text.matchAll(/\bbrainatlas\s+([a-z][\w-]*)/g)].map((m) => m[1]);

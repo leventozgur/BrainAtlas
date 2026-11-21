@@ -22,7 +22,7 @@ import {
   uninstallManagedFiles,
   removeCreatedDirectories,
 } from '../install-manifest.mjs';
-import { installedSyncSchedule } from './sync.mjs';
+import { installedMaintainSchedule, installedSyncSchedule } from './sync.mjs';
 import { buildHealthSummary, formatHealthSummary } from '../health.mjs';
 import { adapterHealth, removeAdapter } from './adapters.mjs';
 import {
@@ -472,16 +472,24 @@ export async function uninstall({ plan, output, paths, env, dependencies }) {
       config: cfg,
       dependencies: { ...dependencies, plan: true },
     });
+    const maintainScheduler = await installedMaintainSchedule('remove', {
+      paths,
+      env,
+      config: cfg,
+      dependencies: { ...dependencies, plan: true },
+    });
     output({
       ...(await uninstallManagedFiles(paths, { plan: true })),
       appDirectory: paths.dataDir,
       keepVault: true,
       adapters: cfg.agents || [],
       scheduler,
+      ...(maintainScheduler ? { maintainScheduler } : {}),
     });
     return;
   }
   const scheduler = await installedSyncSchedule('remove', { paths, env, config: cfg, dependencies });
+  const maintainScheduler = await installedMaintainSchedule('remove', { paths, env, config: cfg, dependencies });
   const adapterWarnings = await removeAdapters(cfg, paths, env);
   const activeManifest = await readInstallManifest(paths);
   const configFile = await resolveManagedPath(paths.configFile);
@@ -511,6 +519,7 @@ export async function uninstall({ plan, output, paths, env, dependencies }) {
     vaultPreserved: true,
     warnings: adapterWarnings,
     scheduler,
+    ...(maintainScheduler ? { maintainScheduler } : {}),
   });
   return;
 }
