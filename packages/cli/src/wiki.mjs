@@ -13,7 +13,7 @@ const TOOL_FOR = {
 };
 
 const ALLOWED_OPTIONS = {
-  query: new Set(['--limit', '--compact']),
+  query: new Set(['--limit', '--compact', '--provenance']),
   read: new Set(['--anchor', '--max-chars']),
   index: new Set(),
   list: new Set(['--type']),
@@ -56,6 +56,10 @@ export function parseWikiArguments(argv) {
       options.compact = true;
       continue;
     }
+    if (name === '--provenance') {
+      options['--provenance'] = true;
+      continue;
+    }
     let raw;
     if (equals >= 0) raw = token.slice(equals + 1);
     else {
@@ -79,6 +83,7 @@ export function parseWikiArguments(argv) {
     args.query = positional.join(' ');
     if (options['--limit'] !== undefined) args.limit = integerOption('--limit', options['--limit']);
     if (options.compact === true) args.compact = true;
+    if (options['--provenance'] === true) args.provenance = true;
   } else if (sub === 'read') {
     args.path = positional[0];
     if (options['--anchor'] !== undefined) args.anchor = options['--anchor'];
@@ -120,7 +125,9 @@ export async function runWikiCommand(argv, { env = process.env } = {}) {
 const queryBlock = (item, index) => {
   const heading = typeof item.heading === 'string' && item.heading.length ? ` § ${item.heading}` : '';
   const stale = item.stale === true ? ' [stale]' : '';
-  const lines = [`${index + 1}. ${item.path}${heading}${stale}`];
+  const provenance =
+    item.provenance === 'none' || item.provenance === 'partial' ? ` [provenance: ${item.provenance}]` : '';
+  const lines = [`${index + 1}. ${item.path}${heading}${stale}${provenance}`];
   if (typeof item.snippet === 'string' && item.snippet.length) {
     for (const line of item.snippet.split('\n')) lines.push(`   ${line}`);
   }

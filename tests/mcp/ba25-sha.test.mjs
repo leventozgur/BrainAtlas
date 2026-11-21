@@ -88,8 +88,11 @@ test('wiki_update_page with a matching expectedSha256 writes and returns the new
     expectedSha256: sha(PAGE),
   });
   assert.equal(result.updated, true);
-  assert.equal(result.sha256, sha(next));
-  assert.equal(await readFile(page, 'utf8'), next);
+  // BA-63: MCP writes add `generated` and `status: proposed` when missing, so the stored bytes differ from `next`.
+  const stored = await readFile(page, 'utf8');
+  assert.ok(stored.includes('title: Shared') && stored.includes('status: proposed') && stored.includes('generated:'));
+  assert.ok(stored.endsWith('Beta body.\n'));
+  assert.equal(result.sha256, sha(stored));
 });
 
 test('wiki_update_page with a stale expectedSha256 is refused and changes neither the page nor the log', async (t) => {
@@ -116,7 +119,8 @@ test('wiki_write_page with a matching expectedSha256 writes; a stale one is refu
     expectedSha256: sha(PAGE),
   });
   assert.equal(written.written, true);
-  assert.equal(written.sha256, sha(next));
+  const stored = await readFile(page, 'utf8');
+  assert.equal(written.sha256, sha(stored));
   const logBefore = await readFile(log, 'utf8');
   const refused = await call(client, 'wiki_write_page', {
     path: 'concepts/shared.md',
@@ -125,7 +129,7 @@ test('wiki_write_page with a matching expectedSha256 writes; a stale one is refu
   });
   assert.equal(refused.isError, true);
   assert.ok(refused.text.startsWith('E_CONFLICT:'), refused.text);
-  assert.equal(await readFile(page, 'utf8'), next);
+  assert.equal(await readFile(page, 'utf8'), stored);
   assert.equal(await readFile(log, 'utf8'), logBefore);
 });
 
@@ -163,7 +167,7 @@ test('calls without expectedSha256 keep the previous behaviour, including overwr
   const result = await ok(client, 'wiki_update_page', { path: 'concepts/shared.md', content: next });
   assert.equal(result.updated, true);
   assert.equal(result.sha256, undefined, 'no hash in the response without expectedSha256');
-  assert.equal(await readFile(page, 'utf8'), next);
+  assert.ok((await readFile(page, 'utf8')).endsWith('Delta.\n'));
 });
 
 test('readOnly mode still offers no write tool, and wiki_read_page still returns the hash', async (t) => {

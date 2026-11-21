@@ -69,7 +69,7 @@ const helpUsages = Object.freeze({
   compact:
     'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]',
   usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful',
-  wiki: 'brainatlas wiki query <text> [--limit N] [--compact] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]',
+  wiki: 'brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]',
   ui: 'brainatlas ui [--no-open] [--json]',
   help: 'brainatlas --help | brainatlas help [COMMAND]',
 });
