@@ -4,6 +4,8 @@
 
 - `safety.secretFilter` can now be set to `false` in the custom profile (it stays locked in Lite and Full, and switching an opted-out config to those profiles is refused with `E_LOCKED_KEY`). Off means writes are no longer refused for secret-like content: MCP page writes and crosslink titles, `checkpoint` with `secretFilter: false` and the `maintain --fix` index line skip `scanText`. Path deny rules, output redaction (hooks, recap, CLI, receipts) and the sync and synthesis scans are unchanged. `doctor` and `config set` warn while it is off. New core export `secretFilterEnabled(config)`.
 
+- Fix two macOS-flaky tests and bound CI time: concurrent first use of the sync host identity no longer fails with `E_INVALID_PATH` while another process is publishing `host-id` (the temporary link is removed right after publishing and readers wait out the brief two-link state); the MCP semantic fallback test gives its fingerprint-mismatch server its own state so that server's background rebuild cannot replace the shared index; the CI test job times out at 30 min and each test at 5 min.
+
 ## 0.1.0-rc.13 — 2026-11-21
 
 Per-agent channel and agent management, plus a fix for the dead semantic hook path in installed Full releases. The default install (MCP + hooks) is unchanged, and without a `channels` entry every file written is byte-identical to rc.12. Also ships the work merged since rc.12: `maintain --weekly` and synthesis review (BA-48), identifier and provenance retrieval fixes, and the corrected `status` semantic freshness count (BA-50).

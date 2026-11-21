@@ -86,7 +86,25 @@ async function ensureSyncDirectory(path, stateRoot) {
   return actual;
 }
 
+const PENDING_LINK_RETRIES = 50;
+const PENDING_LINK_DELAY_MS = 10;
+const delay = (ms) => new Promise((done) => setTimeout(done, ms));
+
+// A concurrent first use publishes host-id by hard-linking its temporary file, so for a moment the file has two links
+// until that writer unlinks the temporary name. Wait out exactly that state; anything else still fails at once.
 async function readStoredHostId(path) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await readStoredHostIdOnce(path);
+    } catch (error) {
+      if (error?.pendingLink !== true || attempt >= PENDING_LINK_RETRIES)
+        throw error?.pendingLink ? invalidPath() : error;
+      await delay(PENDING_LINK_DELAY_MS);
+    }
+  }
+}
+
+async function readStoredHostIdOnce(path) {
   let info;
   try {
     info = await lstat(path);
@@ -100,7 +118,9 @@ async function readStoredHostId(path) {
     handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     info = await handle.stat();
     const processUid = typeof process.getuid === 'function' ? process.getuid() : null;
-    if (!info.isFile() || info.nlink !== 1 || processUid === null || info.uid !== processUid) throw invalidPath();
+    if (!info.isFile() || processUid === null || info.uid !== processUid) throw invalidPath();
+    if (info.nlink === 2) throw Object.assign(invalidPath(), { pendingLink: true });
+    if (info.nlink !== 1) throw invalidPath();
     if ((info.mode & 0o777) !== 0o600) await handle.chmod(0o600);
     const value = (await handle.readFile('utf8')).trim();
     if (!/^[a-z0-9-]{1,32}$/.test(value)) throw invalidState();
@@ -156,6 +176,8 @@ export async function resolveHostId({ stateDir, env = {}, config = {}, hostId: l
     await ensureSyncDirectory(syncDir, stateRoot);
     try {
       await link(temporaryPath, hostIdPath);
+      // Drop the temporary name right away so readers see a single link as soon as possible.
+      await unlink(temporaryPath).catch(() => {});
       return generated;
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;
