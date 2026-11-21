@@ -158,7 +158,7 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
   if (args.includes('--schedule'))
     throw error(
       'E_ARGUMENT',
-      'maintain does not support --schedule; run "brainatlas maintain --weekly" from your own scheduler.'
+      'maintain does not support --schedule; run "brainatlas maintain --weekly" from your own scheduler, or enable the Full maintain-schedule module ("brainatlas maintain-schedule install").'
     );
   if (proposals !== undefined) {
     if (weekly || fix || queue || sources || repo !== undefined) {

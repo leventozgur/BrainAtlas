@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-48A2: new optional Full/Custom module `maintain-schedule` (`brainatlas maintain-schedule install|status|remove [--day] [--hour]`) installs a weekly launchd agent or systemd user timer for `maintain --weekly`. It owns only its two files (hash-recorded, never overwrites unmanaged or edited files), `uninstall` removes it, and the Lite build is unchanged.
+
 - Fix two macOS-flaky tests and bound CI time: concurrent first use of the sync host identity no longer fails with `E_INVALID_PATH` while another process is publishing `host-id` (the temporary link is removed right after publishing and readers wait out the brief two-link state); the MCP semantic fallback test gives its fingerprint-mismatch server its own state so that server's background rebuild cannot replace the shared index; the CI test job times out at 30 min and each test at 5 min.
 
 ## 0.1.0-rc.13 — 2026-11-21
