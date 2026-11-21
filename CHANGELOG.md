@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-62: `brainatlas status --summary [--json]` prints one read-only health view (version, profile, modules, agent channels, hook mode, semantic state and recent hook use, last sync, OKF error/warning counts, `maintain` findings by kind). It adds a flag only; the existing `status`, `doctor`, `wiki lint`, `okf check` and `maintain` outputs are unchanged.
+
 - Fix two macOS-flaky tests and bound CI time: concurrent first use of the sync host identity no longer fails with `E_INVALID_PATH` while another process is publishing `host-id` (the temporary link is removed right after publishing and readers wait out the brief two-link state); the MCP semantic fallback test gives its fingerprint-mismatch server its own state so that server's background rebuild cannot replace the shared index; the CI test job times out at 30 min and each test at 5 min.
 
 ## 0.1.0-rc.13 — 2026-11-21

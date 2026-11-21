@@ -5,7 +5,10 @@ Start with:
 ```sh
 brainatlas doctor
 brainatlas status
+brainatlas status --summary
 ```
+
+`status --summary` (add `--json` for scripts) prints one read-only table: version, profile, modules, per-agent channels, hook mode, semantic state, last sync, OKF counts and `maintain` findings. `wiki lint`, `okf check` and `maintain` apply different rules, so a clean `wiki lint` does not mean the other two are clean; the summary lists them side by side. The OKF line uses the core rules; `okf check` also applies the strict module rules when installed.
 
 `doctor` reports whether the current release and configured adapter checks pass. It does not prove that every agent version loads its configuration or permits hooks.
 
