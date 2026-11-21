@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-52 (a, b): sync scenario-matrix tests (edit vs delete, rename, offline merge on different pages, offline same-page conflict, conflict copy vs search) and a fix the matrix exposed: sync conflict copies (`*.conflict-*.md`) are now in the default retrieval exclusion, so the hook and MCP search no longer return them. A custom `retrieval.exclude` list replaces the default, so add the pattern to it if you use one. No sync data-loss case was found. The "experimental" label decision (c, d) stays open.
+
 - Fix two macOS-flaky tests and bound CI time: concurrent first use of the sync host identity no longer fails with `E_INVALID_PATH` while another process is publishing `host-id` (the temporary link is removed right after publishing and readers wait out the brief two-link state); the MCP semantic fallback test gives its fingerprint-mismatch server its own state so that server's background rebuild cannot replace the shared index; the CI test job times out at 30 min and each test at 5 min.
 
 ## 0.1.0-rc.13 — 2026-11-21

@@ -1244,7 +1244,15 @@ export function isExcludedPath(relPath, exclude = []) {
 }
 // BA-29: the default exclusions. At a wiki root only its own navigation and agent-policy files are left out; a vault root
 // (no wiki directory, the legacy layout) also leaves out its planning, archive, inbox and raw folders. Nested files are not affected.
-export const DEFAULT_EXCLUDE_WIKI = Object.freeze(['index.md', 'log.md', 'AGENTS.md', 'CLAUDE.md', 'GEMINI.md']);
+// BA-52: sync conflict copies (`page.conflict-<host>-<stamp>.md`, written by the sync engine) are never answers.
+export const DEFAULT_EXCLUDE_WIKI = Object.freeze([
+  'index.md',
+  'log.md',
+  'AGENTS.md',
+  'CLAUDE.md',
+  'GEMINI.md',
+  '**/*.conflict-*.md',
+]);
 export const DEFAULT_EXCLUDE_VAULT = Object.freeze([
   ...DEFAULT_EXCLUDE_WIKI,
   'planning/**',
