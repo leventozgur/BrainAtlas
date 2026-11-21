@@ -440,7 +440,11 @@ test('MCP fallback, opt-out and remote policy preserve lexical answers without l
   behavior = 'ok';
   const mismatch = structuredClone(config);
   mismatch.semantic.model = 'different';
-  const mismatchQuery = await connect(mismatch);
+  // A fingerprint mismatch schedules a background rebuild for the other model; give it its own state so that rebuild
+  // cannot replace the index the later queries in this test read.
+  const mismatchState = join(root, 'mismatch-state');
+  await cp(stateDir, mismatchState, { recursive: true });
+  const mismatchQuery = await connect(mismatch, mismatchState);
   const mismatchResult = await mismatchQuery('car');
   assert.deepEqual(mismatchResult.results, golden.results);
   assert.equal(mismatchResult.semantic.fallbackReason, 'fingerprint-mismatch');
