@@ -5,12 +5,12 @@ commands but cannot register an MCP server or hooks can still query and read a v
 tool handlers; search, page reading, status and lint logic are not duplicated.
 
 ```text
-brainatlas wiki query <text> [--limit N] [--compact] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]
+brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]
 ```
 
 | Subcommand | MCP tool | Arguments |
 |---|---|---|
-| `query <text…>` | `wiki_query` | all words after `query` joined by one space; `--limit N` (integer) and `--compact` are optional |
+| `query <text…>` | `wiki_query` | all words after `query` joined by one space; `--limit N` (integer), `--compact` and `--provenance` are optional |
 | `read <path>` | `wiki_read_page` | the path as given (`concepts/x.md`, `wiki/concepts/x.md` or with `#anchor`); `--anchor A` and `--max-chars N` are optional |
 | `index` | `wiki_read_index` | none |
 | `list` | `wiki_list_pages` | `--type T` is optional |

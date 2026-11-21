@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-63: pages written through MCP (`wiki_write_page`, `wiki_update_page` with `content`, `wiki_create_entity`, `wiki_create_concept`) now get `generated` and `status: proposed` when missing; supplied fields are kept and no evidence fields are invented. `wiki_query` takes an optional `provenance: true` (CLI `wiki query --provenance`) that adds `provenance: none|partial|full` to each result and marks incomplete pages in text output; default results are unchanged. Because `proposed` pages rank slightly lower, newly written pages stay below verified ones until confirmed.
+
 - Fix two macOS-flaky tests and bound CI time: concurrent first use of the sync host identity no longer fails with `E_INVALID_PATH` while another process is publishing `host-id` (the temporary link is removed right after publishing and readers wait out the brief two-link state); the MCP semantic fallback test gives its fingerprint-mismatch server its own state so that server's background rebuild cannot replace the shared index; the CI test job times out at 30 min and each test at 5 min.
 
 ## 0.1.0-rc.13 — 2026-11-21

@@ -65,6 +65,25 @@ function pageBody(text) {
 const INDEX_CATEGORY_LINE = /^##\s+(.+)$/;
 const FENCE_OPEN = /^(`{3,}|~{3,})/;
 const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
+
+const PROVENANCE_KEYS = ['generated', 'status', 'sources', 'verified', 'stale_after'];
+/** BA-63: how many of the OKF provenance fields a page carries. Presence only; it never changes ranking. */
+function provenanceOf(frontmatter) {
+  const fm = frontmatter ?? {};
+  const present = PROVENANCE_KEYS.filter((key) => Object.hasOwn(fm, key) && fm[key] !== null && fm[key] !== '').length;
+  return present === 0 ? 'none' : present === PROVENANCE_KEYS.length ? 'full' : 'partial';
+}
+
+/**
+ * BA-63: a page written through MCP gets `generated` (UTC now) and `status: proposed` when it has none. Evidence fields
+ * (`sources`, `verified`) are never invented, and fields the author supplied are never changed.
+ */
+function withWriteProvenance(frontmatter, now = new Date()) {
+  const next = { ...frontmatter };
+  if (!Object.hasOwn(next, 'generated')) next.generated = now.toISOString();
+  if (!Object.hasOwn(next, 'status')) next.status = 'proposed';
+  return next;
+}
 /** Undo CommonMark backslash escapes of ASCII punctuation in a link destination. */
 function unescapeDestination(raw) {
   return raw.replace(/\\([!-/:-@[-`{-~])/g, '$1');
@@ -605,150 +624,168 @@ export function createServer(options) {
       return handler(args);
     });
 
-  readTool(
-    'wiki_query',
-    z.object({ query: z.string(), limit: z.number().int().min(0).max(20).optional(), compact: z.boolean().optional() }),
-    async ({ query, limit, compact }) => {
-      const count = limit ?? 5;
-      // Edits made outside this server (Obsidian, sync, another agent's MCP process) are picked up here.
-      // A failed freshness check (e.g. a file removed between the scan and the read) keeps the current index; the next query retries.
-      try {
-        if (searcher.refreshIfChanged() && semanticEnabled) scheduleUpdate();
-      } catch {
-        /* Keep serving the last good index. */
-      }
-      const answer = searcher.search(query, {
+  const queryWiki = async ({ query, limit, compact }) => {
+    const count = limit ?? 5;
+    // Edits made outside this server (Obsidian, sync, another agent's MCP process) are picked up here.
+    // A failed freshness check (e.g. a file removed between the scan and the read) keeps the current index; the next query retries.
+    try {
+      if (searcher.refreshIfChanged() && semanticEnabled) scheduleUpdate();
+    } catch {
+      /* Keep serving the last good index. */
+    }
+    const answer = searcher.search(query, {
+      limit: count,
+      budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT),
+      abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35,
+    });
+    // BA-32: compact drops only the `snippet` key from every result; all other keys, values and their order are unchanged.
+    const stripSnippets = (rows) => (compact === true ? rows.map(({ snippet, ...rest }) => rest) : rows);
+    // BA-53: pull-side low confidence, on unless retrieval.pullLowConfidence is explicitly false. Only a below-threshold
+    // abstention is re-run with no threshold, on the same searcher snapshot (no refresh), so limit, budget and excluded
+    // paths stay identical. Other abstain reasons and non-abstained answers never produce low-confidence rows.
+    const lowConfidenceAnswer = () => {
+      if (
+        config.retrieval?.pullLowConfidence === false ||
+        answer.abstained !== true ||
+        answer.reason !== 'below_threshold'
+      )
+        return null;
+      const weak = searcher.search(query, {
         limit: count,
         budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT),
+        abstainThreshold: 0,
+      });
+      if (!weak.results.length) return null;
+      return {
+        results: stripSnippets(weak.results.map((row) => ({ ...row, lowConfidence: true }))),
+        abstained: true,
+        lowConfidence: true,
+      };
+    };
+    const lexical = lowConfidenceAnswer() ?? { results: stripSnippets(answer.results), abstained: answer.abstained };
+    if (!semanticEnabled) return lexical;
+    const fallback = (reason) => ({ ...lexical, semantic: { used: false, fallbackReason: reason }, mode: 'lexical' });
+    try {
+      let module;
+      try {
+        module = await loadSemantic();
+      } catch (error) {
+        return fallback(error?.fallbackReason === 'module-missing' ? 'module-missing' : 'module-load-error');
+      }
+      const provider = providerFor(module);
+      const index = await module.readSemanticIndex(stateDir);
+      const emptyIndexWithPages =
+        index &&
+        index.entries.length === 0 &&
+        Object.keys(index.fileHashes).length === 0 &&
+        (await core.listPages(vaultDir)).some((path) => !['wiki/index.md', 'wiki/log.md'].includes(path));
+      if (!index || emptyIndexWithPages) {
+        scheduleUpdate(false);
+        return fallback(emptyIndexWithPages || !backgroundFailed ? 'index-missing' : 'provider-error');
+      }
+      if (index.providerFingerprint !== provider.fingerprint || index.dims !== provider.dims) {
+        scheduleUpdate(false);
+        return fallback('fingerprint-mismatch');
+      }
+      const snapshot = searcher.snapshot();
+      // BA-29: excluded pages are removed from the semantic candidates and, as a guard, from the hybrid results.
+      const results = await module.searchHybrid({
+        query,
+        pages: snapshot.pages,
+        lexicalIndex: snapshot.index,
+        entries: index.entries.filter((entry) => !isExcluded(entry.path)),
+        provider,
+        limit: count,
+        indexMeta: index,
+        mode: settings.mode,
+        minSemanticScore: settings.minScore,
         abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35,
       });
-      // BA-32: compact drops only the `snippet` key from every result; all other keys, values and their order are unchanged.
-      const stripSnippets = (rows) => (compact === true ? rows.map(({ snippet, ...rest }) => rest) : rows);
-      // BA-53: pull-side low confidence, on unless retrieval.pullLowConfidence is explicitly false. Only a below-threshold
-      // abstention is re-run with no threshold, on the same searcher snapshot (no refresh), so limit, budget and excluded
-      // paths stay identical. Other abstain reasons and non-abstained answers never produce low-confidence rows.
-      const lowConfidenceAnswer = () => {
-        if (
-          config.retrieval?.pullLowConfidence === false ||
-          answer.abstained !== true ||
-          answer.reason !== 'below_threshold'
-        )
-          return null;
-        const weak = searcher.search(query, {
-          limit: count,
-          budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT),
-          abstainThreshold: 0,
-        });
-        if (!weak.results.length) return null;
-        return {
-          results: stripSnippets(weak.results.map((row) => ({ ...row, lowConfidence: true }))),
-          abstained: true,
-          lowConfidence: true,
-        };
+      if (results.fallbackReason) return fallback(results.fallbackReason);
+      if (results.abstained) return { ...lexical, semantic: { used: true }, mode: settings.mode };
+      const visible = results.filter((item) => !isExcluded(item.path));
+      // BA-24: section fields use the core's anchor rule (diacritics, `-N` collisions, astral headings). Order: (1) the
+      // lexical section of this query, when the page is in the lexical answer; (2) the core's section for the query on
+      // the page's own body (bestSection with the query terms, the same choice the core makes for that page); (3) the
+      // section of the chunk's own text, used only when its headingPath equals the chunk's. Otherwise the heading is the
+      // chunk's and the anchor stays null.
+      const sections = new Map(answer.results.map((row) => [row.path, row]));
+      const pagesByPath = new Map(snapshot.pages.map((page) => [page.path, page]));
+      const asOf = new Date(snapshot.index.now);
+      const queryTerms = [...new Set(core.tokens(query, true))];
+      const pageSection = (item, terms) => {
+        const page = pagesByPath.get(item.path);
+        if (!page || typeof page.body !== 'string' || !terms.length) return null;
+        return core.bestSection(page.body, terms, snapshot.index, asOf);
       };
-      const lexical = lowConfidenceAnswer() ?? { results: stripSnippets(answer.results), abstained: answer.abstained };
-      if (!semanticEnabled) return lexical;
-      const fallback = (reason) => ({ ...lexical, semantic: { used: false, fallbackReason: reason }, mode: 'lexical' });
-      try {
-        let module;
-        try {
-          module = await loadSemantic();
-        } catch (error) {
-          return fallback(error?.fallbackReason === 'module-missing' ? 'module-missing' : 'module-load-error');
-        }
-        const provider = providerFor(module);
-        const index = await module.readSemanticIndex(stateDir);
-        const emptyIndexWithPages =
-          index &&
-          index.entries.length === 0 &&
-          Object.keys(index.fileHashes).length === 0 &&
-          (await core.listPages(vaultDir)).some((path) => !['wiki/index.md', 'wiki/log.md'].includes(path));
-        if (!index || emptyIndexWithPages) {
-          scheduleUpdate(false);
-          return fallback(emptyIndexWithPages || !backgroundFailed ? 'index-missing' : 'provider-error');
-        }
-        if (index.providerFingerprint !== provider.fingerprint || index.dims !== provider.dims) {
-          scheduleUpdate(false);
-          return fallback('fingerprint-mismatch');
-        }
-        const snapshot = searcher.snapshot();
-        // BA-29: excluded pages are removed from the semantic candidates and, as a guard, from the hybrid results.
-        const results = await module.searchHybrid({
-          query,
-          pages: snapshot.pages,
-          lexicalIndex: snapshot.index,
-          entries: index.entries.filter((entry) => !isExcluded(entry.path)),
-          provider,
-          limit: count,
-          indexMeta: index,
-          mode: settings.mode,
-          minSemanticScore: settings.minScore,
-          abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35,
-        });
-        if (results.fallbackReason) return fallback(results.fallbackReason);
-        if (results.abstained) return { ...lexical, semantic: { used: true }, mode: settings.mode };
-        const visible = results.filter((item) => !isExcluded(item.path));
-        // BA-24: section fields use the core's anchor rule (diacritics, `-N` collisions, astral headings). Order: (1) the
-        // lexical section of this query, when the page is in the lexical answer; (2) the core's section for the query on
-        // the page's own body (bestSection with the query terms, the same choice the core makes for that page); (3) the
-        // section of the chunk's own text, used only when its headingPath equals the chunk's. Otherwise the heading is the
-        // chunk's and the anchor stays null.
-        const sections = new Map(answer.results.map((row) => [row.path, row]));
-        const pagesByPath = new Map(snapshot.pages.map((page) => [page.path, page]));
-        const asOf = new Date(snapshot.index.now);
-        const queryTerms = [...new Set(core.tokens(query, true))];
-        const pageSection = (item, terms) => {
-          const page = pagesByPath.get(item.path);
-          if (!page || typeof page.body !== 'string' || !terms.length) return null;
-          return core.bestSection(page.body, terms, snapshot.index, asOf);
+      const chunkSection = (item) => {
+        const found = pageSection(item, [...new Set(core.tokens(String(item.snippet ?? ''), true))]);
+        return found && found.headingPath === (item.headingPath ?? '') ? found : null;
+      };
+      let budget = Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT);
+      // Order is the module's order (RRF in rrf mode, cosine then lexical rank in semantic-primary); `score` is the
+      // value of that ordering: rrfScore, or semanticScore in semantic-primary (0 for lexical-only hits, which the module places last).
+      const semanticPrimary = settings.mode === 'semantic-primary';
+      const normalized = visible.map((item) => {
+        const original = answer.results.find((row) => row.path === item.path);
+        const section = sections.get(item.path) ?? pageSection(item, queryTerms) ?? chunkSection(item);
+        const chunkHeading = item.headingPath?.split(' > ').at(-1) || null;
+        // BA-57: the flag comes from the section object; a chunk-only heading has no section, so it is never flagged.
+        const synthesized = section?.synthesized === true;
+        const sectionFields = section
+          ? {
+              heading: section.heading,
+              anchor: section.anchor,
+              headingPath: section.headingPath,
+              ...(synthesized ? { synthesized: true } : {}),
+            }
+          : chunkHeading
+            ? { heading: chunkHeading, anchor: null, headingPath: item.headingPath }
+            : {};
+        // Code-point safe: a cut never leaves a lone surrogate (core prefixKeepingPairs, as BA-17 in the core).
+        const snippet = core.prefixKeepingPairs(String(item.snippet ?? ''), Math.max(0, budget));
+        budget -= snippet.length;
+        const row = {
+          ...original,
+          path: item.path,
+          title: item.title,
+          score: semanticPrimary ? (item.semanticScore ?? 0) : item.rrfScore,
+          ...(item.semanticScore !== undefined ? { semanticScore: item.semanticScore } : {}),
+          rrfScore: item.rrfScore,
+          snippet,
+          stale: item.stale,
+          status: item.status,
+          ...sectionFields,
         };
-        const chunkSection = (item) => {
-          const found = pageSection(item, [...new Set(core.tokens(String(item.snippet ?? ''), true))]);
-          return found && found.headingPath === (item.headingPath ?? '') ? found : null;
-        };
-        let budget = Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT);
-        // Order is the module's order (RRF in rrf mode, cosine then lexical rank in semantic-primary); `score` is the
-        // value of that ordering: rrfScore, or semanticScore in semantic-primary (0 for lexical-only hits, which the module places last).
-        const semanticPrimary = settings.mode === 'semantic-primary';
-        const normalized = visible.map((item) => {
-          const original = answer.results.find((row) => row.path === item.path);
-          const section = sections.get(item.path) ?? pageSection(item, queryTerms) ?? chunkSection(item);
-          const chunkHeading = item.headingPath?.split(' > ').at(-1) || null;
-          // BA-57: the flag comes from the section object; a chunk-only heading has no section, so it is never flagged.
-          const synthesized = section?.synthesized === true;
-          const sectionFields = section
-            ? {
-                heading: section.heading,
-                anchor: section.anchor,
-                headingPath: section.headingPath,
-                ...(synthesized ? { synthesized: true } : {}),
-              }
-            : chunkHeading
-              ? { heading: chunkHeading, anchor: null, headingPath: item.headingPath }
-              : {};
-          // Code-point safe: a cut never leaves a lone surrogate (core prefixKeepingPairs, as BA-17 in the core).
-          const snippet = core.prefixKeepingPairs(String(item.snippet ?? ''), Math.max(0, budget));
-          budget -= snippet.length;
-          const row = {
-            ...original,
-            path: item.path,
-            title: item.title,
-            score: semanticPrimary ? (item.semanticScore ?? 0) : item.rrfScore,
-            ...(item.semanticScore !== undefined ? { semanticScore: item.semanticScore } : {}),
-            rrfScore: item.rrfScore,
-            snippet,
-            stale: item.stale,
-            status: item.status,
-            ...sectionFields,
-          };
-          // A synthesized section is presented neutrally: a verified page's trust is dropped from that row.
-          if (synthesized && row.trust === 'verified') delete row.trust;
-          return row;
-        });
-        return { results: stripSnippets(normalized), abstained: false, semantic: { used: true }, mode: settings.mode };
-      } catch (error) {
-        return fallback(error?.fallbackReason === 'remote-not-allowed' ? 'remote-not-allowed' : 'provider-error');
-      }
+        // A synthesized section is presented neutrally: a verified page's trust is dropped from that row.
+        if (synthesized && row.trust === 'verified') delete row.trust;
+        return row;
+      });
+      return { results: stripSnippets(normalized), abstained: false, semantic: { used: true }, mode: settings.mode };
+    } catch (error) {
+      return fallback(error?.fallbackReason === 'remote-not-allowed' ? 'remote-not-allowed' : 'provider-error');
+    }
+  };
+  // BA-63: every result row says how complete its page's provenance is; rows keep their order and all other keys.
+  const annotateProvenance = (answer) => {
+    if (!Array.isArray(answer?.results) || !answer.results.length) return answer;
+    const byPath = new Map(searcher.snapshot().pages.map((page) => [page.path, page.frontmatter]));
+    return {
+      ...answer,
+      results: answer.results.map((row) => ({ ...row, provenance: provenanceOf(byPath.get(row.path)) })),
+    };
+  };
+  readTool(
+    'wiki_query',
+    z.object({
+      query: z.string(),
+      limit: z.number().int().min(0).max(20).optional(),
+      compact: z.boolean().optional(),
+      provenance: z.boolean().optional(),
+    }),
+    async (args) => {
+      const answer = await queryWiki(args);
+      return args.provenance === true ? annotateProvenance(answer) : answer;
     }
   );
   readTool(
@@ -848,7 +885,7 @@ export function createServer(options) {
         if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
         const sha256 = await writeLocked(async () => {
           await checkExpectedSha(target, expectedSha256);
-          await writePageAtomic(target, { frontmatter: parsed.data, body: parsed.body });
+          await writePageAtomic(target, { frontmatter: withWriteProvenance(parsed.data), body: parsed.body });
           await logEntry('write-page', `wiki/${normalized}`);
           return expectedSha256 === undefined ? undefined : fileSha(target);
         });
@@ -871,7 +908,7 @@ export function createServer(options) {
           if (content !== undefined) {
             const parsed = core.parseFrontmatter(content);
             if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
-            next = { frontmatter: parsed.data, body: parsed.body };
+            next = { frontmatter: withWriteProvenance(parsed.data), body: parsed.body };
           } else if (patch) {
             // body replaces the body first; append is then added to the end of the resulting body, so both are applied.
             const base = typeof patch.body === 'string' ? patch.body : old.body;
@@ -907,7 +944,7 @@ export function createServer(options) {
         type: kind === 'entities' ? 'entity' : 'concept',
         tags: [],
         created: new Date().toISOString(),
-        ...parsed.data,
+        ...withWriteProvenance(parsed.data),
         title: name,
       };
       checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body: parsed.body }));
