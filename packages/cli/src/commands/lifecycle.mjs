@@ -2,7 +2,14 @@
 import { access, chmod, lstat, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { defaultConfig, effectiveChannel, loadConfig, validateConfig } from '@brainatlas/core';
+import {
+  defaultConfig,
+  effectiveChannel,
+  loadConfig,
+  SECRET_FILTER_OFF_WARNING,
+  secretFilterEnabled,
+  validateConfig,
+} from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from '../archive.mjs';
 import {
   managePath,
@@ -174,6 +181,7 @@ async function doctorResult(paths, env) {
     checks.release = false;
   }
   const warnings = [];
+  if (!secretFilterEnabled(cfg)) warnings.push(SECRET_FILTER_OFF_WARNING);
   const moduleHealth = [];
   if (checks.release && cfg.agents?.length) {
     for (const agent of cfg.agents) {

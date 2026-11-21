@@ -10,6 +10,7 @@ import {
   resolveModuleOrder,
   scanPath,
   scanText,
+  SECRET_FILTER_OFF_WARNING,
   setConfigValue,
   unsetConfigValue,
   activate as activateModule,
@@ -382,7 +383,8 @@ export async function configCommand({ args, plan, output, paths, env, markRedact
     const warnings = credentialUrl
       ? ['Remote URL contains embedded credentials; use a credential helper instead.']
       : [];
-    if (warnings.length) console.error(warnings[0]);
+    if (key === 'safety.secretFilter' && parsed === false) warnings.push(SECRET_FILTER_OFF_WARNING);
+    for (const warning of warnings) console.error(warning);
     output({ action: 'config set', key, ...(warnings.length ? { warnings } : {}) });
     return;
   }

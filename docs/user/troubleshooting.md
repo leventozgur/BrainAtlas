@@ -22,7 +22,7 @@ brainatlas status --summary
 | Kiro hook does not run | The configured prompt trigger name is unverified. Use MCP pull-mode tools and verify compatibility with the installed Kiro version. |
 | Update health check fails | Installer/update should retain or restore the prior release; run `brainatlas doctor`, then `brainatlas rollback` if needed. |
 | Sync reports conflicts or pending deletes | Inspect conflict copies and pending-delete status; explicitly review and approve deletions before they propagate. |
-| A write is refused by the safety filter | Review the page for secret-like content and sensitive paths. The filter cannot be disabled. Error output does not reveal matched values. |
+| A write is refused by the safety filter | Review the page for secret-like content and sensitive paths. To accept a known false positive, use `brainatlas safety allow <path>`. In the custom profile you can also turn off content refusals with `brainatlas config set safety.secretFilter false` (path deny rules still apply). Error output does not reveal matched values. |
 
 | Ollama is missing | Install it using the official download, then run `brainatlas semanticSetup`. |
 | Ollama server is stopped | Start it with `ollama serve`, then run `brainatlas semanticSetup`. |
