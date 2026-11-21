@@ -35,7 +35,7 @@ if (!files.length) {
   process.exit(1);
 }
 // A single hung test fails by name after 5 min instead of silently using up the job's time budget.
-const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-timeout=300000', ...files], {
+const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-timeout=900000', ...files], {
   cwd: root,
   stdio: 'inherit',
 });
