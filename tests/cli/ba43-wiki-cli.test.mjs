@@ -281,7 +281,10 @@ test('help lists wiki with its description and usage', async (t) => {
   assert.equal(all.status, 0, all.stderr);
   const command = JSON.parse(all.stdout).commands.find((item) => item.name === 'wiki');
   assert.equal(command.description, 'Read-only Wiki tools from the shell (same results as the MCP read tools).');
-  assert.match(command.usage, /^brainatlas wiki query <text> \[--limit N\] \[--compact\] \[--provenance\] \| read <path>/u);
+  assert.match(
+    command.usage,
+    /^brainatlas wiki query <text> \[--limit N\] \[--compact\] \[--provenance\] \| read <path>/u
+  );
   const detail = f.run('help', 'wiki');
   assert.equal(detail.status, 0, detail.stderr);
   assert.match(detail.stdout, /--max-chars N/u);
