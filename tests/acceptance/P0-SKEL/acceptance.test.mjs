@@ -113,10 +113,16 @@ const signatures = [
     `packages/adapters/${a}/src/index.mjs`,
     { detect: 1, plan: 1, apply: 2, remove: 1, doctor: 1, trustReview: 1 },
   ]),
-  ...['maintain-schedule', 'okf-strict', 'receipts', 'semantic', 'sync-dropbox', 'sync-engine', 'sync-folder', 'sync-git'].map((a) => [
-    `modules/${a}/src/index.mjs`,
-    { activate: 1 },
-  ]),
+  ...[
+    'maintain-schedule',
+    'okf-strict',
+    'receipts',
+    'semantic',
+    'sync-dropbox',
+    'sync-engine',
+    'sync-folder',
+    'sync-git',
+  ].map((a) => [`modules/${a}/src/index.mjs`, { activate: 1 }]),
 ];
 for (const [file, expected] of signatures)
   test(`stub imzaları: ${file}`, async () => {
@@ -246,7 +252,16 @@ test('izlenen metinlerde yaygın özel anahtar ve token biçimleri yok', async (
   assert.deepEqual(hits, []);
 });
 test('modül entry commands export ve NotImplemented hata sözleşmesi', async () => {
-  for (const name of ['maintain-schedule', 'okf-strict', 'receipts', 'semantic', 'sync-dropbox', 'sync-engine', 'sync-folder', 'sync-git']) {
+  for (const name of [
+    'maintain-schedule',
+    'okf-strict',
+    'receipts',
+    'semantic',
+    'sync-dropbox',
+    'sync-engine',
+    'sync-folder',
+    'sync-git',
+  ]) {
     const mod = await import(pathToFileURL(join(root, `modules/${name}/src/index.mjs`)));
     assert.equal(typeof mod.commands, 'object', `${name}: commands`);
     // PM: once a module is implemented, activate({}) may reject with its own context error instead of NotImplementedError;
