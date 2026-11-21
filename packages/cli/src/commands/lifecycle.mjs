@@ -23,6 +23,7 @@ import {
   removeCreatedDirectories,
 } from '../install-manifest.mjs';
 import { installedSyncSchedule } from './sync.mjs';
+import { buildHealthSummary, formatHealthSummary } from '../health.mjs';
 import { adapterHealth, removeAdapter } from './adapters.mjs';
 import {
   error,
@@ -420,7 +421,20 @@ export async function install({ args, flag, plan, output, paths, env }) {
   throw error('E_ARGUMENT', 'Command arguments are invalid.');
 }
 
-export async function status({ command, output, paths, env }) {
+/** Inputs of the health summary, shared by `status --summary` and `brainatlas ui`. */
+export async function summaryInputs({ paths, env }) {
+  const doctor = await doctorResult(paths, env);
+  const current = await readCurrent(paths);
+  const config = await loadConfig({ paths, env }).catch(() => null);
+  const agentChannels = config
+    ? Object.fromEntries(
+        (Array.isArray(config.agents) ? config.agents : []).map((name) => [name, effectiveChannel(config, name)])
+      )
+    : null;
+  return { doctor, currentVersion: current?.slice('releases/'.length) ?? null, config, agentChannels };
+}
+
+export async function status({ command, flag, json, output, paths, env }) {
   const result = await doctorResult(paths, env);
   const current = await readCurrent(paths);
   if (command === 'status') {
@@ -431,7 +445,17 @@ export async function status({ command, output, paths, env }) {
           (Array.isArray(cfg.agents) ? cfg.agents : []).map((name) => [name, effectiveChannel(cfg, name)])
         )
       : null;
-    output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null, agentChannels });
+    const currentVersion = current?.slice('releases/'.length) ?? null;
+    if (flag?.('--summary')) {
+      const summary = await buildHealthSummary({
+        doctor: result,
+        currentVersion,
+        config: cfg,
+        agentChannels,
+        paths,
+      });
+      output(json ? summary : formatHealthSummary(summary));
+    } else output({ ...result, currentVersion, agentChannels });
   } else output({ ...result, currentVersion: current?.slice('releases/'.length) ?? null });
   if (command === 'doctor' && !result.ok) process.exitCode = 1;
   return;
