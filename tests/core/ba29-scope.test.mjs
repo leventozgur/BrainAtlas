@@ -49,11 +49,18 @@ test('a wiki symlink that points inside the vault is the root; one that leaves t
   assert.equal(searchScope(vault).root, vault, 'escaping symlink: vault root, nothing is read outside the vault');
 });
 
-test('default exclusion at wiki root covers only the root-level navigation and policy files', (t) => {
+test('default exclusion at wiki root covers the root-level navigation and policy files and sync conflict copies', (t) => {
   const dir = temp(t),
     vault = path.join(dir, 'vault');
   fs.mkdirSync(path.join(vault, 'wiki'), { recursive: true });
-  assert.deepEqual(searchScope(vault).exclude, ['index.md', 'log.md', 'AGENTS.md', 'CLAUDE.md', 'GEMINI.md']);
+  assert.deepEqual(searchScope(vault).exclude, [
+    'index.md',
+    'log.md',
+    'AGENTS.md',
+    'CLAUDE.md',
+    'GEMINI.md',
+    '**/*.conflict-*.md',
+  ]);
 });
 
 test('default exclusion at vault root adds planning, archive, inbox and raw', (t) => {
@@ -66,6 +73,7 @@ test('default exclusion at vault root adds planning, archive, inbox and raw', (t
     'AGENTS.md',
     'CLAUDE.md',
     'GEMINI.md',
+    '**/*.conflict-*.md',
     'planning/**',
     'archive/**',
     'inbox/**',
