@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-68: `sync status` no longer reports `SYNCED` while the last completed run refused files (secret filter or denied path). It now reports `PENDING` with `refusedCount` and `refusedFiles` (path and rule id only, never content) until the offending files are fixed and a run succeeds.
+
 - Fix two macOS-flaky tests and bound CI time: concurrent first use of the sync host identity no longer fails with `E_INVALID_PATH` while another process is publishing `host-id` (the temporary link is removed right after publishing and readers wait out the brief two-link state); the MCP semantic fallback test gives its fingerprint-mismatch server its own state so that server's background rebuild cannot replace the shared index; the CI test job times out at 30 min and each test at 5 min.
 
 ## 0.1.0-rc.13 — 2026-11-21

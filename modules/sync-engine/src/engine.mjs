@@ -438,6 +438,15 @@ export function createSyncEngine({
     ]);
     if (!Array.isArray(conflicts) || !Array.isArray(pendingDeletes)) throw new SyncTransportError('E_STATE_INVALID');
     const unresolved = conflicts.filter((row) => !row.resolvedAt);
+    // Files the last completed run refused (secret filter / path deny) never reach the remote, so they must keep
+    // the status PENDING instead of SYNCED.
+    const refused =
+      journal?.phase === 'complete' && Array.isArray(journal.refused)
+        ? journal.refused
+            .filter((row) => row && typeof row.path === 'string')
+            .map(({ path, ruleId }) => ({ path, ruleId: typeof ruleId === 'string' ? ruleId : undefined }))
+            .sort((a, b) => a.path.localeCompare(b.path))
+        : [];
     const degraded = transportStatus?.status === 'degraded' || transportStatus?.status === 'DEGRADED';
     const degradedReason =
       typeof transportStatus?.reason === 'string'
@@ -452,7 +461,7 @@ export function createSyncEngine({
           ? 'DEGRADED'
           : journal?.phase === 'interrupted'
             ? 'INTERRUPTED'
-            : pendingDeletes.length || unresolved.length
+            : pendingDeletes.length || unresolved.length || refused.length
               ? 'PENDING'
               : 'SYNCED',
       hostId,
@@ -465,6 +474,7 @@ export function createSyncEngine({
         .filter((path) => typeof path === 'string')
         .sort(),
       paused,
+      ...(refused.length ? { refusedCount: refused.length, refusedFiles: refused } : {}),
       ...(transportStatus ? { transport: transportStatus } : {}),
       ...(degradedReason ? { degradedReason } : {}),
     };
@@ -1093,6 +1103,7 @@ export function createSyncEngine({
       await saveJson(manifestPath, manifest);
       journal.phase = 'complete';
       journal.completedAt = now().toISOString();
+      journal.refused = result.refused.map(({ path, ruleId }) => ({ path, ruleId }));
       await saveJson(journalPath, journal);
       const conflictRows = await activeConflicts();
       result.conflicts = conflictRows.map(({ path, kind, conflictCopy }) => ({
