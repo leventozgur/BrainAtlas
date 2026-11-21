@@ -13,6 +13,7 @@ import * as setup from './commands/setup.mjs';
 import * as configCommands from './commands/config.mjs';
 import * as tools from './commands/tools.mjs';
 import { agentCommand } from './commands/agent.mjs';
+import { uiCommand } from './ui.mjs';
 import { dispatchModuleCommand } from './commands/sync.mjs';
 export { hookCommandFor } from './commands/tools.mjs';
 
@@ -40,6 +41,7 @@ const helpDescriptions = Object.freeze({
   compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).',
   usage: 'Summarize hook metrics for the last days or record feedback.',
   wiki: 'Read-only Wiki tools from the shell (same results as the MCP read tools).',
+  ui: 'Open a local browser panel for status, agent channels and settings (127.0.0.1 only).',
   help: 'Show built-in and active module commands.',
 });
 const helpUsages = Object.freeze({
@@ -68,6 +70,7 @@ const helpUsages = Object.freeze({
     'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]',
   usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful',
   wiki: 'brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]',
+  ui: 'brainatlas ui [--no-open] [--json]',
   help: 'brainatlas --help | brainatlas help [COMMAND]',
 });
 
@@ -170,7 +173,7 @@ async function showHelp(topic, { paths, env, output, json }) {
 // command === 'update', command === 'rollback', command === 'recover', command === 'eval'
 // command === 'hook', command === 'mcp', command === 'migrate', command === 'adopt'
 // command === 'maintain', command === 'compact', command === 'usage', command === 'wiki'
-// command === 'agent'
+// command === 'agent', command === 'ui'
 const dispatch = Object.freeze({
   init: setup.init,
   install: lifecycle.install,
@@ -180,6 +183,7 @@ const dispatch = Object.freeze({
   safety: configCommands.safety,
   module: configCommands.moduleCommand,
   agent: agentCommand,
+  ui: uiCommand,
   uninstall: lifecycle.uninstall,
   update: lifecycle.update,
   rollback: lifecycle.rollback,
