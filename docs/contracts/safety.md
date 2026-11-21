@@ -5,7 +5,18 @@ contract-version: 1
 
 ## Purpose
 One shared API that every writer and emitter (hook output, MCP writes, checkpoint, sync) uses before data leaves its boundary.
-The filter cannot be disabled (`safety.secretFilter` is locked to `true`); Full may only add `extraDenyGlobs`.
+`safety.secretFilter` is locked to `true` in the Lite and Full profiles; Full may only add `extraDenyGlobs`.
+The custom profile may set `safety.secretFilter: false` (see "Opt-out" below).
+
+## Opt-out (custom profile only)
+`secretFilterEnabled(config)` (exported from core) is `false` only when the configuration sets `safety.secretFilter: false`, which
+`validateConfig` accepts only with `profile: "custom"`. When it is `false`:
+- Write refusals for secret-like **content** are lifted: MCP page writes and crosslink titles, `checkpoint(…, { secretFilter: false })`
+  and the `maintain --fix` index line no longer call `scanText`.
+- Unchanged: path deny rules (`scanPath`, default and `extraDenyGlobs`) still refuse writes; hook, recap, CLI and receipt output is still
+  passed through `redact`; sync push and pull and the synthesis prompt and output scans still run, because they send data to another
+  system.
+- `brainatlas doctor` and `brainatlas config set safety.secretFilter false` report a warning.
 
 ## Function signatures
 ```js

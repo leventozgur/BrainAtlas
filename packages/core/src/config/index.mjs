@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',channels?:{'claude-code'?:'mcp'|'cli',codex?:'mcp'|'cli','copilot-vscode'?:'mcp'|'cli','gemini-cli'?:'mcp'|'cli',kiro?:'mcp'|'cli'},vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:true,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',channels?:{'claude-code'?:'mcp'|'cli',codex?:'mcp'|'cli','copilot-vscode'?:'mcp'|'cli','gemini-cli'?:'mcp'|'cli',kiro?:'mcp'|'cli'},vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:boolean,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
 /** Adapter names that may carry a per-agent channel (BA-61). */
 export const CHANNEL_AGENTS = Object.freeze(['claude-code', 'codex', 'copilot-vscode', 'gemini-cli', 'kiro']);
@@ -95,7 +95,7 @@ export const CONFIG_SCHEMA = {
       type: 'object',
       required: ['secretFilter', 'extraDenyGlobs'],
       properties: {
-        secretFilter: { const: true },
+        secretFilter: { type: 'boolean' },
         extraDenyGlobs: { type: 'array', items: { type: 'string' } },
         allow: {
           type: 'array',
@@ -318,6 +318,19 @@ export function defaultConfig(profile) {
   };
 }
 
+export const SECRET_FILTER_OFF_WARNING =
+  'safety.secretFilter is off: writes are no longer refused for secret-like content. Hook redaction, path deny globs and sync scans stay on.';
+
+/**
+ * True unless the configuration explicitly disables the secret filter (custom profile only).
+ * When false, writes are no longer refused for secret-like content. Hook output redaction,
+ * path deny globs and the sync and synthesis egress scans stay active regardless.
+ * @param {any} cfg @returns {boolean}
+ */
+export function secretFilterEnabled(cfg) {
+  return cfg?.safety?.secretFilter !== false;
+}
+
 /** @param {any} obj @returns {{ok:boolean, errors:Array<{path:string,code:string,message:string}>}} */
 export function validateConfig(obj) {
   const errors = [];
@@ -328,9 +341,12 @@ export function validateConfig(obj) {
     !Array.isArray(obj) &&
     obj.safety &&
     typeof obj.safety === 'object' &&
-    obj.safety.secretFilter === false
+    obj.safety.secretFilter === false &&
+    obj.profile !== 'custom'
   )
-    errors.push(error('safety.secretFilter', 'E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.'));
+    errors.push(
+      error('safety.secretFilter', 'E_LOCKED_KEY', 'safety.secretFilter can only be disabled in the custom profile.')
+    );
   if (obj?.semantic?.baseUrl !== undefined) {
     try {
       const url = new URL(obj.semantic.baseUrl);
@@ -471,8 +487,6 @@ export function setConfigValue(cfg, dottedKey, value) {
   const lockedValue = dottedKey === 'safety.secretFilter' ? true : dottedKey === 'telemetry' ? false : undefined;
   if (PROFILES[cfg.profile].lockedKeys.includes(dottedKey) && value !== lockedValue)
     throw new BrainAtlasError('E_LOCKED_KEY', `Configuration key ${dottedKey} is locked for this profile.`);
-  if (dottedKey === 'safety.secretFilter' && value === false)
-    throw new BrainAtlasError('E_LOCKED_KEY', 'safety.secretFilter cannot be disabled.');
   const keys = dottedKey.split('.');
   if (keys.some((key) => !key) || hasReservedSegment(keys))
     throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');

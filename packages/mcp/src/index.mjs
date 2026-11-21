@@ -484,10 +484,12 @@ export function createServer(options) {
     }
     return { normalized, target: checked };
   };
+  // Path deny globs always apply; content scanning can be turned off with safety.secretFilter=false (custom profile).
+  const contentFilter = core.secretFilterEnabled(config);
   const checkWrite = (rel, content) => {
     if (
       core.scanPath(rel, { extraDenyGlobs: config.safety?.extraDenyGlobs ?? [] }).length ||
-      core.scanText(content).length
+      (contentFilter && core.scanText(content).length)
     )
       throw mcpError('E_SECRET_DETECTED', 'write refused: secret-like content detected');
   };
@@ -999,7 +1001,7 @@ export function createServer(options) {
             typeof targetPage.frontmatter.title === 'string'
               ? targetPage.frontmatter.title
               : rel.split('/').at(-1).replace(/\.md$/, '');
-          if (core.scanText(title).length)
+          if (contentFilter && core.scanText(title).length)
             throw mcpError('E_SECRET_DETECTED', 'write refused: secret-like content detected');
           links.push(`- [${wiki.escapeMarkdownLinkText(title)}](${posix.relative(posix.dirname(normalized), rel)})`);
         }

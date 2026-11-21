@@ -78,7 +78,7 @@ export async function checkpoint(vaultDir, message, options = {}) {
     } catch {
       throw new BrainAtlasError('E_CHECKPOINT_SCAN', 'Unable to inspect staged content.');
     }
-    if (findings(await safety.scanText(staged)))
+    if (options.secretFilter !== false && findings(await safety.scanText(staged)))
       throw new BrainAtlasError('E_SECRET_DETECTED', 'Checkpoint refused by the content safety scan.');
   }
   const commit = await call([
