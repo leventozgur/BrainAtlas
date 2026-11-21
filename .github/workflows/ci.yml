@@ -4,6 +4,8 @@ on:
   pull_request:
 jobs:
   test:
+    # The macOS suite takes ~12-15 min; a hung job should fail at 30 min, not hold a runner for the 6 h default.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
