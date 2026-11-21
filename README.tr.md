@@ -10,7 +10,7 @@
 
 BrainAtlas kodlama ajanları için tasarlanmıştır, ancak kasa içerik türünü kısıtlamaz: proje dışı notlar da çalışır.
 
-BrainAtlas barındırılan bir bilgi servisi veya ajanın kanıtı izleyeceği garantisi değildir. Telemetri göndermez. Gizli bilgi filtresi daima açıktır ve devre dışı bırakılamaz. Güvenlik modeli için [Security](SECURITY.md) belgesine bakın.
+BrainAtlas barındırılan bir bilgi servisi veya ajanın kanıtı izleyeceği garantisi değildir. Telemetri göndermez. Gizli bilgi filtresi varsayılan olarak açıktır ve Lite ile Full profillerinde kilitlidir; yalnızca custom profil yazma retlerini kapatabilir. Güvenlik modeli için [Security](SECURITY.md) belgesine bakın.
 
 ## Profiller
 
@@ -85,7 +85,7 @@ Doğrulanmış arşivden `brainatlas update --from <archive>` ile güncelleyin. 
 
 ## Gizlilik ve güvenlik
 
-Kasa ve durum verileri yereldir. Telemetri yoktur. Desteklenen yazmalardan önce içerik gizli bilgi filtresinden geçer; filtre kapatılamaz. İsteğe bağlı senkronizasyon yalnızca yapılandırıldığında veri aktarır. Ayrıntılar: [SECURITY.md](SECURITY.md), [senkronizasyon kılavuzu](docs/user/sync.md).
+Kasa ve durum verileri yereldir. Telemetri yoktur. Desteklenen yazmalardan önce içerik gizli bilgi filtresinden geçer; filtre Lite ve Full profillerinde kapatılamaz. Custom profilde `brainatlas config set safety.secretFilter false` gizli bilgi benzeri içerik içeren yazmaların reddini kaldırır; çıktı maskeleme, yol engelleme kuralları ve senkronizasyon taramaları açık kalır. İsteğe bağlı senkronizasyon yalnızca yapılandırıldığında veri aktarır. Ayrıntılar: [SECURITY.md](SECURITY.md), [senkronizasyon kılavuzu](docs/user/sync.md).
 
 ## Karşılaştırma ve ilgili çalışmalar
 
