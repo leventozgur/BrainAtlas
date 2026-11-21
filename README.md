@@ -10,7 +10,7 @@
 
 BrainAtlas is designed for coding agents, but the vault does not restrict content type: non-project notes work too.
 
-BrainAtlas is not a hosted knowledge service, a general-purpose agent, or a guarantee that an agent follows retrieved evidence. It does not send telemetry. The secret filter is always enabled and cannot be disabled. Core configuration sets telemetry to false. See [Security](SECURITY.md).
+BrainAtlas is not a hosted knowledge service, a general-purpose agent, or a guarantee that an agent follows retrieved evidence. It does not send telemetry. The secret filter is on by default and locked in the Lite and Full profiles; only the custom profile can opt out of its write refusals. Core configuration sets telemetry to false. See [Security](SECURITY.md).
 
 ## Profiles
 
@@ -47,7 +47,7 @@ Settings live in the BrainAtlas configuration file (`~/Library/Application Suppo
 | Shell instead of MCP and hooks | off (default channel is MCP) | `brainatlas init --channel cli` or per agent `--channel claude-code=cli,kiro=mcp`; to change the channel of an installed agent later use `brainatlas agent set <agent> --channel mcp\|cli` | [CLI channel](docs/user/cli-channel.md) |
 | Add, remove or switch one agent | per `init --agents` | `brainatlas agent list` (shows detected agents); `brainatlas agent add <agent> [--channel mcp\|cli] [--plan]`; `brainatlas agent remove <agent> [--plan]` | [Agent setup](docs/user/agents.md) |
 | Folder or Git sync (Full, experimental) | off | Configured with `sync.transport`; see the guide before enabling | [Sync](docs/user/sync.md) |
-| Telemetry and secret filter | off / on, locked | Cannot be changed (`E_LOCKED_KEY`) | [Security](SECURITY.md) |
+| Telemetry and secret filter | off / on, locked | Cannot be changed (`E_LOCKED_KEY`); the custom profile may set `safety.secretFilter` to `false` | [Security](SECURITY.md) |
 
 To stop BrainAtlas completely, run `brainatlas uninstall` (the vault is kept).
 
@@ -87,7 +87,7 @@ Install an update from a verified release archive with `brainatlas update --from
 
 ## Privacy and security model
 
-Vault and state are local. BrainAtlas has no telemetry. The secret filter scans content before supported writes; it is always on and cannot be disabled. Default path-deny rules also block sensitive locations and files. Hooks return bounded context and their metrics omit prompt text, page content, paths, and raw session identifiers. Optional sync transports move vault data only when configured; understand the selected transport and credentials before enabling it.
+Vault and state are local. BrainAtlas has no telemetry. The secret filter scans content before supported writes; it is locked on in Lite and Full. In the custom profile `brainatlas config set safety.secretFilter false` stops refusing writes with secret-like content, while output redaction, path deny rules and sync scans stay on. Default path-deny rules also block sensitive locations and files. Hooks return bounded context and their metrics omit prompt text, page content, paths, and raw session identifiers. Optional sync transports move vault data only when configured; understand the selected transport and credentials before enabling it.
 
 See [Security](SECURITY.md), [Sync](docs/user/sync.md), and the [contracts](docs/contracts/).
 

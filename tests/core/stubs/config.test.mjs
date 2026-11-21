@@ -23,9 +23,12 @@ test('validator gives key-specific errors without echoing values', () => {
   assert.ok(
     result.errors.every((item) => !item.message.includes('TOP_SECRET_TOKEN') && !item.message.includes('PRIVATE'))
   );
-  const disabled = api.defaultConfig('custom');
+  const disabled = api.defaultConfig('full');
   disabled.safety.secretFilter = false;
   assert.ok(api.validateConfig(disabled).errors.some((item) => item.code === 'E_LOCKED_KEY'));
+  const optedOut = api.defaultConfig('custom');
+  optedOut.safety.secretFilter = false;
+  assert.equal(api.validateConfig(optedOut).ok, true);
 });
 
 test('Lite locked keys reject edits; allowed edits return a validated copy', () => {
