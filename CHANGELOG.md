@@ -2,11 +2,25 @@
 
 ## Unreleased
 
+## 0.1.0-rc.14 — 2026-11-21
+
+The `safety.secretFilter` opt-out (custom profile), status summary and local panel (BA-62, BA-64), MCP provenance (BA-63), the optional weekly maintenance scheduler module (BA-48A2), sync status and scenario-matrix fixes (BA-68, BA-52) and CI hardening. The default install is unchanged.
+
 - BA-64: `brainatlas ui [--no-open] [--json]` serves a local panel on 127.0.0.1 (random port, per-run token, Host/Origin checks) with the status summary, agent channels and scalar settings. Changes show a plan first and apply separately through the same handlers as `agent set` and `config set`; blocked keys and read-only installations are refused. See `docs/user/ui.md`.
 - BA-62: `brainatlas status --summary [--json]` prints one read-only health view (version, profile, modules, agent channels, hook mode, semantic state and recent hook use, last sync, OKF error/warning counts, `maintain` findings by kind). It adds a flag only; the existing `status`, `doctor`, `wiki lint`, `okf check` and `maintain` outputs are unchanged.
 - `safety.secretFilter` can now be set to `false` in the custom profile (it stays locked in Lite and Full, and switching an opted-out config to those profiles is refused with `E_LOCKED_KEY`). Off means writes are no longer refused for secret-like content: MCP page writes and crosslink titles, `checkpoint` with `secretFilter: false` and the `maintain --fix` index line skip `scanText`. Path deny rules, output redaction (hooks, recap, CLI, receipts) and the sync and synthesis scans are unchanged. `doctor` and `config set` warn while it is off. New core export `secretFilterEnabled(config)`.
 
 - Fix two macOS-flaky tests and bound CI time: concurrent first use of the sync host identity no longer fails with `E_INVALID_PATH` while another process is publishing `host-id` (the temporary link is removed right after publishing and readers wait out the brief two-link state); the MCP semantic fallback test gives its fingerprint-mismatch server its own state so that server's background rebuild cannot replace the shared index; the CI test job times out at 30 min and each test at 5 min.
+
+- BA-68: `sync status` no longer reports `SYNCED` while the last completed run refused files (secret filter or denied path). It now reports `PENDING` with `refusedCount` and `refusedFiles` (path and rule id only, never content) until the offending files are fixed and a run succeeds.
+
+- BA-63: pages written through MCP (`wiki_write_page`, `wiki_update_page` with `content`, `wiki_create_entity`, `wiki_create_concept`) now get `generated` and `status: proposed` when missing; supplied fields are kept and no evidence fields are invented. `wiki_query` takes an optional `provenance: true` (CLI `wiki query --provenance`) that adds `provenance: none|partial|full` to each result and marks incomplete pages in text output; default results are unchanged. Because `proposed` pages rank slightly lower, newly written pages stay below verified ones until confirmed.
+
+- BA-48A2: new optional Full/Custom module `maintain-schedule` (`brainatlas maintain-schedule install|status|remove [--day] [--hour]`) installs a weekly launchd agent or systemd user timer for `maintain --weekly`. It owns only its two files (hash-recorded, never overwrites unmanaged or edited files), `uninstall` removes it, and the Lite build is unchanged.
+
+- BA-52 (a, b): sync scenario-matrix tests (edit vs delete, rename, offline merge on different pages, offline same-page conflict, conflict copy vs search) and a fix the matrix exposed: sync conflict copies (`*.conflict-*.md`) are now in the default retrieval exclusion, so the hook and MCP search no longer return them. A custom `retrieval.exclude` list replaces the default, so add the pattern to it if you use one. No sync data-loss case was found. The "experimental" label decision (c, d) stays open.
+
+- CI: the per-test timeout is 15 min instead of 5 min. `tests/acceptance/BA-00/ba-suite.test.mjs` runs two full child suites in one file and exceeded 5 min on ubuntu/Node 20 (`testTimeoutFailure`, red on main since the 5 min bound). The 30 min job limit still bounds hung runs.
 
 ## 0.1.0-rc.13 — 2026-11-21
 
