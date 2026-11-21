@@ -45,7 +45,7 @@ const helpDescriptions = Object.freeze({
 const helpUsages = Object.freeze({
   init: 'brainatlas init [--yes] [--vault PATH] [--profile lite|full] [--agents claude-code,copilot-vscode,kiro,codex,gemini-cli] [--channel mcp|cli|<agent>=<mcp|cli>,...] [--plan] [--json]',
   install: 'brainatlas install [--finalize]',
-  status: 'brainatlas status [--json]',
+  status: 'brainatlas status [--summary] [--json]',
   doctor: 'brainatlas doctor [--json]',
   config: 'brainatlas config get [KEY] | set KEY VALUE [--plan] | unset KEY [--plan]',
   safety:
