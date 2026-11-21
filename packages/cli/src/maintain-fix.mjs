@@ -469,7 +469,7 @@ function unclosedFrontmatter(lines, offset) {
  * Frontmatter lines are never scanned for sections and never receive an insertion. With an unclosed frontmatter block
  * the index has no body at all, so any insertion fails the verification (E_FIX_VERIFY) instead of being written.
  */
-async function planIndex(root, content, pages, files, unfixed) {
+async function planIndex(root, content, pages, files, unfixed, secretFilter = true) {
   const text = await readOptionalText(root, 'wiki/index.md');
   if (text === null) {
     unfixed.push({
@@ -498,7 +498,7 @@ async function planIndex(root, content, pages, files, unfixed) {
     if (indexed.has(rel)) continue;
     const line = indexLine(pages.get(path), rel);
     // A page title or summary that matches a safety rule never reaches the index: only the rule ids are reported.
-    const findings = scanText(line);
+    const findings = secretFilter ? scanText(line) : [];
     if (findings.length) {
       const ruleIds = [...new Set(findings.map((item) => item.ruleId))].sort();
       unfixed.push({
@@ -546,7 +546,7 @@ function reportedLinkTarget(detail) {
 }
 
 /** The full read-only plan: index lines, archive rewrites, optional source lists, plus the report-only unfixed items. */
-async function computePlan(root, { sources, now }) {
+async function computePlan(root, { sources, now, secretFilter = true }) {
   const pagePaths = await listWikiMarkdown(root);
   const loaded = await Promise.all(
     pagePaths.map(async (path) => {
@@ -562,7 +562,7 @@ async function computePlan(root, { sources, now }) {
     unfixed.push({ kind: 'symlink', path, detail: 'symbolic link is not followed', reason: 'symlink' });
   }
   const files = [];
-  const { added } = await planIndex(root, content, pages, files, unfixed);
+  const { added } = await planIndex(root, content, pages, files, unfixed, secretFilter);
   const names = buildNameIndex(pagePaths, pages);
   const archive = await archiveIndex(root);
   const state = { fixed: new Set(), ambiguous: [] };
@@ -661,7 +661,11 @@ export async function planFix(vault, options = {}) {
   const started = Date.now();
   const root = await vaultRoot(vault);
   const now = options.now instanceof Date && !Number.isNaN(options.now.valueOf()) ? options.now : new Date();
-  const { files, unfixed } = await computePlan(root, { sources: options.sources === true, now });
+  const { files, unfixed } = await computePlan(root, {
+    sources: options.sources === true,
+    now,
+    secretFilter: options.secretFilter !== false,
+  });
   return resultOf('plan', files, unfixed, false, started);
 }
 
@@ -673,15 +677,16 @@ export async function applyFix(vault, options = {}) {
   const started = Date.now();
   const root = await vaultRoot(vault);
   const sources = options.sources === true;
+  const secretFilter = options.secretFilter !== false;
   const now = options.now instanceof Date && !Number.isNaN(options.now.valueOf()) ? options.now : new Date();
   const wiki = await lstat(join(root, 'wiki')).catch(() => null);
   if (!wiki || !wiki.isDirectory() || wiki.isSymbolicLink()) {
-    const { files, unfixed } = await computePlan(root, { sources, now });
+    const { files, unfixed } = await computePlan(root, { sources, now, secretFilter });
     return resultOf('apply', files, unfixed, false, started);
   }
   const { withLock, LOCK_FILE_NAME } = await lockApi();
   return withLock(join(root, 'wiki', LOCK_FILE_NAME), async () => {
-    const { files, unfixed } = await computePlan(root, { sources, now });
+    const { files, unfixed } = await computePlan(root, { sources, now, secretFilter });
     const ordered = files.slice().sort((a, b) => byText(a.path, b.path));
     for (const file of ordered) verifyFile(file);
     let written = false;

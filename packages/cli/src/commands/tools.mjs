@@ -2,7 +2,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, vaultId } from '@brainatlas/core';
+import { loadConfig, secretFilterEnabled, vaultId } from '@brainatlas/core';
 import { recordCreatedDirectories, missingDirectories } from '../install-manifest.mjs';
 import { formatMaintenance, receiptCandidates, runMaintenance } from '../maintain.mjs';
 import { applyCompaction, formatCompaction, planCompaction } from '../compact.mjs';
@@ -234,9 +234,16 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
     if (queue) throw error('E_ARGUMENT', 'maintain --fix cannot be combined with --queue.');
     if (repo !== undefined) throw error('E_ARGUMENT', 'maintain --fix cannot be combined with --repo.');
     if (plan === apply) throw error('E_ARGUMENT', 'maintain --fix requires exactly one of --plan or --apply.');
-    const vaultPath =
-      requested === undefined ? (await loadConfig({ paths, env, readOnly: true })).vault.path : requested;
-    const result = plan ? await planFix(vaultPath, { sources }) : await applyFix(vaultPath, { sources });
+    const fixConfig =
+      requested === undefined
+        ? await loadConfig({ paths, env, readOnly: true })
+        : await loadConfig({ paths, env, readOnly: true }).catch(() => null);
+    const vaultPath = requested === undefined ? fixConfig.vault.path : requested;
+    // The opt-out applies only to the configured vault; any other vault keeps the filter on.
+    const secretFilter =
+      !fixConfig || resolve(vaultPath) !== resolve(fixConfig.vault.path) || secretFilterEnabled(fixConfig);
+    const options = { sources, secretFilter };
+    const result = plan ? await planFix(vaultPath, options) : await applyFix(vaultPath, options);
     if (json) {
       output(result);
       return;
