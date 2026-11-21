@@ -30,11 +30,11 @@ export function resolvePaths(options);
 export function vaultId(absPath);
 ```
 
-`CONFIG_SCHEMA` is a JSON Schema draft 2020-12 object. `PROFILES` maps `lite`, `full`, and `custom` to default module lists and locked keys. Lite has no optional modules (`[]`). Full uses the marker `['*']`: every module discovered in the release whose `module.json` `profiles` contains `full` (core never hard-codes optional module names, so the Lite purity guard holds). Custom starts empty. `safety.secretFilter` is locked to `true` in Lite and cannot be disabled in any profile; `telemetry` is locked to `false` in Lite.
+`CONFIG_SCHEMA` is a JSON Schema draft 2020-12 object. `PROFILES` maps `lite`, `full`, and `custom` to default module lists and locked keys. Lite has no optional modules (`[]`). Full uses the marker `['*']`: every module discovered in the release whose `module.json` `profiles` contains `full` (core never hard-codes optional module names, so the Lite purity guard holds). Custom starts empty. `safety.secretFilter` is locked to `true` in Lite and Full; only the custom profile may set it to `false` (see the safety contract); `telemetry` is locked to `false` in Lite.
 
 ## Input
 
-The v1 config shape is `{schemaVersion:1,profile,vault:{path},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars,abstainThreshold},hooks:{mode:'normal'|'economic'|'manual',deadlineMs},safety:{secretFilter:true,extraDenyGlobs:string[]},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},telemetry:false,readOnly:boolean,node:{path:string}}`. Path resolution uses injected `env.HOME` and `env.XDG_*`; it never calls `os.homedir()`.
+The v1 config shape is `{schemaVersion:1,profile,vault:{path},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars,abstainThreshold},hooks:{mode:'normal'|'economic'|'manual',deadlineMs},safety:{secretFilter:boolean,extraDenyGlobs:string[]},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},telemetry:false,readOnly:boolean,node:{path:string}}`. Path resolution uses injected `env.HOME` and `env.XDG_*`; it never calls `os.homedir()`.
 
 Path mapping: macOS uses `~/Library/Application Support/BrainAtlas/{releases/<v>/,current,bin/brainatlas,config.json,state/<vault-id>/,install-manifest.json}`. Linux uses `${XDG_DATA_HOME:-~/.local/share}/brainatlas`, `${XDG_CONFIG_HOME:-~/.config}/brainatlas/config.json`, and `${XDG_STATE_HOME:-~/.local/state}/brainatlas/<vault-id>/`. `vault-id` is the first 16 hex characters of SHA-256 over the vault's absolute path.
 
