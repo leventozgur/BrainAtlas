@@ -10,8 +10,20 @@ import { redactOutput, error } from './commands/shared.mjs';
 import { buildHealthSummary } from './health.mjs';
 
 const MAX_BODY = 16 * 1024;
-// Keys the panel never edits: paths, interpreter, state location and sync transport options (may hold remotes).
-const BLOCKED_KEY = /^(vault|node|stateDir|sync\.options|channels?|agents|modules|profile|schemaVersion)(\.|$)/;
+// BA-70: the panel edits only these tuning keys (an allowlist, so a key added to the schema later stays closed). Anything
+// that can redirect content (semantic.baseUrl, semantic.allowRemote, sync.*), weaken a safety rule (safety.*, readOnly),
+// run a command (maintain.synthesis.*, node.path) or move state (vault, stateDir, channels, agents, modules) is absent.
+export const EDITABLE_KEYS = new Set([
+  'retrieval.budgetChars',
+  'retrieval.abstainThreshold',
+  'retrieval.pullLowConfidence',
+  'hooks.mode',
+  'hooks.deadlineMs',
+  'hooks.disclosure',
+  'okf.level',
+  'semantic.enabled',
+  'semantic.minScore',
+]);
 
 const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BrainAtlas</title><style>
@@ -47,7 +59,7 @@ async function load(){
 load().catch((e)=>show(String(e.message)));
 </script></body></html>`;
 
-/** Flatten the editable leaves of the configuration (scalars only, schema keys only, never blocked keys). */
+/** Flatten the editable leaves of the configuration (scalars only, schema keys only, allowlisted keys only). */
 export function editableSettings(cfg) {
   const rows = [];
   const walk = (value, schema, prefix) => {
@@ -55,9 +67,12 @@ export function editableSettings(cfg) {
     for (const [key, child] of Object.entries(schema.properties)) {
       const path = prefix ? `${prefix}.${key}` : key;
       const item = value?.[key];
-      if (BLOCKED_KEY.test(path)) continue;
       if (child?.type === 'object') walk(item, child, path);
-      else if (['string', 'number', 'integer', 'boolean'].includes(child?.type) && item !== undefined)
+      else if (
+        EDITABLE_KEYS.has(path) &&
+        ['string', 'number', 'integer', 'boolean'].includes(child?.type) &&
+        item !== undefined
+      )
         rows.push({ key: path, value: item });
     }
   };
@@ -155,7 +170,7 @@ export async function startUiServer({ paths, env, host = '127.0.0.1' }) {
               throw error('E_ARGUMENT', 'agent and channel (mcp or cli) are required.');
             return runHandler(agentCommand, ['set', body.agent, '--channel', body.channel], { paths, env, plan });
           }
-          if (typeof body.key !== 'string' || BLOCKED_KEY.test(body.key))
+          if (typeof body.key !== 'string' || !EDITABLE_KEYS.has(body.key))
             throw error('E_CONFIG_KEY', 'This setting cannot be changed from the panel.');
           if (!editableSettings(cfg).some((row) => row.key === body.key))
             throw error('E_CONFIG_KEY', 'Unknown setting.');

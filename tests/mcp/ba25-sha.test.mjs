@@ -88,9 +88,9 @@ test('wiki_update_page with a matching expectedSha256 writes and returns the new
     expectedSha256: sha(PAGE),
   });
   assert.equal(result.updated, true);
-  // BA-63: MCP writes add `generated` and `status: proposed` when missing, so the stored bytes differ from `next`.
+  // BA-63/BA-69: MCP writes add `generated` (never `status`) when missing, so the stored bytes differ from `next`.
   const stored = await readFile(page, 'utf8');
-  assert.ok(stored.includes('title: Shared') && stored.includes('status: proposed') && stored.includes('generated:'));
+  assert.ok(stored.includes('title: Shared') && !stored.includes('status:') && stored.includes('generated:'));
   assert.ok(stored.endsWith('Beta body.\n'));
   assert.equal(result.sha256, sha(stored));
 });
