@@ -34,6 +34,10 @@ Run `npm run release:verify -- --dir <folder>` on a built release folder before 
 
 Wall-clock latency budgets live in `tests/perf/` and run with `npm run test:perf`; they are not part of `npm test`, so run them on a quiet machine when you change a hook, retrieval or scanner timing path.
 
+## Checking for date time-bombs
+
+Tests that spawn a real CLI, hook or MCP process must derive their fixture timestamps from the real clock, because the child process does not receive the test's fixed `now`. Verify future safety by shifting the test clock, for example `BRAINATLAS_TEST_CLOCK_SHIFT_DAYS=60 node --import ./tests/helpers/shift-clock.mjs --test tests/acceptance/BA-01/*.test.mjs`, or run the whole suite with `BRAINATLAS_TEST_CLOCK_SHIFT_DAYS=60 NODE_OPTIONS="--import $PWD/tests/helpers/shift-clock.mjs" node scripts/run-tests.mjs`; the preload shifts `Date.now()`/`new Date()` and propagates the shift to spawned children through `NODE_OPTIONS`. The default `npm test` run does not use the preload. No date-shift artifacts remain in the suite; `tests/perf/hooks-latency.perf.test.mjs` and `tests/acceptance/Q-SLOW/slow-provider.test.mjs` are excluded from this check.
+
 ## Change guidelines
 
 - Treat `docs/contracts/*.md` as API contracts. Do not change a signature or contract without an explicit proposal and review.

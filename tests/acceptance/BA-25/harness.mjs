@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
+import { clockShiftEnv } from '../../helpers/shift-clock.mjs';
 
 export const WT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 export const LOCK_NAME = '.brainatlas-write.lock';
@@ -35,7 +36,7 @@ export async function makeFixture(t, { readOnly = false } = {}) {
   config.readOnly = readOnly;
   const configFile = join(dir, 'config.json');
   await writeFile(configFile, JSON.stringify(config));
-  const env = {
+  const env = clockShiftEnv({
     HOME: home,
     XDG_CONFIG_HOME: join(home, 'config'),
     XDG_DATA_HOME: join(home, 'data'),
@@ -43,7 +44,7 @@ export async function makeFixture(t, { readOnly = false } = {}) {
     BRAINATLAS_CONFIG: configFile,
     BRAINATLAS_VAULT: vault,
     PATH: process.env.PATH || '',
-  };
+  });
   return {
     dir,
     home,

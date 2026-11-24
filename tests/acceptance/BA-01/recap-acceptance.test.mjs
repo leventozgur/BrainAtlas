@@ -10,10 +10,12 @@ import { spawnSync } from 'node:child_process';
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 import { resolvePaths, vaultId } from '../../../packages/core/src/paths/index.mjs';
 import { buildRecap } from '../../../packages/hooks/src/recap.mjs';
+import { clockShiftEnv } from '../../helpers/shift-clock.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const BIN = join(ROOT, 'packages/hooks/bin/brainatlas-hook.mjs');
 const NOW = new Date('2026-11-10T12:00:00.000Z');
+const REAL_NOW = new Date();
 const DAY = 24 * 60 * 60 * 1000;
 const LINE = /^- \d{4}-\d{2}-\d{2} .+ \(wiki\/[^()\s]+\.md\)$/;
 // Synthetic secrets assembled at run time so the source file itself holds no secret literal.
@@ -21,6 +23,8 @@ const TOKEN = ['ghp', ['A1b2C3d4E5f6G7h8', 'I9j0K1l2M3n4O5p6Q7r8'].join('')].joi
 const PW_KEY = ['pass', 'word'].join('');
 
 const msAgo = (days) => NOW.getTime() - days * DAY;
+// Subprocess tests run the hook with the real clock, so their fixtures must be relative to the real time.
+const msAgoReal = (days) => REAL_NOW.getTime() - days * DAY;
 const entry = (ms, path, action = 'update') => `- ${new Date(ms).toISOString()} ${JSON.stringify({ action, path })}`;
 
 async function makeVault(t) {
@@ -489,7 +493,7 @@ async function session(t, { mode = 'normal' } = {}) {
 function hook(s, client, event, stdin, extraEnv = {}) {
   return spawnSync(process.execPath, [BIN, client, event], {
     cwd: ROOT,
-    env: { ...s.env, ...extraEnv },
+    env: clockShiftEnv({ ...s.env, ...extraEnv }),
     input: stdin,
     encoding: 'utf8',
     timeout: 12000,
@@ -499,7 +503,7 @@ function hook(s, client, event, stdin, extraEnv = {}) {
 
 async function seedRecent(s, rel = 'wiki/entities/a.md', title = 'Alpha Page') {
   await writeFile(join(s.vault, rel), fmPage(title));
-  await writeFile(join(s.wiki, 'log.md'), entry(msAgo(0.5), rel) + '\n');
+  await writeFile(join(s.wiki, 'log.md'), entry(msAgoReal(0.5), rel) + '\n');
 }
 
 test('claude session-start envelope carries the recap; claude prompt never does', async (t) => {
@@ -602,7 +606,7 @@ test('metrics line for session-start has only the allowed keys and no title, pat
 test('session-start receipt with a secret title through bin is redacted in the envelope', async (t) => {
   const s = await session(t);
   await writeFile(join(s.vault, 'wiki/entities/s.md'), `---\ntitle: ${PW_KEY}=${TOKEN}\n---\n`);
-  await writeFile(join(s.wiki, 'log.md'), entry(msAgo(1), 'wiki/entities/s.md') + '\n');
+  await writeFile(join(s.wiki, 'log.md'), entry(msAgoReal(1), 'wiki/entities/s.md') + '\n');
   const out = hook(s, 'claude', 'session-start', JSON.stringify({ session_id: 'sec' }));
   assert.doesNotMatch(out.stdout, new RegExp(TOKEN));
   assert.match(out.stdout, /REDACTED/);
@@ -624,7 +628,7 @@ test('20 synthetic sessions with recent changes all produce a card of at most 80
     }
     await writeFile(
       join(s.wiki, 'log.md'),
-      Array.from({ length: 6 }, (_, p) => entry(msAgo(p + 0.2), `wiki/entities/s${i}-p${p}.md`)).join('\n') + '\n'
+      Array.from({ length: 6 }, (_, p) => entry(msAgoReal(p + 0.2), `wiki/entities/s${i}-p${p}.md`)).join('\n') + '\n'
     );
     const out = hook(s, client, 'session-start', JSON.stringify(payload));
     assert.equal(out.status, 0);
