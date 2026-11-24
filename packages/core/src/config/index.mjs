@@ -193,7 +193,7 @@ export const SEMANTIC_DEFAULTS = Object.freeze({
 });
 
 // BA-81: `keepAlive` is an in-memory default only. Writing it would make the file unreadable for older releases
-// (for example 0.1.0-rc.15 rejects unknown semantic keys), which would break rollback and cross-version reads.
+// (for example 0.1.0-rc.16 rejects unknown semantic keys), which would break rollback and cross-version reads.
 const { keepAlive: _keepAlive, ...WRITTEN_SEMANTIC_DEFAULTS } = SEMANTIC_DEFAULTS;
 
 const clone = (value) => structuredClone(value);
