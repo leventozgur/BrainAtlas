@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.0-rc.15 — 2026-11-24
+
+Release candidate for 0.1.0: fixes from the review of rc.14, panel and scheduler hardening, a date time-bomb in the test suite, and README/README.tr for the final release. The `ui` panel, the `maintain-schedule` module, semantic retrieval and Git/folder/Dropbox sync are labelled experimental. The default install (MCP + hooks, Lite) is unchanged except that MCP writes no longer add `status: proposed`.
+
+- BA-77: README and README.tr describe installing from the distribution archive, verifying `SHA256SUMS.sig` and the checksums, requirements, all commands, the experimental list and the license. `module.json` of semantic, sync-git and sync-dropbox carries `"experimental": true`.
 - BA-69: MCP writes no longer add `status: proposed`. The stamp turned neutral pages into weak ones (lower rank, `[unverified]` in the hook), which rc.14 did not mention; `generated` is still added when missing. `wiki_query --provenance` no longer counts empty values such as `sources: []` as provenance. Pages already stamped `proposed` by rc.14 keep that status until their author changes it.
 - BA-70: the `brainatlas ui` panel edits only an allowlist of tuning keys (`retrieval.budgetChars`, `retrieval.abstainThreshold`, `retrieval.pullLowConfidence`, `hooks.mode`, `hooks.deadlineMs`, `hooks.disclosure`, `okf.level`, `semantic.enabled`, `semantic.minScore`). Before, any non-blocked scalar was editable, including `semantic.baseUrl`, `semantic.allowRemote`, `sync.transport`, `safety.secretFilter` and `readOnly`.
 - BA-71: `brainatlas ui` is labelled experimental and hardened. The token travels only in the URL fragment (`/#t=…`) and the `x-brainatlas-token` header; a `?t=` query parameter is ignored. A body over 16 KiB gets 413 and the connection is closed. Every response carries `frame-ancestors 'none'`, `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`. The panel closes itself after 30 minutes without a request. Use `--no-open` on shared machines, because the opened URL is visible in the process list.

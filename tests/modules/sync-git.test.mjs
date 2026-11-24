@@ -418,7 +418,7 @@ test('activation wires the selected Git transport into the sync engine context',
       manifest,
       {
         name: 'sync-engine',
-        version: '0.1.0-rc.14',
+        version: '0.1.0-rc.15',
         description: 'engine',
         requires: [],
         provides: ['sync'],

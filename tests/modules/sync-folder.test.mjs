@@ -166,7 +166,7 @@ test('activation wires selected folder transport and the manifest declares its d
       manifest,
       {
         name: 'sync-engine',
-        version: '0.1.0-rc.14',
+        version: '0.1.0-rc.15',
         description: 'engine',
         requires: [],
         provides: ['sync'],
