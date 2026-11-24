@@ -111,14 +111,15 @@ test('fingerprint of the indexing provider equals the query provider fingerprint
   }
 });
 
-test('wiki_query against a slow provider still times out at timeoutMs 5000 and falls back to BM25', async (t) => {
+test('wiki_query against a provider that never answers still times out at timeoutMs 5000 and falls back to BM25', async (t) => {
   const w = await workspace(t, {
     'one.md': '---\ntype: entity\ntitle: One\nstatus: active\n---\n# One\nvioletneedle evidence\n',
     'index.md': '# Wiki Index\n',
     'log.md': '# Log\n',
   });
   const config = configFor(w);
-  // Build a valid index quickly first (before enabling the mocked clock), with the same provider identity the server will use.
+  assert.equal(config.semantic.timeoutMs, 5000, 'the product query timeout stays at 5000 ms');
+  // Build a valid index quickly first, with the same provider identity the server will use.
   const quick = async (url, request) => ({
     ok: true,
     json: async () => ({ embeddings: JSON.parse(request.body).input.map(() => [1, 0]) }),
@@ -138,30 +139,34 @@ test('wiki_query against a slow provider still times out at timeoutMs 5000 and f
   await cp(join(repo, 'modules/semantic'), join(release, 'modules/semantic'), { recursive: true });
   await symlink(join(repo, 'packages'), join(release, 'packages'));
   await symlink(release, paths.currentDir);
-  enable(t);
-  const calls = [];
-  const server = createServer({ config, paths, env: { HOME: w.root }, fetchImpl: slowFetch(8000, calls) });
+  // No mocked clock: the real 5000 ms product timer must abandon the request. The provider never answers, so the
+  // outcome cannot depend on how quickly the host delivers the fetch response.
+  let calls = 0;
+  const neverAnswers = () => {
+    calls++;
+    return new Promise(() => {});
+  };
+  const server = createServer({ config, paths, env: { HOME: w.root }, fetchImpl: neverAnswers });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'q-slow', version: '1' });
-  await drive(
-    t,
-    Promise.all([server.connect(serverTransport), client.connect(clientTransport, { timeout: CLIENT_TIMEOUT_MS })])
-  );
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport, { timeout: CLIENT_TIMEOUT_MS })]);
   t.after(async () => {
     await client.close();
     await server.close();
   });
-  const response = await drive(
-    t,
-    client.callTool({ name: 'wiki_query', arguments: { query: 'violetneedle' } }, undefined, {
-      timeout: CLIENT_TIMEOUT_MS,
-    }),
-    250
-  );
+  const started = performance.now();
+  const response = await client.callTool({ name: 'wiki_query', arguments: { query: 'violetneedle' } }, undefined, {
+    timeout: CLIENT_TIMEOUT_MS,
+  });
+  const elapsed = performance.now() - started;
+  // Generous bounds: a loaded CI runner may add latency, but the fallback must not wait on the provider. The small
+  // lower-bound tolerance absorbs timers that fire a millisecond early relative to performance.now().
+  assert.ok(elapsed >= config.semantic.timeoutMs - 50, `fallback came back after ${elapsed.toFixed(0)} ms`);
+  assert.ok(elapsed <= config.semantic.timeoutMs + 10_000, `fallback took ${elapsed.toFixed(0)} ms`);
   const payload = JSON.parse(response.content[0].text);
   assert.deepEqual(payload.results, lexical.results);
   assert.equal(payload.semantic.used, false);
   assert.equal(payload.semantic.fallbackReason, 'provider-error');
   assert.equal(payload.mode, 'lexical');
-  assert.equal(calls.length, 1, 'one query embedding was attempted');
+  assert.equal(calls, 1, 'one query embedding was attempted');
 });
