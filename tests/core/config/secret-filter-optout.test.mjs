@@ -44,7 +44,7 @@ test('only the custom profile can disable the secret filter', () => {
   assert.equal(redact(`key ${SECRET}`).includes(SECRET), false);
 });
 
-test('checkpoint skips the content scan but keeps the path scan when the filter is off', async (t) => {
+test('checkpoint refuses secret-like staged content even when called with { secretFilter: false }', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'ba-optout-checkpoint-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const env = {
@@ -68,11 +68,10 @@ test('checkpoint skips the content scan but keeps the path scan when the filter 
     scanText: () => (scanned.push('text'), [{ ruleId: 'anthropic' }]),
   };
   const lint = async () => ({ errorCount: 0 });
-  await assert.rejects(checkpoint(dir, 'refused', { runCommand, safety, env, lint }), { code: 'E_SECRET_DETECTED' });
-  scanned.length = 0;
-  const result = await checkpoint(dir, 'allowed', { runCommand, safety, env, lint, secretFilter: false });
-  assert.equal(result.committed, true);
-  assert.deepEqual(scanned, ['path:wiki/page.md']);
+  await assert.rejects(checkpoint(dir, 'refused', { runCommand, safety, env, lint, secretFilter: false }), {
+    code: 'E_SECRET_DETECTED',
+  });
+  assert.deepEqual(scanned, ['path:wiki/page.md', 'text']);
 });
 
 test('maintain --fix indexes a secret-like title only when the filter is off', async (t) => {

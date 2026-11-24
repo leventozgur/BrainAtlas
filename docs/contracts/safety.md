@@ -4,15 +4,15 @@ contract-version: 1
 # Safety (secret filter) contract
 
 ## Purpose
-One shared API that every writer and emitter (hook output, MCP writes, checkpoint, sync) uses before data leaves its boundary.
+One shared API that every writer and emitter (hook output, MCP writes, sync) uses before data leaves its boundary.
 `safety.secretFilter` is locked to `true` in the Lite and Full profiles; Full may only add `extraDenyGlobs`.
 The custom profile may set `safety.secretFilter: false` (see "Opt-out" below).
 
 ## Opt-out (custom profile only)
 `secretFilterEnabled(config)` (exported from core) is `false` only when the configuration sets `safety.secretFilter: false`, which
 `validateConfig` accepts only with `profile: "custom"`. When it is `false`:
-- Write refusals for secret-like **content** are lifted: MCP page writes and crosslink titles, `checkpoint(…, { secretFilter: false })`
-  and the `maintain --fix` index line no longer call `scanText`.
+- Write refusals for secret-like **content** are lifted: MCP page writes and crosslink titles and the `maintain --fix` index line no
+  longer call `scanText`.
 - Unchanged: path deny rules (`scanPath`, default and `extraDenyGlobs`) still refuse writes; hook, recap, CLI and receipt output is still
   passed through `redact`; sync push and pull and the synthesis prompt and output scans still run, because they send data to another
   system.
@@ -43,7 +43,7 @@ The custom profile may set `safety.secretFilter: false` (see "Opt-out" below).
 
 ## Errors
 - `TypeError` for non-string input or an invalid custom rule. Callers translate a non-empty finding list into their own refusal code
-  (`E_SECRET_DETECTED` for MCP/checkpoint/sync writes; hooks redact instead of refusing).
+  (`E_SECRET_DETECTED` for MCP/sync writes; hooks redact instead of refusing).
 
 ## Rule catalogue (BA-26 additions)
 Existing rule ids are unchanged. New content rules: `azure-storage-key` (`AccountKey=` or `SharedAccessKey=` with a value of 32 or more

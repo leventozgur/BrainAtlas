@@ -8,7 +8,7 @@ Please report suspected vulnerabilities privately through GitHub private vulnera
 
 BrainAtlas is designed for local vault storage and coding-agent integrations. Its boundaries include the local filesystem, agent configuration files, MCP stdio input/output, optional hooks, release archives, and optional sync transports.
 
-- The secret filter scans supported writes. It is locked on in the Lite and Full profiles. The custom profile can opt out with `safety.secretFilter: false`, which only lifts write refusals for secret-like content: output redaction, path deny rules and the sync and synthesis scans stay on, and `doctor` warns while it is off. Path deny rules block common secret-bearing locations; users can add deny globs.
+- The secret filter scans supported writes. It is locked on in the Lite and Full profiles. The custom profile can opt out with `safety.secretFilter: false`, which only lifts write refusals for secret-like content: output redaction, path deny rules and the sync and synthesis scans stay on, and `doctor` warns while it is off. Path deny rules block common secret-bearing locations; users can add deny globs. With `safety.secretFilter: false` secret-like pages can be written locally, but sync still refuses them, and `brainatlas sync status` shows them as PENDING with `refusedFiles` until fixed.
 - MCP write tools are not advertised in read-only mode and scan proposed content before writing.
 - Agent adapters plan owned configuration changes, preserve unrelated user data where supported, and require trust review. Review the exact plan before applying it.
 - Hooks bound output and avoid logging prompt text, page content, paths, or raw session identifiers.
