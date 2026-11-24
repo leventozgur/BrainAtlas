@@ -34,7 +34,7 @@ if (!files.length) {
   console.error('No test files found');
   process.exit(1);
 }
-// A single hung test fails by name after 5 min instead of silently using up the job's time budget.
+// A single hung test fails by name after 15 min instead of silently using up the job's time budget.
 const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-timeout=900000', ...files], {
   cwd: root,
   stdio: 'inherit',
