@@ -34,7 +34,15 @@ test('hook command executes a polyglot shim in a path with spaces', async (t) =>
     event: 'session-start',
     paths: { vault, state, release },
   });
-  const run = (args) => spawnSync(command[0], args, { encoding: 'utf8' });
+  // The permission-model child cannot read the clock-shift preload outside its allowlist, and this test has no dates.
+  // Remove only that preload so the default run keeps NODE_OPTIONS untouched.
+  const runEnv = { ...process.env };
+  if (process.env.BRAINATLAS_TEST_CLOCK_SHIFT_DAYS && runEnv.NODE_OPTIONS) {
+    const nodeOptions = runEnv.NODE_OPTIONS.replace(/--import\s+\S*shift-clock\.mjs/g, '').trim();
+    if (nodeOptions) runEnv.NODE_OPTIONS = nodeOptions;
+    else delete runEnv.NODE_OPTIONS;
+  }
+  const run = (args) => spawnSync(command[0], args, { encoding: 'utf8', env: runEnv });
   const result = run(command.slice(1));
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), ['gemini', 'session-start']);

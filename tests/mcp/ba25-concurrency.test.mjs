@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { defaultConfig } from '../../packages/core/src/config/index.mjs';
+import { clockShiftEnv } from '../helpers/shift-clock.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const LOCK = '.brainatlas-write.lock';
@@ -35,7 +36,12 @@ async function fixture(t) {
       command: process.execPath,
       args: [resolve(root, 'packages/mcp/bin/brainatlas-mcp.mjs')],
       cwd: root,
-      env: { HOME: home, BRAINATLAS_CONFIG: configFile, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' },
+      env: clockShiftEnv({
+        HOME: home,
+        BRAINATLAS_CONFIG: configFile,
+        BRAINATLAS_VAULT: vault,
+        PATH: process.env.PATH ?? '',
+      }),
       stderr: 'pipe',
     });
     const client = new Client({ name, version: '1.0.0' });

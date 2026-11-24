@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { clockShiftEnv } from '../helpers/shift-clock.mjs';
 import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -219,7 +220,7 @@ test(
     await mkdir(output, { recursive: true });
     await writeFile(gitConfig, '[user]\n\tname = E2E\n\temail = noreply\n[init]\n\tdefaultBranch = main\n');
 
-    const commonEnv = {
+    const commonEnv = clockShiftEnv({
       PATH: process.env.PATH || '/usr/bin:/bin',
       TMPDIR: temp,
       BRAINATLAS_OFFLINE: '1',
@@ -234,7 +235,7 @@ test(
       LC_ALL: 'C',
       npm_config_offline: 'true',
       npm_config_loglevel: 'silent',
-    };
+    });
     const envFor = (home, platform, id) => ({
       ...commonEnv,
       HOME: home,
