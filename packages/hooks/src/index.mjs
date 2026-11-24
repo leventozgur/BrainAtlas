@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
 import { constants, realpathSync } from 'node:fs';
-import { lstat, mkdir, open, readFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
@@ -11,6 +11,11 @@ import { SEMANTIC_DEFAULTS } from '../../core/src/config/index.mjs';
 import { SEMANTIC_BUDGET_MS, semanticEntryUrl, semanticRequested } from './semantic.mjs';
 
 const clients = new Set(['claude', 'codex', 'kiro', 'copilot', 'gemini']);
+// BA-81: the hook process deadline and the post-output warm-up wait are shared with the bin.
+export const HOOK_PROCESS_DEADLINE_MS = 4700;
+export const WARMUP_WAIT_MS = 2000;
+// BA-81: at most one warm-up per state directory in this window.
+const WARMUP_RATE_LIMIT_MS = 60000;
 // BA-26: hook output also redacts e-mail addresses and TR phone numbers (contact data is kept in pages, not in injected context).
 const REDACT_OUTPUT = { personal: true };
 const events = new Set(['prompt', 'session-start', 'session-end']);
@@ -233,6 +238,94 @@ function semanticStep(config, env) {
     return null;
   }
 }
+// BA-81: a timestamp file written atomically before each request keeps one warm-up per state directory per minute.
+// An unparsable file, a missing or invalid `at`, or an `at` later than now is stale and gets overwritten; only a
+// readable past timestamp within the window suppresses the warm-up. A read or write error means "do not warm up".
+async function warmupDue(stateDir, now) {
+  if (!stateDir) return false;
+  const file = join(stateDir, 'semantic-warmup.json');
+  let previous;
+  try {
+    previous = await readFile(file, 'utf8');
+  } catch (error) {
+    if (error?.code !== 'ENOENT') return false;
+  }
+  if (previous !== undefined) {
+    let at = NaN;
+    try {
+      const stored = JSON.parse(previous)?.at;
+      if (typeof stored === 'string') at = Date.parse(stored);
+    } catch {
+      /* An unparsable file is stale. */
+    }
+    if (Number.isFinite(at) && at <= now.getTime() && now.getTime() - at < WARMUP_RATE_LIMIT_MS) return false;
+  }
+  const tmp = `${file}.${process.pid}.${now.getTime()}.tmp`;
+  try {
+    await mkdir(stateDir, { recursive: true, mode: 0o700 });
+    await writeFile(tmp, JSON.stringify({ at: now.toISOString() }), { flag: 'wx', mode: 0o600 });
+    await rename(tmp, file);
+    return true;
+  } catch {
+    await rm(tmp, { force: true }).catch(() => {});
+    return false;
+  }
+}
+// BA-81: one in-process request through the same validated provider after stdout has been written. It never reads
+// the vault or the semantic index, never sends prompt or page text, and every error is swallowed. `deadline` is the
+// end of the post-output cap; the rate-limit I/O and the module import are charged against it, and a request that
+// would start with no time left is skipped.
+function warmupTask(settings, stateDir, env, now) {
+  return async (deadline = Date.now() + WARMUP_WAIT_MS) => {
+    if (env.BRAINATLAS_OFFLINE === '1' || Date.now() >= deadline) return;
+    if (!(await warmupDue(stateDir, now))) return;
+    try {
+      const module = await import(semanticEntryUrl());
+      const timeoutMs = Math.floor(deadline - Date.now());
+      if (timeoutMs <= 0) return;
+      module.validateConfiguredProvider(settings);
+      const provider = module.createOllamaProvider({ ...settings, timeoutMs });
+      await provider.embed(['warm-up']);
+    } catch {
+      /* A warm-up never reports anything. */
+    }
+  };
+}
+/**
+ * Writes the hook output first and flushes it, then waits for a due warm-up for at most WARMUP_WAIT_MS in total.
+ * The cap starts when stdout was flushed; a warm-up that would start with less than WARMUP_WAIT_MS left on the
+ * process deadline is skipped, never aborted part-way, and every warm-up error is swallowed. `done` receives the
+ * hook exit code after the flush and warm-up.
+ * @param {{stdout?:string,exitCode?:number,warmup?:(deadline:number)=>(void|Promise<void>)}} result
+ * @param {number} started process start timestamp (`Date.now()`)
+ * @param {(exitCode:number)=>void} done
+ */
+export function finishHookOutput(result, started, done) {
+  const after = async () => {
+    const warmup = result?.warmup;
+    if (typeof warmup === 'function' && HOOK_PROCESS_DEADLINE_MS - (Date.now() - started) >= WARMUP_WAIT_MS) {
+      const deadline = Date.now() + WARMUP_WAIT_MS;
+      let cap;
+      try {
+        await Promise.race([
+          Promise.resolve()
+            .then(() => warmup(deadline))
+            .catch(() => {}),
+          new Promise((resolve) => {
+            cap = setTimeout(resolve, WARMUP_WAIT_MS);
+          }),
+        ]);
+      } catch {
+        /* The warm-up never changes the hook result. */
+      } finally {
+        clearTimeout(cap);
+      }
+    }
+    done(result?.exitCode ?? 0);
+  };
+  if (!result?.stdout) void after();
+  else process.stdout.write(result.stdout, after);
+}
 // BA-28: an opt-in shadow threshold from `retrieval.shadow`. Absent or invalid means the shadow search does not run.
 function shadowThreshold(retrieval) {
   const shadow = retrieval?.shadow;
@@ -265,7 +358,7 @@ function retrieve(options, query, searchOptions, remaining, semantic, shadow) {
     worker.once('exit', () => finish(new Error('search')));
   });
 }
-/** @param {{client?:string,event?:string,stdin?:string,env?:object,now?:Date,config?:any}} [input] @returns {Promise<{stdout:string,exitCode:number}>} */
+/** @param {{client?:string,event?:string,stdin?:string,env?:object,now?:Date,config?:any}} [input] @returns {Promise<{stdout:string,exitCode:number,warmup?:(deadline:number)=>Promise<void>}>} */
 export async function runHook(input = {}) {
   const { client, event, stdin = '', env = {}, config = {}, now = new Date() } = input;
   if (!clients.has(client) || !events.has(event)) return { stdout: empty(client), exitCode: 2 };
@@ -285,7 +378,8 @@ export async function runHook(input = {}) {
     results = 0,
     outcome = 'empty',
     semanticState,
-    shadowState;
+    shadowState,
+    warmup;
   try {
     let data = {};
     if (stdin.trim()) {
@@ -302,6 +396,8 @@ export async function runHook(input = {}) {
       /* unsupported */
     } else if (event === 'session-start') {
       const geminiStartup = client !== 'gemini' || ['startup', 'resume', 'clear'].includes(data.source);
+      // BA-81: a session-start card also exposes one post-output warm-up, so the first prompt finds the model loaded.
+      // It never reads the vault or the semantic index and a failure never changes the card or its timing.
       if (stateDir && geminiStartup) {
         let handoff = '';
         try {
@@ -323,6 +419,8 @@ export async function runHook(input = {}) {
             context = '';
           }
         }
+        const step = semanticStep(config, env);
+        if (step) warmup = warmupTask(step.settings, stateDir, env, now);
       }
     } else if (typeof prompt === 'string' && prompt.trim() && stateDir && config.vault?.path) {
       const trigger = /(^|\s)(?:\/sb|@sb)(?=\s|$)/i.test(prompt);
@@ -354,6 +452,11 @@ export async function runHook(input = {}) {
           .map((item) => ({ ...item, path: scope.prefix + item.path }));
         semanticState = hit.semantic;
         shadowState = hit.shadow;
+        // BA-81: a semantic step that missed its budget means the model was probably cold; warm it after the prompt.
+        if (semanticState === 'fallback:deadline') {
+          const step = semanticStep(config, env);
+          if (step) warmup = warmupTask(step.settings, stateDir, env, now);
+        }
         if (Date.now() - start >= deadline) throw new Error('deadline');
         const unseen = found.filter((item) => !seen.includes(item.path));
         // BA-26: restricted results are removed before packing, so they are never injected and never marked as shown.
@@ -415,7 +518,7 @@ export async function runHook(input = {}) {
     ...(semanticState ? { semantic: semanticState } : {}),
     ...(shadowState ? { shadow: shadowState } : {}),
   });
-  return { stdout: envelope(client, event, context), exitCode: 0 };
+  return { stdout: envelope(client, event, context), exitCode: 0, ...(warmup ? { warmup } : {}) };
 }
 /** Build the node command used by client hook configuration. */
 export function buildHookCommand({ nodePath, shimPath, client, event, paths }) {

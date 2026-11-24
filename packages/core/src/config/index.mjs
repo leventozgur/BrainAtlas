@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
 
-/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',channels?:{'claude-code'?:'mcp'|'cli',codex?:'mcp'|'cli','copilot-vscode'?:'mcp'|'cli','gemini-cli'?:'mcp'|'cli',kiro?:'mcp'|'cli'},vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:boolean,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
+/** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',channels?:{'claude-code'?:'mcp'|'cli',codex?:'mcp'|'cli','copilot-vscode'?:'mcp'|'cli','gemini-cli'?:'mcp'|'cli',kiro?:'mcp'|'cli'},vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:boolean,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,keepAlive?:string,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
 /** Adapter names that may carry a per-agent channel (BA-61). */
 export const CHANNEL_AGENTS = Object.freeze(['claude-code', 'codex', 'copilot-vscode', 'gemini-cli', 'kiro']);
@@ -139,6 +139,7 @@ export const CONFIG_SCHEMA = {
         timeoutMs: { type: 'integer', minimum: 1 },
         indexTimeoutMs: { type: 'integer', minimum: 1 },
         indexBatchSize: { type: 'integer', minimum: 1, maximum: 64 },
+        keepAlive: { type: 'string', pattern: '^(?:0|[1-9][0-9]{0,4}[smh])$' },
         allowRemote: { type: 'boolean' },
       },
       additionalProperties: false,
@@ -187,8 +188,13 @@ export const SEMANTIC_DEFAULTS = Object.freeze({
   timeoutMs: 5000,
   indexTimeoutMs: 120000,
   indexBatchSize: 32,
+  keepAlive: '30m',
   allowRemote: false,
 });
+
+// BA-81: `keepAlive` is an in-memory default only. Writing it would make the file unreadable for older releases
+// (for example 0.1.0-rc.15 rejects unknown semantic keys), which would break rollback and cross-version reads.
+const { keepAlive: _keepAlive, ...WRITTEN_SEMANTIC_DEFAULTS } = SEMANTIC_DEFAULTS;
 
 const clone = (value) => structuredClone(value);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -311,7 +317,7 @@ export function defaultConfig(profile) {
     safety: { secretFilter: true, extraDenyGlobs: [], allow: [] },
     okf: { level: 'warn' },
     sync: { transport: null, options: {} },
-    semantic: { ...SEMANTIC_DEFAULTS },
+    semantic: { ...WRITTEN_SEMANTIC_DEFAULTS },
     telemetry: false,
     readOnly: false,
     node: { path: 'node' },
@@ -452,7 +458,7 @@ export async function loadConfig(options) {
   }
   const result = validateConfig(value);
   if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
-  return { ...value, semantic: { ...SEMANTIC_DEFAULTS, ...value.semantic } };
+  return { ...value, semantic: { ...WRITTEN_SEMANTIC_DEFAULTS, ...value.semantic } };
 }
 
 /** @param {Config} cfg @param {{paths:object}} options @returns {Promise<void>} */
@@ -493,7 +499,7 @@ export function setConfigValue(cfg, dottedKey, value) {
   const entries = resolveConfigKey(keys);
   if (!entries) throw new BrainAtlasError('E_CONFIG_KEY', `Unknown configuration key ${dottedKey}.`);
   const out = clone(cfg);
-  if (keys[0] === 'semantic') out.semantic = { ...SEMANTIC_DEFAULTS, ...out.semantic };
+  if (keys[0] === 'semantic') out.semantic = { ...WRITTEN_SEMANTIC_DEFAULTS, ...out.semantic };
   let target = out;
   for (let index = 0; index < keys.length - 1; index += 1) {
     const key = keys[index];

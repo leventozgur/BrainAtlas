@@ -244,7 +244,8 @@ test('config keeps v1 compatibility, defaults optional semantic settings, reject
   await writeFile(configFile, JSON.stringify(original));
   const loaded = await loadConfig({ paths: { configFile }, env: { HOME: f.root } });
   assert.equal(loaded.schemaVersion, 1);
-  assert.deepEqual(loaded.semantic, SEMANTIC_DEFAULTS);
+  const { keepAlive: _keepAlive, ...writtenSemanticDefaults } = SEMANTIC_DEFAULTS;
+  assert.deepEqual(loaded.semantic, writtenSemanticDefaults);
   assert.equal(validateConfig(loaded).ok, true);
   assert.equal(defaultConfig('full').semantic.enabled, false);
   assert.deepEqual(defaultConfig('lite').modules, []);

@@ -344,6 +344,7 @@ export async function evalCommand({ value, output }) {
 }
 
 export async function hookOrMcp({ command, args, env, paths, output }) {
+  const started = Date.now();
   /** @type {any} */
   let component;
   try {
@@ -355,6 +356,15 @@ export async function hookOrMcp({ command, args, env, paths, output }) {
   const entry = command === 'hook' ? component.runHook : component.main;
   if (typeof entry !== 'function')
     throw error('E_COMPONENT_MISSING', 'Requested component entry point is unavailable.');
+  // BA-81: the shared hook helper writes and flushes stdout first, then awaits a due warm-up within the cap and
+  // ends the process, so a pending request can never keep the CLI alive past the cap.
+  const emit = (result) =>
+    new Promise((resolve) => {
+      component.finishHookOutput(result, started, (exitCode) => {
+        resolve(undefined);
+        process.exit(exitCode);
+      });
+    });
   try {
     if (command === 'mcp') await entry();
     else {
@@ -391,8 +401,7 @@ export async function hookOrMcp({ command, args, env, paths, output }) {
           ? await entry({ client, event, stdin, env, now: new Date(), config: cfg })
           : { stdout: '', exitCode: 0 };
       } else result = await entry({ client, event, stdin, env, now: new Date(), config: cfg });
-      if (result.stdout) process.stdout.write(result.stdout);
-      process.exitCode = result.exitCode;
+      await emit(result);
     }
   } catch (e) {
     if (e.code === 'E_NOT_IMPLEMENTED') throw error('E_COMPONENT_MISSING', 'Requested component is unavailable.');
