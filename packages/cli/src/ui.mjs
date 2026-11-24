@@ -10,6 +10,7 @@ import { redactOutput, error } from './commands/shared.mjs';
 import { buildHealthSummary } from './health.mjs';
 
 const MAX_BODY = 16 * 1024;
+const DEFAULT_IDLE_MS = 30 * 60 * 1000;
 // BA-70: the panel edits only these tuning keys (an allowlist, so a key added to the schema later stays closed). Anything
 // that can redirect content (semantic.baseUrl, semantic.allowRemote, sync.*), weaken a safety rule (safety.*, readOnly),
 // run a command (maintain.synthesis.*, node.path) or move state (vault, stateDir, channels, agents, modules) is absent.
@@ -36,7 +37,7 @@ button,select,input{font:inherit}pre{background:#8882;padding:.6rem;overflow:aut
 <h2>Settings</h2><table id="settings"></table>
 <h2>Result</h2><pre id="out">Nothing yet. Changes show a plan first; apply is a separate step.</pre>
 <script>
-const params=new URLSearchParams(location.search);const T=params.get('t')||'';history.replaceState(null,'',location.pathname);
+const params=new URLSearchParams(location.hash.slice(1));const T=params.get('t')||'';history.replaceState(null,'',location.pathname);
 const $=(id)=>document.getElementById(id);
 const api=async(path,body)=>{const r=await fetch(path,{method:body?'POST':'GET',headers:{'x-brainatlas-token':T,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j};
@@ -109,27 +110,46 @@ async function runHandler(handler, args, { paths, env, plan }) {
 
 /**
  * Start the panel. It listens on 127.0.0.1 only, on a random port, and requires a per-run token.
- * @param {{paths:any, env:any, host?:string}} options
+ * It closes itself after `idleMs` without a request; `idle` resolves when that happens.
+ * @param {{paths:any, env:any, host?:string, idleMs?:number}} options
  */
-export async function startUiServer({ paths, env, host = '127.0.0.1' }) {
+export async function startUiServer({ paths, env, host = '127.0.0.1', idleMs = DEFAULT_IDLE_MS }) {
   const token = randomBytes(24).toString('hex');
   let queue = Promise.resolve();
+  /** @type {() => void} */
+  let markIdle = () => {};
+  const idle = new Promise((resolve) => {
+    markIdle = () => resolve(undefined);
+  });
+  /** @type {NodeJS.Timeout | undefined} */
+  let idleTimer;
+  let closePromise;
   const serialized = (task) => {
     const run = queue.then(task, task);
     queue = run.catch(() => {});
     return run;
   };
   const server = createServer(async (request, response) => {
+    scheduleIdle();
+    response.once('finish', scheduleIdle);
+    response.once('close', scheduleIdle);
     const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
-    const send = (status, body, type = 'application/json') => {
+    let sent = false;
+    const send = (status, body, type = 'application/json', { close = false } = {}) => {
+      if (sent) return;
+      sent = true;
+      if (close) request.on('error', () => {});
       response.writeHead(status, {
         'content-type': `${type}; charset=utf-8`,
         'cache-control': 'no-store',
         'x-content-type-options': 'nosniff',
+        'x-frame-options': 'DENY',
         'referrer-policy': 'no-referrer',
         'content-security-policy':
-          "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'",
+          "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'",
+        ...(close ? { connection: 'close' } : {}),
       });
+      if (close) response.once('finish', () => request.destroy());
       response.end(type === 'application/json' ? JSON.stringify(redactOutput(body, env.HOME)) : body);
     };
     try {
@@ -140,11 +160,11 @@ export async function startUiServer({ paths, env, host = '127.0.0.1' }) {
       if (origin !== undefined && origin !== `http://${expectedHost}` && origin !== `http://localhost:${port}`)
         return send(403, { error: 'Origin not allowed.' });
       const url = new URL(request.url ?? '/', `http://${expectedHost}`);
-      const given = request.headers['x-brainatlas-token'] ?? url.searchParams.get('t');
+      if (request.method === 'GET' && url.pathname === '/') return send(200, PAGE, 'text/html');
+      const given = request.headers['x-brainatlas-token'];
       if (!sameToken(given, token)) return send(401, { error: 'Missing or wrong token.' });
       const cfg = await loadConfig({ paths, env });
       const readOnly = cfg.readOnly === true;
-      if (request.method === 'GET' && url.pathname === '/') return send(200, PAGE, 'text/html');
       if (request.method === 'GET' && url.pathname === '/api/summary') {
         const inputs = await summaryInputs({ paths, env });
         return send(200, { readOnly, summary: await buildHealthSummary({ ...inputs, paths }) });
@@ -157,11 +177,32 @@ export async function startUiServer({ paths, env, host = '127.0.0.1' }) {
         if (readOnly) return send(403, { error: 'The installation is read-only.' });
         if (!/^application\/json\b/.test(request.headers['content-type'] ?? ''))
           return send(415, { error: 'JSON body required.' });
-        let raw = '';
-        for await (const chunk of request) {
-          raw += chunk;
-          if (raw.length > MAX_BODY) return send(413, { error: 'Body too large.' });
-        }
+        const declared = Number(request.headers['content-length']);
+        if (Number.isFinite(declared) && declared > MAX_BODY)
+          return send(413, { error: 'Body too large.' }, 'application/json', { close: true });
+        const raw = await new Promise((resolveBody, rejectBody) => {
+          /** @type {Buffer[]} */
+          const chunks = [];
+          let size = 0;
+          let tooLarge = false;
+          request.on('data', (chunk) => {
+            if (tooLarge) return;
+            size += chunk.length;
+            if (size > MAX_BODY) {
+              tooLarge = true;
+              chunks.length = 0;
+              send(413, { error: 'Body too large.' }, 'application/json', { close: true });
+              resolveBody(null);
+              return;
+            }
+            chunks.push(chunk);
+          });
+          request.on('end', () => {
+            if (!tooLarge) resolveBody(Buffer.concat(chunks).toString('utf8'));
+          });
+          request.on('error', rejectBody);
+        });
+        if (raw === null) return;
         const body = JSON.parse(raw || '{}');
         const plan = body.apply !== true;
         const result = await serialized(async () => {
@@ -184,16 +225,35 @@ export async function startUiServer({ paths, env, host = '127.0.0.1' }) {
       return send(bad ? 400 : 500, { error: cause instanceof SyntaxError ? 'Invalid JSON.' : (cause?.code ?? 'E_UI') });
     }
   });
+  const close = () => {
+    if (closePromise) return closePromise;
+    closePromise = new Promise((resolve) => {
+      clearTimeout(idleTimer);
+      if (!server.listening) return resolve(undefined);
+      server.close(() => resolve(undefined));
+      server.closeAllConnections();
+    });
+    return closePromise;
+  };
+  function scheduleIdle() {
+    if (closePromise || !(idleMs > 0)) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      close().then(markIdle);
+    }, idleMs);
+  }
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, host, () => resolve(undefined));
   });
+  scheduleIdle();
   const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
   return {
     port,
     token,
-    url: `http://127.0.0.1:${port}/?t=${token}`,
-    close: () => new Promise((resolve) => server.close(() => resolve(undefined))),
+    url: `http://127.0.0.1:${port}/#t=${token}`,
+    idle,
+    close,
   };
 }
 
@@ -221,7 +281,7 @@ function openBrowser(url, env) {
 export async function uiCommand({ args, flag, json, output, paths, env, dependencies = {} }) {
   const known = new Set(['--no-open', '--json']);
   if (args.some((argument) => !known.has(argument))) throw error('E_ARGUMENT', 'ui arguments are invalid.');
-  const panel = await startUiServer({ paths, env });
+  const panel = await startUiServer({ paths, env, idleMs: dependencies.uiIdleMs });
   output(json ? { url: panel.url, port: panel.port } : `BrainAtlas panel: ${panel.url}\nPress Ctrl+C to stop.`);
   if (!flag('--no-open') && env.BRAINATLAS_OFFLINE !== '1') openBrowser(panel.url, env);
   if (dependencies.uiStop) {
@@ -229,10 +289,21 @@ export async function uiCommand({ args, flag, json, output, paths, env, dependen
     await panel.close();
     return;
   }
+  let idleClosed = false;
+  /** @type {(value?: any) => void} */
+  let resolveStop = () => {};
+  const stop = () => resolveStop(undefined);
   await new Promise((resolve) => {
-    const stop = () => resolve(undefined);
+    resolveStop = resolve;
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
+    panel.idle.then(() => {
+      idleClosed = true;
+      resolve(undefined);
+    });
   });
+  process.removeListener('SIGINT', stop);
+  process.removeListener('SIGTERM', stop);
   await panel.close();
+  if (idleClosed) output('BrainAtlas panel closed after 30 minutes idle.');
 }
