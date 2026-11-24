@@ -91,6 +91,24 @@ function withWriteProvenance(frontmatter, now = new Date()) {
   if (!Object.hasOwn(next, 'generated')) next.generated = now.toISOString();
   return next;
 }
+/**
+ * BA-74: replacing an existing page with `content` must not fake freshness. Content that carries `generated` keeps it as
+ * given; content without it keeps the existing page's non-empty `generated` byte for byte; when neither has one, nothing
+ * is added. Only a page that does not exist yet gets `generated: now` (BA-63).
+ * @param {Record<string, unknown>} frontmatter frontmatter parsed from the new content
+ * @param {Record<string, unknown>|undefined} existing frontmatter of the page on disk, or undefined when it is new
+ * @param {Date} [now] clock used only for a new page
+ * @returns {Record<string, unknown>}
+ */
+function withReplacementProvenance(frontmatter, existing, now = new Date()) {
+  if (existing === undefined) return withWriteProvenance(frontmatter, now);
+  const next = { ...frontmatter };
+  if (Object.hasOwn(next, 'generated')) return next;
+  const previous = existing.generated;
+  // Only a non-empty string is preserved: any other existing value is not a usable provenance stamp.
+  if (typeof previous === 'string' && previous.trim() !== '') next.generated = previous;
+  return next;
+}
 /** Undo CommonMark backslash escapes of ASCII punctuation in a link destination. */
 function unescapeDestination(raw) {
   return raw.replace(/\\([!-/:-@[-`{-~])/g, '$1');
@@ -549,6 +567,15 @@ export function createServer(options) {
       throw mcpError('E_CONFLICT', 'The page changed since it was read.');
     }
   };
+  /** BA-74: frontmatter of the page on disk, or undefined when there is no file. Uses the core parser so dates stay strings. */
+  const existingFrontmatter = async (target) => {
+    try {
+      return core.parseFrontmatter(await readFile(target, 'utf8')).data;
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return undefined;
+      throw error;
+    }
+  };
   // Called inside the lock: the log append is part of the same critical section as the write it records.
   const logEntry = async (action, rel) => {
     const record = JSON.stringify({ action, path: rel });
@@ -894,7 +921,11 @@ export function createServer(options) {
         if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
         const sha256 = await writeLocked(async () => {
           await checkExpectedSha(target, expectedSha256);
-          await writePageAtomic(target, { frontmatter: withWriteProvenance(parsed.data), body: parsed.body });
+          const existing = await existingFrontmatter(target);
+          await writePageAtomic(target, {
+            frontmatter: withReplacementProvenance(parsed.data, existing),
+            body: parsed.body,
+          });
           await logEntry('write-page', `wiki/${normalized}`);
           return expectedSha256 === undefined ? undefined : fileSha(target);
         });
@@ -917,7 +948,9 @@ export function createServer(options) {
           if (content !== undefined) {
             const parsed = core.parseFrontmatter(content);
             if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
-            next = { frontmatter: withWriteProvenance(parsed.data), body: parsed.body };
+            // A second read is needed: `old.frontmatter` (gray-matter) turns unquoted dates into Date objects, not strings.
+            const existing = await existingFrontmatter(target);
+            next = { frontmatter: withReplacementProvenance(parsed.data, existing), body: parsed.body };
           } else if (patch) {
             // body replaces the body first; append is then added to the end of the resulting body, so both are applied.
             const base = typeof patch.body === 'string' ? patch.body : old.body;
