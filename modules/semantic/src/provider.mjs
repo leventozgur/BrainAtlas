@@ -2,6 +2,8 @@
 import { createHash } from 'node:crypto';
 
 export const PREPROCESS_VERSION = '1';
+// BA-81: Ollama keep-alive duration. `0` means "let Ollama decide" and sends no field, exactly as before.
+export const KEEP_ALIVE_PATTERN = /^(?:0|[1-9][0-9]{0,4}[smh])$/u;
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 
 function safeError(message) {
@@ -39,7 +41,7 @@ function validateVector(value, dims) {
   return Float32Array.from(value);
 }
 
-/** Create an Ollama provider using only the supplied fetch implementation. @param {{baseUrl?:string,model?:string,dims?:number,fetchImpl?:Function,queryPrefix?:string,documentPrefix?:string,batchSize?:number,timeoutMs?:number}} [options] */
+/** Create an Ollama provider using only the supplied fetch implementation. @param {{baseUrl?:string,model?:string,dims?:number,fetchImpl?:Function,queryPrefix?:string,documentPrefix?:string,batchSize?:number,timeoutMs?:number,keepAlive?:string}} [options] */
 export function createOllamaProvider({
   baseUrl = DEFAULT_BASE_URL,
   model,
@@ -49,6 +51,7 @@ export function createOllamaProvider({
   documentPrefix = '',
   batchSize = 32,
   timeoutMs = 60000,
+  keepAlive,
 } = {}) {
   if (typeof model !== 'string' || !model.trim() || !Number.isInteger(dims) || dims < 1) {
     throw safeError('Embedding provider configuration is invalid.');
@@ -59,7 +62,8 @@ export function createOllamaProvider({
     !Number.isInteger(batchSize) ||
     batchSize < 1 ||
     !Number.isInteger(timeoutMs) ||
-    timeoutMs < 1
+    timeoutMs < 1 ||
+    (keepAlive !== undefined && (typeof keepAlive !== 'string' || !KEEP_ALIVE_PATTERN.test(keepAlive)))
   )
     throw safeError('Embedding provider configuration is invalid.');
   if (typeof fetchImpl !== 'function') throw safeError('Embedding provider fetch is unavailable.');
@@ -97,7 +101,11 @@ export function createOllamaProvider({
               fetchImpl(endpoint, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ model, input: batch }),
+                body: JSON.stringify({
+                  model,
+                  input: batch,
+                  ...(keepAlive === undefined || keepAlive === '0' ? {} : { keep_alive: keepAlive }),
+                }),
                 signal: controller.signal,
               }),
               timeout,

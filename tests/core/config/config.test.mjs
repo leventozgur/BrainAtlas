@@ -64,7 +64,9 @@ test('semantic settings are optional, validated, and accessible through dotted c
   const configFile = join(dir, 'config.json');
   await writeFile(configFile, JSON.stringify(cfg));
   const loaded = await loadConfig({ paths: { configFile } });
-  assert.deepEqual(loaded.semantic, SEMANTIC_DEFAULTS);
+  const { keepAlive: _defaultKeepAlive, ...writtenDefaults } = SEMANTIC_DEFAULTS;
+  assert.deepEqual(loaded.semantic, writtenDefaults, 'keepAlive stays an in-memory consumer default');
+  assert.equal(loaded.semantic.keepAlive, undefined);
   const changed = setConfigValue(cfg, 'semantic.dims', 42);
   assert.equal(changed.semantic.dims, 42);
   for (const [key, value] of [
