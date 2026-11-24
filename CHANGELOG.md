@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-81: the hook's semantic step now works on a cold Ollama. Ollama unloads the model after 5 idle minutes and cancels a load when the client disconnects, so the hook (350 ms budget) almost always fell back: on the maintainer's machine 227 `fallback:deadline` vs 8 `used` in 3 days. Embed requests now send `keep_alive` from the new optional `semantic.keepAlive` (default `30m`, `"0"` keeps Ollama's own behaviour). After writing its output, the hook warms the model at session-start and after a prompt whose semantic step hit its deadline; it waits at most 2 s, at most once per minute per vault, and never in Lite, with semantic off or offline. The hook's Node permission sandbox is unchanged (no child process). `keepAlive` is written to the config file only when you set it, so the file stays valid for 0.1.0-rc.15.
+
 ## 0.1.0-rc.15 — 2026-11-24
 
 Release candidate for 0.1.0: fixes from the review of rc.14, panel and scheduler hardening, a date time-bomb in the test suite, and README/README.tr for the final release. The `ui` panel, the `maintain-schedule` module, semantic retrieval and Git/folder/Dropbox sync are labelled experimental. The default install (MCP + hooks, Lite) is unchanged except that MCP writes no longer add `status: proposed`.
