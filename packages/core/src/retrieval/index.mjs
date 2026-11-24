@@ -592,6 +592,8 @@ export function buildIndex(pages, options = {}) {
   for (const p of pages) {
     if (!p || typeof p.path !== 'string' || typeof p.title !== 'string') fail('E_INVALID_INPUT', 'Invalid page');
     if (!safePath(p.path)) continue;
+    // BA-73: a conflict copy is never a document, whatever the exclusion list says.
+    if (isConflictCopyPath(p.path)) continue;
     records.push({ path: p.path, superseded: isSupersededPage(p), successor: successorOf(p) });
     if (isSupersededPage(p)) continue;
     const { lengths, counts, identifiers } = analyzePage(p);
@@ -963,6 +965,8 @@ function statFingerprint(vaultDir, exclude = []) {
   const entries = [];
   for (const full of files) {
     const rel = path.relative(root, full).split(path.sep).join('/');
+    // BA-73: sync conflict copies are invisible to search under every exclusion list, so they are not walked entries at all.
+    if (isConflictCopyPath(rel)) continue;
     let token;
     try {
       const st = fs.lstatSync(full);
@@ -1069,6 +1073,8 @@ function decodeCache(data, exclude, paths) {
       !isPlainObject(page) ||
       typeof page.path !== 'string' ||
       !safePath(page.path) ||
+      // BA-73: a conflict copy is never an indexed document, so a cache that carries one is rebuilt.
+      isConflictCopyPath(page.path) ||
       (paths && !paths.has(page.path)) ||
       seen.has(page.path)
     )
@@ -1090,7 +1096,7 @@ function decodeCache(data, exclude, paths) {
     if (!Array.isArray(doc.lengths) || doc.lengths.length !== 4 || !doc.lengths.every(isCount)) return null;
   }
   for (const p of skipped) {
-    if (!safePath(p) || (paths && !paths.has(p)) || seen.has(p)) return null;
+    if (!safePath(p) || isConflictCopyPath(p) || (paths && !paths.has(p)) || seen.has(p)) return null;
     seen.add(p);
   }
   if (paths && seen.size !== paths.size) return null;
@@ -1238,21 +1244,27 @@ function decodeRecords(entries, skipped, docs, supersedes) {
   if (JSON.stringify(supersedes) !== JSON.stringify(supersessionOf(records))) return null;
   return files;
 }
+// BA-73: the sync engine's conflict-copy name (`page.conflict-<host>-<stamp>[-<n>].md`, matched by its own
+// `isConflictArtifact`), tested case-insensitively against the basename. It is narrower than a `*.conflict-*`
+// glob, so an ordinary page such as `foo.conflict-resolution.md` stays searchable.
+const conflictCopyPattern = /\.conflict-[a-z0-9_-]+-\d{8}T\d{6}Z(?:-\d+)?\.md$/i;
+/**
+ * BA-73: whether a path is a sync conflict copy. Such copies are never search answers, independent of `retrieval.exclude`.
+ * @param {string} relPath path relative to the search root (or any path); only its basename is tested
+ * @returns {boolean} true when the basename has the sync engine's conflict-copy format
+ */
+export function isConflictCopyPath(relPath) {
+  return typeof relPath === 'string' && conflictCopyPattern.test(path.basename(relPath));
+}
 /** BA-29: whether a search-root-relative path is excluded by the rule (the hook also filters its semantic hits with it). */
 export function isExcludedPath(relPath, exclude = []) {
-  return excludeMatcher(exclude)(relPath);
+  return isConflictCopyPath(relPath) || excludeMatcher(exclude)(relPath);
 }
 // BA-29: the default exclusions. At a wiki root only its own navigation and agent-policy files are left out; a vault root
 // (no wiki directory, the legacy layout) also leaves out its planning, archive, inbox and raw folders. Nested files are not affected.
-// BA-52: sync conflict copies (`page.conflict-<host>-<stamp>.md`, written by the sync engine) are never answers.
-export const DEFAULT_EXCLUDE_WIKI = Object.freeze([
-  'index.md',
-  'log.md',
-  'AGENTS.md',
-  'CLAUDE.md',
-  'GEMINI.md',
-  '**/*.conflict-*.md',
-]);
+// BA-73: sync conflict copies are not a glob here: the searcher always skips them through isConflictCopyPath, so a custom
+// `retrieval.exclude` cannot bring them back.
+export const DEFAULT_EXCLUDE_WIKI = Object.freeze(['index.md', 'log.md', 'AGENTS.md', 'CLAUDE.md', 'GEMINI.md']);
 export const DEFAULT_EXCLUDE_VAULT = Object.freeze([
   ...DEFAULT_EXCLUDE_WIKI,
   'planning/**',
@@ -1265,7 +1277,8 @@ export const DEFAULT_EXCLUDE_VAULT = Object.freeze([
  * directory whose real path lies inside the vault (a symlink that leaves the vault is not followed); otherwise the vault itself.
  * `prefix` is the root's vault-relative folder with a trailing `/` (`wiki/`), or '' for the vault root: the hook reports paths
  * vault-relative with it. `configured` is `retrieval.exclude`: absent (undefined) gives the default for the root kind, an array
- * replaces it, and an empty array restores the legacy scope with every page.
+ * replaces it, and an empty array restores the legacy scope with every page. Sync conflict copies are never part of `exclude`:
+ * BA-73 keeps them out of the searcher regardless of this list.
  * @param {string} vaultDir
  * @param {string[]} [configured]
  * @returns {{root: string, exclude: string[], prefix: string}}
@@ -1472,7 +1485,8 @@ export function createSearcher(options) {
     if (before.key !== state.key) refreshTo(before);
     if (state.pages) return;
     const key = state.key,
-      pages = loadPagesDetailed(vaultDir).pages;
+      // BA-73: the walked snapshot never carries a sync conflict copy, matching the incremental state.
+      pages = loadPagesDetailed(vaultDir).pages.filter((page) => !isConflictCopyPath(page.path));
     if (fingerprintOf().key === key) {
       state.pages = pages;
       return;
