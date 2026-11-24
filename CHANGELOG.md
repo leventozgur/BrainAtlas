@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- BA-69: MCP writes no longer add `status: proposed`. The stamp turned neutral pages into weak ones (lower rank, `[unverified]` in the hook), which rc.14 did not mention; `generated` is still added when missing. `wiki_query --provenance` no longer counts empty values such as `sources: []` as provenance. Pages already stamped `proposed` by rc.14 keep that status until their author changes it.
+- BA-70: the `brainatlas ui` panel edits only an allowlist of tuning keys (`retrieval.budgetChars`, `retrieval.abstainThreshold`, `retrieval.pullLowConfidence`, `hooks.mode`, `hooks.deadlineMs`, `hooks.disclosure`, `okf.level`, `semantic.enabled`, `semantic.minScore`). Before, any non-blocked scalar was editable, including `semantic.baseUrl`, `semantic.allowRemote`, `sync.transport`, `safety.secretFilter` and `readOnly`.
+
 ## 0.1.0-rc.14 — 2026-11-21
 
 The `safety.secretFilter` opt-out (custom profile), status summary and local panel (BA-62, BA-64), MCP provenance (BA-63), the optional weekly maintenance scheduler module (BA-48A2), sync status and scenario-matrix fixes (BA-68, BA-52) and CI hardening. The default install is unchanged.

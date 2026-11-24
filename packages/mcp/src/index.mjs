@@ -67,21 +67,28 @@ const FENCE_OPEN = /^(`{3,}|~{3,})/;
 const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
 
 const PROVENANCE_KEYS = ['generated', 'status', 'sources', 'verified', 'stale_after'];
-/** BA-63: how many of the OKF provenance fields a page carries. Presence only; it never changes ranking. */
+/** BA-63: how many of the OKF provenance fields a page carries. Presence only (empty values do not count); it never changes ranking. */
 function provenanceOf(frontmatter) {
   const fm = frontmatter ?? {};
-  const present = PROVENANCE_KEYS.filter((key) => Object.hasOwn(fm, key) && fm[key] !== null && fm[key] !== '').length;
+  const filled = (value) =>
+    value !== null &&
+    value !== undefined &&
+    value !== '' &&
+    !(Array.isArray(value) && value.length === 0) &&
+    !(typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
+  const present = PROVENANCE_KEYS.filter((key) => Object.hasOwn(fm, key) && filled(fm[key])).length;
   return present === 0 ? 'none' : present === PROVENANCE_KEYS.length ? 'full' : 'partial';
 }
 
 /**
- * BA-63: a page written through MCP gets `generated` (UTC now) and `status: proposed` when it has none. Evidence fields
- * (`sources`, `verified`) are never invented, and fields the author supplied are never changed.
+ * BA-63: a page written through MCP gets `generated` (UTC now) when it has none. `status` is never added (BA-69): the
+ * server cannot know the author's intent, and a `proposed` stamp would silently turn a neutral page into a `weak` one that
+ * ranks lower and is marked `[unverified]`. Evidence fields (`sources`, `verified`) are never invented, and fields the
+ * author supplied are never changed.
  */
 function withWriteProvenance(frontmatter, now = new Date()) {
   const next = { ...frontmatter };
   if (!Object.hasOwn(next, 'generated')) next.generated = now.toISOString();
-  if (!Object.hasOwn(next, 'status')) next.status = 'proposed';
   return next;
 }
 /** Undo CommonMark backslash escapes of ASCII punctuation in a link destination. */

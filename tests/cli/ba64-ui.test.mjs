@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultConfig, resolvePaths, saveConfig } from '@brainatlas/core';
-import { startUiServer } from '../../packages/cli/src/ui.mjs';
+import { startUiServer, EDITABLE_KEYS } from '../../packages/cli/src/ui.mjs';
 import { main } from '../../packages/cli/src/index.mjs';
 import { cleanEnv } from './clean-env.mjs';
 
@@ -103,7 +103,12 @@ test('summary, agents and settings are read-only views without paths or secrets'
   const settings = await call(f.panel, { path: '/api/settings' });
   const keys = settings.json.settings.map((row) => row.key);
   assert.ok(keys.includes('hooks.mode'));
-  assert.ok(!keys.some((key) => /^(vault|node|stateDir|sync\.options|channels)/.test(key)));
+  assert.ok(
+    !keys.some((key) =>
+      /^(vault|node|stateDir|sync|channels|safety|readOnly|semantic\.(baseUrl|allowRemote|model))/.test(key)
+    )
+  );
+  assert.ok(keys.every((key) => EDITABLE_KEYS.has(key)));
   for (const response of [summary, agents, settings]) {
     assert.equal(response.text.includes(f.vault), false);
     assert.equal(response.text.includes(f.panel.token), false);
@@ -139,7 +144,18 @@ test('a setting change shows a plan first and the apply path writes the same fil
 
 test('blocked keys, bad bodies and wrong content types are refused', async (t) => {
   const f = await fixture(t);
-  for (const key of ['vault.path', 'node.path', 'channels.codex', 'stateDir', 'nonexistent.key'])
+  for (const key of [
+    'vault.path',
+    'node.path',
+    'channels.codex',
+    'stateDir',
+    'nonexistent.key',
+    'semantic.baseUrl',
+    'semantic.allowRemote',
+    'sync.transport',
+    'readOnly',
+    'safety.secretFilter',
+  ])
     assert.equal(
       (await call(f.panel, { method: 'POST', path: '/api/setting', body: { key, value: 'x', apply: true } })).status,
       400,
