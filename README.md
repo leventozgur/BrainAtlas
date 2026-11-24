@@ -78,7 +78,7 @@ Adapters can create or modify agent configuration. Inspect the plan and trust re
 | Lite | Core only; no optional modules | Secret filtering enabled; telemetry off. Recommended starting profile. |
 | Full | Core plus modules marked for Full in the selected release | Optional modules include sync, semantic retrieval, receipts, and strict OKF-inspired checks. Availability depends on release contents. |
 
-Semantic retrieval is opt-in, uses local Ollama, and is off by default; on the independent semantic holdout v2 (`wiki_query`, EmbeddingGemma), TR→EN rose from 0/10 to 8/10 and EN→TR from 2/10 to 8/10, while difficult near-topic negatives were not improved (2/10 abstained before and after). Review module status before enabling optional functionality.
+Semantic retrieval is experimental and opt-in, uses local Ollama, and is off by default; on the independent semantic holdout v2 (`wiki_query`, EmbeddingGemma), TR→EN rose from 0/10 to 8/10 and EN→TR from 2/10 to 8/10, while difficult near-topic negatives were not improved (2/10 abstained before and after). Folder sync is experimental. Review module status before enabling optional functionality.
 
 Experimental in 0.1.0: semantic retrieval, Git/folder/Dropbox sync, the local panel (`brainatlas ui`), and the `maintain-schedule` module. These features may change between releases. See [Retrieval](docs/user/retrieval.md) and [Semantic retrieval](docs/user/semantic.md) for details.
 

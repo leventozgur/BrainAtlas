@@ -78,7 +78,7 @@ Adaptörler ajan yapılandırmasını oluşturabilir veya değiştirebilir. Plan
 | Lite | Yalnızca çekirdek; isteğe bağlı modül yok | Gizli bilgi filtresi açık, telemetri kapalı. Başlangıç için önerilir. |
 | Full | Seçilen sürümde Full için işaretli modüller ve çekirdek | İsteğe bağlı modüller senkronizasyon, semantik arama, makbuzlar ve sıkı OKF esinli kontrolleri içerir. Kullanılabilirlik sürüme bağlıdır. |
 
-Semantik arama isteğe bağlıdır, yerel Ollama kullanır ve varsayılan olarak kapalıdır; bağımsız semantik holdout v2'de (`wiki_query`, EmbeddingGemma) TR→EN 0/10'dan 8/10'a, EN→TR 2/10'dan 8/10'a yükselmiş, zor yakın konulu negatiflerde iyileşme olmamıştır (önce ve sonra 2/10 çekimser). İsteğe bağlı işlevleri açmadan önce modül durumunu inceleyin.
+Semantik arama deneyseldir ve isteğe bağlıdır, yerel Ollama kullanır ve varsayılan olarak kapalıdır; bağımsız semantik holdout v2'de (`wiki_query`, EmbeddingGemma) TR→EN 0/10'dan 8/10'a, EN→TR 2/10'dan 8/10'a yükselmiş, zor yakın konulu negatiflerde iyileşme olmamıştır (önce ve sonra 2/10 çekimser). Klasör senkronizasyonu deneyseldir. İsteğe bağlı işlevleri açmadan önce modül durumunu inceleyin.
 
 0.1.0'da deneysel: semantik arama, Git/klasör/Dropbox senkronizasyonu, yerel panel (`brainatlas ui`) ve `maintain-schedule` modülü. Bu işlevler sürümler arasında değişebilir. Ayrıntılar için [Retrieval](docs/user/retrieval.md) ve [Semantik arama](docs/user/semantic.md) belgelerine bakın.
 
