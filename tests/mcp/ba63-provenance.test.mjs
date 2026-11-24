@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -63,6 +64,98 @@ test('BA-63: written pages gain generated but never a status; author fields and 
   const created = await readFile(resolve(wiki, 'concepts/new-idea.md'), 'utf8');
   assert.doesNotMatch(created, /^status:/m);
   assert.match(created, /^generated: /m);
+});
+
+test('BA-74: content updates keep the existing generated value instead of faking freshness', async (t) => {
+  const { wiki, client } = await fixture(t);
+  await writeFile(
+    resolve(wiki, 'concepts/stamped.md'),
+    "---\ntitle: Stamped\ngenerated: '2026-01-01T00:00:00Z'\n---\nOld body.\n"
+  );
+  await ok(client, 'wiki_update_page', {
+    path: 'concepts/stamped.md',
+    content: '---\ntitle: Stamped\n---\nNew body.\n',
+  });
+  const stamped = await readFile(resolve(wiki, 'concepts/stamped.md'), 'utf8');
+  assert.match(stamped, /^generated: ['"]?2026-01-01T00:00:00Z['"]?$/m);
+  assert.match(stamped, /New body\./);
+
+  await writeFile(resolve(wiki, 'concepts/unstamped.md'), '---\ntitle: Unstamped\n---\nOld body.\n');
+  await ok(client, 'wiki_update_page', {
+    path: 'concepts/unstamped.md',
+    content: '---\ntitle: Unstamped\n---\nNew body.\n',
+  });
+  const unstamped = await readFile(resolve(wiki, 'concepts/unstamped.md'), 'utf8');
+  assert.doesNotMatch(unstamped, /^generated:/m);
+
+  await ok(client, 'wiki_write_page', {
+    path: 'concepts/rewritten.md',
+    content: '---\ntitle: Rewritten\ngenerated: "2026-03-03T00:00:00Z"\n---\nOwn stamp.\n',
+  });
+  await ok(client, 'wiki_write_page', {
+    path: 'concepts/rewritten.md',
+    content: '---\ntitle: Rewritten\ngenerated: "2026-04-04T00:00:00Z"\n---\nNewer own stamp.\n',
+  });
+  const rewritten = await readFile(resolve(wiki, 'concepts/rewritten.md'), 'utf8');
+  assert.match(rewritten, /^generated: ['"]?2026-04-04T00:00:00Z['"]?$/m);
+  assert.doesNotMatch(rewritten, /2026-03-03T00:00:00Z/);
+
+  await ok(client, 'wiki_write_page', { path: 'concepts/fresh.md', content: '---\ntitle: Fresh\n---\nBody.\n' });
+  const fresh = await readFile(resolve(wiki, 'concepts/fresh.md'), 'utf8');
+  assert.match(fresh, /^generated: ['"]?\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z['"]?$/m);
+});
+
+test('BA-74: content updates with expectedSha256 report the stored hash and keep the existing generated', async (t) => {
+  const { wiki, client } = await fixture(t);
+  const target = resolve(wiki, 'concepts/hashed.md');
+  await writeFile(target, "---\ntitle: Hashed\ngenerated: '2026-01-01T00:00:00Z'\n---\nOld body.\n");
+  const before = await readFile(target);
+  const expectedSha256 = createHash('sha256').update(before).digest('hex');
+  const result = await ok(client, 'wiki_update_page', {
+    path: 'concepts/hashed.md',
+    content: '---\ntitle: Hashed\n---\nNew body.\n',
+    expectedSha256,
+  });
+  const after = await readFile(target);
+  assert.equal(result.sha256, createHash('sha256').update(after).digest('hex'));
+  const stored = after.toString('utf8');
+  assert.match(stored, /^generated: ['"]?2026-01-01T00:00:00Z['"]?$/m);
+  assert.match(stored, /New body\./);
+});
+
+test('BA-74: content updates do not invent a generated value', async (t) => {
+  const { wiki, client } = await fixture(t);
+
+  await writeFile(resolve(wiki, 'concepts/empty-value.md'), "---\ntitle: Empty\ngenerated: ''\n---\nOld body.\n");
+  await ok(client, 'wiki_update_page', {
+    path: 'concepts/empty-value.md',
+    content: '---\ntitle: Empty\n---\nNew body.\n',
+  });
+  const empty = await readFile(resolve(wiki, 'concepts/empty-value.md'), 'utf8');
+  assert.doesNotMatch(empty, /^generated:/m);
+
+  await writeFile(
+    resolve(wiki, 'concepts/own.md'),
+    "---\ntitle: Own\ngenerated: '2026-01-01T00:00:00Z'\n---\nOld body.\n"
+  );
+  await ok(client, 'wiki_update_page', {
+    path: 'concepts/own.md',
+    content: '---\ntitle: Own\ngenerated: "2026-05-05T00:00:00Z"\n---\nNew body.\n',
+  });
+  const own = await readFile(resolve(wiki, 'concepts/own.md'), 'utf8');
+  assert.match(own, /^generated: ['"]?2026-05-05T00:00:00Z['"]?$/m);
+  assert.doesNotMatch(own, /2026-01-01T00:00:00Z/);
+
+  await writeFile(
+    resolve(wiki, 'concepts/unquoted.md'),
+    '---\ntitle: Unquoted\ngenerated: 2026-01-01T00:00:00Z\n---\nOld body.\n'
+  );
+  await ok(client, 'wiki_update_page', {
+    path: 'concepts/unquoted.md',
+    content: '---\ntitle: Unquoted\n---\nNew body.\n',
+  });
+  const unquoted = await readFile(resolve(wiki, 'concepts/unquoted.md'), 'utf8');
+  assert.match(unquoted, /^generated: ['"]?2026-01-01T00:00:00Z['"]?$/m);
 });
 
 test('BA-63: patch updates keep existing frontmatter and add nothing', async (t) => {
