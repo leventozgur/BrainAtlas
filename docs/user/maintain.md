@@ -197,10 +197,12 @@ brainatlas maintain-schedule status [--json]
 brainatlas maintain-schedule remove [--plan]
 ```
 
-It writes only its own two files (one plist, or a `.service` and `.timer`) under your home directory, records their
-hashes, and `remove` (and `brainatlas uninstall`) deletes a file only while it still matches that record; a file you
-edited is kept. `install` refuses to overwrite a scheduler file it did not create. Otherwise, or on Lite, schedule the
-command yourself, for example with a launch agent, a systemd user timer or `cron`:
+The `maintain-schedule` module is experimental. It writes only its own two files (one plist, or a `.service` and a
+`.timer`) under your home directory, records their hashes, and `remove` (and `brainatlas uninstall`) deletes a file only
+while it still matches that record; a file you edited is kept. Re-running `install` with a new `--day` or `--hour`
+replaces the schedule. `install` refuses to overwrite a scheduler file it did not create. A Linux user timer runs only
+while the user is logged in unless lingering is enabled with `loginctl enable-linger <user>`. Otherwise, or on Lite,
+schedule the command yourself, for example with a launch agent, a systemd user timer or `cron`:
 
 ```text
 <binPath> maintain --weekly
