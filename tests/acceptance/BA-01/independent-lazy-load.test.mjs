@@ -11,12 +11,17 @@ import { spawnSync } from 'node:child_process';
 import { runHook } from '../../../packages/hooks/src/index.mjs';
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 import { resolvePaths, vaultId } from '../../../packages/core/src/paths/index.mjs';
+import { clockShiftEnv } from '../../helpers/shift-clock.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const BIN = join(ROOT, 'packages/hooks/bin/brainatlas-hook.mjs');
 const NOW = new Date('2026-11-10T00:00:00.000Z');
+const LOG_TS = '2026-11-09T12:00:00.000Z';
+// The module-trace test spawns the hook, which uses the real clock; keep its fixture one day in the past.
+const REAL_NOW = new Date();
+const REAL_LOG_TS = new Date(REAL_NOW.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
-async function fixture(t, { mode = 'normal', handoff = null, page = true } = {}) {
+async function fixture(t, { mode = 'normal', handoff = null, page = true, logTs = LOG_TS } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'ba01-indep-lazy-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const env = {
@@ -33,7 +38,7 @@ async function fixture(t, { mode = 'normal', handoff = null, page = true } = {})
     await writeFile(join(v, 'wiki', 'entities', 'fresh.md'), '---\ntitle: "Fresh Page"\n---\n');
     await writeFile(
       join(v, 'wiki', 'log.md'),
-      `# Log\n- 2026-11-09T12:00:00.000Z {"action":"update-page","path":"wiki/entities/fresh.md"}\n`
+      `# Log\n- ${logTs} {"action":"update-page","path":"wiki/entities/fresh.md"}\n`
     );
   }
   const paths = resolvePaths({ env });
@@ -66,7 +71,7 @@ async function traceLoads(root, env, event, payload) {
   const trace = join(root, 'trace.txt');
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(register).href, BIN, 'claude', event], {
     input: JSON.stringify(payload),
-    env: { ...env, BA01_TRACE: trace },
+    env: clockShiftEnv({ ...env, BA01_TRACE: trace }),
     encoding: 'utf8',
     timeout: 12000,
   });
@@ -76,7 +81,7 @@ async function traceLoads(root, env, event, payload) {
 }
 
 test('prompt path never loads recap.mjs, session-start does (module trace)', async (t) => {
-  const f = await fixture(t);
+  const f = await fixture(t, { logTs: REAL_LOG_TS });
   const prompt = await traceLoads(f.root, f.env, 'prompt', { session_id: 'trace-p', prompt: 'fresh page' });
   assert.ok(
     !prompt.loads.some((s) => /recap/.test(s)),

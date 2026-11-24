@@ -67,21 +67,46 @@ const FENCE_OPEN = /^(`{3,}|~{3,})/;
 const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
 
 const PROVENANCE_KEYS = ['generated', 'status', 'sources', 'verified', 'stale_after'];
-/** BA-63: how many of the OKF provenance fields a page carries. Presence only; it never changes ranking. */
+/** BA-63: how many of the OKF provenance fields a page carries. Presence only (empty values do not count); it never changes ranking. */
 function provenanceOf(frontmatter) {
   const fm = frontmatter ?? {};
-  const present = PROVENANCE_KEYS.filter((key) => Object.hasOwn(fm, key) && fm[key] !== null && fm[key] !== '').length;
+  const filled = (value) =>
+    value !== null &&
+    value !== undefined &&
+    value !== '' &&
+    !(Array.isArray(value) && value.length === 0) &&
+    !(typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
+  const present = PROVENANCE_KEYS.filter((key) => Object.hasOwn(fm, key) && filled(fm[key])).length;
   return present === 0 ? 'none' : present === PROVENANCE_KEYS.length ? 'full' : 'partial';
 }
 
 /**
- * BA-63: a page written through MCP gets `generated` (UTC now) and `status: proposed` when it has none. Evidence fields
- * (`sources`, `verified`) are never invented, and fields the author supplied are never changed.
+ * BA-63: a page written through MCP gets `generated` (UTC now) when it has none. `status` is never added (BA-69): the
+ * server cannot know the author's intent, and a `proposed` stamp would silently turn a neutral page into a `weak` one that
+ * ranks lower and is marked `[unverified]`. Evidence fields (`sources`, `verified`) are never invented, and fields the
+ * author supplied are never changed.
  */
 function withWriteProvenance(frontmatter, now = new Date()) {
   const next = { ...frontmatter };
   if (!Object.hasOwn(next, 'generated')) next.generated = now.toISOString();
-  if (!Object.hasOwn(next, 'status')) next.status = 'proposed';
+  return next;
+}
+/**
+ * BA-74: replacing an existing page with `content` must not fake freshness. Content that carries `generated` keeps it as
+ * given; content without it keeps the existing page's non-empty `generated` byte for byte; when neither has one, nothing
+ * is added. Only a page that does not exist yet gets `generated: now` (BA-63).
+ * @param {Record<string, unknown>} frontmatter frontmatter parsed from the new content
+ * @param {Record<string, unknown>|undefined} existing frontmatter of the page on disk, or undefined when it is new
+ * @param {Date} [now] clock used only for a new page
+ * @returns {Record<string, unknown>}
+ */
+function withReplacementProvenance(frontmatter, existing, now = new Date()) {
+  if (existing === undefined) return withWriteProvenance(frontmatter, now);
+  const next = { ...frontmatter };
+  if (Object.hasOwn(next, 'generated')) return next;
+  const previous = existing.generated;
+  // Only a non-empty string is preserved: any other existing value is not a usable provenance stamp.
+  if (typeof previous === 'string' && previous.trim() !== '') next.generated = previous;
   return next;
 }
 /** Undo CommonMark backslash escapes of ASCII punctuation in a link destination. */
@@ -542,6 +567,15 @@ export function createServer(options) {
       throw mcpError('E_CONFLICT', 'The page changed since it was read.');
     }
   };
+  /** BA-74: frontmatter of the page on disk, or undefined when there is no file. Uses the core parser so dates stay strings. */
+  const existingFrontmatter = async (target) => {
+    try {
+      return core.parseFrontmatter(await readFile(target, 'utf8')).data;
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return undefined;
+      throw error;
+    }
+  };
   // Called inside the lock: the log append is part of the same critical section as the write it records.
   const logEntry = async (action, rel) => {
     const record = JSON.stringify({ action, path: rel });
@@ -887,7 +921,11 @@ export function createServer(options) {
         if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
         const sha256 = await writeLocked(async () => {
           await checkExpectedSha(target, expectedSha256);
-          await writePageAtomic(target, { frontmatter: withWriteProvenance(parsed.data), body: parsed.body });
+          const existing = await existingFrontmatter(target);
+          await writePageAtomic(target, {
+            frontmatter: withReplacementProvenance(parsed.data, existing),
+            body: parsed.body,
+          });
           await logEntry('write-page', `wiki/${normalized}`);
           return expectedSha256 === undefined ? undefined : fileSha(target);
         });
@@ -910,7 +948,9 @@ export function createServer(options) {
           if (content !== undefined) {
             const parsed = core.parseFrontmatter(content);
             if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
-            next = { frontmatter: withWriteProvenance(parsed.data), body: parsed.body };
+            // A second read is needed: `old.frontmatter` (gray-matter) turns unquoted dates into Date objects, not strings.
+            const existing = await existingFrontmatter(target);
+            next = { frontmatter: withReplacementProvenance(parsed.data, existing), body: parsed.body };
           } else if (patch) {
             // body replaces the body first; append is then added to the end of the resulting body, so both are applied.
             const base = typeof patch.body === 'string' ? patch.body : old.body;

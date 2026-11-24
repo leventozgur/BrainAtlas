@@ -41,7 +41,7 @@ const helpDescriptions = Object.freeze({
   compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).',
   usage: 'Summarize hook metrics for the last days or record feedback.',
   wiki: 'Read-only Wiki tools from the shell (same results as the MCP read tools).',
-  ui: 'Open a local browser panel for status, agent channels and settings (127.0.0.1 only).',
+  ui: '(experimental) Open a local browser panel for status, agent channels and settings (127.0.0.1 only).',
   help: 'Show built-in and active module commands.',
 });
 const helpUsages = Object.freeze({

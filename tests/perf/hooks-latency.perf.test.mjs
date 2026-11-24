@@ -260,9 +260,6 @@ test('cold session-start stays under 300 ms p95 with a 5 MB log', async (t) => {
 
 // ---------- tests/acceptance/BA-01/recap-acceptance.test.mjs ----------
 
-const ACCEPT_NOW = new Date('2026-11-10T12:00:00.000Z');
-const ACCEPT_DAY = 24 * 60 * 60 * 1000;
-const acceptMsAgo = (days) => ACCEPT_NOW.getTime() - days * ACCEPT_DAY;
 const acceptEntry = (ms, path, action = 'update') =>
   `- ${new Date(ms).toISOString()} ${JSON.stringify({ action, path })}`;
 const acceptFmPage = (title) => `---\ntitle: ${title}\n---\n# Body heading ignored\nText.\n`;
@@ -313,7 +310,11 @@ test('session-start p95 is at most 300 ms with a 5 MB log.md (20 runs)', async (
   await writeFile(join(s.vault, 'wiki/entities/big.md'), acceptFmPage('Big Log Page'));
   const filler = `- ${'human line of ordinary notes '.repeat(4)}`;
   const block = Array.from({ length: Math.ceil((5 * 1024 * 1024) / (filler.length + 1)) }, () => filler).join('\n');
-  await writeFile(join(s.wiki, 'log.md'), `${block}\n${acceptEntry(acceptMsAgo(0.1), 'wiki/entities/big.md')}\n`);
+  // The recap only lists entries inside its 14-day window, so the timestamp is relative to the real clock.
+  await writeFile(
+    join(s.wiki, 'log.md'),
+    `${block}\n${acceptEntry(Date.now() - 60 * 60 * 1000, 'wiki/entities/big.md')}\n`
+  );
   const durations = [];
   for (let i = 0; i < 20; i++) {
     const started = process.hrtime.bigint();
