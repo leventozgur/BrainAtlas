@@ -57,6 +57,7 @@ BrainAtlas'ı tamamen durdurmak için `brainatlas uninstall` çalıştırın (ka
 | `brainatlas maintain [--repo DIR]` | Eski, kırık, yetim ve büyük sayfaları raporlar | hayır (`--queue` hariç) |
 | `brainatlas compact --page wiki/<sayfa>.md --plan\|--apply` | Uzun sayfanın eski tarihli bölümlerini satır kaybetmeden `wiki/archive/` altına taşır | yalnızca `--apply` |
 | `brainatlas usage [--days N]` | İçeriksiz hook metriklerini özetler | hayır |
+| `brainatlas ui [--no-open] [--json]` | Durum, ajan kanalları ve ayarlar için deneysel yerel panel (yalnızca 127.0.0.1) | yalnızca panelde apply |
 | `brainatlas doctor`, `status` | Kurulum sağlığını denetler | hayır |
 
 Rehberler: [Wiki CLI](docs/user/wiki-cli.md), [Bakım raporu](docs/user/maintain.md), [Compact](docs/user/compact.md), [Kullanım](docs/user/usage.md).

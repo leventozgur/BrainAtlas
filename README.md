@@ -59,6 +59,7 @@ To stop BrainAtlas completely, run `brainatlas uninstall` (the vault is kept).
 | `brainatlas maintain [--repo DIR]` | Report stale, broken, orphan and oversized pages | no (unless `--queue`) |
 | `brainatlas compact --page wiki/<page>.md --plan\|--apply` | Move older dated sections of a long page into `wiki/archive/` without losing lines | `--apply` only |
 | `brainatlas usage [--days N]` | Summarize content-free hook metrics | no |
+| `brainatlas ui [--no-open] [--json]` | Experimental local panel for status, agent channels and settings (127.0.0.1 only) | panel apply only |
 | `brainatlas doctor`, `status` | Check installation health | no |
 
 Guides: [Wiki CLI](docs/user/wiki-cli.md), [Maintenance report](docs/user/maintain.md), [Compact](docs/user/compact.md), [Usage](docs/user/usage.md).
