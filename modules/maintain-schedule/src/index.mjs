@@ -17,7 +17,12 @@ const xml = (value) =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
-const unitQuote = (value) => `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+const unitQuote = (value) =>
+  `"${String(value)
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"')
+    .replaceAll('%', '%%')
+    .replaceAll('$', () => '$$')}"`;
 
 function within(root, path) {
   const rel = relative(root, path);
@@ -68,9 +73,28 @@ function hostCommands(action, platform, file0, uid) {
     return [
       ['systemctl', ['--user', 'daemon-reload']],
       ['systemctl', ['--user', 'enable', '--now', `${UNIT}.timer`]],
+      ['systemctl', ['--user', 'restart', `${UNIT}.timer`]],
     ];
   if (action === 'remove') return [['systemctl', ['--user', 'disable', '--now', `${UNIT}.timer`]]];
   return [['systemctl', ['--user', 'is-enabled', `${UNIT}.timer`]]];
+}
+
+/**
+ * The install steps split around the file writes so a re-install can unload the
+ * previous job first (darwin) and reload the units afterwards (linux).
+ * @param {string} platform
+ * @param {string} file0
+ * @param {string|number} uid
+ * @returns {{before:Array<{command:string,args:string[],allowFailure:boolean}>,after:Array<{command:string,args:string[],allowFailure:boolean}>}}
+ */
+function installSteps(platform, file0, uid) {
+  const step = (command, args, allowFailure = false) => ({ command, args, allowFailure });
+  const before = platform === 'darwin' ? [step('launchctl', ['bootout', `gui/${uid}/${LABEL}`], true)] : [];
+  const after =
+    platform === 'darwin'
+      ? [step('launchctl', ['bootstrap', `gui/${uid}`, file0])]
+      : hostCommands('install', platform, file0, uid).map(([command, args]) => step(command, args));
+  return { before, after };
 }
 
 function context(ctx) {
@@ -172,6 +196,22 @@ function parseArgs(args) {
   return { action, day, hour, plan };
 }
 
+/**
+ * Put the managed files and the state file back exactly as they were before the
+ * failed call; a first install leaves neither files nor state behind.
+ * @param {{statePath:string}} c
+ * @param {Array<{path:string,contents:Buffer|null}>} previous
+ * @param {Buffer|null} previousState
+ */
+async function restorePrevious(c, previous, previousState) {
+  for (const row of previous) {
+    if (row.contents === null) await rm(row.path, { force: true });
+    else await writeAtomic(row.path, row.contents);
+  }
+  if (previousState === null) await rm(c.statePath, { force: true });
+  else await writeAtomic(c.statePath, previousState);
+}
+
 async function install(c, { day, hour, plan }) {
   const spec = planSchedule({
     platform: c.platform,
@@ -187,24 +227,48 @@ async function install(c, { day, hour, plan }) {
   await assertInsideHome(c, [...paths, c.statePath]);
   const state = await readState(c.statePath);
   const owned = new Map((state?.files ?? []).map((row) => [row.path, row.sha256]));
+  const previous = [];
   for (const file of spec.files) {
-    const existing = await readFile(file.path, 'utf8').catch(() => null);
-    if (existing === null) continue;
-    if (!owned.has(file.path)) throw fail('E_SCHEDULER_EXISTS', 'A scheduler file already exists and is not managed.');
-    if (digest(existing) !== owned.get(file.path))
-      throw fail('E_SCHEDULER_CONFLICT', 'A managed scheduler file changed after installation.');
+    const existing = await readFile(file.path).catch(() => null);
+    if (existing === null) {
+      if (owned.has(file.path))
+        throw fail('E_SCHEDULER_CONFLICT', 'A managed scheduler file is missing after installation.');
+    } else {
+      if (!owned.has(file.path))
+        throw fail('E_SCHEDULER_EXISTS', 'A scheduler file already exists and is not managed.');
+      if (digest(existing) !== owned.get(file.path))
+        throw fail('E_SCHEDULER_CONFLICT', 'A managed scheduler file changed after installation.');
+    }
+    previous.push({ path: file.path, contents: existing });
   }
+  const previousState = await readFile(c.statePath).catch(() => null);
+  const reinstall = previous.some((row) => row.contents !== null);
+  const steps = installSteps(c.platform, paths[0], c.uid);
   try {
+    for (const step of steps.before) await exec(c, step.command, step.args, { allowFailure: step.allowFailure });
     for (const file of spec.files) await writeAtomic(file.path, file.contents);
-    for (const [command, args] of hostCommands('install', c.platform, paths[0], c.uid)) await exec(c, command, args);
+    for (const step of steps.after) await exec(c, step.command, step.args, { allowFailure: step.allowFailure });
     await writeAtomic(
       c.statePath,
       `${JSON.stringify({ schemaVersion: 1, platform: c.platform, day, hour, files: spec.files.map((f) => ({ path: f.path, sha256: digest(f.contents) })) }, null, 2)}\n`
     );
   } catch (cause) {
-    for (const [command, args] of hostCommands('remove', c.platform, paths[0], c.uid))
-      await exec(c, command, args, { allowFailure: true });
-    if (!state) for (const path of paths) await rm(path, { force: true });
+    try {
+      await restorePrevious(c, previous, previousState);
+      if (reinstall) {
+        const reload =
+          c.platform === 'darwin'
+            ? [...steps.before, ...steps.after].map((step) => [step.command, step.args])
+            : hostCommands('install', c.platform, paths[0], c.uid).slice(0, 2);
+        for (const [command, args] of reload) await exec(c, command, args, { allowFailure: true });
+      } else {
+        for (const [command, args] of hostCommands('remove', c.platform, paths[0], c.uid))
+          await exec(c, command, args, { allowFailure: true });
+      }
+    } catch (rollbackError) {
+      cause.rollbackError = rollbackError;
+      cause.message = `${cause.message} (rollback failed: ${rollbackError.message})`;
+    }
     throw cause;
   }
   return { action: 'install', platform: c.platform, day, hour, files: paths, status: 'installed' };
