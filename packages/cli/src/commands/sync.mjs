@@ -11,7 +11,8 @@ import {
   activateEnabledModules,
 } from './shared.mjs';
 
-export async function dispatchModuleCommand(command, args, { paths, env, output, dependencies = {} }) {
+/** Route one module command and return whatever the module produced (no printing, no exit code). */
+async function runModuleCommand(command, args, { paths, env, dependencies = {} }) {
   const current = await readCurrent(paths);
   const releaseDir = currentReleaseDir(paths, current);
   if (!releaseDir) throw error('E_COMMAND_UNKNOWN', 'Unknown command.');
@@ -63,10 +64,28 @@ export async function dispatchModuleCommand(command, args, { paths, env, output,
       ctx
     );
   }
+  return result;
+}
+
+export async function dispatchModuleCommand(command, args, { paths, env, output, dependencies = {} }) {
+  const result = await runModuleCommand(command, args, { paths, env, dependencies });
   if (result && typeof result === 'object' && Number.isInteger(result.exitCode) && typeof result.output === 'string') {
     if (result.output) console.log(result.output);
     process.exitCode = result.exitCode;
   } else if (result !== undefined) output(result);
+}
+
+/**
+ * BA-87: run a module command that prints JSON and return the parsed report, without writing to stdout or
+ * setting `process.exitCode`. The panel uses this to read the `semanticSetup --dry-run --json` report.
+ * @param {string} command @param {string[]} args @param {{paths:any,env:any,dependencies?:any}} options
+ * @returns {Promise<any>}
+ */
+export async function moduleCommandReport(command, args, options) {
+  const result = await runModuleCommand(command, args, options);
+  if (typeof result === 'string') return JSON.parse(result);
+  if (typeof result?.output === 'string') return JSON.parse(result.output);
+  return result;
 }
 
 /** @param {string} action @param {{paths:any,env:any,config:any,dependencies?:{plan?:boolean}}} options */
