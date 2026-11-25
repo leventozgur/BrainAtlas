@@ -56,7 +56,7 @@ const helpUsages = Object.freeze({
   agent:
     'brainatlas agent list [--json] | agent add <agent> [--channel mcp|cli] [--plan] | agent remove <agent> [--plan] | agent set <agent> --channel mcp|cli [--plan]',
   uninstall: 'brainatlas uninstall [--plan]',
-  update: 'brainatlas update --from ARCHIVE [--plan] | --check',
+  update: 'brainatlas update --from ARCHIVE [--plan] | --check [--pre]',
   rollback: 'brainatlas rollback [--to VERSION] [--plan]',
   recover: 'brainatlas recover [--plan]',
   eval: 'brainatlas eval [--cases FILE] [--corpus DIR]',
