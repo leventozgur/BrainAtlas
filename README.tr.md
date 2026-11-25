@@ -152,7 +152,7 @@ BrainAtlas, diğer araçların özellikleri değiştiği ve bağımsız olarak d
 - [OKF esinli metadata](docs/user/okf.md)
 - [Senkronizasyon davranışı](docs/user/sync.md)
 - [Bakım raporu](docs/user/maintain.md)
-- [Salt okunur Wiki CLI (`brainatlas wiki`)](docs/user/wiki-cli.md)
+- [Wiki CLI (`brainatlas wiki`)](docs/user/wiki-cli.md)
 - [CLI kanalı (MCP ve hook yerine talimatlar)](docs/user/cli-channel.md)
 - [Uzun sayfaları sıkıştırma](docs/user/compact.md)
 - [Kullanım özeti ve geri bildirim](docs/user/usage.md)

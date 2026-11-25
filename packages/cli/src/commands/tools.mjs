@@ -109,9 +109,9 @@ async function queueMaintenanceReceipt({ config, paths, env, candidates }) {
   return { queued: Boolean(result?.queued), id: result?.id, candidates: result?.candidates ?? 0 };
 }
 
-export async function wiki({ args, json, output, env }) {
+export async function wiki({ args, json, output, env, dependencies }) {
   const { formatWikiResult, runWikiCommand } = await import('../wiki.mjs');
-  const result = await runWikiCommand(args, { env });
+  const result = await runWikiCommand(args, { env, ...(dependencies?.stdin ? { stdin: dependencies.stdin } : {}) });
   if (json) {
     output(result.value);
     return;

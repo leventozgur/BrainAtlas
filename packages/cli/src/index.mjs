@@ -40,7 +40,7 @@ const helpDescriptions = Object.freeze({
     'Wiki maintenance report (read-only unless --queue); --fix (--plan | --apply) [--sources] repairs index lines, archived links and source lists; --weekly writes a read-only snapshot; --proposals reviews stored current-state proposals.',
   compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).',
   usage: 'Summarize hook metrics for the last days or record feedback.',
-  wiki: 'Read-only Wiki tools from the shell (same results as the MCP read tools).',
+  wiki: 'Wiki tools from the shell: the same read and write tools as the MCP server, run in process.',
   ui: '(experimental) Open a local browser panel for status, agent channels and settings (127.0.0.1 only).',
   help: 'Show built-in and active module commands.',
 });
@@ -69,7 +69,10 @@ const helpUsages = Object.freeze({
   compact:
     'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]',
   usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful',
-  wiki: 'brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]',
+  wiki: [
+    'brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint  [--vault PATH] [--json]',
+    'brainatlas wiki write <path> | update <path> [--patch | --append] | create-entity <name> | create-concept <name>  [--file F | stdin] [--expected-sha256 H] | crosslinks <path> | update-index  [--vault PATH] [--json]',
+  ],
   ui: 'brainatlas ui [--no-open] [--json]',
   help: 'brainatlas --help | brainatlas help [COMMAND]',
 });

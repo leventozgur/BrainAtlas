@@ -152,7 +152,7 @@ BrainAtlas does not publish feature comparisons with other tools because their f
 - [OKF-inspired metadata](docs/user/okf.md)
 - [Sync behavior](docs/user/sync.md)
 - [Maintenance report](docs/user/maintain.md)
-- [Read-only Wiki CLI (`brainatlas wiki`)](docs/user/wiki-cli.md)
+- [Wiki CLI (`brainatlas wiki`)](docs/user/wiki-cli.md)
 - [CLI channel (instructions instead of MCP and hooks)](docs/user/cli-channel.md)
 - [Compact long pages](docs/user/compact.md)
 - [Usage summary and feedback](docs/user/usage.md)

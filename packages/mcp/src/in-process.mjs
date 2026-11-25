@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-// BA-43: call one of the read-only Wiki tools in process through the SDK's linked in-memory transport, so a caller
-// without MCP registration gets exactly the tool the registered MCP server exposes.
+// BA-43: call one of the Wiki tools in process through the SDK's linked in-memory transport, so a caller without MCP
+// registration gets exactly the tool the registered MCP server exposes. BA-43d added the write tools; they are
+// registered by createServer only when config.readOnly is not true, exactly as for the stdio server.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { VERSION } from '@brainatlas/core';
@@ -14,22 +15,31 @@ const READ_TOOLS = new Set([
   'wiki_status',
   'wiki_lint',
 ]);
+const WRITE_TOOLS = new Set([
+  'wiki_write_page',
+  'wiki_update_page',
+  'wiki_create_entity',
+  'wiki_create_concept',
+  'wiki_add_crosslinks',
+  'wiki_update_index',
+]);
 
 function argumentError(name) {
-  const message = `Unknown read-only Wiki tool: ${name}.`;
+  const message = `Unknown Wiki tool: ${name}.`;
   return Object.assign(new Error(message), { code: 'E_ARGUMENT' });
 }
 
 /**
- * Run one read-only Wiki tool in process. Only the six read tools are accepted; any other name is refused before a
- * server is created. Client and server are closed on every path, including an error.
+ * Run one Wiki tool in process. Only the six read tools and the six write tools are accepted; any other name is
+ * refused before a server is created. A write tool in a read-only installation is not registered, so the call
+ * returns the SDK's tool error. Client and server are closed on every path, including an error.
  * @param {{config:object,paths:object,env:object}} options
  * @param {string} name
  * @param {object} [args]
  * @returns {Promise<{isError:boolean,text:string}>}
  */
 export async function callToolInProcess(options, name, args = {}) {
-  if (!READ_TOOLS.has(name)) throw argumentError(name);
+  if (!READ_TOOLS.has(name) && !WRITE_TOOLS.has(name)) throw argumentError(name);
   const server = createServer(options);
   const client = new Client({ name: 'brainatlas-cli', version: VERSION });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

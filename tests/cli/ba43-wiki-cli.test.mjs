@@ -280,12 +280,18 @@ test('help lists wiki with its description and usage', async (t) => {
   const all = f.run('--help', '--json');
   assert.equal(all.status, 0, all.stderr);
   const command = JSON.parse(all.stdout).commands.find((item) => item.name === 'wiki');
-  assert.equal(command.description, 'Read-only Wiki tools from the shell (same results as the MCP read tools).');
+  assert.equal(
+    command.description,
+    'Wiki tools from the shell: the same read and write tools as the MCP server, run in process.'
+  );
   assert.match(
-    command.usage,
+    command.usage[0],
     /^brainatlas wiki query <text> \[--limit N\] \[--compact\] \[--provenance\] \| read <path>/u
   );
+  // BA-43d: the second usage line lists the write subcommands.
+  assert.match(command.usage[1], /^brainatlas wiki write <path> \| update <path> \[--patch \| --append\]/u);
   const detail = f.run('help', 'wiki');
   assert.equal(detail.status, 0, detail.stderr);
   assert.match(detail.stdout, /--max-chars N/u);
+  assert.match(detail.stdout, /create-concept <name>/u);
 });

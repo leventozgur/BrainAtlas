@@ -1,8 +1,8 @@
 # The `cli` channel: instructions instead of MCP and hooks
 
 On some machines an agent cannot register MCP servers or hooks: managed desktops, locked-down IDEs, or a policy that
-blocks local executables. The `cli` channel installs only an instruction block that tells the agent to query the vault
-with the read-only `brainatlas wiki` commands from the shell.
+blocks local executables. The `cli` channel installs only an instruction block that tells the agent to query and update
+the vault with the `brainatlas wiki` commands from the shell.
 
 ## When to use it
 
@@ -31,16 +31,25 @@ contain a BrainAtlas MCP entry or a BrainAtlas-managed hook.
   (vault scope). The whole skill file is managed.
 - No MCP server entry, no hook, no settings change, and no skill file for other agents.
 
-The payload names the installed `brainatlas` launcher and the read-only commands:
+The payload names the installed `brainatlas` launcher and the commands:
 `brainatlas wiki query "<project name and topic terms>" --json`, `brainatlas wiki read <path> --json`, and the
-`list` / `index` / `status` variants.
+`list` / `index` / `status` variants. For Claude Code (BA-43d), the `CLAUDE.md` block also asks the agent to save
+verified, durable findings at the end of a substantial task, and the skill lists every write subcommand (`update
+--append`, `update --patch`, `write`, `create-concept`, `create-entity`, `crosslinks`, `update-index`, with content on
+standard input or `--file`) and what `E_CONFLICT`, `E_SECRET_DETECTED` and `E_READ_ONLY` mean. The Codex, Copilot,
+Gemini CLI and Kiro texts describe only the read commands; the write commands work for them too.
+
+A skill or `CLAUDE.md` block written by rc.12 to rc.17 (read-only text) is still recognised as BrainAtlas-managed:
+`doctor` reports it as from an older version, `brainatlas init` replaces it with the current text, and `uninstall`
+removes it. Run `brainatlas init` once after updating to get the write commands in the skill.
 
 ## What is lost
 
 - No automatic context injection: hooks and the MCP server are what put relevant pages in front of the agent.
 - The agent must decide to search, so results depend on it following the instruction block.
 - Every query starts a new process and reloads the vault; there is no long-lived MCP session or warm index.
-- Only the read-only tools are reachable. Writes and maintenance stay in the CLI.
+- Every MCP Wiki tool, read and write, is reachable through `brainatlas wiki` with the same results (BA-43d).
+  Maintenance (`maintain`, `compact`) stays in the CLI, as with the default channel.
 
 ## Switch back to the default channel
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BA-43d: the `cli` channel can now write. `brainatlas wiki` gains `write <path>`, `update <path>` (full content, `--patch` with a JSON patch object, or `--append` with text added to the end of the body), `create-entity <name>`, `create-concept <name>`, `crosslinks <path>` and `update-index`. Each calls the registered MCP write tool in process, so the result, the files written, the log entry, the secret filter, the path rules, the write lock and `--expected-sha256` (the `sha256` that `wiki read` returns) are the MCP server's own. Page content is read from `--file <path>` or standard input, never from a command-line word; empty content is refused with `E_ARGUMENT`. In a read-only installation every write subcommand fails with `E_READ_ONLY`. The Claude Code skill and `CLAUDE.md` block of the `cli` channel now describe the write commands and saving verified findings at the end of a task. A skill or block written by rc.12 to rc.17 is recognised: `doctor` reports it as from an older version, `brainatlas init` replaces it and `uninstall` removes it. Run `brainatlas init` once after updating to get the new skill. The Codex, Copilot, Gemini CLI and Kiro instruction texts are unchanged. Automatic context injection still needs the hooks of the default channel.
+
 ## 0.1.0-rc.17 — 2026-11-25
 
 Fixes from the maintainer's rc.16 use: the OKF check accepts the archive pages `compact` writes, `update --check` finds new releases by itself, and the experimental `ui` panel guards its settings. The default install (Lite, semantic off) is otherwise unchanged.
