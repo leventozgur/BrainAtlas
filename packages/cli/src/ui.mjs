@@ -44,24 +44,35 @@ const HELP = Object.freeze({
   'semantic.minScore': 'Lowest similarity score a semantic result needs.',
 });
 
+/**
+ * BA-87: effective defaults for optional editable keys that `defaultConfig` omits. They mirror runtime behaviour:
+ * the hook discloses fully unless `hooks.disclosure` is 'progressive' (packages/hooks/src/index.mjs), and MCP pull
+ * returns low-confidence results unless `retrieval.pullLowConfidence` is false (packages/mcp/src/index.mjs).
+ */
+const OPTIONAL_DEFAULTS = Object.freeze({
+  'hooks.disclosure': 'full',
+  'retrieval.pullLowConfidence': true,
+});
+
 const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BrainAtlas</title><style>
 :root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0 auto;max-width:56rem;padding:1rem 1rem 3rem}
 table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #8884;padding:.35rem .5rem;text-align:left;font-size:.9rem}
 button,select,input{font:inherit}pre{background:#8882;padding:.6rem;overflow:auto;white-space:pre-wrap}h2{margin-top:2rem}
 dialog{border:1px solid #8888;border-radius:.5rem;max-width:44rem}menu{display:flex;gap:.5rem;justify-content:flex-end;padding:0}
-.help{color:#888;font-size:.8rem}#notes{color:#a60;font-size:.9rem;white-space:pre-wrap}
+.help{color:#888;font-size:.8rem}#notes{color:#a60;font-size:.9rem;white-space:pre-wrap}details{font-size:.8rem}#change{white-space:pre-wrap}
 </style></head><body><h1>BrainAtlas</h1><p id="note"></p>
 <h2>Status</h2><table id="summary"></table>
 <h2>Agents</h2><table id="agents"></table>
 <h2>Settings</h2><table id="settings"></table><div id="notes"></div>
 <h2>Result</h2><pre id="out">Nothing yet. Every change asks for confirmation and shows what it will change.</pre>
-<dialog id="confirm"><p id="change"></p><p id="extra"></p><menu><button id="ok">Confirm</button><button id="cancel">Cancel</button></menu></dialog>
+<dialog id="confirm"><p id="change"></p><details><summary>Raw plan</summary><pre id="raw"></pre></details><menu><button id="ok">Confirm</button><button id="cancel">Cancel</button></menu></dialog>
 <script>
 const params=new URLSearchParams(location.hash.slice(1));const T=params.get('t')||'';history.replaceState(null,'',location.pathname);
 const $=(id)=>document.getElementById(id);
 const CHANNEL_LABELS={mcp:'MCP server',cli:'CLI + skill'};
 const CHANNEL_TITLES={mcp:'The agent calls BrainAtlas tools over MCP.',cli:'The agent runs the brainatlas CLI, guided by an installed skill file.'};
+const channelLabel=(value)=>CHANNEL_LABELS[value]||value||'unknown';
 const api=async(path,body)=>{const r=await fetch(path,{method:body?'POST':'GET',headers:{'x-brainatlas-token':T,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
  const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.message||j.error||('HTTP '+r.status));e.payload=j;throw e}return j};
 const cell=(row,text,tag='td')=>{const c=document.createElement(tag);c.textContent=text;row.append(c);return c};
@@ -70,27 +81,40 @@ const dialog=$('confirm');
 let pending=null;
 const closeDialog=(value)=>{const resolve=pending;pending=null;if(typeof dialog.close==='function')dialog.close();else dialog.removeAttribute('open');if(resolve)resolve(value)};
 $('ok').onclick=()=>closeDialog(true);$('cancel').onclick=()=>closeDialog(false);
-const ask=(text,extra)=>new Promise((resolve)=>{$('change').textContent=text;$('extra').textContent=extra||'';pending=resolve;
+const ask=(text)=>new Promise((resolve)=>{$('change').textContent=text;pending=resolve;
  if(typeof dialog.showModal==='function'){try{dialog.showModal();return}catch(e){}}dialog.setAttribute('open','')});
 const describe=(problem)=>{const p=problem.payload||{};if(p.error==='E_SEMANTIC_NOT_READY'){const lines=[p.reason||'Semantic search is not ready.'];
  for(const [name,step] of Object.entries(p.steps||{}))lines.push(name+': '+(step.status||'action-needed')+' — '+(step.reason||''));
  if(p.next)lines.push('Next: '+p.next);return lines.join('\\n')}return String(problem.message||problem)};
-const run=async(path,body,extraOf)=>{const shown=await api(path,{...body,apply:false});
- const change=JSON.stringify({change:body,result:shown.result===undefined?shown:shown.result},null,2);
- const ok=await ask(change,extraOf?extraOf(shown):'');
+let currentValues={};let currentChannels={};
+const brief=(value)=>value===undefined?'unset':JSON.stringify(value);
+const currentValue=(row)=>row.value===undefined?row.default:row.value;
+const describeChange=(body,install)=>{if(body.key!==undefined)return body.key+': '+brief(currentValues[body.key])+' → '+brief(body.value);
+ if(body.agent!==undefined&&install)return 'Install '+body.agent+' with '+channelLabel(body.channel);
+ if(body.agent!==undefined)return body.agent+': '+channelLabel(currentChannels[body.agent])+' → '+channelLabel(body.channel);
+ return 'Change: '+JSON.stringify(body)};
+const semanticLines=(shown)=>{const s=shown.semantic;if(!s)return [];const lines=[];
+ for(const [name,step] of Object.entries(s.steps||{}))lines.push(name+': '+(step.status||'')+' — '+(step.reason||''));
+ for(const warning of s.warnings||[])lines.push('Warning: '+warning);return lines};
+const changedFiles=(shown)=>{const result=shown.result&&typeof shown.result==='object'?shown.result:shown;
+ const list=Array.isArray(result.changes)?result.changes:Array.isArray(result.changes?.changes)?result.changes.changes:[];
+ const files=[];for(const item of list){const file=item&&typeof item==='object'?(item.path||item.file):undefined;
+  if(typeof file==='string'&&!files.includes(file))files.push(file)}return files};
+const run=async(path,body,{install=false}={})=>{const shown=await api(path,{...body,apply:false});
+ const lines=[describeChange(body,install),...semanticLines(shown)];
+ const files=changedFiles(shown);if(files.length)lines.push('Files:',...files);
+ $('raw').textContent=JSON.stringify(shown,null,2);
+ const ok=await ask(lines.join('\\n'));
  if(!ok){show('Cancelled. Nothing was written.');return null}
  const done=await api(path,{...body,apply:true});await load();return done};
 const button=(label,handler)=>{const b=document.createElement('button');b.textContent=label;b.onclick=async()=>{try{const v=await handler();if(v!==null)show(v===undefined?'Done.':v)}catch(e){show(describe(e))}};return b};
-const channelSelect=(selected)=>{const sel=document.createElement('select');for(const ch of ['mcp','cli']){const o=document.createElement('option');o.value=ch;o.textContent=CHANNEL_LABELS[ch];o.title=CHANNEL_TITLES[ch];o.selected=ch===selected;sel.append(o)}return sel};
-const semanticExtra=(shown)=>{const s=shown.semantic;if(!s)return '';const lines=[];
- for(const [name,step] of Object.entries(s.steps||{}))lines.push(name+': '+(step.status||'')+' — '+(step.reason||''));
- for(const warning of s.warnings||[])lines.push('Warning: '+warning);return lines.join('\\n')};
-const control=(row,readOnly)=>{let el;
- if(row.control==='select'){el=document.createElement('select');for(const option of row.options||[]){const o=document.createElement('option');o.value=option;o.textContent=option;o.selected=option===(row.value===undefined?row.default:row.value);el.append(o)}}
- else if(row.control==='checkbox'){el=document.createElement('input');el.type='checkbox';el.checked=row.value===true}
- else if(row.control==='number'){el=document.createElement('input');el.type='number';el.value=row.value===undefined?'':String(row.value);el.step=String(row.step||1);
+const channelSelect=(selected)=>{const sel=document.createElement('select');for(const ch of ['mcp','cli']){const o=document.createElement('option');o.value=ch;o.textContent=channelLabel(ch);o.title=CHANNEL_TITLES[ch];o.selected=ch===selected;sel.append(o)}return sel};
+const control=(row,readOnly)=>{let el;const current=currentValue(row);
+ if(row.control==='select'){el=document.createElement('select');for(const option of row.options||[]){const o=document.createElement('option');o.value=option;o.textContent=option;o.selected=option===current;el.append(o)}}
+ else if(row.control==='checkbox'){el=document.createElement('input');el.type='checkbox';el.checked=current===true}
+ else if(row.control==='number'){el=document.createElement('input');el.type='number';el.value=current===undefined?'':String(current);el.step=String(row.step||1);
   if(row.min!==undefined)el.min=String(row.min);if(row.max!==undefined)el.max=String(row.max)}
- else {el=document.createElement('input');el.type='text';el.value=row.value===undefined?'':String(row.value)}
+ else {el=document.createElement('input');el.type='text';el.value=current===undefined?'':String(current)}
  el.disabled=readOnly;return el};
 const read=(row,el)=>row.control==='checkbox'?el.checked:row.control==='number'?(el.value.trim()===''?NaN:Number(el.value)):el.value;
 const valid=(row,el)=>{if(row.control!=='number')return true;const v=read(row,el);
@@ -99,35 +123,38 @@ const valid=(row,el)=>{if(row.control!=='number')return true;const v=read(row,el
 async function load(){
  const s=await api('/api/summary');$('note').textContent=s.readOnly?'Read-only: changes are disabled.':'Every change asks for confirmation and shows what it will change.';
  $('summary').replaceChildren();for(const [k,v] of Object.entries(s.summary)){if(v&&typeof v==='object'||k==='note')continue;const r=document.createElement('tr');cell(r,k,'th');cell(r,String(v));$('summary').append(r)}
- const a=await api('/api/agents');$('agents').replaceChildren();
- for(const g of a.agents){const r=document.createElement('tr');cell(r,g.agent,'th');
-  cell(r,g.installed?('channel '+CHANNEL_LABELS[g.channel]+(g.healthy?' (healthy)':' (check doctor)')):(g.detected?'detected, not installed':'not found'));
+ const a=await api('/api/agents');$('agents').replaceChildren();currentChannels={};
+ for(const g of a.agents){const r=document.createElement('tr');cell(r,g.agent,'th');currentChannels[g.agent]=g.channel;
+  cell(r,g.installed?('channel '+channelLabel(g.channel)+(g.healthy?' (healthy)':' (check doctor)')):(g.detected?'detected, not installed':'not found'));
   const c=document.createElement('td');
-  if(!s.readOnly&&g.installed){const sel=channelSelect(g.channel);c.append(sel,button('Apply',()=>run('/api/agent',{agent:g.agent,channel:sel.value})))}
-  else if(!s.readOnly&&g.detected){const sel=channelSelect('mcp');c.append(sel,button('Install',()=>run('/api/agent-add',{agent:g.agent,channel:sel.value})))}
+  if(!s.readOnly&&g.installed){const sel=channelSelect(g.channel);const apply=button('Apply',()=>run('/api/agent',{agent:g.agent,channel:sel.value}));
+   const sync=()=>{apply.disabled=sel.value===g.channel};sel.addEventListener('change',sync);sync();c.append(sel,apply)}
+  else if(!s.readOnly&&g.detected){const sel=channelSelect('mcp');c.append(sel,button('Install',()=>run('/api/agent-add',{agent:g.agent,channel:sel.value},{install:true})))}
   r.append(c);$('agents').append(r)}
- const t=await api('/api/settings');$('settings').replaceChildren();$('notes').textContent=(t.notes||[]).join('\\n');
- for(const row of t.settings){const r=document.createElement('tr');cell(r,row.key,'th');const c=document.createElement('td');
+ const t=await api('/api/settings');$('settings').replaceChildren();$('notes').textContent=(t.notes||[]).join('\\n');currentValues={};
+ for(const row of t.settings){currentValues[row.key]=currentValue(row);const r=document.createElement('tr');cell(r,row.key,'th');const c=document.createElement('td');
   const el=control(row,s.readOnly);c.append(el);
   if(row.help){const help=document.createElement('div');help.className='help';help.textContent=row.help;c.append(help)}
-  if(!s.readOnly){const apply=button('Apply',()=>run('/api/setting',{key:row.key,value:read(row,el)},semanticExtra));
-   if(row.control==='number'){const sync=()=>{apply.disabled=!valid(row,el)};el.addEventListener('input',sync);sync()}
-   c.append(apply);
-   if(row.default!==undefined&&row.default!==row.value)c.append(button('Reset',()=>run('/api/setting',{key:row.key,value:row.default},semanticExtra)))}
+  if(!s.readOnly){const apply=button('Apply',()=>run('/api/setting',{key:row.key,value:read(row,el)}));
+   const initial=currentValue(row);const baseline=initial===undefined?read(row,el):initial;
+   const sync=()=>{apply.disabled=!valid(row,el)||read(row,el)===baseline};
+   el.addEventListener(row.control==='checkbox'?'change':'input',sync);sync();c.append(apply);
+   if(row.default!==undefined&&row.default!==currentValue(row))c.append(button('Reset',()=>run('/api/setting',{key:row.key,value:row.default})))}
   r.append(c);$('settings').append(r)}
 }
 load().catch((e)=>show(String(e.message)));
 </script></body></html>`;
 
-/** The default for one editable key: the profile default, or SEMANTIC_DEFAULTS for `semantic.*`. */
+/** The default for one editable key: the profile default, the documented optional default, or SEMANTIC_DEFAULTS. */
 function defaultFor(profile, key) {
   if (key.startsWith('semantic.')) return SEMANTIC_DEFAULTS[key.slice('semantic.'.length)];
-  return key.split('.').reduce((value, part) => value?.[part], defaultConfig(profile));
+  const value = key.split('.').reduce((item, part) => item?.[part], defaultConfig(profile));
+  return value === undefined ? OPTIONAL_DEFAULTS[key] : value;
 }
 
 /**
  * BA-87: derive one typed control row from the schema node, never a hand-written copy of the schema. Every
- * allowlisted key gets a row; an optional key that the config does not carry has no value and no default.
+ * allowlisted key gets a row; an optional key that the config does not carry has no value but keeps its default.
  * @param {string} key @param {any} value @param {any} schema @param {'lite'|'full'|'custom'} profile
  */
 function settingRow(key, value, schema, profile) {
@@ -174,8 +201,8 @@ export function editableSettings(cfg, options = {}) {
 }
 
 /**
- * BA-87: the semantic module is usable only in a non-lite profile whose config enables it and whose release
- * ships `modules/semantic`. The module list follows the same rule as `enabledModuleEntries`: `*` or `semantic`.
+ * BA-87: the semantic module is usable only in a non-lite profile whose release ships `modules/semantic` and whose
+ * module list enables it (the `'*'` marker or an explicit `'semantic'` entry).
  */
 async function semanticInstalled(paths, cfg) {
   if (cfg.profile === 'lite' || !paths.currentDir) return false;

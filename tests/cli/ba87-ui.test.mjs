@@ -164,9 +164,9 @@ test('settings rows carry a typed control, default and help for every allowliste
   assert.equal(rows.get('okf.level').control, 'select');
   assert.deepEqual(rows.get('okf.level').options, ['warn', 'strict']);
   assert.equal(rows.get('okf.level').default, 'warn');
-  assert.equal(rows.get('hooks.disclosure').default, undefined);
+  assert.equal(rows.get('hooks.disclosure').default, 'full');
   assert.equal(rows.get('retrieval.pullLowConfidence').control, 'checkbox');
-  assert.equal(rows.get('retrieval.pullLowConfidence').default, undefined);
+  assert.equal(rows.get('retrieval.pullLowConfidence').default, true);
   assert.equal(rows.get('retrieval.budgetChars').control, 'number');
   assert.equal(rows.get('retrieval.budgetChars').min, 1);
   assert.equal(rows.get('retrieval.budgetChars').step, 1);
@@ -228,6 +228,26 @@ test('the page has no separate plan button, a confirmation dialog and full chann
   assert.match(page.text, /The agent calls BrainAtlas tools over MCP\./u);
   assert.match(page.text, /The agent runs the brainatlas CLI, guided by an installed skill file\./u);
   assert.match(page.text, /Reset/u);
+  assert.match(page.text, /describeChange/u);
+  assert.match(page.text, /→/u);
+  assert.match(page.text, /<details>/u);
+  assert.match(page.text, /Raw plan/u);
+  assert.match(page.text, /apply\.disabled=/u);
+  assert.match(page.text, /read\(row,el\)===baseline/u);
+  assert.match(page.text, /sel\.value===g\.channel/u);
+  assert.match(page.text, /#change\{white-space:pre-wrap\}/u);
+  assert.match(page.text, /result\.changes/u);
+  assert.equal(/result\.remove|result\.install/u.test(page.text), false);
+});
+
+test('a config without hooks.disclosure still reports an effective default for the row', async (t) => {
+  const f = await fixture(t);
+  const config = JSON.parse(await readFile(f.paths.configFile, 'utf8'));
+  assert.equal(Object.hasOwn(config.hooks, 'disclosure'), false);
+  const settings = await call(f.panel, { path: '/api/settings' });
+  const row = settings.json.settings.find((item) => item.key === 'hooks.disclosure');
+  assert.equal(row.value, undefined);
+  assert.equal(row.default, 'full');
 });
 
 test('an agent install plans first and applies through the same handler as agent add', async (t) => {
