@@ -97,6 +97,7 @@ Experimental in 0.1.0: semantic retrieval, Git/folder/Dropbox sync, the local pa
 | `brainatlas usage [--days N]` | Summarize content-free hook metrics | no |
 | `brainatlas ui [--no-open] [--json]` | Experimental local panel for status, agent channels and settings (127.0.0.1 only) | panel apply only |
 | `brainatlas update --from <archive>` | Install an update from a verified release archive | installation only |
+| `brainatlas update --check [--pre]` | Check for the newest release (network: GitHub releases API, only when run) and print the download, verify and install commands | no |
 | `brainatlas update --check --from <archive>` | Inspect a release archive without installing it | no |
 | `brainatlas rollback [--to VERSION]` | Switch to the prior release, or to an installed version | installation only |
 | `brainatlas module list\|add\|remove` | List, add, or remove installed modules | `add` and `remove` only |
@@ -133,7 +134,7 @@ See [Security](SECURITY.md), [Sync](docs/user/sync.md), and the [contracts](docs
 
 ## Update, rollback, and uninstall
 
-Install an update from a verified release archive with `brainatlas update --from <archive>`. The CLI checks release health and restores the prior release if the new one fails its health check. Use `brainatlas rollback` to return to the prior release, or `brainatlas rollback --to VERSION` for a specific installed version. Run `brainatlas uninstall` to remove BrainAtlas-managed installation and adapter changes; the configured vault is preserved. Review `--plan` output where supported before applying changes.
+Install an update from a verified release archive with `brainatlas update --from <archive>`. Run `brainatlas update --check` to find the newest release and print the commands to download, verify and install it; it downloads nothing. The CLI checks release health and restores the prior release if the new one fails its health check. Use `brainatlas rollback` to return to the prior release, or `brainatlas rollback --to VERSION` for a specific installed version. Run `brainatlas uninstall` to remove BrainAtlas-managed installation and adapter changes; the configured vault is preserved. Review `--plan` output where supported before applying changes.
 
 ## Comparison and related work
 

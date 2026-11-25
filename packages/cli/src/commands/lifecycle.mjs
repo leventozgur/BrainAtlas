@@ -1,5 +1,17 @@
 // SPDX-License-Identifier: MIT
-import { access, chmod, lstat, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  access,
+  chmod,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  readlink,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
@@ -65,6 +77,177 @@ function compareVersions(left, right) {
   }
   return 0;
 }
+const UPDATE_RELEASES_URL = 'https://api.github.com/repos/leventozgur/BrainAtlas/releases?per_page=30';
+const UPDATE_RELEASE_PREFIX = 'https://github.com/leventozgur/BrainAtlas/releases/';
+const UPDATE_DOWNLOAD_PREFIX = 'https://github.com/leventozgur/BrainAtlas/releases/download/';
+const UPDATE_ASSET_NAMES = Object.freeze({
+  distribution: (version) => `brainatlas-${version}-distribution.tar.gz`,
+  full: (version) => `brainatlas-${version}-full.tgz`,
+  lite: (version) => `brainatlas-${version}-lite.tgz`,
+  sha256sums: () => 'SHA256SUMS',
+  signature: () => 'SHA256SUMS.sig',
+});
+
+/** @param {unknown} value @returns {value is Record<string, any>} */
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A GitHub release URL under the expected prefix that contains no shell-unsafe characters.
+ * @param {unknown} value
+ * @param {string} prefix
+ * @returns {string|undefined}
+ */
+function prefixedUrl(value, prefix) {
+  if (typeof value !== 'string' || !value.startsWith(prefix)) return undefined;
+  return /^https:\/\/github\.com\/leventozgur\/BrainAtlas\/releases\/[A-Za-z0-9._~/%-]+$/.test(value)
+    ? value
+    : undefined;
+}
+
+/**
+ * Whether a version string carries a pre-release part; build metadata alone does not count.
+ * @param {string|null|undefined} version
+ * @returns {boolean}
+ */
+function isPrereleaseVersion(version) {
+  return typeof version === 'string' && /^v?\d+(?:\.\d+)*-/.test(version);
+}
+
+/**
+ * Version of the installed release, tolerating build metadata in the current link target.
+ * @param {{currentDir: string, releasesDir: string}} paths
+ * @returns {Promise<string|null>}
+ */
+async function installedVersion(paths) {
+  try {
+    const current = await readCurrent(paths);
+    return current ? current.slice('releases/'.length) : null;
+  } catch {
+    try {
+      const target = await readlink(paths.currentDir);
+      const name = target.startsWith(`${paths.releasesDir}/`)
+        ? target.slice(paths.releasesDir.length + 1)
+        : /^releases\/(.+)$/.exec(target)?.[1];
+      if (typeof name !== 'string' || name === '..' || !/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(name)) return null;
+      return name;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Pick the highest eligible release from the GitHub releases API array.
+ * @param {unknown} releases
+ * @param {string|null} currentVersion
+ * @param {boolean} pre
+ * @returns {{version: string, entry: Record<string, any>}|null}
+ */
+function selectRelease(releases, currentVersion, pre) {
+  if (!Array.isArray(releases)) return null;
+  const allowPrerelease = pre === true || isPrereleaseVersion(currentVersion);
+  let best = null;
+  for (const entry of releases) {
+    if (!isRecord(entry) || entry.draft === true) continue;
+    const tag = entry.tag_name;
+    if (typeof tag !== 'string' || !tag.startsWith('v')) continue;
+    const version = tag.slice(1);
+    if (!validVersion(version)) continue;
+    if (entry.prerelease === true && !allowPrerelease) continue;
+    if (!best || compareVersions(version, best.version) > 0) best = { version, entry };
+  }
+  return best;
+}
+
+/**
+ * Map release assets to the exact expected names, ignoring foreign or unsafe URLs.
+ * @param {Record<string, any>} entry
+ * @param {string} version
+ * @returns {Record<string, string>}
+ */
+function releaseAssets(entry, version) {
+  /** @type {Record<string,string>} */
+  const assets = {};
+  const listed = Array.isArray(entry.assets) ? entry.assets : [];
+  for (const [key, expected] of Object.entries(UPDATE_ASSET_NAMES)) {
+    const name = expected(version);
+    const match = listed.find((asset) => isRecord(asset) && asset.name === name);
+    const url = match ? prefixedUrl(match.browser_download_url, UPDATE_DOWNLOAD_PREFIX) : undefined;
+    if (url) assets[key] = url;
+  }
+  return assets;
+}
+
+/**
+ * Whether the release lists the distribution archive with an allowed download URL.
+ * @param {Record<string, any>} entry
+ * @param {string} version
+ * @returns {boolean}
+ */
+function hasDistributionAsset(entry, version) {
+  const name = UPDATE_ASSET_NAMES.distribution(version);
+  const listed = Array.isArray(entry.assets) ? entry.assets : [];
+  return listed.some(
+    (asset) =>
+      isRecord(asset) &&
+      asset.name === name &&
+      prefixedUrl(asset.browser_download_url, UPDATE_DOWNLOAD_PREFIX) !== undefined
+  );
+}
+
+/**
+ * The profile archive name suffix for the installed configuration.
+ * @param {{configFile?: string}} paths
+ * @param {Record<string, string|undefined>} env
+ * @returns {Promise<'lite'|'full'>}
+ */
+async function installedProfile(paths, env) {
+  try {
+    const cfg = await loadConfig({ paths, env, readOnly: true });
+    return cfg?.profile === 'full' || cfg?.profile === 'custom' ? 'full' : 'lite';
+  } catch {
+    return 'lite';
+  }
+}
+
+/**
+ * Shell lines that download, verify and install the selected release.
+ * @param {{version: string, profile: 'lite'|'full', hasDistribution: boolean}} options
+ * @returns {string[]}
+ */
+function updateNextLines({ version, profile, hasDistribution }) {
+  if (hasDistribution !== true || !validVersion(version)) return [];
+  const dir = `brainatlas-${version}`;
+  const tag = `v${version}`;
+  const distribution = UPDATE_ASSET_NAMES.distribution(version);
+  return [
+    `mkdir ${dir}`,
+    `curl -fL -o ${dir}/${distribution} ${UPDATE_DOWNLOAD_PREFIX}${tag}/${distribution}`,
+    `tar -xzf ${dir}/${distribution} -C ${dir}`,
+    `# Check that the key fingerprint in ${dir}/release/allowed_signers is SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40 (ssh-keygen -lf ${dir}/release/allowed_signers)`,
+    `ssh-keygen -Y verify -f ${dir}/release/allowed_signers -I brainatlas-release -n brainatlas-release -s ${dir}/SHA256SUMS.sig < ${dir}/SHA256SUMS`,
+    `(cd ${dir} && shasum -a 256 -c SHA256SUMS)`,
+    `brainatlas update --from ${dir}/brainatlas-${version}-${profile}.tgz`,
+  ];
+}
+
+/**
+ * Human-readable update check summary with the commands to run next.
+ * @param {Record<string, any>} result
+ * @returns {string}
+ */
+function formatUpdateCheck(result) {
+  const status =
+    result.status === 'available'
+      ? `Update available: ${result.currentVersion ?? 'not installed'} -> ${result.offeredVersion}`
+      : result.status === 'up-to-date'
+        ? `BrainAtlas ${result.currentVersion} is up to date.`
+        : `BrainAtlas ${result.currentVersion} is newer than the latest release ${result.offeredVersion}.`;
+  return [status, ...(Array.isArray(result.next) ? result.next : [])].join('\n');
+}
+
 const journalPath = (paths) => join(paths.stateDir, 'update-journal.json');
 const previousPath = (paths) => join(paths.stateDir, 'previous-release');
 const releaseLink = (version) => `releases/${version}`;
@@ -524,7 +707,7 @@ export async function uninstall({ plan, output, paths, env, dependencies }) {
   return;
 }
 
-export async function update({ args, flag, value, plan, output, paths, env, dependencies }) {
+export async function update({ args, flag, value, json, plan, output, paths, env, dependencies }) {
   if (flag('--check') || flag('--metadata-only')) {
     const archivePath = value('--from');
     if (archivePath) {
@@ -546,7 +729,46 @@ export async function update({ args, flag, value, plan, output, paths, env, depe
     }
     const metadataUrl = env.BRAINATLAS_UPDATE_METADATA_URL;
     if (!metadataUrl) {
-      output({ status: 'unknown', reason: 'metadata-unavailable' });
+      try {
+        const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+        const response = await fetchImpl(UPDATE_RELEASES_URL, {
+          headers: {
+            accept: 'application/vnd.github+json',
+            'user-agent': 'brainatlas-update-check',
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) throw new Error();
+        const body = await response.json();
+        const currentVersion = await installedVersion(paths);
+        const selected = selectRelease(body, currentVersion, flag('--pre'));
+        if (!selected) throw new Error();
+        const { version, entry } = selected;
+        const order = currentVersion === null ? 1 : compareVersions(version, currentVersion);
+        const status = order > 0 ? 'available' : order === 0 ? 'up-to-date' : 'current-newer';
+        const releaseUrl = prefixedUrl(entry.html_url, UPDATE_RELEASE_PREFIX);
+        const assets = releaseAssets(entry, version);
+        /** @type {Record<string, any>} */
+        const result = {
+          status,
+          currentVersion,
+          offeredVersion: version,
+          prerelease: entry.prerelease === true,
+          ...(releaseUrl ? { releaseUrl } : {}),
+          assets,
+        };
+        if (status === 'available') {
+          const nextLines = updateNextLines({
+            version,
+            profile: await installedProfile(paths, env),
+            hasDistribution: hasDistributionAsset(entry, version),
+          });
+          if (nextLines.length > 0) result.next = nextLines;
+        }
+        output(json ? result : formatUpdateCheck(result));
+      } catch (cause) {
+        output({ status: 'unknown', reason: cause?.code === 'E_OFFLINE' ? 'offline' : 'metadata-unavailable' });
+      }
       return;
     }
     try {

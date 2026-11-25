@@ -97,6 +97,7 @@ Semantik arama deneyseldir ve isteğe bağlıdır, yerel Ollama kullanır ve var
 | `brainatlas usage [--days N]` | İçeriksiz hook metriklerini özetler | hayır |
 | `brainatlas ui [--no-open] [--json]` | Durum, ajan kanalları ve ayarlar için deneysel yerel panel (yalnızca 127.0.0.1) | yalnızca panelde apply |
 | `brainatlas update --from <archive>` | Doğrulanmış sürüm arşivinden güncelleme kurar | yalnızca kurulum |
+| `brainatlas update --check [--pre]` | En yeni sürümü denetler (ağ: GitHub sürüm API'si, yalnızca çalıştırıldığında) ve indirme, doğrulama ve kurulum komutlarını yazdırır | hayır |
 | `brainatlas update --check --from <archive>` | Sürüm arşivini kurmadan inceler | hayır |
 | `brainatlas rollback [--to VERSION]` | Önceki sürüme veya kurulu belirli bir sürüme döner | yalnızca kurulum |
 | `brainatlas module list\|add\|remove` | Kurulu modülleri listeler, ekler veya kaldırır | yalnızca `add` ve `remove` |
@@ -133,7 +134,7 @@ Bkz. [Güvenlik](SECURITY.md), [Sync](docs/user/sync.md) ve [sözleşmeler](docs
 
 ## Güncelleme, geri alma ve kaldırma
 
-Doğrulanmış bir sürüm arşivinden `brainatlas update --from <archive>` ile güncelleyin. CLI sürüm sağlığını denetler ve yeni sürüm sağlık kontrolünden geçemezse önceki sürümü geri yükler. Önceki sürüme dönmek için `brainatlas rollback`, kurulu belirli bir sürüm için `brainatlas rollback --to VERSION` kullanın. `brainatlas uninstall` BrainAtlas tarafından yönetilen kurulumu ve adaptör değişikliklerini kaldırır; yapılandırılmış kasa korunur. Uygulamadan önce desteklenen yerlerde `--plan` çıktısını inceleyin.
+Doğrulanmış bir sürüm arşivinden `brainatlas update --from <archive>` ile güncelleyin. En yeni sürümü bulmak ve indirme, doğrulama ve kurulum komutlarını yazdırmak için `brainatlas update --check` çalıştırın; hiçbir şey indirmez. CLI sürüm sağlığını denetler ve yeni sürüm sağlık kontrolünden geçemezse önceki sürümü geri yükler. Önceki sürüme dönmek için `brainatlas rollback`, kurulu belirli bir sürüm için `brainatlas rollback --to VERSION` kullanın. `brainatlas uninstall` BrainAtlas tarafından yönetilen kurulumu ve adaptör değişikliklerini kaldırır; yapılandırılmış kasa korunur. Uygulamadan önce desteklenen yerlerde `--plan` çıktısını inceleyin.
 
 ## Karşılaştırma ve ilgili çalışmalar
 
