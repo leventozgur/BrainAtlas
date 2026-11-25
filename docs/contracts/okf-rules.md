@@ -4,9 +4,11 @@ This is a local, warning-oriented metadata profile. It does not claim conformanc
 
 | Rule | Severity | Meaning |
 |---|---|---|
-| `required.<field>` | warn | One of `generated`, `status`, `sources`, `verified`, or `stale_after` is absent. |
+| `required.<field>` | warn | One of `generated`, `status`, `sources`, `verified`, or `stale_after` is absent. Compact archive pages require only `generated`. |
+| Compact archive page | — | With path `wiki/archive/**` and `type: archive`, `type` and `status: archived` are accepted, `status`/`sources`/`verified`/`stale_after` are not required, and `archived_from` must be a `wiki/*.md` path without `..` (`archive.source-missing` otherwise). Every other rule still applies. |
 | `frontmatter.invalid` | error | Frontmatter could not be parsed. |
 | `type.invalid`, `status.invalid`, `generated.invalid`, `sources.invalid`, `verified.invalid`, `stale_after.invalid` | error | A field does not match the local profile type/value rules. |
+| `archive.source-missing` | warn | A compact archive page has no `archived_from` value that is a `wiki/*.md` path without `..`. |
 | `generated.future` | error | `generated` is later than the check's as-of date. |
 | `confirmed.unverified` | warn | A confirmed page has no verification record. |
 | `stale.expired` | warn | `stale_after` has passed, based on the latest verified date or `generated`. |
@@ -18,3 +20,7 @@ This is a local, warning-oriented metadata profile. It does not claim conformanc
 | `page.unreadable` | error | A requested page could not be read. |
 
 `generated` and `verified[].date` accept UTC date or UTC timestamp strings. `stale_after` accepts a date, timestamp, or positive `P<n>D` / `P<n>W` duration. Supersession target existence is checked only during a full scan. The `level` option is reserved for callers; this profile always reports warning findings and does not silently promote them.
+
+## Compact archive pages
+
+A page is a compact archive page when its path starts with `wiki/archive/` and its frontmatter has `type: archive`. On such a page `type: archive` is valid, `status: archived` is accepted alongside the normal statuses, `status`, `sources`, `verified` and `stale_after` are not required, and `archived_from` must be a `wiki/*.md` path without `..` (otherwise `archive.source-missing`). Every other rule still applies: a missing `generated` reports `required.generated`, and `frontmatter.invalid`, `generated.invalid`, `generated.future`, the `*.invalid` value rules for present fields, `date.unquoted.*` and the supersession rules are unchanged. `type: archive` outside `wiki/archive/` still reports `type.invalid`, and `status: archived` on a non-archive page still reports `status.invalid`; pages under `wiki/archive/` without `type: archive` are checked exactly as before.

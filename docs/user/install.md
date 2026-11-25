@@ -37,6 +37,7 @@ Replace `<v>` with the actual version. Run `brainatlas doctor` to check installa
 
 ## Manage releases
 
+- Check for the newest release: `brainatlas update --check`. It sends one request to the GitHub releases API (`https://api.github.com/repos/leventozgur/BrainAtlas/releases`) only when you run it, and prints the commands to download, verify and install that release. It downloads and installs nothing. `--pre` also considers pre-releases; a pre-release installation considers them automatically. Before trusting the archive's `release/allowed_signers`, check that the maintainer key fingerprint is `SHA256:PPcml0QiRHQJrtPnqWMXF77PgJhPT27GOHboOMJCw40`. Set `BRAINATLAS_OFFLINE=1` to opt out of the request.
 - Update from a verified archive: `brainatlas update --from <archive>`.
 - Check an archive: `brainatlas update --check --from <archive>`.
 - Roll back to the prior release: `brainatlas rollback`; choose a specific installed version with `brainatlas rollback --to <version>`.

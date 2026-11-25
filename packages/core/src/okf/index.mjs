@@ -24,11 +24,19 @@ export function checkPage(page, options = {}) {
   if (path === 'wiki/index.md' || path === 'wiki/log.md') return findings;
   if (page?.errors?.length) add('frontmatter.invalid', 'error', 'Frontmatter could not be parsed.');
   const type = data.type;
-  if (type !== undefined && !types.has(type)) add('type.invalid', 'error', 'Type is not a supported Wiki page type.');
-  for (const key of ['generated', 'status', 'sources', 'verified', 'stale_after'])
+  const archive = path.startsWith('wiki/archive/') && type === 'archive';
+  if (type !== undefined && !types.has(type) && !archive)
+    add('type.invalid', 'error', 'Type is not a supported Wiki page type.');
+  const required = archive ? ['generated'] : ['generated', 'status', 'sources', 'verified', 'stale_after'];
+  for (const key of required)
     if (!Object.hasOwn(data, key)) add(`required.${key}`, 'warn', `Required field '${key}' is missing.`);
-  if (data.status !== undefined && !statuses.has(data.status))
+  if (data.status !== undefined && !statuses.has(data.status) && !(archive && data.status === 'archived'))
     add('status.invalid', 'error', 'Status is not a supported value.');
+  if (archive) {
+    const from = data.archived_from;
+    if (typeof from !== 'string' || !from.startsWith('wiki/') || !from.endsWith('.md') || from.includes('..'))
+      add('archive.source-missing', 'warn', 'Archive pages need a valid wiki path in archived_from.');
+  }
   if (data.generated !== undefined && !isDate(data.generated))
     add('generated.invalid', 'error', 'Generated must be a UTC date or timestamp string.');
   if (data.generated && isDate(data.generated) && Date.parse(data.generated) > (options.asOf ?? new Date()))

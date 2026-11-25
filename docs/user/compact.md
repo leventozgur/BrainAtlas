@@ -37,6 +37,7 @@ brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-
   frontmatter (`type: archive`, `status: archived`, `archived_from`, `generated`) and a `# History:` heading. An
   existing archive page is appended to only when its `archived_from` names the same page; otherwise the command fails
   with `E_CONFLICT` and changes nothing.
+- Archive pages written by this command pass BrainAtlas `okf check` without errors.
 - The page keeps every other byte. If it has no `## Archived history` section, one is appended with a link to the
   archive page.
 - Running `--apply` again with the same options moves nothing and writes nothing.

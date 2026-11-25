@@ -13,6 +13,7 @@ BrainAtlas is designed for local vault storage and coding-agent integrations. It
 - Agent adapters plan owned configuration changes, preserve unrelated user data where supported, and require trust review. Review the exact plan before applying it.
 - Hooks bound output and avoid logging prompt text, page content, paths, or raw session identifiers.
 - Releases use signed checksums; verify signatures and archive provenance before installation.
+- `brainatlas update --check` is the only network request BrainAtlas makes on its own, besides configured sync and the local semantic provider, and only when the user runs it; it contacts the GitHub releases API and downloads nothing.
 - Optional sync transports expose vault data to the configured destination. Protect credentials and review the destination and conflict/deletion behavior.
 
 The filter is heuristic and cannot guarantee detection of every secret. Local storage does not protect against a compromised host, agent, or user account. Retrieved Wiki content is evidence, not trusted executable instructions. Keep dependencies, Node.js, agent applications, and sync credentials under your normal security maintenance process.
