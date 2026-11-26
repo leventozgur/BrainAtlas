@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26: new secret rules (Azure, Bearer, GitLab, Azure DevOps PAT, Turkish assignment keys), personal-data findings
-// (TCKN, TR IBAN) and output-only contact redaction. Fixtures are assembled at run time so no provider-format or
-// personal-data literal is stored in this file. Synthetic values only; checksums are computed here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -14,11 +11,9 @@ import {
 const ids = (text) => scanText(text).map((finding) => finding.ruleId);
 const hasRule = (text, id) => ids(text).includes(id);
 
-// Base64-looking material with mixed case, digits, '+', '/' and padding; never a real key.
 const B64 = ['aGVsbG8', 'd29ybGQt', 'a2V5', 'MTIzNDU2', 'Nzg5MDEy', 'MzQ1Njc4', 'OTA=='].join('');
 const SIG = ['Qm9', 'ydGVz', 'dC1z', 'aWc', 'MTIz', 'NDU2', 'Nzg5'].join('');
 
-// Turkish national-id check digits (10th and 11th digit) for nine chosen leading digits.
 function tckn(first9) {
   const d = [...first9].map(Number);
   const odd = d[0] + d[2] + d[4] + d[6] + d[8],
@@ -27,9 +22,8 @@ function tckn(first9) {
   const d11 = [...d, d10].reduce((a, b) => a + b, 0) % 10;
   return `${first9}${d10}${d11}`;
 }
-// ISO 13616 check digits for a TR IBAN with the given 22-digit BBAN.
 function trIban(bban, check = null) {
-  const rest = `${bban}292700`; // "TR" -> 29 27 (T=29, R=27), then "00" placeholder check digits
+  const rest = `${bban}292700`;
   let mod = 0;
   for (const ch of rest) mod = (mod * 10 + Number(ch)) % 97;
   const cd = check ?? String(98 - mod).padStart(2, '0');
@@ -53,7 +47,6 @@ test('Azure storage and Service Bus connection strings are secret findings', () 
     hasRule(`https://demo.blob.example/c?SharedAccessSignature=sv=2021-06-08&ss=b&sig=${SIG}%3D`, 'azure-sas-token')
   );
   assert.ok(hasRule(`SharedAccessSignature=sv=2021-06-08&se=2030-01-01&sr=b&sig=${SIG}`, 'azure-sas-token'));
-  // Placeholders and key names without values stay quiet.
   for (const text of [
     'AccountKey=<key>',
     'AccountKey=${AZURE_KEY}',
@@ -193,7 +186,6 @@ test('contact redaction leaves versions, dates, ids and hashes alone', () => {
   assert.equal(redact(text, { personal: true }), text);
 });
 
-// fix1: query-string and matrix parameters after a URL scheme, and upper-case Turkish keys with dotted capital İ.
 test('fix1: a Turkish secret in a URL query string is a finding; the scheme does not hide it', () => {
   const value = ['Xq7r', 'T2mP', '9kL4', 'zB8w'].join('');
   const host = ['https://ornek', '.example/giris'].join('');
@@ -207,7 +199,6 @@ test('fix1: a Turkish secret in a URL query string is a finding; the scheme does
       hasRule(`${host}?token=${value}`, 'secret-assignment'),
     'query token'
   );
-  // The URL user:password form keeps its own rule.
   assert.ok(hasRule(`https://ali:${value}@ornek.example/`, 'connection-credentials'));
 });
 

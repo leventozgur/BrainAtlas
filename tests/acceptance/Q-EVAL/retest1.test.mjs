@@ -88,7 +88,7 @@ test('category Unicode and length/control boundaries', (t) => {
   const result = runEval({ corpusDir: f.corpusDir, casesFile: f.casesFile, now });
   assert.equal(result.byCategory['Türkçe'].n, 1);
   assert.equal(result.byCategory['a'.repeat(63)].n, 1);
-  assert.equal(result.byCategory['b'.repeat(64)].n, 1); // PM correction: spec says names up to 64 chars are kept
+  assert.equal(result.byCategory['b'.repeat(64)].n, 1);
   assert.equal(result.byCategory.uncategorized.n, 2);
   assert.equal(
     Object.values(result.byCategory).reduce((n, c) => n + c.n, 0),

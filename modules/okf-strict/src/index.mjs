@@ -39,9 +39,8 @@ async function readWikiPages(vaultDir) {
           const stat = await lstat(file);
           if (!stat.isFile() || stat.isSymbolicLink()) continue;
           pages.set(path, parseFrontmatter(await readFile(file, 'utf8')).data);
-        } catch {
-          /* core checkVault reports unreadable pages without exposing their contents */
-        }
+          // eslint-disable-next-line no-empty
+        } catch {}
       }
     }
   }
@@ -106,7 +105,6 @@ function strictPageFindings(path, data, pages) {
   return result;
 }
 
-/** Run the local OKF checks, applying the stricter evidence and supersession gates. */
 export async function check(vaultDir, options = {}) {
   const selected = options.changed === undefined ? null : [...new Set(options.changed)];
   const asOf = options.asOf === undefined ? new Date() : options.asOf;
@@ -141,7 +139,6 @@ export async function check(vaultDir, options = {}) {
   return [...merged.values()].sort((a, b) => a.path.localeCompare(b.path) || a.rule.localeCompare(b.rule));
 }
 
-/** Checkpoint-compatible injected lint callback. */
 export async function lintGate(vaultDir, changedPaths, options = {}) {
   const findings = await check(vaultDir, {
     ...options,
@@ -178,7 +175,6 @@ function parseArgs(args) {
   return options;
 }
 
-/** Module command entry: commands.check({vaultDir, core}, ['--strict', ...]). */
 export async function checkCommand(ctx, args = []) {
   if (typeof ctx?.vaultDir !== 'string' || !ctx.vaultDir) throw new TypeError('OKF command needs a vaultDir.');
   const options = parseArgs(args);
@@ -200,7 +196,6 @@ export async function checkCommand(ctx, args = []) {
   };
 }
 
-/** Generic CLI module command entry. Args may include the module's `check` verb. */
 export async function okfCommand(args, ctx) {
   if (!Array.isArray(args)) throw new TypeError('Command arguments must be an array.');
   const checkArgs = args[0] === 'check' ? args.slice(1) : args;

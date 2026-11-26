@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-00 blind acceptance: gate KEEP/DISCARD logic, boundaries, missing metrics, invalid input and exit codes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
@@ -73,7 +72,6 @@ test('missing or non-numeric metrics FAIL and never pass silently', () => {
     'DISCARD'
   );
   assert.equal(evaluateGate({ baseline: base, candidate: cand, criteria: primary('constructor') }).decision, 'DISCARD');
-  // delta criterion without a baseline value: threshold cannot be computed, so FAIL.
   const noBase = evaluateGate({
     baseline: {},
     candidate: cand,
@@ -81,7 +79,6 @@ test('missing or non-numeric metrics FAIL and never pass silently', () => {
   });
   assert.equal(noBase.decision, 'DISCARD');
   assert.equal(noBase.criteria[0].result, 'FAIL');
-  // Design as implemented: a value criterion still reads the baseline document, so a missing baseline fails it.
   assert.equal(evaluateGate({ baseline: {}, candidate: cand, criteria: primary('m.recall') }).decision, 'DISCARD');
 });
 
@@ -132,7 +129,6 @@ test('getMetric reads only own dotted paths', () => {
   assert.equal(getMetric(null, 'a'), undefined);
 });
 
-// ---- CLI ----
 function writeJson(dir, name, value) {
   const file = join(dir, name);
   writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value), 'utf8');

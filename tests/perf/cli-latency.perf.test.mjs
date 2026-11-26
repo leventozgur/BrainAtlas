@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Performance suite: CLI child-process termination time. The test compares a measured elapsed time with a fixed
-// bound, so it runs only in the `perf` CI job (`npm run test:perf`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';

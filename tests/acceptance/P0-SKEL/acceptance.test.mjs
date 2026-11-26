@@ -137,7 +137,7 @@ for (const [file, expected] of signatures)
 test('CLI sürüm ve bilinmeyen komut', () => {
   const version = run(['packages/cli/bin/brainatlas.mjs', '--version']);
   assert.equal(version.status, 0, version.stderr);
-  assert.equal(version.stdout.trim(), JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version); // PM: version-agnostic (rc bumps)
+  assert.equal(version.stdout.trim(), JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version);
   const bad = run(['packages/cli/bin/brainatlas.mjs', 'unknown']);
   assert.equal(bad.status, 2);
 });
@@ -240,7 +240,7 @@ test('izlenen metinlerde yaygın özel anahtar ve token biçimleri yok', async (
     .split('\0')
     .filter(Boolean)
     .filter((f) => !/^tests\/(core\/safety|acceptance\/C3-SAFETY)\/fixtures\//.test(f))) {
-    /* PM: synthetic secret fixtures are allowed only there (privacy-allow.txt) */ let data;
+    let data;
     try {
       data = await readFile(join(root, f));
     } catch {
@@ -264,8 +264,6 @@ test('modül entry commands export ve NotImplemented hata sözleşmesi', async (
   ]) {
     const mod = await import(pathToFileURL(join(root, `modules/${name}/src/index.mjs`)));
     assert.equal(typeof mod.commands, 'object', `${name}: commands`);
-    // PM: once a module is implemented, activate({}) may reject with its own context error instead of NotImplementedError;
-    // the contract here is: async activate(ctx) of arity 1; on an empty context it may no-op or throw an Error.
     assert.equal(mod.activate.length, 1, `${name}: activate arity`);
     try {
       await mod.activate({});

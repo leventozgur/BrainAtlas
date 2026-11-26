@@ -111,7 +111,6 @@ test('offline release kit acceptance', { timeout: 180000 }, async (t) => {
       const path = join(kit, name),
         bytes = await readFile(path),
         modified = Buffer.from(bytes);
-      // Change a byte in the installer's comment so its shell syntax remains valid.
       if (name === 'install.sh') modified[modified.indexOf(Buffer.from('SPDX'))] ^= 1;
       else modified[Math.floor(modified.length / 2)] ^= 1;
       await writeFile(path, modified);

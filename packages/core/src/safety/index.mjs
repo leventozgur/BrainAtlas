@@ -4,17 +4,12 @@ import { CONTENT_RULES, DENY_GLOBS, PERSONAL_RULES, CONTACT_RULES } from './rule
 
 const placeholder =
   /^(?:<[^>]*>|x{3,}|changeme|example|none|null|undefined|redacted|placeholder|\$\{[^}]+\}|\$[A-Za-z_][\w]*|process\.env\.[\w]+|\*+)$/i;
-// BA-26: keys may contain Turkish letters; the lookbehind replaces \b, which does not treat them as word characters.
 const assignment =
   /(?<![A-Za-z0-9_])([A-Za-z_\u00c7\u00e7\u011e\u011f\u0130\u0131\u00d6\u00f6\u015e\u015f\u00dc\u00fc][A-Za-z0-9_.\u00c7\u00e7\u011e\u011f\u0130\u0131\u00d6\u00f6\u015e\u015f\u00dc\u00fc-]{0,127})["']?[ \t]*[:=][ \t]*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|(\$\{[A-Za-z_][A-Za-z0-9_]*\}|[^\s,;"'\]}]+))/g;
 const secretKey =
   /(?:password|passwd|passphrase|(?:^|[_ .-])pwd|secret|token|api[_ .-]?key|access[_ .-]?key|credential|private[_ .-]?key)|(?:^|[_ .-])(?:\u015fifre|sifre|parola)$/i;
 const explicitKey = /(?:password|passwd|passphrase|(?:^|[_ .-])pwd|secret)|(?:^|[_ .-])(?:\u015fifre|sifre|parola)$/i;
-// BA-26 fix1: keys are folded before matching: dotted capital İ and dotless ı both count as i, so ŞİFRE matches şifre.
 const foldKey = (key) => key.replace(/[\u0130\u0131I]/g, 'i');
-// BA-26 fix1: query-string and matrix parameters (?k=v&k2=v2, ;k=v, #k=v). After a URL scheme the general assignment pass consumes
-// the rest of the URL as the value of the scheme, so these pairs get their own pass with anchored key rules: the last key segment
-// must be a secret word, which keeps keys such as password_policy or token_count out of the findings.
 const queryPair =
   /(?<=[?&;#])([A-Za-z_\u00c7\u00e7\u011e\u011f\u0130\u0131\u00d6\u00f6\u015e\u015f\u00dc\u00fc][A-Za-z0-9_.\u00c7\u00e7\u011e\u011f\u0130\u0131\u00d6\u00f6\u015e\u015f\u00dc\u00fc-]{0,127})=(\$\{[A-Za-z_][A-Za-z0-9_]*\}|[^\s&;#"'<>,\]}]+)/g;
 const queryExplicit = /(?:^|[_.-])(?:password|passwd|passphrase|pwd|secret|\u015fifre|sifre|parola)$/i;
@@ -32,7 +27,6 @@ function highEntropy(value) {
   }
   return entropy >= 3;
 }
-/** @param {string} text @param {{rules?:object[]}} options */
 export function scanText(text, options = {}) {
   if (typeof text !== 'string') throw new TypeError('Expected text to be a string');
   const findings = [];
@@ -51,7 +45,6 @@ export function scanText(text, options = {}) {
       add(rule.id, match.index, match.index + match[0].length);
     }
   }
-  // BA-26: personal-data findings are reported only when their checksum agrees; a failing candidate is not a finding.
   for (const rule of PERSONAL_RULES) {
     for (const match of text.matchAll(
       new RegExp(rule.pattern.source, rule.pattern.flags.includes('g') ? rule.pattern.flags : rule.pattern.flags + 'g')
@@ -60,7 +53,6 @@ export function scanText(text, options = {}) {
     }
   }
   for (const match of text.matchAll(assignment)) {
-    // Query-form keys (after ? & ; #) are handled by the query pass below, with its anchored key rules.
     const before = match.index > 0 ? text[match.index - 1] : '';
     if (before && '?&;#'.includes(before)) continue;
     const key = foldKey(match[1]),
@@ -102,7 +94,6 @@ function sortFindings(findings) {
   return findings.sort((a, b) => a.start - b.start || b.end - a.end || a.ruleId.localeCompare(b.ruleId));
 }
 
-// Segment matching avoids regular-expression backtracking for user-supplied globs.
 function segmentMatch(pattern, value) {
   let p = 0,
     v = 0,
@@ -127,7 +118,6 @@ function globMatch(glob, path) {
   const parts = glob.split('/').filter(Boolean),
     items = path.split('/').filter(Boolean);
   if (parts.length === 1) return items.some((item) => segmentMatch(parts[0], item));
-  // A leading ** gives slash-containing patterns the same nested-path behavior.
   const patterns = ['**', ...parts];
   let states = new Set([0]);
   const expand = (set) => {
@@ -144,7 +134,6 @@ function globMatch(glob, path) {
   }
   return expand(states).has(patterns.length);
 }
-/** @param {string} relPath @param {{denyGlobs?:string[],extraDenyGlobs?:string[]}} options */
 export function scanPath(relPath, options = {}) {
   if (typeof relPath !== 'string') throw new TypeError('Expected path to be a string');
   const normalize = (s) =>
@@ -157,13 +146,10 @@ export function scanPath(relPath, options = {}) {
   const patterns = [...DENY_GLOBS, ...(options.denyGlobs ?? []), ...(options.extraDenyGlobs ?? [])];
   const denied = patterns.some((glob) => globMatch(normalize(glob), path));
   const basename = path.slice(path.lastIndexOf('/') + 1);
-  // A generic secret(s).<extension> filename remains sensitive, while Markdown
-  // slugs such as team-secret-rotation-notes-v0.md are ordinary wiki page names.
   const genericSecretFile = /^secrets?\.(?!.*\.md$).+/i.test(basename);
   return denied || genericSecretFile ? [{ ruleId: 'denied-path', kind: 'path', start: 0, end: relPath.length }] : [];
 }
 
-/** Return the persisted, value-free identity for one safety finding. */
 export function fingerprintSafetyFinding(relPath, text, finding) {
   if (typeof relPath !== 'string' || typeof text !== 'string' || !finding || typeof finding.ruleId !== 'string') {
     throw new TypeError('Invalid safety finding');
@@ -183,7 +169,6 @@ export function fingerprintSafetyFinding(relPath, text, finding) {
   return { path: relPath, ruleId: finding.ruleId, sha256: createHash('sha256').update(matchedBytes).digest('hex') };
 }
 
-/** Match a finding against the exact value-free entries stored in safety.allow. */
 export function isSafetyFindingAllowed(relPath, text, finding, allow = []) {
   if (!Array.isArray(allow)) return false;
   const fingerprint = fingerprintSafetyFinding(relPath, text, finding);
@@ -195,10 +180,8 @@ export function isSafetyFindingAllowed(relPath, text, finding, allow = []) {
       (Object.hasOwn(fingerprint, 'sha256') ? entry.sha256 === fingerprint.sha256 : !Object.hasOwn(entry, 'sha256'))
   );
 }
-/** @param {string} text @param {{rules?:object[],personal?:boolean}} options */
 export function redact(text, options = {}) {
   const findings = scanText(text, options);
-  // BA-26: with the personal option, e-mail and TR phone numbers are redacted too. Output only; scanText never reports them.
   if (options.personal) {
     for (const rule of CONTACT_RULES) {
       for (const match of text.matchAll(new RegExp(rule.pattern.source, 'g'))) {

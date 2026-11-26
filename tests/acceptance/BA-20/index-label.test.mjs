@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20 independent acceptance (blind): index entry labels (title) and summaries are line-safe. CR, LF, U+0085, U+2028,
-// U+2029 and other control characters become one space; empty labels fall back to the file name; Turkish letters and
-// emoji are kept; wiki_create_entity and wiki_update_index follow the same rule.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, startServer, readIndexText, entryLines, CONTROL_RE } from './harness.mjs';

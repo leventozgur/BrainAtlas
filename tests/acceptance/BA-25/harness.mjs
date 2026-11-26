@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25 independent acceptance harness (written by the tester, not by the developer). Not a test file.
-// Starts real MCP stdio server processes (one per client) from the worktree (candidate). No network: the servers use the
-// lite profile and no embedding provider.
 import { mkdtemp, mkdir, cp, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,12 +15,11 @@ export const WT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 export const LOCK_NAME = '.brainatlas-write.lock';
 export const BIN = (root) => join(root, 'packages/mcp/bin/brainatlas-mcp.mjs');
 export const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
-export const secret = () => ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-'); // built at runtime
+export const secret = () => ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-');
 
 export const page = (title, body, extra = '') =>
   `---\ntype: concept\ntitle: ${title}\nstatus: active\n${extra}---\n${body}\n`;
 
-/** Fresh vault copy of the shared demo vault, an isolated HOME, and a lite config file. */
 export async function makeFixture(t, { readOnly = false } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'ba25-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
@@ -57,7 +53,6 @@ export async function makeFixture(t, { readOnly = false } = {}) {
   };
 }
 
-/** One MCP client = one real server process. `root` is the worktree (candidate) or the main checkout (baseline). */
 export async function openClient(t, root, fixture, name = 'ba25-tester') {
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -91,7 +86,6 @@ export function okJson(result) {
 export const isErr = (result, code) =>
   result.isError === true && (code === undefined || textOf(result).startsWith(code));
 
-/** Raw stdio JSON-RPC server process (used when the test must SIGKILL the server at a precise moment). */
 export function rawServer(root, env) {
   const child = spawn(process.execPath, [BIN(root)], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
   let buffer = '';
@@ -111,7 +105,6 @@ export function rawServer(root, env) {
       }
     }
   });
-  // A killed server closes its stdin: pending writes then fail with EPIPE, which is expected when the test kills it.
   child.stdin.on('error', () => {});
   const exited = new Promise((resolveExit) => child.once('exit', (code, signal) => resolveExit({ code, signal })));
   const request = (method, params) =>
@@ -138,7 +131,6 @@ export function rawServer(root, env) {
   };
 }
 
-/** Recursive file list (absolute paths). */
 export async function filesUnder(dir) {
   const out = [];
   if (!existsSync(dir)) return out;
@@ -150,20 +142,17 @@ export async function filesUnder(dir) {
   return out.sort();
 }
 
-/** Spawns a long-lived child (for a live pid) and returns its pid and a stop function. */
 export function liveChild(t) {
   const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)'], { stdio: 'ignore' });
   t.after(() => {
     try {
       child.kill('SIGKILL');
-    } catch {
-      /* gone */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   });
   return child.pid;
 }
 
-/** A pid that certainly no longer exists (its child has been reaped). */
 export async function deadPid() {
   const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
   await new Promise((resolveExit) => child.once('exit', resolveExit));
@@ -182,7 +171,6 @@ export async function fileExists(path) {
   }
 }
 
-/** Lines of the index that do not match the Markdown shapes the Wiki writes (heading, entry, blank). */
 export function invalidIndexLines(text) {
   const bad = [];
   if (!text.endsWith('\n')) bad.push('<no trailing newline>');

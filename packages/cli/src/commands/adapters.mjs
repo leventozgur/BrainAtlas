@@ -14,7 +14,6 @@ import { adapterConfig, managedRoots } from './shared.mjs';
 
 const defaultAdapterRoot = fileURLToPath(new URL('../../../adapters/', import.meta.url));
 
-/** Tests may point at a temporary adapter directory; both variables must be set. */
 function adapterRootFor(env) {
   const root = env?.BRAINATLAS_ADAPTER_ROOT;
   return env?.BRAINATLAS_TEST_ADAPTERS === '1' && typeof root === 'string' && root.length > 0
@@ -30,7 +29,6 @@ const listNames = (directory) =>
   });
 
 /**
- * Evidence-based detection of one adapter. A load failure means not detected.
  * @param {{agent: string, env: any}} options
  * @returns {Promise<{detected: boolean, evidence: string[]}>}
  */
@@ -39,14 +37,12 @@ export async function detectAdapter({ agent, env }) {
     const adapter = await import(pathToFileURL(join(adapterRootFor(env), agent, 'src/index.mjs')).href);
     const result = adapter.detect(env);
     if (result && typeof result.detected === 'boolean' && Array.isArray(result.evidence)) return result;
-  } catch {
-    /* an adapter that cannot be loaded or probed is not detected */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   return { detected: false, evidence: [] };
 }
 
 /**
- * Plan (and unless `plan` is set, apply) the install of one adapter.
  * @param {{agent: string, cfg: any, paths: any, env: any, plan?: boolean}} options
  * @returns {Promise<{changes?: any, warning?: string}>}
  */
@@ -54,9 +50,8 @@ export async function installAdapter({ agent, cfg, paths, env, plan }) {
   let available = [];
   try {
     available = await readdir(adapterRootFor(env));
-  } catch {
-    /* a missing adapters directory means no adapters are available */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   if (!available.includes(agent)) return { warning: `Adapter ${agent} is unavailable.` };
   try {
     const adapter = await import(pathToFileURL(join(adapterRootFor(env), agent, 'src/index.mjs')).href);
@@ -121,7 +116,6 @@ export async function installAdapter({ agent, cfg, paths, env, plan }) {
 }
 
 /**
- * Remove one adapter's managed content. With `plan`, only report what would change.
  * @param {{agent: string, cfg: any, paths: any, env: any, plan?: boolean}} options
  * @returns {Promise<{changes?: any, warning?: string}>}
  */
@@ -138,9 +132,6 @@ export async function removeAdapter({ agent, cfg, paths, env, plan }) {
       shimPath: paths.binPath,
       now: new Date(),
     };
-    // An init-time conflict (for example a pre-existing skill file) must not stop uninstall:
-    // removal reaches the adapter so it can report E_MANAGED_BLOCK_EDITED or restore user bytes.
-    // A user's MCP entry or hook must not block removing the cli-channel files either.
     const planForRemoval = async () => {
       if (typeof adapter.plan !== 'function') return { changes: [] };
       try {
@@ -202,7 +193,6 @@ export async function removeAdapter({ agent, cfg, paths, env, plan }) {
 }
 
 /**
- * Health of one installed adapter, as computed by `doctor` for `adapter:<agent>`.
  * @param {{agent: string, cfg: any, paths: any, env: any}} options
  * @returns {Promise<{ok?: boolean, warnings?: string[], capabilities?: any, warning?: string}>}
  */

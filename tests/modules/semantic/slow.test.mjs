@@ -200,7 +200,6 @@ test('a failed final partial write does not mask the provider error or the cance
       }
       return original(texts);
     };
-    // A directory in place of the partial file makes the final write fail with a state error.
     await mkdir(partialPath(f), { recursive: true });
     await assert.rejects(updateSemanticIndex({ ...f, indexBatchSize: 2, signal: controller.signal }), (error) => {
       assert.equal(error.code, mode === 'provider' ? 'E_PROVIDER_FAILURE' : 'E_SEMANTIC_ABORTED', mode);

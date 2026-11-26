@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-32b: per-block clips of the opt-in progressive hook format — the first full block is never clipped by progressive
-// packing, the second is clipped to 300 UTF-16 units, and `full` stays byte-identical. Hermetic: temporary vault, state
-// and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -49,7 +46,6 @@ async function run(f, session, prompt, { hooks = {}, retrieval = {}, client = 'c
 const ask = async (f, session, prompt, options) =>
   text(await run(f, session, prompt, { hooks: { disclosure: 'progressive' }, ...options }));
 const excerpts = (context) => context.split('\n\n').map((block) => block.split('\n').slice(1).join('\n'));
-// A short page that outranks the long one, so the long snippet is always the second full block.
 const strong = ['# Strong', 'zebrafish '.repeat(6).trim()].join('\n');
 const clipped = (snippet) => ({ 'aa.md': `${strong}\n`, 'zz-long.md': snippet });
 

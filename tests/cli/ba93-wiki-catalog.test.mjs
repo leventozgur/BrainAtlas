@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-93: `brainatlas wiki` subcommands come from the operation catalog; update, create and link follow the
-// write rules (stdin, readOnly, dry run) and `wiki index` is gone.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

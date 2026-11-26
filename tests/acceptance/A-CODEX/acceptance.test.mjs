@@ -195,9 +195,8 @@ test('symlinked target file cannot redirect writes outside scope', async (t) => 
   await symlink(f.sentinel, f.toml);
   try {
     await adapter.apply(adapter.plan(f.ctx), f.ctx);
-  } catch {
-    /* the write is expected to fail; the assertion below covers the outcome */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   assert.equal(await get(f.sentinel), 'model = "outside"\n');
 });
 test('synthetic secret does not appear in errors or review', async (t) => {

@@ -11,10 +11,6 @@ import {
   snapshotPath,
 } from '../install-manifest.mjs';
 
-/**
- * BA-61: the config an adapter sees. Identical to `cfg` unless a per-agent channel entry exists.
- * @param {any} cfg @param {string} agent
- */
 export function adapterConfig(cfg, agent) {
   const map = cfg?.channels;
   if (!map || typeof map !== 'object' || !Object.hasOwn(map, agent)) return cfg;
@@ -97,8 +93,6 @@ export function currentReleaseDir(paths, current) {
 export function redactOutput(value, home) {
   const redactString = (text) => {
     let result = home ? text.split(home).join('~') : text;
-    // The core redactor catches user:password@, but URL userinfo can also be
-    // username-only. Remove the entire userinfo component for every URL form.
     result = result.replace(/\b([a-z][a-z0-9+.-]{0,31}:\/\/)([^\s/?#]*)/gi, (match, scheme, authority) => {
       const at = authority.lastIndexOf('@');
       return at < 0 ? match : `${scheme}[REDACTED]@${authority.slice(at + 1)}`;

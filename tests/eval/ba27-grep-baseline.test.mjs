@@ -31,11 +31,8 @@ test('query terms are folded for Turkish and drop stop words; no stemming', () =
 
 test('ranking: distinct matched terms first, then matching-line total, then path; only matching files are returned', (t) => {
   const f = fixture(t);
-  // alpha has all three terms; gamma has quartz and ember (2 distinct); beta has only zebra; delta matches nothing.
   assert.deepEqual(grepRanking(f.corpus, 'zebra quartz ember'), ['alpha.md', 'gamma.md', 'beta.md']);
-  // alpha has two zebra lines, beta one.
   assert.deepEqual(grepRanking(f.corpus, 'zebra'), ['alpha.md', 'beta.md']);
-  // Equal distinct and total counts fall back to the path.
   assert.deepEqual(grepRanking(f.corpus, 'quartz'), ['alpha.md', 'gamma.md']);
   assert.deepEqual(grepRanking(f.corpus, 'cedar river'), ['sub/delta.md']);
   assert.deepEqual(grepRanking(f.corpus, 'nothing matches here'), []);
@@ -56,8 +53,6 @@ test('metrics: recallAt5 and mrrAt10 follow the BM25 definitions; currentFirstRa
   const result = runGrepBaseline({ corpusDir: f.corpus, casesFile });
   assert.equal(result.n, 4);
   assert.equal(result.currentCases, 1);
-  // Answerable: a, b, d. a ranks alpha first (rr 1). b ranks beta first (rr 1, current-state hit). d matches alpha and gamma
-  // only (quartz), so beta is never ranked and d scores 0. recallAt5 = (1 + 1 + 0) / 3 and mrrAt10 = (1 + 1 + 0) / 3.
   assert.ok(Math.abs(result.recallAt5 - 2 / 3) < 1e-12, `recall ${result.recallAt5}`);
   assert.ok(Math.abs(result.mrrAt10 - 2 / 3) < 1e-12, `mrr ${result.mrrAt10}`);
   assert.equal(result.currentFirstRate, 1);
@@ -103,9 +98,9 @@ test('unanswerable cases: unansweredReturnedRate counts cases where a term match
   fs.writeFileSync(
     casesFile,
     JSON.stringify([
-      { id: 'u1', query: 'cedar', relevant: [], abstain: true }, // matches delta.md
-      { id: 'u2', query: 'xylophone', relevant: [], abstain: true }, // no term matches
-      { id: 'u3', query: 'zebra', relevant: [], abstain: true }, // matches
+      { id: 'u1', query: 'cedar', relevant: [], abstain: true },
+      { id: 'u2', query: 'xylophone', relevant: [], abstain: true },
+      { id: 'u3', query: 'zebra', relevant: [], abstain: true },
       { id: 'a1', query: 'ember', relevant: ['alpha.md'] },
     ])
   );

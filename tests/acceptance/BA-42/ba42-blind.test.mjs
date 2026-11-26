@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-42 independent blind acceptance tests: hypotheses 1-3 and spec-edge cases for `brainatlas maintain --repo`.
-// Written from the brief only; the developer's ba42 tests were not read. Fixtures come from make-fixtures.mjs and are
-// frozen by the pinned digest below. Main (the parent of the git common dir) is run read-only from its checkout.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -18,7 +15,6 @@ const MAIN = dirname(
   resolve(DEV, execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: DEV, encoding: 'utf8' }).trim())
 );
 const FIX = join(HERE, 'fixtures');
-// Scratch lives outside the repository (os.tmpdir) and is removed after the file's tests, so no run leaves files behind.
 const SCRATCH = await mkdtemp(join(tmpdir(), 'ba42-blind-'));
 after(async () => {
   await rm(SCRATCH, { recursive: true, force: true });
@@ -43,7 +39,6 @@ const KINDS = [
 const LABELS = JSON.parse(await readFile(join(FIX, 'labels.json'), 'utf8'));
 const RESULTS = {};
 
-// ---- Scratch: an empty HOME and a git shim that logs every git invocation of the product, then runs the real git.
 await mkdir(HOME_DIR, { recursive: true });
 await mkdir(SHIM_DIR, { recursive: true });
 const REAL_GIT = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
@@ -51,7 +46,6 @@ await writeFile(join(SHIM_DIR, 'git'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${GIT
   mode: 0o755,
 });
 
-// ---- Helpers.
 function runCli(which, args, { cwd = DEV } = {}) {
   const r = spawnSync(process.execPath, [CLI[which], 'maintain', ...args], {
     cwd,
@@ -101,7 +95,6 @@ async function digestOf(root) {
   return { digest: createHash('sha256').update(JSON.stringify(entries)).digest('hex'), entries };
 }
 
-/** Full read-only snapshot: names, sizes, mtimes, inodes, content hashes and symlink targets. */
 async function snapshot(root) {
   const out = [];
   const rootInfo = await lstat(root);
@@ -133,7 +126,6 @@ async function snapshot(root) {
   return out;
 }
 
-/** The product's canonical keys for stale-source and stale-symbol findings. Other kinds are not part of the BA-42 check. */
 function canon(f) {
   if (f.kind === 'stale-source') {
     const m = /^repo file not found: (.*)$/u.exec(f.detail);
@@ -171,12 +163,8 @@ const unexpectedOf = (actual, expected) => {
 };
 const nonStale = (findings) => findings.filter((f) => f.kind !== 'stale-source' && f.kind !== 'stale-symbol');
 const nonBaseline = (findings) => findings.filter((f) => f.kind === 'stale-source' || f.kind === 'stale-symbol');
-// BA-54 changed this contract: `maintain --repo` now verifies the `@<commit>` suffix of `repo:` sources with read-only git,
-// so `unknown-commit`, `source-drift` and `unverifiable` can appear next to the BA-42 kinds. The fixtures' commits are
-// synthetic, so `unknown-commit`/`unverifiable` are expected; these kinds are still never keys of `counts`.
 const BA54_KINDS = ['unknown-commit', 'source-drift', 'unverifiable'];
 const withoutBa54 = (findings) => findings.filter((f) => !BA54_KINDS.includes(f.kind));
-// BA-54: with `--repo` and a commit-bearing source the product may only run these read-only git subcommands.
 const READ_ONLY_GIT_SUBCOMMANDS = new Set(['rev-parse', 'cat-file', 'diff']);
 function assertOnlyReadOnlyGit(log, label) {
   for (const line of log.split('\n').filter(Boolean)) {
@@ -189,7 +177,6 @@ function assertOnlyReadOnlyGit(log, label) {
   }
 }
 
-// ---- Fixture freeze.
 test('fixtures are frozen: manifest digest equals the pinned value and every entry still matches', async () => {
   const manifest = JSON.parse(await readFile(join(FIX, 'MANIFEST.json'), 'utf8'));
   const now = await digestOf(FIX);
@@ -218,7 +205,6 @@ test('instrument self-check: the git shim logs a git call made from a child proc
   await rm(GIT_LOG, { force: true });
 });
 
-// ---- Hypothesis 1: detection of broken attributions.
 test('H1 detection: >= 25 broken references on a >= 60 page vault, detection rate >= 0.90', () => {
   const r = runJson('dev', ['--vault', VAULT.main, '--repo', REPO]);
   assert.equal(r.status, 0);
@@ -246,7 +232,6 @@ test('H1 detection: >= 25 broken references on a >= 60 page vault, detection rat
   assert.ok(rate >= 0.9, `detection rate ${rate}`);
 });
 
-// ---- Hypothesis 2: false positives on valid attributions.
 test('H2 false positives: >= 50 valid references, false-positive rate <= 5%', () => {
   const r = runJson('dev', ['--vault', VAULT.main, '--repo', REPO]);
   const actual = actualOf(r.body.findings);
@@ -267,10 +252,6 @@ test('H2 false positives: >= 50 valid references, false-positive rate <= 5%', ()
   assert.ok(rate <= 0.05, `false-positive rate ${rate}`);
 });
 
-// ---- Hypothesis 3: guard rails.
-// BA-54 changed this contract: `--repo` runs on a vault with `@<commit>` sources do call read-only git (`rev-parse`,
-// `cat-file`, `diff --quiet`). Runs without `--repo`, and `--repo` runs on a vault with no commit-bearing source, still
-// start no git process at all. The read-only snapshots stay byte-identical in every case.
 test('H3 read-only: vault, repo, HOME snapshot are unchanged by --repo and non-repo runs; git is only read-only', async () => {
   const before = {
     main: await snapshot(VAULT.main),
@@ -279,7 +260,6 @@ test('H3 read-only: vault, repo, HOME snapshot are unchanged by --repo and non-r
     repo: await snapshot(REPO),
     home: await snapshot(HOME_DIR),
   };
-  // vault-main and vault-edge carry `repo:<path>@<commit>` sources; vault-demo has none.
   const commitBearing = new Set(['main', 'edge']);
   for (const [v, vault] of Object.entries(VAULT)) {
     await rm(GIT_LOG, { force: true });
@@ -322,8 +302,6 @@ test('H3 no --repo: findings, counts and pages equal main on three vaults (JSON 
   assert.equal(rows[0].findings, 0, 'vault-main has no baseline findings');
 });
 
-// BA-54 changed this contract: `counts` must still equal a run without `--repo`; the new commit kinds are compared away
-// because they are expected on this fixture repository, whose commits are synthetic.
 test('H3 counts are unchanged by --repo and the new kinds stay out of counts', () => {
   for (const v of ['main', 'demo', 'edge']) {
     const without = runJson('dev', ['--vault', VAULT[v]]);
@@ -366,7 +344,6 @@ test('H3 no file content: findings, human output and receipt candidates carry no
   RESULTS.h3Leak = { jsonBytes: json.length, candidates: candidates.map((c) => c.title) };
 });
 
-// ---- Spec-edge cases (not part of the thresholds; each has an explicit expectation).
 test('edge: every spec-edge page reports exactly its expected stale findings, nothing more', () => {
   const r = runJson('dev', ['--vault', VAULT.main, '--repo', REPO]);
   const actual = actualOf(r.body.findings);
@@ -388,8 +365,6 @@ test('edge: a file reported missing through both sources and symbols is reported
   assert.equal(hits.length, 1);
 });
 
-// BA-54 changed this contract: the fixture commit `a1b2c3d` is synthetic, so `unknown-commit` is expected here and is
-// filtered out; the stale-source assertion is unchanged.
 test('edge: with-repo page in vault-edge reports only the missing source, and the valid commit reference passes', () => {
   const r = runJson('dev', ['--vault', VAULT.edge, '--repo', REPO]);
   const hits = withoutBa54(r.body.findings)
@@ -455,7 +430,6 @@ test('edge: a symlinked directory on the path is not followed', async () => {
     ].join('\n')
   );
   const r = runJson('dev', ['--vault', vault, '--repo', repo]);
-  // The added page is not listed in the index, so baseline orphan and index-missing findings also appear; only stale kinds are checked here.
   const hits = nonBaseline(r.body.findings)
     .filter((f) => f.path === 'wiki/services/dirlink.md')
     .map((f) => `${f.kind}|${f.detail}`);

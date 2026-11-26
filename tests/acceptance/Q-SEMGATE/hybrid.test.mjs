@@ -59,7 +59,6 @@ test('default searchHybrid preserves legacy RRF output and puts a semantic rank-
   const actual = await searchHybrid(args);
   const explicitLegacyDefaults = await searchHybrid({ ...args, weights: [1, 1], mode: 'rrf' });
 
-  // Reconstruct the old default pipeline and compare its full result objects.
   const lexical = search(buildIndex(pages), 'needle', { limit: 20 }).results;
   const semantic = entries
     .map((entry) => {

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-91: `brainatlas plan` runs the plan_read/plan_update MCP handlers in process. Hermetic: temporary HOME and vault.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

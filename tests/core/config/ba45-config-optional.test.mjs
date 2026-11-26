@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-45: config set may create optional schema keys that are absent; config unset removes them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

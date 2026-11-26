@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 blind acceptance: wiki_update_index minimal edit, over a real stdio MCP client/server.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -10,8 +9,6 @@ const page = (frontmatter, body = 'Gövde.') => `---\n${frontmatter}\n---\n${bod
 const lf = (lines) => lines.join('\n');
 const crlf = (lines) => lines.join('\r\n');
 
-// Pages on disk for the main fixture. Includes a subfolder page, a renamed page, a bracketed title, and a page
-// that is linked twice in the index.
 const MAIN_PAGES = {
   'entities/ahmet.md': page(
     'type: entity\ntitle: Ahmet Yılmaz\nsummary: "Türkçe özet 🚀 çok önemli"\ntags: [kişi, türkçe]'
@@ -23,9 +20,6 @@ const MAIN_PAGES = {
   'concepts/kavram-b.md': page('title: Kavram B\ndescription: "B özet"'),
 };
 
-// Hand-edited index: Turkish and emoji summaries, several tags, out-of-order categories, a blockquote note,
-// a plain paragraph inside a category, external and anchor links, a duplicate entry, a ### sub-heading, a stale
-// entry (deleted page) and a stale entry for a renamed page. Trailing newline present.
 const INDEX_MAIN = [
   '# Wiki Index',
   '',
@@ -55,7 +49,6 @@ const INDEX_MAIN = [
   '',
 ];
 
-// Expected result for INDEX_MAIN with MAIN_PAGES: added Kavram B, Derin Sayfa, Yeni Ad, Yeni Sayfa; removed Silinen, Eski ad.
 const EXPECTED_MAIN = [
   '# Wiki Index',
   '',
@@ -151,7 +144,7 @@ test('C: LF index without a final newline gets a new category appended and keeps
 });
 
 test('D: CRLF index without a final newline ends with a clean line ending after a removed last line', async (t) => {
-  const withoutLastEmpty = INDEX_MAIN.slice(0, -1); // last line is the stale entry, no EOL after it
+  const withoutLastEmpty = INDEX_MAIN.slice(0, -1);
   const f = await startServer(t, { files: { ...MAIN_PAGES, 'index.md': crlf(withoutLastEmpty) } });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 6, added: 4, removed: 2 });
   const out = await readFile(join(f.wiki, 'index.md'), 'utf8');

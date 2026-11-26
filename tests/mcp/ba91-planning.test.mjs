@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-91: planning layout, plan_read/plan_update, template shapes and the Wiki misplacement warning.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';

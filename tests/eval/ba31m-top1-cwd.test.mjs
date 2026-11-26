@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-31m: withCwd subsummary, top1RelevantRate and top1ExcludedRate, checked against values computed by hand
-// on toy records (no retrieval involved).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { summarizeHookRecords } from '../../eval/lib/hook-records.mjs';
@@ -23,11 +21,6 @@ const rec = (over) => ({
   ...over,
 });
 
-// R1: cwd a, answerable, first block relevant; excluded page injected second only.
-// R2: cwd b, answerable, first block is the excluded (other project) page.
-// R3: operational abstain, no cwd, nothing injected.
-// R4: cwd a, answerable, nothing injected (miss, no excluded list).
-// R5: no cwd, answerable, first block relevant; excluded page not injected.
 const TOY = [
   rec({ cwd: '/srv/work/a', relevant: ['a.md'], excluded: ['b.md'], injected: ['a.md', 'b.md'] }),
   rec({ cwd: '/srv/work/b', relevant: ['c.md'], excluded: ['a.md'], injected: ['a.md'] }),

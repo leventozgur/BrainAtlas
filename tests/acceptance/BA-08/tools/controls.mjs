@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-08 holdout control check (brief step 3). Not part of npm test: it reads the PM holdout cases, which are not repository
-// content. Usage: node tests/acceptance/BA-08/tools/controls.mjs <holdout/BA-v2 directory>
-// For ctl-* cases and every trust case, the first result (path, score) and the abstain decision must equal main 6cac7a7.
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadMainRetrieval, dispose, loadWorktreeRetrieval, MAIN_COMMIT } from '../helpers/main-core.mjs';

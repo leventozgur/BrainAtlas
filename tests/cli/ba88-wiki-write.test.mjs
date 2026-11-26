@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-88: `brainatlas wiki write` and `brainatlas wiki reindex` run the MCP write handlers in process, and
-// `--dry-run` runs every check without writing anything. Hermetic: temporary vault, HOME and state directories only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

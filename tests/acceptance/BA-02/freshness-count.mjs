@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 measurement (hypothesis 1): count external edits visible to the next wiki_query over stdio MCP.
-// usage: node freshness-count.mjs <repoRoot> [repeats=3]
-// Each repeat: fresh vault; each external change is followed by one wiki_query; a step is visible when the
-// expected path set is returned exactly. Prints JSON with per-kind counts.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -65,7 +61,6 @@ for (let rep = 0; rep < Number(repArg); rep++) {
       b = await start(f);
     try {
       const w = (n, t) => fs.writeFileSync(path.join(wiki, n), t);
-      // add (x3 distinct terms)
       for (const [n, term] of [
         ['a1.md', 'ta1term'],
         ['a2.md', 'ta2term'],
@@ -74,11 +69,9 @@ for (let rep = 0; rep < Number(repArg); rep++) {
         w(n, `# ${n}\n${term} body\n`);
         tally('external add', ok(await hits(a, term), [n]));
       }
-      // edit content (x2)
       w('a1.md', '# a1\nre1term body\n');
       tally('external edit (different terms)', ok(await hits(a, 're1term'), ['a1.md']));
       tally('external edit: old term gone', ok(await hits(a, 'ta1term'), []));
-      // same-size edit with mtime restored
       const ref = fs.lstatSync(path.join(wiki, 'a2.md'), { bigint: true });
       w('a2.md', '# a2\nta2termX body\n'.slice(0, 0) + '# a2\n' + 'wombats body\n'.slice(0, 'wombats body\n'.length));
       execFileSync('python3', [
@@ -89,19 +82,15 @@ for (let rep = 0; rep < Number(repArg); rep++) {
         ref.mtimeNs.toString(),
       ]);
       tally('same-size edit, mtime restored', ok(await hits(a, 'wombats'), ['a2.md']));
-      // rename
       fs.renameSync(path.join(wiki, 'a3.md'), path.join(wiki, 'a3-renamed.md'));
       tally('external rename', ok(await hits(a, 'ta3term'), ['a3-renamed.md']));
-      // delete
       fs.rmSync(path.join(wiki, 'a3-renamed.md'));
       tally('external delete', ok(await hits(a, 'ta3term'), []));
-      // second MCP process writes via MCP, first process queries
       const r = await b.client.callTool({
         name: 'wiki_write_page',
         arguments: { path: 'wiki/p2.md', content: '---\ntitle: P2\n---\n# P2\np2term body\n' },
       });
       tally('second-MCP-process write', !r.isError && ok(await hits(a, 'p2term'), ['p2.md']));
-      // second MCP process deletes via filesystem
       fs.rmSync(path.join(wiki, 'p2.md'));
       tally('file deleted by other process', ok(await hits(a, 'p2term'), []));
     } finally {

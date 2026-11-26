@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 blind acceptance: runHook on a 2000-page synthetic vault returns the same envelopes with a cold and a warm cache,
-// and a page added outside the process is injected by the next prompt. No network, no timing assertions.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -11,10 +9,6 @@ import { runHook } from '../../../packages/hooks/src/index.mjs';
 import { writeSyntheticCorpus } from '../../../eval/lib/synthetic-corpus.mjs';
 
 const NOW = new Date('2026-01-15T00:00:00Z');
-// PM update (2026-11-11): the original pinned digest of main 1eeec6e's output broke as soon as BA-16 intentionally changed the
-// hook's packing. Parity with 1eeec6e was verified by the blind tester before merge (hook-parity.mjs, digest b564e2448b97d7f1).
-// The durable property is that the BA-02 cache never changes hook output: a cold run (no cache) and a warm run (cache hit) on
-// the same vault and prompts must produce identical envelopes.
 async function envelopes(vault, stateDir, queries) {
   const config = {
     vault: { path: path.resolve(vault) },
@@ -50,7 +44,7 @@ test('hook envelopes on a 2000-page vault are identical with a cold and a warm c
     warm = path.join(home, 'state-warm');
   fs.mkdirSync(cold);
   fs.mkdirSync(warm);
-  await envelopes(vault, warm, queries.slice(0, 1)); // writes the cache for the warm run
+  await envelopes(vault, warm, queries.slice(0, 1));
   const a = await envelopes(vault, cold, queries);
   const b = await envelopes(vault, warm, queries);
   assert.equal(a.injected, 20, 'every prompt should inject at least one page');

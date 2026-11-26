@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-03 probe: which suffix chains of a deep path are indexed, by leaf name shape. Read-only diagnostic.
 import { buildIndex, search } from '../../../../packages/core/src/retrieval/index.mjs';
 const now = new Date('2026-11-11T00:00:00Z');
 for (const n of [13, 20, 40])

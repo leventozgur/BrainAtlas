@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09 blind acceptance: the prompt hook marks only weak pages (`[unverified]` before the path). Verified and neutral pages keep
-// the previous title line. Contract: docs/contracts/retrieval.md, "Result field"; docs/user/okf.md, "Effect on retrieval".
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';

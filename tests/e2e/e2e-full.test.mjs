@@ -529,9 +529,8 @@ test(
       let findings = null;
       try {
         findings = JSON.parse(strict.stdout).findings;
-      } catch {
-        /* non-JSON output is handled as "invalid-output" below */
-      }
+        // eslint-disable-next-line no-empty
+      } catch {}
       if (strict.status !== 0 || !Array.isArray(findings) || findings.length) {
         const detail = Array.isArray(findings)
           ? findings.map((row) => `${row.path}:${row.rule}`).join('+')

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-23: `brainatlas maintain` reports exactly the pages whose frontmatter loadPages throws on (kind `invalid-frontmatter`),
-// and does not fail on them. Hermetic: temporary vault and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -15,13 +13,11 @@ const page = (title, body = 'zephyr body text') =>
   `---\ntype: concept\ngenerated: "2026-11-01"\nstatus: confirmed\nsources: []\nverified: []\nstale_after: "P90D"\naliases: []\nkeywords: []\n---\n\n# ${title}\n\n${body}\n`;
 const index = (...entries) => `# Wiki Index\n\n## Pages\n\n${entries.map((e) => `- [${e[0]}](${e[1]})`).join('\n')}\n`;
 const BROKEN_BODY = 'SECRET-BODY-TEXT zephyr broken body.';
-// Pages that loadPages throws on: reported as invalid-frontmatter.
 const BROKEN = {
   'wiki/concepts/yaml.md': `---\ntitle: [oops\n---\n\n# Yaml\n\n${BROKEN_BODY}\n`,
   'wiki/concepts/dup.md': `---\ntitle: A\ntitle: B\n---\n\n# Dup\n\n${BROKEN_BODY}\n`,
   'wiki/concepts/bom-yaml.md': `\uFEFF---\ntitle: [oops\n---\n\n# BomYaml\n\n${BROKEN_BODY}\n`,
 };
-// Pages that loadPages accepts (an unclosed block, a non-mapping root): not reported, as before.
 const ACCEPTED = {
   'wiki/concepts/unclosed.md': `---\ntitle: Unclosed\nstatus: confirmed\n\n# Unclosed\n\n${BROKEN_BODY}\n`,
   'wiki/concepts/list.md': `---\n- one\n- two\n---\n\n# List\n\n${BROKEN_BODY}\n`,

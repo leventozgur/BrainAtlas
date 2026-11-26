@@ -72,8 +72,6 @@ function stale(frontmatter, asOf) {
   return Number.isFinite(time) && time < asOf.getTime();
 }
 
-// Reference for the pre-section search behavior: ranking, confidence, and result metadata
-// are intentionally calculated without consulting section fields or snippets.
 function legacySearch(index, query, options = {}) {
   const queryTerms = [...new Set(terms(query, true))];
   const limit = options.limit ?? 5;
@@ -331,9 +329,6 @@ test('heading matches alone do not select an empty section and long sections sta
   assert.ok(long.snippet.endsWith('…'));
 });
 
-// PM update (BA-03, 2026-11-11): identifier-aware retrieval intentionally re-ranks queries that contain code-like
-// identifiers (file paths, versions, snake_case, CamelCase). Parity with the legacy ranking is now required for every
-// query without such a token; overall recall and abstention must stay equal and MRR must not fall.
 const IDENTIFIER_LIKE = /[\p{L}\p{N}][_./][\p{L}\p{N}]|--\p{L}|\p{Ll}\p{Lu}|\p{L}\p{N}|\p{N}\p{L}/u;
 test('old and new ranking agree for non-identifier queries; recall and abstention agree and MRR does not fall at T=0.35', (t) => {
   const cases = JSON.parse(fs.readFileSync(path.join(root, 'eval/dev/natural-cases.json'), 'utf8'));
@@ -347,8 +342,6 @@ test('old and new ranking agree for non-identifier queries; recall and abstentio
     compared++;
     const current = currentFor(item),
       old = oldFor(item);
-    // PM update (BA-09, 2026-11-11): provenance trust re-weights verified and weak (proposed/disputed) pages; results carrying
-    // a `trust` field are left out of the legacy comparison, every other result must keep its exact order and score.
     const weighted = new Set(index.docs.filter((d) => d.trust && d.trust !== 'neutral').map((d) => d.page.path));
     const keep = (r) => !weighted.has(r.path);
     const a = current.results.filter(keep),

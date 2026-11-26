@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Regenerates fixtures/golden-search.json from the checkout selected by BA17_ROOT (run it against main, not the
-// worktree). Prints only counts, never page bodies.
 import fs from 'node:fs';
 import { corpusPages, queries, budgets, thresholds } from './corpus.mjs';
 import { NOW, goldenFile, loadRetrieval } from './support.mjs';

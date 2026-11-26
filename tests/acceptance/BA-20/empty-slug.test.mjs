@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-21: Turkish/accented letters are transliterated; pins updated for that.
-// BA-20 independent acceptance (blind): a name with no ASCII letter or digit is refused with E_INVALID_INPUT, the refusal
-// text does not echo the input, and nothing (page, index, log) is written. Names with Turkish letters that still contain
-// ASCII letters are created; their slugs are reported as diagnostics.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, refused, startServer, snapshot, readIndexText, entryLines } from './harness.mjs';

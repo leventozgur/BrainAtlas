@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-38: `brainatlas compact` moves older dated H2 sections verbatim into wiki/archive/<name>-history.md.
-// Hermetic: temporary vault and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

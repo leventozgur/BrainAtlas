@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Acceptance (6) semanticSetup progress output and (7) ETA confirmation, dry-run, status partialChunks.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -10,10 +9,6 @@ import { exists, fakeClock, makeSecret, readJson, sectionPage, snapshot, tempRoo
 
 const STEP_NAMES = ['preflight', 'ollama', 'server', 'model', 'index', 'probe', 'config'];
 
-/**
- * `durations[i]` is the simulated (fake clock) duration of the i-th /api/embed document request;
- * the last value repeats.
- */
 async function fixture(
   t,
   { files, sections = 100, durations = [1000], isTTY = false, answers = [true, true], embedError } = {}
@@ -198,7 +193,6 @@ test('--json: nothing but the report JSON is returned even when progress and ETA
   for (const line of f.state.progress) assert.equal(result.output.includes(line), false);
 });
 
-// ---------- ETA confirmation (7) ----------
 test('ETA above 300 s, interactive, no --yes: one confirmation; decline stops with action-needed, config untouched, partial kept', async (t) => {
   const f = await fixture(t, { isTTY: true, durations: [200000, 1], answers: [true, false] });
   const before = await f.configBytes();
@@ -229,7 +223,7 @@ test('after a declined run, rerunning with --yes continues from the partial, ski
   await runJson(f, []);
   f.state.prompts.length = 0;
   f.state.embedRequests.length = 0;
-  f.state.embedCalls = 1; // later requests are fast
+  f.state.embedCalls = 1;
   const { exitCode, report } = await runJson(f, ['--yes']);
   assert.equal(exitCode, 0);
   assert.equal(f.state.prompts.length, 0, '--yes never prompts');
@@ -258,7 +252,6 @@ test('ETA notice appears with --yes but without any prompt, and indexing complet
 });
 
 test('ETA at or below 300 s: no notice, no ETA prompt; just above 300 s: notice and prompt (exact boundary)', async (t) => {
-  // 96 chunks: first group of 32 leaves 64; eta = D / 32 * 64 = 2 * D.
   const below = await fixture(t, { sections: 96, isTTY: true, durations: [100000, 1] });
   assert.equal((await runJson(below, [])).exitCode, 0);
   assert.equal(below.state.prompts.length, 1, 'consent only');
@@ -323,7 +316,6 @@ test('non-interactive run without --yes never prompts and never embeds (implicit
   assert.equal(f.state.embedRequests.length, 0);
 });
 
-// ---------- dry-run ----------
 test('--dry-run reports the chunks still to embed (partial excluded) and performs no write or embedding', async (t) => {
   const f = await fixture(t, { isTTY: true, durations: [200000, 1], answers: [true, false] });
   await runJson(f, []);
@@ -355,7 +347,6 @@ test('--dry-run on a fresh state counts every chunk and creates nothing', async 
   assert.equal(f.state.embedRequests.length, 0);
 });
 
-// ---------- failure paths and secrets ----------
 test('provider failures during setup indexing do not leak error text, secrets or paths and keep the contract', async (t) => {
   const secret = makeSecret();
   const f = await fixture(t, { isTTY: false, embedError: `provider exploded ${secret}` });

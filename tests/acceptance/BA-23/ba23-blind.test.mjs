@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-23 independent blind acceptance tests. Written from the brief only; the developer's ba23 tests were not read.
-// Main (def482f) is imported and executed read-only from its checkout; all fixtures and caches live under ./.tmp.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
@@ -14,7 +12,6 @@ import { resolvePaths } from '../../../packages/core/src/paths/index.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = resolve(HERE, '../../..');
-// Main checkout root: BA23_MAIN_ROOT if set, else the parent of the git common dir (the main checkout, from a worktree or from main itself).
 function mainRoot() {
   if (process.env.BA23_MAIN_ROOT) return resolve(process.env.BA23_MAIN_ROOT);
   const common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: DEV, encoding: 'utf8' }).trim();
@@ -27,7 +24,6 @@ const NOW = new Date('2026-11-12T00:00:00.000Z');
 const dev = await import(pathToFileURL(join(DEV, 'packages/core/src/retrieval/index.mjs')).href);
 const main = await import(pathToFileURL(join(MAIN, 'packages/core/src/retrieval/index.mjs')).href);
 
-// Every malformed-frontmatter shape the brief asks about, plus shapes that main must keep indexing.
 const CASES = {
   'ok.md': '---\ntitle: Ok\n---\n# Ok\nplain body',
   'bad-yaml.md': '---\ntitle: [unclosed\n---\n# Bad\nBROKENTOKEN_YAML',
@@ -65,7 +61,6 @@ async function writeTree(root, files) {
   return root;
 }
 
-// Main's verdict for one page: alone in its own directory, so no other page can affect it.
 async function mainVerdict(t, rel, content) {
   const dir = await workdir(t);
   await writeTree(dir, { [rel]: content });
@@ -77,10 +72,7 @@ async function mainVerdict(t, rel, content) {
   }
 }
 
-// MCP indexes <vault>/wiki, so its fixtures live under wiki/.
 const underWiki = (files) => Object.fromEntries(Object.entries(files).map(([k, v]) => [`wiki/${k}`, v]));
-
-// ---------- Criterion 1: skip set equals what main's loadPages throws on ----------
 
 test('BA-23 c1: skipped set is exactly the pages main loadPages rejects, and the rest match main', async (t) => {
   const vault = await writeTree(await workdir(t), {
@@ -91,16 +83,13 @@ test('BA-23 c1: skipped set is exactly the pages main loadPages rejects, and the
   const expectedSkipped = [];
   for (const [rel, content] of Object.entries(CASES)) if (await mainVerdict(t, rel, content)) expectedSkipped.push(rel);
   expectedSkipped.sort();
-  // Sanity: the fixture really exercises main's throwing path.
   assert.ok(expectedSkipped.length >= 7, `expected several main-throwing pages, got ${expectedSkipped.length}`);
   const { pages, skipped } = dev.loadPagesDetailed(vault);
   assert.deepEqual([...skipped].sort(), expectedSkipped);
-  // The loadPages contract is unchanged: it still throws on this vault.
   assert.throws(
     () => dev.loadPages(vault),
     (e) => e.code === 'E_INVALID_INPUT'
   );
-  // Readable pages are identical to main's loadPages over the same readable set.
   const clean = await workdir(t);
   await writeTree(
     clean,
@@ -112,8 +101,6 @@ test('BA-23 c1: skipped set is exactly the pages main loadPages rejects, and the
   );
   assert.deepEqual(pages, main.loadPages(clean));
 });
-
-// ---------- Criterion 1 + 5: searcher results on a broken vault equal main on the same vault with those pages deleted ----------
 
 const GOOD = {
   'good-alpha.md':
@@ -158,7 +145,6 @@ test('BA-23 c1+c5: search on a broken vault equals main search on the same vault
     const b = mainSearcher.search(q, { limit: 10 });
     assert.deepEqual(a, b, `query ${JSON.stringify(q)}`);
   }
-  // Broken-page content never surfaces.
   for (const q of ['BROKENTOKEN_ONE', 'BROKENTOKEN_THREE', 'BROKENTOKEN_FOUR']) {
     assert.equal(devSearcher.search(q, { limit: 10 }).results.length, 0, q);
   }
@@ -174,17 +160,13 @@ test('BA-23 c1+c5: searcher on a vault with broken pages does not throw and repo
   assert.deepEqual(readable, Object.keys(GOOD).sort());
 });
 
-// ---------- Criterion 1: parity of the lexical search and cache bytes with main on a clean vault ----------
-
 test('BA-23 c5: clean vault gives identical cache bytes, search results and refresh behaviour in main and dev', async (t) => {
   const vault = await writeTree(await workdir(t), GOOD);
   const devState = join(await workdir(t), 'dev-state');
   const mainState = join(await workdir(t), 'main-state');
   const d = dev.createSearcher({ vaultDir: vault, stateDir: devState, now: NOW });
   const m = main.createSearcher({ vaultDir: vault, stateDir: mainState, now: NOW });
-  // BA-41 (2026-11-15, PM): cache format changed deliberately (per-file records, new schema tag); byte parity with main dropped, result parity below kept.
   for (const q of QUERIES) assert.deepEqual(d.search(q, { limit: 10 }), m.search(q, { limit: 10 }), q);
-  // Warm cache: a second instance reads the cache and must answer the same; refreshIfChanged is false on both.
   const d2 = dev.createSearcher({ vaultDir: vault, stateDir: devState, now: NOW });
   const m2 = main.createSearcher({ vaultDir: vault, stateDir: mainState, now: NOW });
   assert.equal(d2.refreshIfChanged(), false);
@@ -200,7 +182,6 @@ test('BA-23 c5: demo-vault search and cache bytes match main', async (t) => {
   const mainState = join(await workdir(t), 'main-state');
   const d = dev.createSearcher({ vaultDir: vault, stateDir: devState, now: NOW });
   const m = main.createSearcher({ vaultDir: vault, stateDir: mainState, now: NOW });
-  // BA-41 (2026-11-15, PM): cache format changed deliberately (per-file records, new schema tag); byte parity with main dropped, result parity below kept.
   for (const q of [
     'vault backup',
     'evidence',
@@ -215,8 +196,6 @@ test('BA-23 c5: demo-vault search and cache bytes match main', async (t) => {
     assert.deepEqual(d.search(q, { limit: 5 }), m.search(q, { limit: 5 }), q);
   }
 });
-
-// ---------- Criterion 3: fix is picked up on refreshIfChanged; re-break is skipped again; no permanent skip ----------
 
 test('BA-23 c3: fixing a broken page is picked up by refreshIfChanged, re-breaking it skips it again', async (t) => {
   const vault = await writeTree(await workdir(t), {
@@ -234,10 +213,8 @@ test('BA-23 c3: fixing a broken page is picked up by refreshIfChanged, re-breaki
   assert.equal(s.refreshIfChanged(), true);
   const hit = s.search('FIXEDTOKENXYZ', { limit: 5 });
   assert.equal(hit.results[0]?.path, 'fixable.md');
-  // A fresh instance over the same state dir agrees (cache must not hold the old skip).
   const fresh = dev.createSearcher({ vaultDir: vault, stateDir, now: NOW });
   assert.equal(fresh.search('FIXEDTOKENXYZ', { limit: 5 }).results[0]?.path, 'fixable.md');
-  // Re-break with different content: skipped again, old fixed text gone, no throw.
   await writeFile(join(vault, 'fixable.md'), '---\ntitle: [again\n---\n# Fixable\nREBROKENTOKEN');
   assert.equal(s.refreshIfChanged(), true);
   assert.equal(s.search('FIXEDTOKENXYZ', { limit: 5 }).results.length, 0);
@@ -258,9 +235,6 @@ test('BA-23 c3: a cache-hit instance over a vault with a broken page still skips
   assert.equal(warm.refreshIfChanged(), false);
 });
 
-// ---------- Criterion 2: hook (real process) and MCP wiki_query on the same broken vault ----------
-
-// loadConfig reads resolvePaths().configFile under HOME (not BRAINATLAS_CONFIG), so the config is written there.
 async function envFor(t, vault) {
   const home = await workdir(t);
   const env = { HOME: home, BRAINATLAS_VAULT: vault, PATH: process.env.PATH ?? '' };
@@ -370,8 +344,6 @@ test('BA-23 c2: MCP wiki_query on a broken vault equals main MCP on the same vau
   assert.deepEqual(d.payload, m.payload);
 });
 
-// ---------- Criterion 4: maintain --json ----------
-
 function maintain(vault, home) {
   const r = spawnSync(
     process.execPath,
@@ -401,7 +373,6 @@ test('BA-23 c4: maintain --json reports invalid-frontmatter by relative path, wi
   assert.deepEqual(inv.map((f) => f.path).sort(), ['wiki/bad-yaml.md', 'wiki/sub/broken-bom.md']);
   for (const f of inv) assert.deepEqual(Object.keys(f).sort(), ['detail', 'kind', 'path']);
   assert.ok(!r.stdout.includes('BROKENTOKEN'), 'page body must not appear');
-  // Parser wording must not appear in any detail (file names such as bad-yaml.md are allowed in paths only).
   for (const f of report.findings)
     assert.ok(
       !/yaml|unclosed|duplicate|map keys|nested|flow|alias|tab/i.test(f.detail),
@@ -441,8 +412,6 @@ test('BA-23 c4: clean vault has zero invalid-frontmatter and maintain output mat
   assert.deepEqual(dr, mr);
 });
 
-// ---------- Criterion 6: security boundaries unchanged ----------
-
 test('BA-23 c6: symlinks out of the vault (files and directories) are neither indexed nor reported as skipped', async (t) => {
   const outside = await writeTree(await workdir(t), {
     'secret.md': '# Secret\nSYMLINKTOKEN',
@@ -459,7 +428,6 @@ test('BA-23 c6: symlinks out of the vault (files and directories) are neither in
   const s = dev.createSearcher({ vaultDir: vault, stateDir: join(await workdir(t), 'state'), now: NOW });
   assert.equal(s.search('SYMLINKTOKEN', { limit: 5 }).results.length, 0);
   assert.equal(s.search('OUTSIDEBAD', { limit: 5 }).results.length, 0);
-  // Parity with main on a vault whose symlinks are the only extra items.
   const m = main.createSearcher({ vaultDir: vault, stateDir: join(await workdir(t), 'mstate'), now: NOW });
   for (const q of QUERIES) assert.deepEqual(s.search(q, { limit: 10 }), m.search(q, { limit: 10 }), q);
 });
@@ -480,8 +448,6 @@ test('BA-23 c6: unsafe page paths are still dropped by buildIndex (same as main)
     ['ok.md']
   );
 });
-
-// ---------- Criterion 3 for MCP: a fixed page appears on the next query without restarting the server ----------
 
 test('BA-23 c3: MCP picks up a fixed page on a later wiki_query', async (t) => {
   const vault = await writeTree(

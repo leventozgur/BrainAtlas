@@ -23,7 +23,6 @@ function temp(t) {
   return dir;
 }
 
-// One document per identifier type, plus a document with neutral text and common words only.
 const corpus = [
   page('snake.md', 'The E_WIDGET_TIMEOUT error fires after a delay.'),
   page('hash.md', 'Release commit a1b2c3d includes the fix.'),
@@ -124,7 +123,6 @@ test('common words are not identifiers: years, short version tags, dates and pla
 });
 
 test('a query without identifiers is ranked exactly as before the exact index existed', () => {
-  // Identical to BM25F on the same index: no exact boost and no identifier abstention.
   const result = top('backups and restores');
   assert.equal(result.reason, null);
   assert.equal(result.results[0].path, 'plain.md');
@@ -233,7 +231,6 @@ test('fix1: dotted, slashed and ISO dates are never identifiers, while version s
     const result = top(`${date} tarihinde ne oldu?`);
     assert.notEqual(result.reason, NOT_FOUND, date);
   }
-  // 1.2.2025 is a date-shaped token, so it is not an identifier even though 1.2.3 (a version) is.
   const version = buildIndex([page('v.md', 'Build 1.2.2025 was tagged.'), page('w.md', '1.2.3 is the release.')], {
     now,
   });
@@ -260,6 +257,5 @@ test('fix1: a basename and its suffix chains are indexed for paths deeper than t
   const idx = buildIndex([page('deep.md', `Module ${deep} handles backoff.`), page('other.md', 'plain')], { now });
   assert.equal(search(idx, 'deep_retry.mjs nedir?', { abstainThreshold: 0.35 }).results[0].path, 'deep.md');
   assert.equal(search(idx, 'd13/deep_retry.mjs nedir?', { abstainThreshold: 0.35 }).results[0].path, 'deep.md');
-  // Non-consecutive paths remain a documented limit.
   assert.equal(search(idx, 'd3/d5/deep_retry.mjs nedir?', { abstainThreshold: 0.35 }).reason, NOT_FOUND);
 });

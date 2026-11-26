@@ -160,9 +160,8 @@ test(
     const before = await bytes(join(outside, 'mcp-config.json'));
     try {
       await a.apply(a.plan(s.ctx), s.ctx);
-    } catch {
-      /* refusal is acceptable */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     assert.deepEqual(await bytes(join(outside, 'mcp-config.json')), before);
   }
 );
@@ -182,9 +181,8 @@ test('forged plan cannot write outside owned paths', async (t) => {
   };
   try {
     await a.apply(p, s.ctx);
-  } catch {
-    /* refusal is acceptable */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   assert.deepEqual(await bytes(s.sentinel), before);
 });
 

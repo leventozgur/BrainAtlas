@@ -117,10 +117,6 @@ function toolFailure(text) {
   return failure(match[1], match[2]);
 }
 
-/**
- * @param {string[]} argv
- * @param {{env?:NodeJS.ProcessEnv}} [settings]
- */
 export async function runPlanCommand(argv, { env = process.env } = {}) {
   const { sub, vault, args, dryRun = false } = parsePlanArguments(argv);
   const { callToolInProcess, serverOptions } = await import('@brainatlas/mcp');

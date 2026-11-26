@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09: provenance trust in ranking. Hermetic: in-memory pages and temporary directories only; no network, no HOME access.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -21,7 +20,6 @@ const page = (file, frontmatter = {}, body = BODY) => ({
 });
 const QUERY = 'backup rotation';
 const one = (frontmatter) => search(buildIndex([page('p.md', frontmatter)], { now }), QUERY).results[0];
-// `verified` for verified pages, `weak` for weak pages, `neutral` when the result carries no trust field.
 const classOf = (frontmatter) => {
   const r = one(frontmatter);
   assert.ok(r, 'page should be returned');
@@ -33,8 +31,6 @@ function temp(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
-
-// --- Classification ---------------------------------------------------------------------------------------------------
 
 test('confirmed with one valid verified record is verified', () => {
   assert.equal(classOf({ status: 'confirmed', verified: [record] }), 'verified');
@@ -119,9 +115,6 @@ test('result shape: trust appears only for verified and weak pages', () => {
   assert.equal(Object.hasOwn(byPath['c-neutral.md'], 'trust'), false);
 });
 
-// --- Multiplier and ordering ------------------------------------------------------------------------------------------
-
-// Single-page indexes give the same lexical score for identical bodies, so the trust factor is the only difference.
 const scoreWith = (frontmatter, query = `${QUERY} missingterm`) =>
   search(buildIndex([page('p.md', frontmatter)], { now }), query).results[0].score;
 
@@ -159,8 +152,6 @@ test('at equal lexical score a verified page moves above a neutral page that sor
   );
 });
 
-// --- Abstention is decided before trust --------------------------------------------------------------------------------
-
 test('a verified page whose lexical score is below the threshold still abstains', () => {
   const neutral = scoreWith({});
   const index = buildIndex([page('p.md', { status: 'confirmed', verified: [record] })], { now });
@@ -181,8 +172,6 @@ test('a weak page whose lexical score clears the threshold is still answered, al
   );
   assert.ok(Math.abs(result.results[0].score - neutral * 0.9) < 1e-12);
 });
-
-// --- Cache -----------------------------------------------------------------------------------------------------------
 
 test('trust survives the persisted cache and a cache with a wrong or missing trust field is rebuilt', async (t) => {
   const dir = temp(t);
@@ -243,8 +232,6 @@ const pg = (file, body, frontmatter = {}, title = file) => ({
   frontmatter,
 });
 
-// --- Fix1 regressions ----------------------------------------------------------------------------------------------------
-
 test('fix1: unquoted impossible calendar dates in a verified record are neutral, like their quoted forms', async (t) => {
   const dir = temp(t);
   const body = (date) =>
@@ -271,7 +258,6 @@ test('fix1: unquoted impossible calendar dates in a verified record are neutral,
   });
 });
 
-// A link value is LINK_ALPHA (0.5) times the source's trust-adjusted score times the neighbour's own factor.
 test('fix1: a linked weak neighbour gets 0.5 x source x 0.9, a linked verified neighbour 0.5 x source x 1.5', () => {
   const index = buildIndex(
     [

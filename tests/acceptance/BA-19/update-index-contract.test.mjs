@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 blind acceptance: wiki_update_index behaviour on hand-edited indexes, as stated in docs/contracts/mcp-tools.md.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFile, symlink } from 'node:fs/promises';

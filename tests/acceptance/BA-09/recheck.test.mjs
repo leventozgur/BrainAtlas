@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09 re-test (2026-11-11), added by the second tester. Covers the two code fixes: unquoted impossible dates and offset
-// timestamps are neutral, unquoted valid leap/end-of-month dates are verified; a link-added neighbour carries its own trust
-// factor (link value = 0.5 x source score x neighbour factor) and the first-result rule still holds.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCandidate, makeVault, removeDir, page, record, NOW } from './helpers.mjs';

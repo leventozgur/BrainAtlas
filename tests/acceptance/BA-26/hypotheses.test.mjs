@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26 blind acceptance, hypotheses 1 and 2 (capture and false positives). Black-box: calls the product safety module
-// only. Labels come from labels.json, frozen before the first product run; thresholds are fixed by the brief.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -32,7 +30,6 @@ test('H1 capture: scanText finds each positive with its expected rule (rate >= 0
       hits++;
       byCat[it.cat].hit++;
     } else misses.push(`${it.id} fmt=${it.fmt} expected=${it.expected} got=[${findings.map((f) => f.ruleId)}]`);
-    // Redaction of the same content must not keep a raw matched value (BA-16 rule: redact before any cut).
     const redacted = safety.redact(it.text);
     for (const f of findings) {
       const raw = it.text.slice(f.start, f.end);
@@ -62,7 +59,6 @@ test('H1b contact redaction: redact(personal) removes every e-mail and TR phone 
   const rate = hits / contacts.length;
   t.diagnostic(`H1b contact redaction: ${hits}/${contacts.length} = ${rate.toFixed(4)}`);
   for (const m of misses) t.diagnostic(`  miss ${m}`);
-  // Without the personal option, contact data is not a scanText finding (write path does not block it).
   const noOpt = contacts.filter((it) => safety.scanText(it.text).length > 0).length;
   t.diagnostic(`H1b scanText findings on contact items (must be 0 for write path): ${noOpt}`);
   assert.ok(rate >= 0.95, `contact redaction rate ${rate.toFixed(4)} < 0.95`);
@@ -90,7 +86,6 @@ test('H2 false positives: hard-clean pieces with any scanText finding (rate <= 0
 });
 
 test('H2b clean pieces through redact(personal): contact markers only where the text has contact data', (t) => {
-  // Observation for the parity and hook-output reviews; the brief's threshold is H2 above.
   let markers = 0;
   for (const it of cleanItems) if (/\[REDACTED:/.test(safety.redact(it.text, { personal: true }))) markers++;
   t.diagnostic(`H2b clean pieces with any REDACTED marker under personal redact: ${markers}`);

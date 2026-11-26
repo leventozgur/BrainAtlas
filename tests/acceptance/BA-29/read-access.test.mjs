@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-29 independent acceptance, hypothesis 4 (read access). Pages excluded from search results (wiki/index.md, wiki/log.md,
-// wiki/AGENTS.md, wiki/CLAUDE.md, wiki/GEMINI.md) stay readable through wiki_read_page, wiki_list_pages and
-// wiki_status. The search-side check (wiki_query never returns them) runs on the candidate only.
-// Hermetic: temporary directories and an in-memory MCP transport; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -70,7 +66,6 @@ async function session(mcp, root, v) {
   const call = async (name, args = {}) => {
     const r = await client.callTool({ name, arguments: args });
     let text = r.content?.[0]?.text ?? null;
-    // indexAgeMs is the wall-clock age of wiki/index.md (differs between any two runs); every other field is compared.
     if (name === 'wiki_status' && text) {
       const status = JSON.parse(text);
       delete status.indexAgeMs;

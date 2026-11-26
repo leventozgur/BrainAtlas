@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-57: a current-state block accepted by `maintain --proposals accept` is marked as synthesized in search results, and a
-// verified page's trust is omitted for that section. Hermetic: in-memory pages only; no network, no HOME access.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildIndex, pageSections, search } from '../../packages/core/src/retrieval/index.mjs';
@@ -19,8 +17,6 @@ const page = (file, frontmatter, body, title = 'Backup policy') => ({
   body,
   frontmatter,
 });
-// The block `maintain --proposals accept` writes: a `Current state` heading, the opening marker, one bullet per sentence,
-// and the closing marker. Its heading date is before `now`, so the BA-04 preference can choose it.
 const block = (sentence) => `## Current state (proposed 2026-11-18)\n${OPEN}\n- ${sentence}\n${CLOSE}\n`;
 const bodyWith = (sentence) =>
   `# Backup policy\n\n## 2026-01-05 rotation\n\nThe rotation schedule runs nightly at 03:00.\n\n${block(sentence)}`;
@@ -134,7 +130,6 @@ test('BA-57: a synthesized result gains the key and keeps every other field in p
 });
 
 test('BA-57: ranking is unchanged; only the marker line is different', () => {
-  // The query matches the page title only, never the body, so the extra marker line cannot change any field's score.
   const text = 'unrelated garden notes about tomatoes and basil.';
   const marked = [
     page('a.md', verified, `${text}\n${block('quorum sentence')}`, 'Zephyr handbook'),

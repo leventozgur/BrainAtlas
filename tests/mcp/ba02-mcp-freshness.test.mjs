@@ -104,11 +104,9 @@ test('a freshness check that fails mid-scan does not fail wiki_query; the next q
   t.after(() => {
     fs.readFileSync = realRead;
   });
-  // The first query hits the injected failure during the rebuild: it must still answer from the last good index.
   assert.deepEqual(await query(mcp.client, 'baseline'), ['base.md']);
   fs.readFileSync = realRead;
   assert.equal(failures, 1);
-  // The next query retries the rebuild and sees the new page.
   assert.deepEqual(await query(mcp.client, 'late'), ['late.md']);
 });
 

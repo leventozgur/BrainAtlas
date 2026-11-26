@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 retest (independent): wiki_status indexCoveragePct over a mixed vault, the no-index and no-page cases, and a
-// wiki/ directory symlinked outside the vault. Real stdio MCP server, temporary vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, textOf, startServer, readIndex } from './harness.mjs';
@@ -9,8 +7,6 @@ import { linkedPages } from './retest-reader.mjs';
 const page = (title) => `---\ntitle: ${title}\n---\nKısa gövde.\n`;
 const percent = (covered, total) => Math.round((covered / total) * 100);
 
-// Six pages: four are named by the index (escaped parenthesis, angle-bracket with a space, anchor, query on a nested
-// path); two are not (one only inside a fenced block, one not mentioned at all). A stale entry must not count.
 const MIXED_PAGES = {
   'a(b).md': page('Kök (B)'),
   'entities/ali yilmaz.md': page('Ali Yılmaz'),
@@ -114,8 +110,6 @@ test('wiki/ symlinked outside the vault: wiki_status answers as an empty Wiki an
   );
 });
 
-// Contract (docs/contracts/mcp-tools.md, wiki_status): "100 when there are no pages". The escaped view is documented as
-// "answer as an empty Wiki", so the same rule applies. The product returns null here (see the source line of the view).
 test('wiki/ symlinked outside the vault: indexCoveragePct follows the empty-Wiki rule (100), not null', async (t) => {
   const f = await startServer(t, { wikiLink: { 'entities/dis.md': page('Dış') } });
   assert.equal(okJson(await call(f.client, 'wiki_status', {})).indexCoveragePct, 100);

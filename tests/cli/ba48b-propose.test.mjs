@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-48 phase B2: current-state proposals from an injected model command, under the budget caps, in shadow mode. Every
-// model call and every command is faked; nothing here touches a network or a real model.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -32,7 +30,6 @@ async function temp(t, prefix) {
   return dir;
 }
 
-/** A copy of the B1 fixture vault whose Wiki files are older than seven days, so no page counts as recently edited. */
 async function oldVault(t) {
   const root = await temp(t, 'ba48b-propose-vault-');
   const vault = join(root, 'vault');

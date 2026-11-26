@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Shared helpers for BA-00 blind acceptance tests. Test-only; never imported by product code.
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -26,11 +25,6 @@ export function removeDir(dir) {
   rmSync(dir, { recursive: true, force: true });
 }
 
-/**
- * Run a node script in a child process. The child never inherits node:test's context variable.
- * @param {string[]} args script path (absolute) followed by its arguments
- * @param {{env?:object, cwd?:string, preload?:boolean}} [options]
- */
 export function runNode(args, { env = {}, cwd = ROOT, preload = false } = {}) {
   const childEnv = { ...process.env, ...env };
   delete childEnv.NODE_TEST_CONTEXT;

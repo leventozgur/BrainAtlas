@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20 independent acceptance (blind): docs/contracts/mcp-tools.md matches behavior for the BA-20 rules. The contract text
-// is read as the specification; each behavior claim below is checked through the real stdio server.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';

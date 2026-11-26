@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-24 independent acceptance tests (black-box, worktree vs main checkout, fake embedding provider, no network).
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -35,8 +34,6 @@ async function indexedDir(tree) {
 }
 const semMode = (mode) => ({ semantic: { mode } });
 
-// Criterion 4: semantic off, Lite, provider error/throw/timeout, missing index, fingerprint mismatch and abstention answer
-// the same bytes as main.
 const DEGRADED = [
   { name: 'semantic disabled', over: { semantic: { enabled: false } }, index: false, reason: undefined },
   { name: 'module not configured', over: { modules: [] }, index: true, reason: undefined },
@@ -98,7 +95,6 @@ test('criterion 4: degraded paths answer byte-identically to main', async (t) =>
           assert.equal(data.mode, 'lexical', `${scenario.name}: mode must be lexical`);
         }
         if (scenario.abstain) {
-          // The hybrid module abstains; the MCP then answers with the lexical answer and semantic.used true (as main does).
           const data = JSON.parse(texts[tree.name][0]);
           assert.equal(data.semantic?.used, true, 'abstention scenario must reach the hybrid module');
           const lexicalServer = await startServer(tree, ws, {
@@ -129,7 +125,6 @@ test('criterion 4: degraded paths answer byte-identically to main', async (t) =>
   }
 });
 
-// Criterion 3 (ordering): hybrid order is main's order, in both modes.
 test('criterion 3: hybrid result order equals main in rrf and semantic-primary', async (t) => {
   const stateWt = await indexedDir(wt),
     stateMain = await indexedDir(main);
@@ -160,7 +155,6 @@ test('criterion 3: hybrid result order equals main in rrf and semantic-primary',
   t.diagnostic(`hybrid answers compared: ${hybridAnswers}`);
 });
 
-// Criterion 3 (score): score is the active ordering key, non-increasing, rrfScore/semanticScore extra, old keys kept.
 test('criterion 3: score is the active mode key, non-increasing, extra fields only added', async (t) => {
   const stateWt = await indexedDir(wt),
     stateMain = await indexedDir(main);
@@ -208,8 +202,6 @@ test('criterion 3: score is the active mode key, non-increasing, extra fields on
   t.diagnostic('score contract checked in both modes');
 });
 
-// Criteria 1 and 5-style anchor checks. Independent oracle: headings of the page via wiki_read_page, anchors from the
-// core rule written out in the harness. The lexical answer (semantic off, core only) is the reference for shared pages.
 async function anchorViolations(tree, stateDir) {
   const lex = await startServer(tree, ws, {
     stateDir: join(tree.stateRoot, 'anchor-lex'),
@@ -295,7 +287,6 @@ test('criterion 1: explicit Turkish, repeated and emoji headings get the expecte
       // eslint-disable-next-line no-undef -- the outer test callback has no `t`; keeping this branch a hard failure avoids masking a regression
       else t.diagnostic(`hybrid did not return ${path} for "${q}" (not a defect by itself)`);
     }
-    // Emoji and symbol-only headings: whatever the core rule yields (empty base becomes "section"), never an emoji.
     const emoji = (await sp.query('symbol', { limit: 20 })).results.find((r) => r.path === 'emoji/astral.md');
     if (emoji) assert.doesNotMatch(emoji.anchor ?? '', /\p{Extended_Pictographic}/u);
   } finally {
@@ -304,7 +295,6 @@ test('criterion 1: explicit Turkish, repeated and emoji headings get the expecte
   }
 });
 
-// Criterion 2: code-point safe snippets under every budget, and hybrid snippets stay within the budget.
 async function snippetViolations(tree, stateDir, mode, budgets) {
   const out = { lone: [], overBudget: [], notPrefix: [], exercised: 0 };
   const full = await startServer(tree, ws, {
@@ -369,7 +359,6 @@ test('criterion 2: no lone surrogate in any snippet at any budget (hybrid and le
       `emoji snippet was cut at only ${v.exercised} budgets (${mode}); fixture does not exercise the cut`
     );
   }
-  // Lexical path (semantic disabled): core only.
   const lexServer = async (b) =>
     startServer(wt, ws, {
       stateDir: join(wt.stateRoot, 'snip-lex'),
@@ -390,7 +379,6 @@ test('criterion 2: no lone surrogate in any snippet at any budget (hybrid and le
   t.diagnostic(`budgets 0..70 checked for both modes and lexical`);
 });
 
-// Criterion 5: stale values agree between paths and match the expected truth table.
 test('criterion 5: stale is the same on the hybrid and lexical paths and matches the expected truth', async (t) => {
   const expected = {
     'tr/cozum.md': true,
@@ -431,7 +419,6 @@ test('criterion 5: stale is the same on the hybrid and lexical paths and matches
   t.diagnostic('stale checked for expired quoted/unquoted/PnD, future, PnD fresh, undated');
 });
 
-// Criterion 5 (single rule): one stale() definition in the product code.
 test('criterion 5: a single stale() definition remains in product code', () => {
   let out = '';
   try {
@@ -448,7 +435,6 @@ test('criterion 5: a single stale() definition remains in product code', () => {
   assert.match(defs[0], /^packages\/core\/src\/retrieval\/index\.mjs:/);
 });
 
-// Baseline, informational only: how main behaves on the same fixture for the defects BA-24 targets.
 test('baseline (informational): main on the same fixture', async (t) => {
   const stateMain = await indexedDir(main);
   const anchors = await anchorViolations(main, stateMain);

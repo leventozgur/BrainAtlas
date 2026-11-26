@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-43b: `init --channel cli` writes shell instructions (and a Claude Code skill) instead of MCP entries and hooks.
-// Hermetic: temporary HOME, vault, config, data and state directories only; no network.
 import { OPERATIONS } from '../../packages/core/src/index.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -336,7 +334,6 @@ test('claude-code: the default channel never reads the skill path; the cli chann
     shimPath,
     now: new Date(),
   };
-  // A directory at the skill path fails every read with EISDIR.
   await mkdir(join(home, '.claude', 'skills', 'brainatlas', 'SKILL.md'), { recursive: true });
   const planned = claudeCode.plan(ctx);
   const skill = join(home, '.claude', 'skills', 'brainatlas', 'SKILL.md');
@@ -367,7 +364,6 @@ test('claude-code cli plan treats BOM and malformed JSON as no BrainAtlas entry'
     plannedFiles,
     [join(home, 'CLAUDE.md'), join(home, '.claude', 'skills', 'brainatlas', 'SKILL.md')].sort()
   );
-  // A document that does contain a BrainAtlas MCP entry is still refused, BOM or not.
   await writeFile(join(home, '.claude.json'), '\uFEFF{"mcpServers":{"brainatlas":{"type":"stdio"}}}');
   assert.throws(
     () => claudeCode.plan(ctx),
@@ -424,8 +420,6 @@ test('copilot-vscode cli remove and doctor verify the block body payload', async
   const report = await copilot.doctor(ctx);
   assert.equal(report.ok, false);
   assert.equal(report.checks.find((check) => check.id === 'instructions').ok, false);
-  // A block with the exact CLI payload is owned: a real cli install on an empty
-  // vault applies and removes cleanly, and doctor only reports the missing file.
   const vault2 = join(base, 'vault2');
   await mkdir(vault2, { recursive: true });
   const owned = { ...ctx, vaultDir: vault2 };

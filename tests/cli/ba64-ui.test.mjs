@@ -66,9 +66,8 @@ function call(panel, { method = 'GET', path = '/', headers = {}, body, rawBody, 
           let json = null;
           try {
             json = JSON.parse(text);
-          } catch {
-            /* HTML */
-          }
+            // eslint-disable-next-line no-empty
+          } catch {}
           resolveCall({ status: res.statusCode, text, json, headers: res.headers });
         });
       }

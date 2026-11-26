@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25 hypothesis 2 (page loss): two separate MCP server processes read the same page hash and both write different
-// content with expectedSha256 at the same time, >= 50 rounds. Candidate criterion, per round: exactly one success and one
-// E_CONFLICT; the final file is the winner's content; lost updates = 0; the E_CONFLICT reply has no page content or hash;
-// the log has no entry for the failed write.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -85,7 +81,6 @@ async function racePage(t, root) {
     const landed = [markerA, markerB].filter((m) => final.includes(m));
     if (successes.length === 1 && landed.length !== 1) stats.badWinner++;
     if (successes.length === 1 && !final.includes(successes[0])) stats.badWinner++;
-    // A successful write whose content is not in the final file is a lost update.
     for (const s of successes) if (!final.includes(s)) stats.lostUpdates++;
     const logAfter = (await readText(f.logFile))
       .split('\n')

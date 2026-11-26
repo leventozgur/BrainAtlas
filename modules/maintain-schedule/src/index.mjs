@@ -30,7 +30,6 @@ function within(root, path) {
 }
 
 /**
- * Pure plan: the files for one platform. No filesystem or host access.
  * @param {{platform?:string,binPath?:string,home?:string,configHome?:string,day?:string,hour?:number}} [options]
  */
 export function planSchedule({ platform, binPath, home, configHome, day = 'mon', hour = 9 } = {}) {
@@ -80,8 +79,6 @@ function hostCommands(action, platform, file0, uid) {
 }
 
 /**
- * The install steps split around the file writes so a re-install can unload the
- * previous job first (darwin) and reload the units afterwards (linux).
  * @param {string} platform
  * @param {string} file0
  * @param {string|number} uid
@@ -197,8 +194,6 @@ function parseArgs(args) {
 }
 
 /**
- * Put the managed files and the state file back exactly as they were before the
- * failed call; a first install leaves neither files nor state behind.
  * @param {{statePath:string}} c
  * @param {Array<{path:string,contents:Buffer|null}>} previous
  * @param {Buffer|null} previousState

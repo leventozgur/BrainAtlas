@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20 independent retest (blind, after fix1): wiki_create_entity / wiki_create_concept frontmatter and index lines, the
-// unreadable-page case of wiki_update_index, and the refusal paths. Real stdio MCP server, temporary HOME and vault, no
-// network, every value is fixed or built at run time. Refusal messages are checked for the absence of caller content.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, readdir, writeFile, rm, lstat } from 'node:fs/promises';
@@ -13,7 +10,6 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 
 const WORKTREE = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-// BA20_TARGET=main runs the main checkout's server (executed only; every write goes to a temporary vault).
 const ROOT = process.env.BA20_TARGET === 'main' ? resolve(WORKTREE, '..', '..', 'BrainAtlas') : WORKTREE;
 const OPTS = { timeout: 60_000 };
 // eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
@@ -73,7 +69,6 @@ const indexPath = (f) => join(f.wiki, 'index.md');
 const indexText = (f) => readFile(indexPath(f), 'utf8');
 const entryLines = (text) => text.split('\n').filter((line) => line.startsWith('- ['));
 
-/** Byte snapshot of every entry under a directory (links recorded as links). */
 async function snapshot(dir) {
   const out = {};
   async function walk(rel) {
@@ -92,10 +87,6 @@ async function snapshot(dir) {
 
 const page = (frontmatter, body = 'Gövde.\n') => `---\n${frontmatter}\n---\n${body}`;
 
-/**
- * Creates the page through the tool in a fresh vault, then writes the same page bytes into a second fresh vault and
- * runs wiki_update_index there. Returns both index texts and the page bytes so the caller can compare the lines.
- */
 async function createAndUpdate(t, { tool, type, name, content, relPath }) {
   const created = await fixture(t);
   const createdResult = jsonOf(await call(created, tool, { type, name, content }));
@@ -107,8 +98,6 @@ async function createAndUpdate(t, { tool, type, name, content, relPath }) {
   const fromUpdate = await indexText(scanned);
   return { fromCreate, fromUpdate, pageBytes: pageBytes.toString('utf8') };
 }
-
-// ---- 1. create line equals the update line, for summary, description, tags and their combinations ----
 
 const VARIANTS = [
   {
@@ -190,8 +179,6 @@ test('create keeps summary, description and tags in the page frontmatter on disk
   assert.match(onDisk, /^title: Alan Kontrol$/m);
 });
 
-// ---- 2. no frontmatter in the content: behavior as before (name as label, no summary) ----
-
 test(
   'create without frontmatter in the content: name is the label, no summary suffix, body kept, update line equal',
   OPTS,
@@ -219,8 +206,6 @@ test('create concept without frontmatter: concept type default and plain label',
   assert.deepEqual(entryLines(await indexText(f)), ['- [Plain Concept](concepts/plain-concept.md)']);
 });
 
-// ---- 3. broken frontmatter: E_INVALID_INPUT, nothing written, no caller content in the message ----
-
 const BROKEN = [
   { label: 'unclosed flow list', content: '---\ntitle: X\ntags: [a, SENTINEL_TAG\n---\nSENTINEL_BODY\n' },
   { label: 'missing closing delimiter', content: '---\ntitle: X\nsummary: SENTINEL_SUM\nSENTINEL_BODY\n' },
@@ -247,8 +232,6 @@ for (const b of BROKEN) {
   });
 }
 
-// ---- 4. title in the content does not change the create name ----
-
 test('a title in the content does not replace the create name (page title and label)', OPTS, async (t) => {
   const f = await fixture(t);
   const res = jsonOf(
@@ -265,8 +248,6 @@ test('a title in the content does not replace the create name (page title and la
   const lines = entryLines(await indexText(f));
   assert.deepEqual(lines, ['- [Create Adi](entities/create-adi.md) — x']);
 });
-
-// ---- 5. unreadable page (raw C0 in frontmatter) plus five normal pages ----
 
 const BAD = '---\ntype: entity\ntitle: A\u0001B\n---\nG.\n';
 
@@ -296,9 +277,6 @@ test(
   }
 );
 
-// ---- 6. secret-shaped summary: refused, nothing written ----
-
-// Built at run time from fragments; it matches the content rule for an Anthropic-style key but is not a credential.
 const SECRET = ['sk', 'ant'].join('-') + '-' + 'Q'.repeat(24);
 
 for (const type of ['entity', 'concept']) {

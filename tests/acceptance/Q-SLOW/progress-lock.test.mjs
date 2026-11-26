@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Acceptance (6, index-store part) onProgress objects / ETA, and (8) lock behaviour.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -80,7 +79,6 @@ test('etaMs is null before the first group completes and a finite number afterwa
   assert.equal(embed[0].batchSize, 32);
   assert.equal(typeof embed[1].etaMs, 'number');
   assert.equal(embed[1].done, 32);
-  // 32 chunks in 10 s with 68 left: 10000 / 32 * 68 = 21250
   assert.ok(Math.abs(embed[1].etaMs - 21250) < 1, `eta ${embed[1].etaMs}`);
   assert.ok(embed.slice(1).every((event) => typeof event.etaMs === 'number' && event.etaMs >= 0));
   assert.equal(embed.at(-1).etaMs, 0, 'nothing remaining at the end');
@@ -143,7 +141,6 @@ test('an onProgress that throws aborts indexing, keeps completed work in the par
   assert.equal(await exists(join(w.semanticDir, 'index.json')), false);
 });
 
-// ---------- lock (8) ----------
 async function lockFixture(t, count = 10) {
   const w = await workspace(t, { 'page.md': sectionPage('Page', count) });
   w.lock = join(w.semanticDir, 'index.lock');

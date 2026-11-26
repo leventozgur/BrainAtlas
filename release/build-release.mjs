@@ -110,7 +110,6 @@ function untar(buf) {
   return result;
 }
 
-/** @param {{version:string,profile:'lite'|'full',builtAt?:string,out?:string}} options @returns {Promise<string[]>} */
 export async function buildRelease(options) {
   const { version, profile, builtAt = '1970-01-01T00:00:00.000Z', out = root } = options || {};
   const sourceRoot = resolve(process.env.BRAINATLAS_RELEASE_SOURCE || root);
@@ -215,7 +214,6 @@ export async function buildRelease(options) {
   return [dest, sumsPath];
 }
 
-/** Build a self-contained offline distribution directory for both release profiles. @param {{version?:string,out?:string,builtAt?:string}} [options] */
 export async function buildDistribution(options = {}) {
   const sourceRoot = resolve(process.env.BRAINATLAS_RELEASE_SOURCE || root);
   const packageInfo = JSON.parse(await readFile(join(sourceRoot, 'package.json'), 'utf8'));
@@ -287,7 +285,6 @@ export async function buildDistribution(options = {}) {
   }
 }
 
-/** @param {string} archivePath @param {string} checksumPath @param {string} signaturePath @returns {Promise<object>} */
 async function verifiedArchive(
   archivePath,
   checksumPath,
@@ -363,12 +360,10 @@ async function verifiedArchive(
     throw fail('E_PROFILE_MISMATCH', 'Lite archive contains modules.');
   return { manifest, entries, prefix };
 }
-/** @param {string} archivePath @param {string} checksumPath @param {string} signaturePath @returns {Promise<object>} */
 export async function verifyRelease(archivePath, checksumPath, signaturePath) {
   return (await verifiedArchive(archivePath, checksumPath, signaturePath, arguments[3])).manifest;
 }
 
-// Extract only verified regular files, into a newly created directory.
 export async function extractRelease(archivePath, checksumPath, signaturePath, destination, allowedSigners) {
   const { manifest, entries, prefix } = await verifiedArchive(archivePath, checksumPath, signaturePath, allowedSigners);
   await mkdir(destination);

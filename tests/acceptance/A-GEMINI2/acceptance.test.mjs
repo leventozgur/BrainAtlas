@@ -139,9 +139,8 @@ test(
     await symlink(outside, join(f.home, '.gemini'));
     try {
       await adapter.apply(adapter.plan(f.ctx), f.ctx);
-    } catch {
-      /* the write is expected to fail; the assertions below cover the outcome */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     assert.equal(await readFile(join(outside, 'settings.json'), 'utf8'), '{}');
     assert.deepEqual(await readdir(outside), ['settings.json']);
   }

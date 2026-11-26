@@ -376,9 +376,8 @@ export async function configCommand({ args, plan, output, paths, env, markRedact
       try {
         const remote = new URL(parsed);
         credentialUrl = Boolean(remote.username || remote.password);
-      } catch {
-        /* an unparsable URL cannot embed credentials */
-      }
+        // eslint-disable-next-line no-empty
+      } catch {}
     }
     const warnings = credentialUrl
       ? ['Remote URL contains embedded credentials; use a credential helper instead.']

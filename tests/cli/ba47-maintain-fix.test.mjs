@@ -476,7 +476,6 @@ test('inserted lines reuse the CRLF ending of the file', async (t) => {
 });
 
 test('index frontmatter is skipped by section scanning and never receives an insertion', async (t) => {
-  // A heading-shaped YAML comment in the frontmatter is not a section: the entry falls through to Unsorted at the end.
   const dir = await vaultWith(t, {
     'wiki/index.md': '---\n## Concepts\nstatus: draft\n---\n\n# Wiki Index\n\n## Other\n\n- [X](concepts/x.md)\n',
     'wiki/concepts/a.md': page({ title: 'A' }),
@@ -493,7 +492,6 @@ test('index frontmatter is skipped by section scanning and never receives an ins
   const again = await planFix(dir, { now: NOW });
   assert.deepEqual(again.changes, []);
 
-  // An unclosed frontmatter block leaves no body to insert into: the fix fails verification and writes nothing.
   for (const indexText of ['---\ntitle: idx\n', '---\ntitle: idx']) {
     const unclosed = await vaultWith(t, {
       'wiki/index.md': indexText,
@@ -508,7 +506,6 @@ test('index frontmatter is skipped by section scanning and never receives an ins
 
 test('CRLF files without a final line terminator keep a consistent ending', async (t) => {
   const dir = await vaultWith(t, {
-    // No final terminator: one entry is appended right after the unterminated last line, one block goes to Unsorted.
     'wiki/index.md': '# Wiki Index\r\n\r\n## Entities\r\n\r\n- [E](entities/e.md)',
     'wiki/entities/f.md': page({ title: 'F' }),
     'wiki/concepts/a.md':

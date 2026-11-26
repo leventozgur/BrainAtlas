@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-48 phase B2: generate "current state" proposals with an external model command. Proposals are stored for review
-// only; this module never writes inside the vault and never starts a background process. The model command is injected
-// in tests and defaults to one `spawn` (shell:false) call whose stdin is the prompt.
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -19,7 +16,6 @@ import {
   validateProposal,
 } from './core.mjs';
 
-/** Defaults for `maintain.synthesis`; an absent key always means the default here (never written by `defaultConfig`). */
 export const SYNTHESIS_DEFAULTS = Object.freeze({
   mode: 'off',
   command: Object.freeze([]),
@@ -43,7 +39,6 @@ const isNumberIn = (value, min, max) =>
   typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 const failure = (code, message) => Object.assign(new Error(message), { code });
 
-/** The effective `maintain.synthesis` settings: the configured values over the defaults, each one type/range checked. */
 export function synthesisSettings(config) {
   const source = isObject(config?.maintain?.synthesis) ? config.maintain.synthesis : {};
   const command = Array.isArray(source.command) ? source.command.filter((entry) => typeof entry === 'string') : [];
@@ -63,7 +58,6 @@ export function synthesisSettings(config) {
   };
 }
 
-/** The ISO week key `YYYY-Www` in UTC (the ledger and the proposal batch share it). */
 export function isoWeek(date) {
   const time = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date(date);
   const day = new Date(Date.UTC(time.getUTCFullYear(), time.getUTCMonth(), time.getUTCDate()));
@@ -74,7 +68,6 @@ export function isoWeek(date) {
   return `${day.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
-/** The fixed English prompt. The page and the archive are data; the model may only summarise them. */
 const PROPOSAL_SCHEMA_TEXT = JSON.stringify(
   {
     schemaVersion: 1,
@@ -91,7 +84,6 @@ const PROPOSAL_SCHEMA_TEXT = JSON.stringify(
   2
 );
 
-/** Neutralises a `<page>`/`</page>`/`<archive>`/`</archive>` tag inside page data so it cannot close or reopen a block. */
 const neutraliseTags = (text) => String(text ?? '').replace(/<(\/?\s*(?:page|archive)\s*)>/giu, '&lt;$1>');
 
 export function buildPrompt({ page, pageText, archiveText }) {
@@ -120,7 +112,6 @@ export function buildPrompt({ page, pageText, archiveText }) {
   ].join('\n');
 }
 
-/** Index just after the closing frontmatter delimiter, or 0. */
 function bodyStart(lines) {
   if (lines[0] !== '---') return 0;
   for (let index = 1; index < lines.length; index++)
@@ -132,7 +123,6 @@ const stripCr = (line) => (line.endsWith('\r') ? line.slice(0, -1) : line);
 const SECTION_START = /^##[ \t]+\S/u;
 const TITLE_START = /^#[ \t]+\S/u;
 
-/** H2 sections of a page body with their line span, mirroring the compaction section rules (fences and H1 end them). */
 function pageSections(lines) {
   const sections = [];
   let fence = null;
@@ -164,9 +154,6 @@ function pageSections(lines) {
 }
 
 /**
- * The would-be page text and archive text of a `compact --keep 3` run. The section list comes from `planCompaction`;
- * the moved lines are matched back by heading and line count. When the plan cannot be reproduced the page stays as it
- * is and the archive is unchanged, which is always safe for the gates.
  * @returns {Promise<{pageText: string, archiveText: string}>}
  */
 export async function withCompaction(root, page, pageText, planned) {
@@ -206,7 +193,6 @@ export async function withCompaction(root, page, pageText, planned) {
   return { pageText: pageWithoutMoved, archiveText };
 }
 
-/** Replaces the frontmatter `status` with `disputed`, adding the line when the page has no status yet. */
 export function withDisputed(text) {
   const lines = text.split('\n');
   if (lines[0] !== '---') return text;
@@ -227,7 +213,6 @@ export function withDisputed(text) {
   return lines.join('\n');
 }
 
-/** Index of the `}` that closes the object opened at `start`, honouring strings and escapes, or -1. */
 function objectEnd(text, start) {
   let depth = 0;
   let inString = false;
@@ -250,7 +235,6 @@ function objectEnd(text, start) {
   return -1;
 }
 
-/** The first top-level JSON object in a text, or null. */
 function firstJsonObject(text) {
   const source = String(text ?? '');
   for (let start = source.indexOf('{'); start >= 0; start = source.indexOf('{', start + 1)) {
@@ -258,14 +242,12 @@ function firstJsonObject(text) {
     if (end < 0) continue;
     try {
       return JSON.parse(source.slice(start, end + 1));
-    } catch {
-      /* not a complete object: try the next one */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   return null;
 }
 
-/** The proposal object in a command's stdout, also unwrapping a Claude Code `--output-format json` envelope. */
 export function parseProposalOutput(stdout) {
   const value = firstJsonObject(stdout);
   if (!isObject(value)) return null;
@@ -273,7 +255,6 @@ export function parseProposalOutput(stdout) {
   return value;
 }
 
-/** The ledger map. A missing file is empty; an unreadable, unparsable or invalid ledger is never overwritten. */
 async function readLedger(file) {
   let text;
   try {
@@ -301,23 +282,17 @@ async function readLedger(file) {
   return value;
 }
 
-/** The ledger entry of a week; a missing week key counts as zero calls and zero dollars. */
 const ledgerEntry = (ledger, week) =>
   isObject(ledger[week]) ? { calls: ledger[week].calls, estUsd: ledger[week].estUsd } : { calls: 0, estUsd: 0 };
 
 const estimatedUsd = (promptChars, usdPer1kTokens) =>
   (Math.ceil((promptChars + ESTIMATE_OVERHEAD_CHARS) / CHARS_PER_TOKEN) / 1000) * usdPer1kTokens;
 
-/** Writes the ledger with mode 0600, creating `<stateDir>/synthesis` with mode 0700 first. */
 async function writeLedger(file, ledger) {
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });
   await atomicWriteFile(file, `${JSON.stringify(ledger, null, 2)}\n`, { mode: 0o600 });
 }
 
-/**
- * The same rule as `restrictedOf` in the retrieval index: `sensitivity: personal` or `inject: never`, both trimmed and
- * lower-cased. A restricted page is searchable but never leaves the vault.
- */
 function restrictedOf(frontmatter) {
   const source = frontmatter || {};
   const sensitivity = typeof source.sensitivity === 'string' ? source.sensitivity.trim().toLowerCase() : '';
@@ -326,8 +301,6 @@ function restrictedOf(frontmatter) {
 }
 
 /**
- * Splits a `scorePages` result into the pages the model may see and the count of pages dropped before target selection.
- * A restricted page, an unreadable file and unparsable frontmatter all fail closed (excluded).
  * @param {string} root @param {Array<{path: string}>} scored
  * @returns {Promise<{allowed: Array<{path: string}>, excluded: number}>}
  */
@@ -347,21 +320,14 @@ async function withoutRestricted(root, scored) {
   return { allowed, excluded };
 }
 
-/** Sorted, de-duplicated rule ids of a `scanText` result; the matched text and offsets never leave this module. */
 const ruleIdsOf = (findings) => [...new Set(findings.map((finding) => finding.ruleId))].sort();
 
-/** A schema failure record, in the same shape as a `runGates` result. */
 const schemaFailure = (detail) => ({
   ok: false,
   failures: [{ gate: 'SCHEMA', detail }],
   delta: { droppedSentences: 0, changedNumbers: [], lostCaveats: 0, blockWords: 0 },
 });
 
-/**
- * One target page: read it, plan the compaction, build the prompt, scan the prompt for secrets, call the model under
- * the budget, scan the answer and only then save the record. `outcome` is `{budget:true}` when the weekly budget stops
- * the run, otherwise `{proposal}` or `{skipped}`.
- */
 async function proposeOneTarget(context, page) {
   const { root, vault, store, settings, now, run, env, ledger, week, ledgerFile, batch, mode } = context;
   const pageText = await readFile(join(root, page), 'utf8');
@@ -407,11 +373,9 @@ async function proposeOneTarget(context, page) {
       result = outcome;
       break;
     }
-    // Transport failure (thrown error, timeout, non-zero exit): retried exactly once, never with another model.
   }
   if (!result) return { skipped: { page, reason: 'transport-failure' } };
 
-  // The call happened (and stays charged) but an unsafe answer is never parsed or stored.
   const outputFindings = scanText(typeof result.stdout === 'string' ? result.stdout : '');
   if (outputFindings.length) {
     return { skipped: { page, reason: 'unsafe-output', ruleIds: ruleIdsOf(outputFindings) } };
@@ -471,8 +435,6 @@ async function proposeOneTarget(context, page) {
 }
 
 /**
- * Generates current-state proposals for at most `pagesPerWeek` pages, strictly under the weekly budget, and stores
- * them for review. The mode defaults to `off`; shadow mode only stores records: the vault is never written.
  * @param {{vault:string, config?:any, stateDir:string, now?:Date, runCommand?:Function, env?:Record<string,string|undefined>}} options
  * @returns {Promise<any>}
  */

@@ -11,7 +11,6 @@ function commandFailure(exitCode) {
   return error;
 }
 
-/** Run a credential helper with any secret delivered on stdin, never in argv. */
 export function runCredentialCommand(command, args, { input = '' } = {}) {
   return new Promise((resolve, reject) => {
     let child;
@@ -47,7 +46,6 @@ function validateSecret(value) {
   return value;
 }
 
-/** Create an OS-backed secret store. Tests may inject runCommand to avoid subprocesses. */
 export function createCredentialStore({
   platform = process.platform,
   runCommand = runCredentialCommand,

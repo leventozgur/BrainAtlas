@@ -90,8 +90,6 @@ const PENDING_LINK_RETRIES = 50;
 const PENDING_LINK_DELAY_MS = 10;
 const delay = (ms) => new Promise((done) => setTimeout(done, ms));
 
-// A concurrent first use publishes host-id by hard-linking its temporary file, so for a moment the file has two links
-// until that writer unlinks the temporary name. Wait out exactly that state; anything else still fails at once.
 async function readStoredHostId(path) {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -135,14 +133,16 @@ async function readStoredHostIdOnce(path) {
   }
 }
 
-/** Resolve a configured sync host identity or create one private to this state directory. @param {{stateDir?:string,env?:Record<string,string|undefined>,config?:any,hostId?:string|null}} [options] @returns {Promise<string>} */
+/**
+ * @param {{stateDir?:string,env?:Record<string,string|undefined>,config?:any,hostId?:string|null}} [options]
+ * @returns {Promise<string>}
+ */
 export async function resolveHostId({ stateDir, env = {}, config = {}, hostId: legacyHostId } = {}) {
   if (typeof stateDir !== 'string' || !stateDir) throw invalidState();
   const fromEnvironment = normalizeHostId(env?.BRAINATLAS_HOST_ID);
   if (fromEnvironment) return fromEnvironment;
   const fromConfig = normalizeHostId(config?.sync?.options?.hostId);
   if (fromConfig) return fromConfig;
-  // Keep the old constructor option working for callers that have not moved to env/config yet.
   const fromLegacyOption = normalizeHostId(legacyHostId);
   if (fromLegacyOption) return fromLegacyOption;
 
@@ -176,7 +176,6 @@ export async function resolveHostId({ stateDir, env = {}, config = {}, hostId: l
     await ensureSyncDirectory(syncDir, stateRoot);
     try {
       await link(temporaryPath, hostIdPath);
-      // Drop the temporary name right away so readers see a single link as soon as possible.
       await unlink(temporaryPath).catch(() => {});
       return generated;
     } catch (error) {

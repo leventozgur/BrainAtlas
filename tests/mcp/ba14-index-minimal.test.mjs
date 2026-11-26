@@ -12,7 +12,6 @@ import { defaultConfig } from '../../packages/core/src/config/index.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const page = (title, extra = '', body = 'evidence') => `---\ntype: entity\ntitle: ${title}\n${extra}---\n${body}\n`;
 
-// Fixture: a small wiki with one indexed page, one new page and one new concept page.
 async function fixture(t, { index, indexEol = '\n', withIndex = true } = {}) {
   const home = await mkdtemp(resolve(tmpdir(), 'ba14-index-'));
   t.after(() => rm(home, { recursive: true, force: true }));
@@ -52,8 +51,6 @@ async function updateIndex(client) {
   return JSON.parse(result.content[0].text);
 }
 
-// Hand-edited index: a description paragraph, a blockquote note, a custom summary with tags, a stale entry,
-// a non-entry line inside a category and a second hand-written category.
 const handEdited = [
   '# Wiki Index',
   '',
@@ -73,8 +70,6 @@ const handEdited = [
   '',
 ].join('\n');
 
-// Expected result: stale entry removed; new entities page inserted after the last entities entry;
-// new concept category appended at the end. Every other line is byte-identical.
 const handEditedExpected = [
   '# Wiki Index',
   '',
@@ -187,6 +182,5 @@ test('wiki_update_index places pages under their folder heading across many cate
     false
   );
   assert.ok(lines.includes('Bu bölümde henüz giriş yok.'));
-  // The input had no trailing newline; the file keeps that style.
   assert.equal((await readFile(f.indexPath, 'utf8')).endsWith('\n'), false);
 });

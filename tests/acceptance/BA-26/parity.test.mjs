@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26 blind acceptance, hypothesis 4: for content that triggers no new rule, and for a vault with no sensitive
-// fields, scanText, redact, search and hook output are identical to main (def482f). The main checkout is only read
-// and imported; nothing is written there. Temporary vaults live under a per-run directory in the OS temp directory.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -26,7 +23,6 @@ const M = await load(MAIN);
 const NOW = new Date('2026-11-11T00:00:00Z');
 const { cleanItems } = fixtures();
 
-// Prose and older-rule content: none of it triggers a new rule.
 const PROSE = [
   'Bu sayfa hook çıktısının ana repo ile aynı olduğunu doğrular.',
   'Deploy sonrası health check 200 döndü ve log dosyası temiz.',

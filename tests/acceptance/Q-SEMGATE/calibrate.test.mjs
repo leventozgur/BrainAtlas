@@ -132,8 +132,6 @@ test('calibrator uses the simplicity tie-break and validates empty, malformed, a
     oneAnswer,
     JSON.stringify([{ id: 'answer-case', query: 'answerable retrieval', relevant: ['z-target.md'] }])
   );
-  // This query is deliberately orthogonal to both documents, so the default
-  // configuration already abstains without adding either calibration threshold.
   const provider = {
     id: 'tie-fixture',
     dims: 2,
@@ -148,8 +146,6 @@ test('calibrator uses the simplicity tie-break and validates empty, malformed, a
     oneEmpty,
     JSON.stringify([{ id: 'empty-case', query: 'no matching tokens', relevant: [], abstain: true }])
   );
-  // Use a second provider for the empty query so its cosine is 0 for both docs;
-  // semantic candidates are filtered as non-positive and lexical search has no hit.
   const tieProvider = {
     ...provider,
     async embedQuery(query) {

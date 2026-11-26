@@ -60,7 +60,6 @@ test('hook-realistic set: schema, counts by kind, cwd/project coverage and long 
   const ambiguous = scoped.filter((c) => !c.query.toLowerCase().includes(c.project.split('-')[0]));
   assert.ok(ambiguous.length >= 8, `ambiguous ${ambiguous.length}`);
 
-  // Ambiguous-project cases: category, cwd-bound relevant page, and other-project pages excluded.
   const amb = cases.filter((c) => c.category === 'ambiguous-project');
   assert.equal(amb.length, 8, 'ambiguous-project cases');
   for (const item of amb) {
@@ -72,7 +71,6 @@ test('hook-realistic set: schema, counts by kind, cwd/project coverage and long 
     );
   }
 
-  // Counts quoted in the README are computed from the data, not typed by hand.
   const knowledge = byKind('knowledge');
   const kCwd = knowledge.filter((c) => c.cwd && c.project).length;
   const readme = fs.readFileSync(path.join(evalDir, 'README-ba.md'), 'utf8');

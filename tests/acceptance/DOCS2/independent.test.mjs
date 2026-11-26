@@ -59,7 +59,6 @@ test('CLI help covers documented quickstart options and rejects unknown topics',
 test('documented sync help provides usable subcommand syntax', () => {
   const doc = read('docs/user/sync.md');
   assert.match(doc, /brainatlas help sync/);
-  // Module help is generated as generic [ARGS]; inspect its actual help contract in CLI source.
   const source = read('packages/cli/src/index.mjs');
   assert.equal(
     /usage: `brainatlas \$\{name\} \[ARGS\]`/.test(source),

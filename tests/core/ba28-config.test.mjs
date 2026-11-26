@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-28: retrieval.shadow is an optional, single-key object with an abstainThreshold in [0, 1].
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultConfig, validateConfig } from '../../packages/core/src/config/index.mjs';

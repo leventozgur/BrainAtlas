@@ -108,7 +108,6 @@ async function pathWithoutSshKeygen(base) {
   await mkdir(bin);
   for (const command of ['tar', 'sh', 'gzip']) {
     const found = spawnSync('sh', ['-c', `command -v ${command}`], { encoding: 'utf8' }).stdout.trim();
-    // GNU tar runs an external gzip for -z; bsdtar (macOS) does not need it.
     if (!found && command === 'gzip') continue;
     assert.ok(found, `${command} is required for this test`);
     await symlink(found, join(bin, command));

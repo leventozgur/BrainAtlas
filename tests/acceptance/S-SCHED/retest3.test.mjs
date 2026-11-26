@@ -101,7 +101,6 @@ for (const platform of ['darwin', 'linux']) {
       const r = await run('remove');
       assert.equal(r.removed.length, inst.files.length);
       for (const file of inst.files) await absent(file);
-      // second remove on clean system is an idempotent success
       const again = await run('remove');
       assert.deepEqual(again.removed, []);
     });
@@ -201,7 +200,7 @@ test('CLI uninstall with failing scheduler stop aborts, keeps scheduler files; r
   f.state.stop = { code: 1, stderr: 'denied' };
   await assert.rejects(invoke(['uninstall', '--json']), { code: 'E_SCHEDULER_COMMAND' });
   assert.deepEqual(await readFile(timer), before);
-  await readFile(f.paths.configFile); // config not destroyed by aborted uninstall
+  await readFile(f.paths.configFile);
   f.state.stop = { code: 0 };
   const out = await invoke(['uninstall', '--json']);
   assert.equal(out.scheduler.removed.length, 2);

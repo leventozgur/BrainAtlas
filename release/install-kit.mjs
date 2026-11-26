@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Self-contained installer helper. This file is copied unchanged into release kits.
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFile, mkdir, writeFile, rm, lstat, readlink, rename, symlink } from 'node:fs/promises';
@@ -57,7 +56,6 @@ function readTar(buffer) {
   return files;
 }
 
-/** Resolve existing symlinks, including dangling ones, without creating paths. */
 async function resolvePathForSafety(input) {
   /** @type {string} */
   let current = sep;
@@ -142,7 +140,6 @@ async function assertInstallRootSafe(installRoot) {
   return followedExternalBrainAtlasRoot;
 }
 
-/** Verify checksums, signature, and the manifest before exposing archive entries. */
 export async function inspectReleaseArchive(archivePath, allowedSigners) {
   let archive;
   let sums;
@@ -225,7 +222,6 @@ export async function inspectReleaseArchive(archivePath, allowedSigners) {
   return { manifest, files, prefix };
 }
 
-/** Extract a verified release into a new destination directory. */
 export async function extractVerifiedRelease(archivePath, destination, allowedSigners) {
   const { manifest, files, prefix } = await inspectReleaseArchive(archivePath, allowedSigners);
   const root = resolve(destination);

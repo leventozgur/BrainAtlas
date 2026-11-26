@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-27 fix1 re-test (fair comparison fields): hand-computed values on a toy corpus for the BM25 side
-// (bm25Fair at threshold 0.35 and 0) and the grep side (runGrepBaseline). Written from the brief only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -26,10 +24,6 @@ const PAGES = {
   'index.md': '---\ntitle: Index\nstatus: active\ngenerated: "2026-06-01"\n---\n# Index\n\nzyqorvex pointer page.\n',
 };
 
-// Answerable: A1 (alpha, hit at both thresholds), A2 (beta, hit), A3 (wrong label, miss), A4 (alpha, hit only at 0:
-// at 0.35 the query abstains because its top score is below the threshold).
-// Unanswerable: U1 (no term matches), U2 (term matches alpha; returned at both thresholds),
-// U3 ("devam et", no term matches), U4 (same query as A4; returned only at 0).
 const CASES = [
   { id: 'A1', query: 'zyqorvex timeout', relevant: ['alpha.md'] },
   { id: 'A2', query: 'quillfrost ledger', relevant: ['sub/beta.md'] },
@@ -77,8 +71,6 @@ test('BA-27 fix1 toy: search membership matches the design (preconditions for th
 test('BA-27 fix1 toy: bm25Fair at threshold 0.35 equals the hand values', () => {
   const { dir, casesFile } = fixture();
   const r = bm25Fair({ corpusDir: dir, casesFile, now: NOW, abstainThreshold: 0.35 });
-  // answerable A1..A4: recall 1, 1, 0, 0 (A4 abstains) -> 0.5; rr 1, 1, 0, 0 -> 0.5
-  // unanswerable U1..U4: abstained U1, U3, U4 -> 3/4; returned U2 -> 1/4
   close(r.recallAt5, 0.5, 'recallAt5');
   close(r.answerableRecallAt5, 0.5, 'answerableRecallAt5');
   close(r.mrrAt10, 0.5, 'mrrAt10');
@@ -90,8 +82,6 @@ test('BA-27 fix1 toy: bm25Fair at threshold 0.35 equals the hand values', () => 
 test('BA-27 fix1 toy: bm25Fair at threshold 0 (no abstention) equals the hand values', () => {
   const { dir, casesFile } = fixture();
   const r = bm25Fair({ corpusDir: dir, casesFile, now: NOW, abstainThreshold: 0 });
-  // A4 now answered (alpha first): recall 1, 1, 0, 1 -> 0.75; rr 1, 1, 0, 1 -> 0.75
-  // U1, U3 abstain -> 2/4; U2, U4 returned -> 2/4
   close(r.recallAt5, 0.75, 'recallAt5');
   close(r.answerableRecallAt5, 0.75, 'answerableRecallAt5');
   close(r.mrrAt10, 0.75, 'mrrAt10');
@@ -114,11 +104,9 @@ test('BA-27 fix1 toy: bm25Fair agrees with the existing runEval on the comparabl
 test('BA-27 fix1 toy: grep side is hand-computed (answerable recall, abstain returns, abstainAccuracy = 1 - returned rate)', () => {
   const { dir, casesFile } = fixture();
   const g = runGrepBaseline({ corpusDir: dir, casesFile });
-  // grep answerable: A1 alpha rank 1, A2 beta rank 1, A3 alpha absent (ranking [beta]), A4 alpha rank 1 -> recall 3/4, rr 3/4
   close(g.recallAt5, 3 / 4, 'recallAt5');
   close(g.answerableRecallAt5, 3 / 4, 'answerableRecallAt5 equals recallAt5');
   close(g.mrrAt10, 3 / 4, 'mrrAt10');
-  // grep returns for U2 ('zyqorvex') and U4 (contains 'zyqorvex'); U1 and U3 match no line
   assert.equal(g.abstainN, 4);
   close(g.unansweredReturnedRate, 2 / 4, 'unansweredReturnedRate');
   close(g.abstainAccuracy, 1 - 2 / 4, 'abstainAccuracy');

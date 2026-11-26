@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-07 acceptance (independent): the prompt hook's optional semantic step, exercised offline.
-// Provider and fetch are fakes; no socket is opened. The real module is loaded, only its index reader is replaced.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -23,7 +21,6 @@ function makeVault() {
   return { root, vault, state: join(root, 'state') };
 }
 
-// Real fingerprint for the test settings, computed by the module's own provider factory.
 async function fingerprint() {
   const { createOllamaProvider } = await import(semanticEntryUrl());
   return createOllamaProvider({
@@ -44,7 +41,6 @@ function fakeFetch({ mode = 'ok', calls = [] } = {}) {
   };
 }
 
-// The module is loaded for real; only readSemanticIndex is replaced with an in-memory index.
 function moduleWithIndex(index) {
   return async (url) => ({ ...(await import(url)), readSemanticIndex: async () => index });
 }
@@ -132,7 +128,6 @@ test('a remote provider URL is refused and the provider is never called', async 
 
 test('a used semantic result is deduplicated by page and passes through the prepare step', async () => {
   const fp = await fingerprint();
-  // Two chunks of beta.md: the better one must win, and beta.md must appear once.
   const index = indexFor(fp, [
     { path: 'beta.md', vector: [0.2, 0.8], text: 'weak chunk', headingPath: ['Beta'] },
     { path: 'beta.md', vector: [1, 0], text: 'river bridge chunk', headingPath: ['Beta'] },
@@ -147,7 +142,6 @@ test('a used semantic result is deduplicated by page and passes through the prep
   assert.equal(hit.semantic, 'used');
   const paths = hit.results.map((r) => r.path);
   assert.equal(new Set(paths).size, paths.length, 'no duplicate pages');
-  // Index entries are relative to wiki/; the hook's page paths are relative to the vault root.
   const beta = hit.results.find((r) => r.path === 'wiki/beta.md');
   assert.ok(beta, 'semantic page is mapped to its vault path');
   assert.equal(beta.semanticScore, 1, 'the best chunk of the page is the one scored');
@@ -157,8 +151,7 @@ test('a used semantic result is deduplicated by page and passes through the prep
 test('secret-shaped content in a semantic chunk is redacted when the caller applies redaction', async () => {
   const { redact } = await import('../../../packages/core/src/safety/index.mjs');
   const fp = await fingerprint();
-  const secret = ['AKIA', 'IOSFODNN7EXAMPLE'].join(''); // built at runtime so the privacy scan does not flag the fixture
-  // The query matches only gamma.md lexically, so beta.md can reach the output only through the semantic chunk text.
+  const secret = ['AKIA', 'IOSFODNN7EXAMPLE'].join('');
   const index = indexFor(fp, [
     { path: 'beta.md', vector: [1, 0], text: `river key ${secret} bridge`, headingPath: [] },
   ]);

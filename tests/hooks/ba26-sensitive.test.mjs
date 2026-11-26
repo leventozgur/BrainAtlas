@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26: the hook never injects a page with `sensitivity: personal` or `inject: never`, never marks it as shown, and redacts
-// contact data and checksum-valid personal identifiers in its output. Pages without these markers are unchanged.
-// Hermetic: temporary vault, state and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile, readFile, readdir } from 'node:fs/promises';
@@ -11,7 +8,6 @@ import { runHook } from '../../packages/hooks/src/index.mjs';
 
 const NOW = new Date('2026-11-10T00:00:00Z');
 const logLine = (ts, entry) => `- ${ts} ${JSON.stringify(entry)}`;
-// Synthetic values assembled at run time; the TCKN and IBAN check digits are computed here.
 const MAIL = ['ornek.kisi', '@', 'example.com'].join('');
 const PHONE = '+90 ' + '5' + '32 000 00 00';
 function tckn(first9) {

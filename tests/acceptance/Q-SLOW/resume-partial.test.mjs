@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Acceptance (3), (4), (5): resume from partial file, fingerprint mismatch, force rebuild, read path isolation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chmod, mkdir, readFile, stat, symlink, writeFile, unlink } from 'node:fs/promises';
@@ -138,7 +137,6 @@ test('checkpoint cadence: written no more often than every 30 s of injected time
       { indexBatchSize: 1 }
     )
     .catch(() => {});
-  // 29 s per group (< 30 s): the first group alone must not trigger a checkpoint.
   assert.deepEqual(fastObservations.slice(0, 2), [
     [1, false],
     [2, false],
@@ -382,7 +380,6 @@ test('read path never sees the partial file: only-partial yields null, existing 
   const complete = await setup(t, 40);
   const previous = await complete.update(fakeProvider({}));
   const bytes = await readFile(complete.index, 'utf8');
-  // Change the corpus and get interrupted so a partial for the *new* state exists next to the old index.
   await writeFile(join(complete.wiki, 'page.md'), sectionPage('Page', 60, 'changed'));
   await assert.rejects(complete.update(fakeProvider({ failOnCall: 2 })));
   assert.equal(await exists(complete.partial), true);

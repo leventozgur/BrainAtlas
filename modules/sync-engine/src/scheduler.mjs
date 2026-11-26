@@ -41,7 +41,6 @@ async function realpathWithMissingTail(path) {
       } catch (statError) {
         if (statError?.code !== 'ENOENT' && statError?.code !== 'ENOTDIR') throw pathEscape();
       }
-      // A dangling symlink cannot be safely approximated by appending a missing tail.
       if (info?.isSymbolicLink()) throw pathEscape();
       const parent = dirname(current);
       if (parent === current) throw pathEscape();
@@ -66,7 +65,6 @@ async function assertSchedulerPaths(ctx, paths, files) {
     } catch (cause) {
       if (cause?.code !== 'ENOENT') throw pathEscape();
     }
-    // Never replace or remove a symlink at the managed file path, even with opt-in.
     if (info?.isSymbolicLink()) throw pathEscape();
     const directoryPath = await realpathWithMissingTail(dirname(file));
     const filePath = info ? await realpathWithMissingTail(file) : resolve(directoryPath, basename(file));
@@ -78,7 +76,9 @@ function unitEscape(value) {
   return String(value).replaceAll('\\', '\\\\').replaceAll(' ', '\\x20').replaceAll('"', '\\"');
 }
 
-/** Build user-level scheduler files without touching the filesystem or host scheduler. @param {{platform?:string,paths?:any,intervalMin?:number}} [options] */
+/**
+ * @param {{platform?:string,paths?:any,intervalMin?:number}} [options]
+ */
 export function planScheduler({ platform, paths, intervalMin = 30 } = {}) {
   if (
     !['darwin', 'linux'].includes(platform) ||
@@ -508,7 +508,6 @@ async function schedulerStatus(ctx, platform, paths) {
   };
 }
 
-/** Handle the user-level sync schedule command. */
 export async function scheduleCommand(args, ctx = {}) {
   const options = parseScheduleArgs(args);
   const { platform, paths } = schedulerPaths(ctx);

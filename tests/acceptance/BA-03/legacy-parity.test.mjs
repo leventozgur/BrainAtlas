@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-03 independent parity test. The golden file fixtures/legacy-main-dev.json was produced once from the main
-// branch (commit c194411, before the identifier change) by running buildIndex/search with limit 10, threshold 0 and
-// asOf 2026-11-11 over every eval/dev set. Identifier-free queries must match it exactly. Identifier-bearing queries
-// may change; the test then checks that no query that was answered at rank 1 loses that answer.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,10 +21,6 @@ const SETS = [
   { key: 'nearNegative', corpus: 'eval/corpus-ba', cases: 'eval/dev/near-negative-cases.json', min: 8 },
 ];
 
-// Independent, deliberately broad classifier of queries that might contain an identifier: any token with an
-// underscore, slash, dot or digit, a lower-to-upper hump, a leading `--`, or two or more leading capitals.
-// Over-selecting only lowers the number of identifier-free queries that are compared, and the minimums below
-// guard against that becoming too large.
 function mayContainIdentifier(query) {
   return query.split(/\s+/).some((raw) => {
     const t = raw.replace(/^[^\p{L}\p{N}-]+|[^\p{L}\p{N}]+$/gu, '');
@@ -46,8 +38,6 @@ function mayContainIdentifier(query) {
 const shape = (r) => ({
   abstained: r.abstained,
   reason: r.reason,
-  // PM update (BA-04, 2026-11-11): BA-04 intentionally changes which section is shown (newest valid dated section);
-  // ranking, scores and abstention must still match main exactly, so the section heading is no longer pinned here.
   results: r.results.map((x) => ({ path: x.path, score: x.score })),
 });
 
@@ -83,7 +73,6 @@ test('identifier-free dev queries return results identical to main (path, score,
       if (mayContainIdentifier(c.query)) return;
       compared++;
       const raw = search(index, c.query, { limit: 10, abstainThreshold: 0, asOf: now });
-      // PM update (BA-09, 2026-11-11): results re-weighted by provenance trust (carrying `trust`) are left out of the comparison.
       const weighted = new Set(index.docs.filter((d) => d.trust && d.trust !== 'neutral').map((d) => d.page.path));
       const drop = (sh) => ({ ...sh, results: sh.results.filter((r) => !weighted.has(r.path)) });
       const current = drop(shape(raw));
@@ -91,9 +80,6 @@ test('identifier-free dev queries return results identical to main (path, score,
       const n = Math.min(current.results.length, expected.results.length);
       current.results = current.results.slice(0, n);
       expected.results = expected.results.slice(0, n);
-      // PM update (BA-08, 2026-11-11): link-graph expansion intentionally adds or lifts linked neighbours below the first result
-      // on linked corpora (eval/corpus-ba); there the first result and abstention must still match main. Unlinked corpora keep
-      // full parity.
       if (set.corpus === 'eval/corpus-ba') {
         assert.deepEqual(
           { abstained: current.abstained, reason: current.reason, first: current.results[0] ?? null },

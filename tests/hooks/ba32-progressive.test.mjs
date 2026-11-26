@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-32: the opt-in progressive hook format (two full blocks, then up to six pointer lines) and byte identity with
-// `full`/absent. Hermetic: temporary vault, state and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -146,7 +144,6 @@ test('BA-32: a small Codex cap leaves out the pointers that do not fit and never
   const anchor = (n) => `${long.toLowerCase()}-${n}`;
   const pointer = (n) => `- ${long} ${n} › ${long} ${n} (p${n}.md#${anchor(n)})`;
   assert.deepEqual(pointers, [3, 4, 5, 6, 7, 8].map(pointer).slice(0, pointers.length));
-  // The first omitted pointer is the one that no longer fits the cap.
   const overflow = `${context}\n${pointer(3 + pointers.length)}`;
   assert.ok(
     JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: overflow } }).length >

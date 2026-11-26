@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Shared helpers for the Q-SLOW blind acceptance tests. Deterministic, offline, temp-dir only.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
@@ -15,7 +14,6 @@ export async function tempRoot(t) {
   return root;
 }
 
-/** A wiki directory and a separate state directory inside one temp root. */
 export async function workspace(t, files = {}) {
   const root = await tempRoot(t);
   const wiki = join(root, 'vault', 'wiki');
@@ -28,7 +26,6 @@ export async function workspace(t, files = {}) {
   return { root, vault: join(root, 'vault'), wiki, stateDir, semanticDir: join(stateDir, 'semantic') };
 }
 
-/** One page with `count` heading sections; each section is exactly one chunk. */
 export function sectionPage(title, count, tag = 'x') {
   let text = `# ${title}\n`;
   for (let i = 0; i < count; i++) text += `\n## Section ${i}\nbody ${tag} number ${i} lorem ipsum\n`;
@@ -51,10 +48,6 @@ export function fakeClock(start = 1_700_000_000_000) {
   return clock;
 }
 
-/**
- * Deterministic fake provider. `durations[i]` is the simulated duration (ms) of call i+1
- * (the last value repeats). The shared fake clock is advanced by that amount.
- */
 export function fakeProvider({
   dims = 3,
   fingerprint = 'fp-a',
@@ -116,7 +109,6 @@ export async function exists(file) {
   }
 }
 
-/** Recursive listing with file content hashes; used to prove "no write happened". */
 export async function snapshot(root, prefix = '') {
   const result = {};
   let entries;
@@ -136,15 +128,11 @@ export async function snapshot(root, prefix = '') {
   return result;
 }
 
-/** Index text with the volatile createdAt neutralised. */
 export function normalizedIndexText(text) {
   assert.equal(text.endsWith('\n'), true);
   return text.replace(/"createdAt":"[^"]*"/u, '"createdAt":"<redacted>"');
 }
 
-/**
- * Drive a promise that depends on mocked setTimeout/Date by ticking virtual time while real I/O proceeds.
- */
 export async function drive(t, promise, stepMs = 500, max = 5000) {
   let settled = false;
   const wrapped = promise.then(

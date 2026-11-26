@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-92: the vault policy block is versioned, refreshable and its user text is linted.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

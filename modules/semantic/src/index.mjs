@@ -17,7 +17,9 @@ import { semanticSetup } from './setup.mjs';
 let enabled = false;
 let gatePassed = false;
 
-/** A gate result and explicit user opt-in are both required to enable retrieval. @param {{gateResult?:any,optIn?:boolean}} [options] */
+/**
+ * @param {{gateResult?:any,optIn?:boolean}} [options]
+ */
 export function configureSemantic({ gateResult, optIn = false } = {}) {
   gatePassed = gateResult?.enable === true;
   enabled = gatePassed && optIn === true;
@@ -28,7 +30,6 @@ export function semanticStatus() {
   return { enabled, gatePassed };
 }
 
-/** Module lifecycle is inert unless the current activation carries a passing gate and opt-in. */
 export async function activate(ctx) {
   configureSemantic({ gateResult: ctx?.semanticGateResult, optIn: ctx?.config?.semantic?.enabled === true });
 }

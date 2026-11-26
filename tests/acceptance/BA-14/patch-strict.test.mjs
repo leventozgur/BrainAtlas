@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 blind acceptance: wiki_update_page patch validation and valid patch behavior over stdio MCP.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';

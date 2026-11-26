@@ -21,7 +21,6 @@ const fmError = (code) => ({
   message: code === 'E_FRONTMATTER_YAML' ? 'Frontmatter YAML is invalid.' : 'Frontmatter delimiters are invalid.',
 });
 
-/** Create a standard vault tree. Existing files are never replaced. */
 export async function initVault(dir, options = {}) {
   const requested = resolve(dir);
   await mkdir(requested, { recursive: true });
@@ -59,7 +58,6 @@ export async function initVault(dir, options = {}) {
   return { path: base, created: [...dirs, ...files.map(([p]) => p)] };
 }
 
-/** Parse YAML frontmatter without allowing unquoted dates to become Date objects. */
 export function parseFrontmatter(text) {
   const source = markdown(text).replace(/^\uFEFF/, '');
   const lines = source.split(/\r?\n/);
@@ -70,8 +68,6 @@ export function parseFrontmatter(text) {
   const doc = YAML.parseDocument(yamlText, { schema: 'core', uniqueKeys: true, prettyErrors: false, strict: true });
   if (doc.errors.length || (doc.contents && !YAML.isMap(doc.contents)))
     return { data: {}, body: lines.slice(end + 1).join('\n'), errors: [fmError('E_FRONTMATTER_YAML')] };
-  // YAML 1.2 core schema treats date-like values as strings; normalize any timestamp
-  // objects defensively so callers never observe timezone-dependent date shifts.
   let data;
   try {
     data = doc.contents ? doc.toJS({ mapAsMap: false, maxAliasCount: 0 }) : {};
@@ -110,7 +106,6 @@ export async function listPages(vaultDir) {
   return result.sort();
 }
 
-/** Append one serialized event; callers cannot replace prior log records. */
 export async function appendLog(vaultDir, entry, options = {}) {
   const base = await realpath(resolve(vaultDir));
   const rel = 'wiki/log.md';
@@ -137,7 +132,6 @@ export async function appendLog(vaultDir, entry, options = {}) {
   await (options.atomicWriter ?? atomicWriteFile)(file, `${content}\n- ${timestamp} ${JSON.stringify(safeEntry)}\n`);
 }
 
-/** Upsert a path/title row under the index Entries heading. */
 export async function upsertIndexEntry(vaultDir, entry) {
   if (
     !validRel(entry?.path) ||

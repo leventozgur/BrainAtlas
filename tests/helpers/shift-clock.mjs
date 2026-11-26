@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Opt-in preload: run the test suite as if it were BRAINATLAS_TEST_CLOCK_SHIFT_DAYS days later.
-// Shifted clocks are propagated to spawned child processes through NODE_OPTIONS.
 import { fileURLToPath } from 'node:url';
 
 const shiftDays = Number(process.env.BRAINATLAS_TEST_CLOCK_SHIFT_DAYS);
@@ -11,8 +9,6 @@ if (ACTIVE) {
   const offset = shiftDays * DAY;
   const RealDate = Date;
   const shiftedNow = () => RealDate.now() + offset;
-  // A class cannot shadow Date() called as a function (it throws without `new`), so proxy the
-  // real constructor: only the zero-argument form is shifted and Date() still returns a string.
   const ShiftedDate = new Proxy(RealDate, {
     apply() {
       return new RealDate(shiftedNow()).toString();
@@ -34,12 +30,10 @@ if (ACTIVE) {
   }
 }
 
-/** Whether NODE_OPTIONS already loads this preload, whether it names the path or the file URL. */
 function hasPreload(value) {
   return value.includes(import.meta.url) || value.includes(fileURLToPath(import.meta.url));
 }
 
-/** Carry the clock shift into a hand-built child env, since such envs bypass process.env inheritance. */
 export function clockShiftEnv(env = {}) {
   if (!ACTIVE) return env;
   const preload = `--import ${import.meta.url}`;

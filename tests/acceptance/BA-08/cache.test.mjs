@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-08 blind acceptance: the persisted index carries the link graph. A valid cache is reused unchanged; a cache without
-// or with a broken graph is rebuilt once; freshness checks see link targets that appear or disappear.
-// Contract: docs/contracts/retrieval.md, "Page links and graph expansion", **Cache**.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -49,8 +46,6 @@ test('a valid cache is reused without rewriting it, and answers the same as a co
   const second = rt.createSearcher({ vaultDir: w.vault, stateDir: w.state, now });
   assert.equal(fs.readFileSync(w.cache, 'utf8'), bytes, 'a valid cache is not rewritten');
   assert.deepEqual(answers(second), cold);
-  // A cache hit builds `links` with a null prototype (index.mjs decodeCachedIndex) while buildIndex uses a plain object
-  // (index.mjs buildLinks). Compare the content, not the prototype; the prototype difference is reported as a finding.
   assert.equal(JSON.stringify(second.snapshot().index.links), JSON.stringify(JSON.parse(bytes).index.links));
   assert.ok(
     cold.some(
@@ -73,7 +68,6 @@ test('a cache without links is rejected and rebuilt, and the rebuilt cache carri
   assert.deepEqual(JSON.parse(fs.readFileSync(w.cache, 'utf8')).index.links, cold.links);
 });
 
-// Each tamper breaks one documented rule for the graph; the searcher must reject the cache and rebuild it.
 const tampers = {
   'asymmetric edge (neighbour lost its back link)': (links) => {
     const k = Object.keys(links)[0];
@@ -129,7 +123,6 @@ test('a link target added to the vault appears after refreshIfChanged, and is dr
   const before = searcher.search('kestrel courier handoff', { abstainThreshold: 0, asOf: now }).results;
   assert.ok(!before.some((r) => r.path === 'timing.md'));
 
-  // The seed now links to a new page; both changes alter the stat fingerprint (size changes).
   writeFiles(w.vault, {
     'seed.md': body('kestrel courier handoff rules [[timing]] with a longer line'),
     'timing.md': body('forty minutes countersign'),
@@ -139,7 +132,6 @@ test('a link target added to the vault appears after refreshIfChanged, and is dr
   assert.equal(linked.find((r) => r.path === 'timing.md')?.via, 'link');
   assert.equal(searcher.refreshIfChanged(), false);
 
-  // Removing the target drops the edge; the rebuilt graph has no entry for the seed.
   fs.rmSync(path.join(w.vault, 'timing.md'));
   writeFiles(w.vault, {
     'seed.md': body('kestrel courier handoff rules [[timing]] with a much longer line than before'),

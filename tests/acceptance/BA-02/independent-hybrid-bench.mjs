@@ -1,9 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 independent measurement (not a node:test file). Per-query MCP hybrid-path cost on a 2000-page synthetic vault.
-// usage: node independent-hybrid-bench.mjs <repoRoot> <workDir>
-//   repoRoot without refreshIfChanged (main): old path = loadPages(vault) + searchHybrid({pages, ...}) per query.
-//   repoRoot with refreshIfChanged (BA-02):   new path = refreshIfChanged() + snapshot() + searchHybrid({pages, lexicalIndex, ...}).
-// Prints one JSON line: mode, per-query p50/p95 (ms), and a digest of every query's result paths (for quality comparison).
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -22,7 +17,6 @@ const now = new Date('2026-11-10T00:00:00Z');
 
 const core = await import(pathToFileURL(path.join(repo, 'packages/core/src/retrieval/index.mjs')).href);
 const hybrid = await import(pathToFileURL(path.join(repo, 'modules/semantic/src/hybrid.mjs')).href);
-// The synthetic corpus generator and fixed vectors are the same deterministic code in both trees (eval/lib is unchanged).
 const corpus = await import(pathToFileURL(path.join(WT, 'eval/lib/synthetic-corpus.mjs')).href);
 const { loadPages, createSearcher } = core;
 const { searchHybrid } = hybrid;
@@ -41,7 +35,7 @@ const provider = { fingerprint: 'ba02-independent-bench', embedQuery: async () =
 
 const isNew = typeof createSearcher({ vaultDir: vault, stateDir, now }).refreshIfChanged === 'function';
 const searcher = isNew ? createSearcher({ vaultDir: vault, stateDir, now }) : null;
-if (searcher) searcher.snapshot(); // first query-independent setup, as in a running MCP server
+if (searcher) searcher.snapshot();
 
 const times = [],
   digest = crypto.createHash('sha256');

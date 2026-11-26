@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-48 phase B1: the deterministic synthesis core — scoring, target selection, sanitising, schema validation, the five
-// gates, the block renderer and the proposal store. No model call and no vault write happens here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';

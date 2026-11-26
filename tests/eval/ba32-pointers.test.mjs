@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-32: the eval parse layer understands `(path#anchor)` block titles and progressive pointer lines, and runHookCases
-// takes a `disclosure` option. Hermetic: temporary corpus and state directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -46,7 +44,6 @@ test('BA-32: pointer lines after the exact header add their paths; other pointer
     '- Ghost (ghost.md)',
   ].join('\n');
   assert.deepEqual(parseInjectedPaths(context, known), ['alpha.md', 'beta.md', 'gamma.md']);
-  // Without the header a `- x (known.md)` line inside a snippet is not a pointer.
   assert.deepEqual(parseInjectedPaths('Alpha (alpha.md)\nsnippet\n- x (beta.md)', known), ['alpha.md']);
   assert.deepEqual(parseInjectedPaths('Alpha (alpha.md)\nsnippet\n- x (gamma.md#g)', known), ['alpha.md']);
 });

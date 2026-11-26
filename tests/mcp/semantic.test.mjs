@@ -286,14 +286,12 @@ test('empty index rebuilds once when pages exist and remains valid for an empty 
   });
   const query = async () =>
     JSON.parse((await client.callTool({ name: 'wiki_query', arguments: { query: 'car' } })).content[0].text);
-  // Empty indexes remain usable when the vault contains no pages.
   releaseBuild();
   const empty = await query();
   assert.equal(empty.semantic.used, true);
   assert.equal(calls, 1);
   await client.close();
   await server.close();
-  // Use a fresh server and a blocking provider to verify concurrent misses share one build.
   await writeFile(join(wiki, 'car.md'), '# Engine\ncar motor');
   let unblock, signal;
   const blocked = new Promise((resolve) => {
@@ -440,8 +438,6 @@ test('MCP fallback, opt-out and remote policy preserve lexical answers without l
   behavior = 'ok';
   const mismatch = structuredClone(config);
   mismatch.semantic.model = 'different';
-  // A fingerprint mismatch schedules a background rebuild for the other model; give it its own state so that rebuild
-  // cannot replace the index the later queries in this test read.
   const mismatchState = join(root, 'mismatch-state');
   await cp(stateDir, mismatchState, { recursive: true });
   const mismatchQuery = await connect(mismatch, mismatchState);

@@ -127,9 +127,8 @@ test('file symlink does not alter outside target', async (t) => {
   const before = await read(x.sentinel);
   try {
     await a.apply(a.plan(x.ctx), x.ctx);
-  } catch {
-    /* the write is expected to fail; the assertion below covers the outcome */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   assert.equal(await read(x.sentinel), before);
 });
 test('doctor, detection and trust review distinguish states and identify Gemini', async (t) => {

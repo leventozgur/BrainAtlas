@@ -584,9 +584,6 @@ function mdCheck(text) {
   if (!claimed || createHash('sha256').update(body).digest('hex').slice(0, 12) !== claimed)
     err('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
 }
-// The cli channel reads the markers tolerantly: CRLF inside the managed block is
-// normalised to LF before the hash and the body are compared, so an unchanged block
-// from a CRLF checkout is recognised instead of being rewritten.
 function restorable(prefix, suffix, original) {
   if (typeof original !== 'string' || suffix.trim() !== '') return false;
   const normalized = (value) => value.replaceAll('\r\n', '\n').replace(/\n+$/u, '');
@@ -634,8 +631,6 @@ function readPlanFile(file, kind) {
   return before;
 }
 function assertNoMcp(ctx, p) {
-  // Detection is tolerant in the cli channel: a BOM or an unreadable document means
-  // "no BrainAtlas entry" because the cli channel never writes these files.
   const forgivingJson = (text) => {
     try {
       const value = JSON.parse(text.replace(/^\uFEFF/, ''));
@@ -748,8 +743,6 @@ export async function apply(planResult, ctx) {
   if (!planResult || !Array.isArray(planResult.changes)) err('E_ARGUMENT', 'Plan is invalid.');
   const p = paths(ctx),
     originalsDir = path.join(p.state, 'originals');
-  // Replanning validates every current target (including BOMs and managed hashes)
-  // and establishes the only files this adapter may write in this scope.
   const allowed = new Set(plan(ctx).changes.map((change) => change.file));
   for (const change of planResult.changes) {
     if (!change || typeof change.file !== 'string' || !allowed.has(change.file))
@@ -786,7 +779,6 @@ export async function remove(ctx) {
     cli = isCli(ctx);
   const files = (cli ? [p.instructions] : [p.toml, p.hooks, p.instructions]).filter(Boolean);
   const actions = [];
-  // Validate the entire removal set before constructing or applying any action.
   for (const file of files) {
     const current = await read(file);
     if (current === null) continue;
@@ -878,16 +870,14 @@ export async function doctor(ctx) {
         mdCheckCli(instructions);
         instructionsOk = mdBody(instructions) === cliPayload(ctx);
       }
-    } catch {
-      /* tolerant read: an unreadable or missing file never fails the check */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     let shimExists = false;
     try {
       await access(ctx.shimPath);
       shimExists = true;
-    } catch {
-      /* tolerant read: an unreadable or missing file never fails the check */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     const checks = [
       {
         id: 'instructions',
@@ -920,23 +910,20 @@ export async function doctor(ctx) {
       const args = block.match(/^args\s*=\s*\[("(?:[^"\\]|\\.)*"),\s*"mcp"\]$/m)?.[1];
       versionDrift = !command || !args || JSON.parse(command) !== ctx.nodePath || JSON.parse(args) !== ctx.shimPath;
     }
-  } catch {
-    /* tolerant read: an unreadable or missing file never fails the check */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   if (hooks) {
     try {
       hookPresent = managedHooks(parseJson(hooks), ctx).length > 0;
-    } catch {
-      /* tolerant read: an unreadable or missing file never fails the check */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   let shimExists = false;
   try {
     await access(ctx.shimPath);
     shimExists = true;
-  } catch {
-    /* tolerant read: an unreadable or missing file never fails the check */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   return {
     ok: registered && shimExists && !versionDrift,
     checks: [

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-48: the read-only weekly maintenance snapshot, its overdue reminder and the absence of any OS scheduler code.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -229,12 +228,10 @@ test('reminder: only an existing last-weekly.json that is more than 8 days old a
   const calls = [];
   const runner = fakeRunner(calls);
 
-  // Never run: no reminder, no host command.
   const plain = await run(['maintain'], env, { runCommand: runner });
   assert.ok(!plain.includes('Reminder:'));
   assert.deepEqual(calls, []);
 
-  // A recent run: no reminder and the JSON keys are exactly as before.
   await mkdir(state, { recursive: true });
   await writeFile(last, JSON.stringify({ ranAt: new Date().toISOString() }));
   const recent = await run(['maintain'], env, { runCommand: runner });
@@ -243,7 +240,6 @@ test('reminder: only an existing last-weekly.json that is more than 8 days old a
   assert.equal(recentJson.weekly, undefined);
   assert.deepEqual(Object.keys(recentJson).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy']);
 
-  // An old run: exactly one reminder line, plus `weekly` in the JSON.
   const oldRanAt = new Date(Date.now() - 9 * 86400000).toISOString();
   await writeFile(last, JSON.stringify({ ranAt: oldRanAt }));
   const stale = await run(['maintain'], env, { runCommand: runner });
@@ -257,13 +253,11 @@ test('reminder: only an existing last-weekly.json that is more than 8 days old a
   assert.equal(staleJson.weekly.lastRun, oldRanAt);
   assert.deepEqual(Object.keys(staleJson.weekly).sort(), ['lastRun', 'overdue']);
 
-  // With --vault: no reminder even when overdue, and the JSON keys stay untouched.
   const withVault = await run(['maintain', '--vault', vault], env, { runCommand: runner });
   assert.ok(!withVault.includes('Reminder:'));
   const withVaultJson = JSON.parse(await run(['maintain', '--vault', vault, '--json'], env, { runCommand: runner }));
   assert.deepEqual(Object.keys(withVaultJson).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy']);
 
-  // After a weekly run the reminder disappears.
   await run(['maintain', '--weekly'], env, { runCommand: runner });
   const after = await run(['maintain'], env, { runCommand: runner });
   assert.ok(!after.includes('Reminder:'));

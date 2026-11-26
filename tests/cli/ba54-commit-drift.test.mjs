@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-54: `maintain --repo` verifies the `@<commit>` suffix of `repo:` sources with read-only git and reports
-// unknown-commit, source-drift and unverifiable. Hermetic: temporary vaults and git repositories only, no network, and
-// maintain never writes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -75,15 +72,12 @@ const commitAll = (dir, message) => {
   return head(dir);
 };
 
-/** A repository with one committed source file; returns its commit. */
 async function seededRepo(dir) {
   await mkdir(dir, { recursive: true });
   git(dir, ['init', '-q']);
   await writeTree(dir, { 'src/total.mjs': SOURCE_FILE });
   return commitAll(dir, 'seed');
 }
-
-// ---- Commit existence and drift.
 
 test('a commit-bearing source whose file is unchanged since that commit reports nothing', async (t) => {
   const { vault, repo } = await fixture(t);
@@ -148,8 +142,6 @@ test('one unknown commit used for two paths on one page is reported once', async
   );
 });
 
-// ---- unverifiable: shallow clone, non-git directory, missing HEAD.
-
 test('a shallow clone reports unverifiable for a commit it does not contain', async (t) => {
   const { base, vault, repo } = await fixture(t);
   const first = await seededRepo(repo);
@@ -165,7 +157,6 @@ test('a shallow clone reports unverifiable for a commit it does not contain', as
       detail: `commit cannot be verified: ${first.slice(0, 7)}`,
     },
   ]);
-  // The one commit the shallow clone does contain is still verifiable.
   await vaultAt(vault, [`repo:src/total.mjs@${head(clone)}`]);
   assert.deepEqual(commitFindings(await runMaintenance(vault, { now: NOW, repo: clone })), []);
 });
@@ -189,8 +180,6 @@ test('a repository without a resolvable HEAD reports unverifiable', async (t) =>
     { kind: 'unverifiable', path: 'wiki/concepts/a.md', detail: 'commit cannot be verified: abcdef1' },
   ]);
 });
-
-// ---- Path handling around commits.
 
 test('a source without a commit adds no commit finding, even outside a git repository', async (t) => {
   const { vault, repo } = await fixture(t);
@@ -238,8 +227,6 @@ test('a file deleted in a later commit is stale-source, not source-drift', async
   );
   assert.deepEqual(commitFindings(report), []);
 });
-
-// ---- Contract: counts, human output, receipts and identical output without --repo.
 
 test('the three new kinds are finding kinds only: counts keeps exactly the BA-12 keys', async (t) => {
   const { vault, repo } = await fixture(t);

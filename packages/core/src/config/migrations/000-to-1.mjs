@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 export const from = 0;
 export const to = 1;
-/** @param {object} obj */
 export function migrate(obj) {
   const profile = ['lite', 'full', 'custom'].includes(obj?.profile) ? obj.profile : 'lite';
   return {

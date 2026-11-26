@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Performance suite: MCP write-lock wait bounds. Two real MCP server processes write the same vault; the tests
-// compare measured waits with fixed bounds, so they run only in the `perf` CI job (`npm run test:perf`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';

@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-00 retest regression (finding 1): near-negative nn-04 asks how many concurrent connections a client may hold
-// open to the Orchard API. No sentence in eval/corpus-ba may answer that premise or the quantity, so the abstain
-// label stays correct. The query must not rely on the old "anonymous client" framing.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -20,7 +17,6 @@ const corpusText = pages.join('\n');
 const orchardPages = pages.filter((p) => p.includes('orchard'));
 const nn04 = JSON.parse(readFileSync(join(DEV, 'near-negative-cases.json'), 'utf8')).find((c) => c.id === 'nn-04');
 
-// Answer terms for the asked quantity (concurrent connections per client).
 const ANSWER_TERMS = [
   'concurrent',
   'concurrency',
@@ -37,8 +33,6 @@ const ANSWER_TERMS = [
   'persistent connection',
   'socket',
 ];
-// Connection wording that would answer the Orchard-specific premise. Checked on Orchard pages only, because the
-// unrelated database connection pool in ops/incident-2026-02-cache-stampede.md is not an Orchard API statement.
 const ORCHARD_CONNECTION = /connection|concurren|simultan|socket|keep-alive/;
 
 test('nn-04 is an abstain case with empty relevant', () => {

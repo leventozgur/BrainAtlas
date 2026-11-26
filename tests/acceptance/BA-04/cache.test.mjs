@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-04 independent acceptance: the persisted cache carries `supersedes`; a structurally bad or pre-BA-04 cache is rebuilt,
-// and a vault change is picked up. Hermetic: temporary directories only, no HOME access, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

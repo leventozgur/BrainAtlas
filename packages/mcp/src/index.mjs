@@ -54,9 +54,7 @@ function asText(error) {
   if (error?.code === 'E_PATH_ESCAPE' && error.message === 'Path is outside planning/.')
     return 'E_PATH_ESCAPE: Path is outside planning/.';
   if (error?.code === 'E_PATH_ESCAPE') return 'E_PATH_ESCAPE: path is outside the Wiki.';
-  // Messages on E_INVALID_INPUT are fixed strings in this file and never contain caller content.
   if (error?.code === 'E_INVALID_INPUT') return `E_INVALID_INPUT: ${error.message}`;
-  // Planning refusals use fixed messages plus the caller's field or identifier.
   if (
     (error?.code === 'E_ARGUMENT' &&
       /^(project|maxChars|title|purpose|status|priority|slug|id|task|op|expectedSha256) /u.test(error.message)) ||
@@ -74,8 +72,6 @@ function serializePage(page) {
     .join('\n');
   return `---\n${fm}\n---\n${page.body ?? ''}\n`;
 }
-// BA-32: the frontmatter rule of the retrieval index (same pattern), so a section read splits the body exactly as the
-// search index does. An opening `---` without a closing line leaves the whole text as body.
 const FRONTMATTER = /^\uFEFF?---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/;
 function pageBody(text) {
   const match = text.match(FRONTMATTER);
@@ -86,7 +82,6 @@ const FENCE_OPEN = /^(`{3,}|~{3,})/;
 const PATCH_KEYS = new Set(['frontmatter', 'body', 'append']);
 
 const PROVENANCE_KEYS = ['generated', 'status', 'sources', 'verified', 'stale_after'];
-/** BA-63: how many of the OKF provenance fields a page carries. Presence only (empty values do not count); it never changes ranking. */
 function provenanceOf(frontmatter) {
   const fm = frontmatter ?? {};
   const filled = (value) =>
@@ -99,21 +94,12 @@ function provenanceOf(frontmatter) {
   return present === 0 ? 'none' : present === PROVENANCE_KEYS.length ? 'full' : 'partial';
 }
 
-/**
- * BA-63: a page written through MCP gets `generated` (UTC now) when it has none. `status` is never added (BA-69): the
- * server cannot know the author's intent, and a `proposed` stamp would silently turn a neutral page into a `weak` one that
- * ranks lower and is marked `[unverified]`. Evidence fields (`sources`, `verified`) are never invented, and fields the
- * author supplied are never changed.
- */
 function withWriteProvenance(frontmatter, now = new Date()) {
   const next = { ...frontmatter };
   if (!Object.hasOwn(next, 'generated')) next.generated = now.toISOString();
   return next;
 }
 /**
- * BA-74: replacing an existing page with `content` must not fake freshness. Content that carries `generated` keeps it as
- * given; content without it keeps the existing page's non-empty `generated` byte for byte; when neither has one, nothing
- * is added. Only a page that does not exist yet gets `generated: now` (BA-63).
  * @param {Record<string, unknown>} frontmatter frontmatter parsed from the new content
  * @param {Record<string, unknown>|undefined} existing frontmatter of the page on disk, or undefined when it is new
  * @param {Date} [now] clock used only for a new page
@@ -124,17 +110,13 @@ function withReplacementProvenance(frontmatter, existing, now = new Date()) {
   const next = { ...frontmatter };
   if (Object.hasOwn(next, 'generated')) return next;
   const previous = existing.generated;
-  // Only a non-empty string is preserved: any other existing value is not a usable provenance stamp.
   if (typeof previous === 'string' && previous.trim() !== '') next.generated = previous;
   return next;
 }
-/** Undo CommonMark backslash escapes of ASCII punctuation in a link destination. */
 function unescapeDestination(raw) {
   return raw.replace(/\\([!-/:-@[-`{-~])/g, '$1');
 }
 /**
- * Destination of a `- [Title](destination)` line, read the way CommonMark reads a link: escaped parentheses and
- * balanced unescaped parentheses belong to the destination; the first unbalanced `)` ends it.
  * @returns {string|undefined} unescaped destination, or undefined when the line is not a link entry
  */
 function entryDestination(trimmed) {
@@ -145,7 +127,6 @@ function entryDestination(trimmed) {
   if (trimmed[i] !== ']' || trimmed[i + 1] !== '(') return undefined;
   const start = i + 2;
   if (trimmed[start] === '<') {
-    // Angle-bracket destination (may contain spaces): ends at the first unescaped '>' that is followed by ')'.
     let j = start + 1;
     while (j < trimmed.length && trimmed[j] !== '>') j += trimmed[j] === '\\' ? 2 : 1;
     if (trimmed[j] !== '>' || trimmed[j + 1] !== ')') return undefined;
@@ -167,18 +148,15 @@ function entryDestination(trimmed) {
   if (i >= trimmed.length || i === start) return undefined;
   return unescapeDestination(trimmed.slice(start, i));
 }
-/** Classify one index line: `## Category` heading or `- [Title](path)` entry (trimmed, as the vendored readIndex does). */
 function indexLineInfo(line) {
   const trimmed = line.trim();
   const heading = trimmed.match(INDEX_CATEGORY_LINE);
   if (heading) return { heading: heading[1].trim() };
   const destination = entryDestination(trimmed);
   if (destination === undefined) return {};
-  // `page.md#anchor` and `page.md?query` name the page `page.md`; a fragment-only target names no page.
   const path = destination.replace(/[#?].*$/s, '');
   return path ? { entryPath: posix.normalize(path) } : {};
 }
-/** Local page paths named by the entry lines of an index text (null: no index). */
 function indexedPaths(content) {
   const paths = new Set();
   if (content === null) return paths;
@@ -187,7 +165,6 @@ function indexedPaths(content) {
   return paths;
 }
 /**
- * Classify every line. Lines inside a fenced code block (``` or ~~~) are opaque: no heading and no entry.
  * @returns {{infos:object[], openFence:{char:string,length:number}|null}}
  */
 function classifyLines(lines) {
@@ -208,36 +185,23 @@ function classifyLines(lines) {
   });
   return { infos, openFence: fence };
 }
-/** Category of a page: its first folder, or `Pages` for a page at the Wiki root. */
 function categoryOf(path) {
   return path.includes('/') ? path.split('/')[0] : 'Pages';
 }
-/**
- * A page whose path holds a carriage return, line feed, U+0085, U+2028 or U+2029 is never written to the index (a line
- * break would split the entry line) and is not counted in wiki_status coverage. Other control characters and tabs are
- * written inside angle brackets and read back exactly.
- */
 const UNSAFE_PATH = /[\r\n\u0085\u2028\u2029]/;
 function indexablePath(path) {
   return !UNSAFE_PATH.test(path);
 }
-/** A link target that names a local Markdown file. External URLs and anchors are never treated as stale pages. */
 function isLocalMarkdownTarget(path) {
   return path.endsWith('.md') && !path.startsWith('/') && !path.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(path);
 }
-/**
- * Line-safe label text: every run of whitespace, C0/C1 control character or DEL (this includes CR, LF, U+0085, U+2028
- * and U+2029) becomes one space, and the result is trimmed. An index entry must stay on one line.
- */
 function cleanLabel(text) {
   // eslint-disable-next-line no-control-regex -- index labels match C0/C1 control characters on purpose so an entry stays on one line
   return text.replace(/[\s\x00-\x1f\x7f-\x9f]+/g, ' ').trim();
 }
-/** Link text of an entry: the cleaned title, else the cleaned file name without `.md`, else the cleaned path. */
 function entryTitle(entry) {
   return cleanLabel(String(entry.title)) || cleanLabel(posix.basename(entry.path, '.md')) || cleanLabel(entry.path);
 }
-/** Index line for one page; the same shape as the vendored writer, with the frontmatter summary and valid tags. */
 function indexEntryLine(entry) {
   const fm = entry.frontmatter ?? {};
   const summarySource = [fm.summary, fm.description].find((value) => typeof value === 'string' && cleanLabel(value));
@@ -247,20 +211,12 @@ function indexEntryLine(entry) {
   const parts = [summary, ...(tags.length ? [tags.map((tag) => `#${tag}`).join(' ')] : [])].filter(Boolean);
   return `- [${title}](${indexDestination(entry.path)})${parts.length ? ` — ${parts.join(' ')}` : ''}`;
 }
-/**
- * Link destination for a page path. Parentheses and backslashes are escaped so the destination ends where the path ends;
- * a space or control character (or a leading `<`) would end a plain destination, so such paths use `<...>`.
- */
 function indexDestination(path) {
   const escaped = path.replace(/([\\()])/g, '\\$1');
   // eslint-disable-next-line no-control-regex -- index labels match C0/C1 control characters on purpose so an entry stays on one line
   if (!/[\s\x00-\x1f\x7f-\x9f]/.test(path) && !path.startsWith('<')) return escaped;
   return `<${escaped.replace(/[<>]/g, '\\$&')}>`;
 }
-/**
- * Index text for a Wiki without an index (or with an empty one): one `## <first folder>` category per folder, `## Pages`
- * for root pages, entries sorted by path. Lines use the same format as mergeIndex.
- */
 function freshIndex(entries) {
   const categories = new Map();
   const sorted = entries
@@ -279,18 +235,13 @@ function freshIndex(entries) {
   return output;
 }
 /**
- * Minimal edit of an existing index. Lines are kept as they are (bytes, EOL, order); only entry lines whose local
- * target no longer exists are removed, and pages without any entry get one line in their folder's category.
- * With `prune: false` no line is removed (the create tools add only their own page).
  * @returns {{output:string, added:number, removed:number}}
  */
 function mergeIndex(content, entries, { prune = true } = {}) {
-  // Existing lines keep their own trailing '\r' (split on '\n' only); inserted lines get the file's style.
   const cr = content.includes('\r\n') ? '\r' : '';
   const fresh = (text) => `${text}${cr}`;
   const isBlank = (text) => text.trim() === '';
   const pagePaths = new Set(entries.map((entry) => entry.path));
-  // Links are collected from the whole file, so an entry above the first heading also counts as linked.
   const linked = new Set();
   const source = content.split('\n');
   const sourceInfos = classifyLines(source).infos;
@@ -318,7 +269,6 @@ function mergeIndex(content, entries, { prune = true } = {}) {
       (info) => info.heading !== undefined && info.heading.toLowerCase() === category.toLowerCase()
     );
     if (headingAt === -1) {
-      // A file that ends inside an open fence would swallow the new block; close the fence first.
       const block = [
         ...(openFence ? [fresh(openFence.char.repeat(openFence.length))] : []),
         fresh(''),
@@ -326,12 +276,10 @@ function mergeIndex(content, entries, { prune = true } = {}) {
         fresh(''),
         line,
       ];
-      // A trailing empty element means the file ends with a newline; keep that newline last.
       if (lines.at(-1) === '') lines.splice(lines.length - 1, 0, ...block);
       else lines.push(...block);
       continue;
     }
-    // Insert after the category's last entry line, or right under its heading when it has none.
     let insertAt = headingAt + 1;
     let hasEntries = false;
     for (let i = headingAt + 1; i < lines.length && infos[i].heading === undefined; i++) {
@@ -344,12 +292,10 @@ function mergeIndex(content, entries, { prune = true } = {}) {
     lines.splice(insertAt, 0, line);
   }
   let output = lines.join('\n');
-  // Removing a CRLF file's last line can leave a bare '\r' at the end; close it with the missing '\n'.
   if (cr && output.endsWith('\r')) output += '\n';
   return { output, added: missing.length, removed };
 }
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-/** A plain object whose own keys are the only keys: a JSON `__proto__` key sets the prototype instead, so it is detected here. */
 function isPlainObject(value) {
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
@@ -409,12 +355,8 @@ export function createServer(options) {
       chmodSync(stateDir, 0o700);
     }
   }
-  // BA-29: the MCP search root stays wiki/ (as before: a vault without wiki/ is E_VAULT_MISSING). Only the exclusion list is new:
-  // root-level navigation and policy pages are not returned, unless retrieval.exclude says otherwise.
   const excludeRules = config.retrieval?.exclude ?? core.DEFAULT_EXCLUDE_WIKI;
   const isExcluded = (rel) => core.isExcludedPath(rel, excludeRules);
-  // BA-88: a dry run may run against a vault without wiki/ (nothing is created), so the searcher is built on first use
-  // there; every other server still builds it eagerly, exactly as before.
   let searcher = null;
   const getSearcher = () => (searcher ??= core.createSearcher({ vaultDir: wikiDir, stateDir, exclude: excludeRules }));
   if (options.dryRun !== true) getSearcher();
@@ -517,7 +459,6 @@ export function createServer(options) {
       throw mcpError('E_PATH_ESCAPE', 'Managed Wiki files cannot be edited directly.');
     if (isAbsolute(normalized) || normalized.split('/').some((part) => !part || part === '.' || part === '..'))
       throw mcpError('E_PATH_ESCAPE', 'Path is invalid.');
-    // The write lock file is not a page: it cannot be read, written or replaced through the Wiki tools.
     if (normalized.split('/').at(-1) === LOCK_FILE_NAME) throw mcpError('E_PATH_ESCAPE', 'Path is invalid.');
     if (core.scanPath(`wiki/${normalized}`, { extraDenyGlobs: config.safety?.extraDenyGlobs ?? [] }).length)
       throw mcpError('E_SECRET_DETECTED', 'write refused: denied path');
@@ -532,7 +473,6 @@ export function createServer(options) {
     }
     return { normalized, target: checked };
   };
-  // Path deny globs always apply; content scanning can be turned off with safety.secretFilter=false (custom profile).
   const contentFilter = core.secretFilterEnabled(config);
   const checkWrite = (rel, content) => {
     if (
@@ -541,10 +481,7 @@ export function createServer(options) {
     )
       throw mcpError('E_SECRET_DETECTED', 'write refused: secret-like content detected');
   };
-  // BA-25: every Wiki write (pages, index, log, crosslinks) runs inside one vault-wide lock file in wiki/ (see lock.mjs).
-  // The check of an expected hash and the write happen in that same critical section.
   const writeLocked = async (work) => {
-    // lstat, not stat: a dangling wiki/ symlink must not be replaced by a directory (mkdir would create its target).
     try {
       await lstat(wikiDir);
     } catch (error) {
@@ -555,9 +492,6 @@ export function createServer(options) {
     return withLock(join(canonicalWiki, LOCK_FILE_NAME), work);
   };
   /**
-   * BA-88: a dry run skips writeLocked, so it repeats its wiki/ handling read-only. A missing wiki/ is not an error and
-   * is not created (the real call creates it); an existing wiki/ (including a dangling symlink) must resolve inside the
-   * vault, exactly as assertWikiInsideVault checks in the lock path.
    * @returns {Promise<boolean>} whether wiki/ exists
    */
   const dryRunWikiCheck = async () => {
@@ -574,8 +508,6 @@ export function createServer(options) {
     createHash('sha256')
       .update(await readFile(file))
       .digest('hex');
-  // Writes a temporary file in the target's folder, then renames it over the target: readers see the old or the new bytes.
-  // The temporary name ends in `.tmp`, so no page listing or search counts it. An existing file keeps its permission bits.
   const replaceFile = async (target, writeTemp) => {
     const temp = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`);
     try {
@@ -593,7 +525,6 @@ export function createServer(options) {
   };
   const writePageAtomic = (target, page) => replaceFile(target, (temp) => wiki.writePage(temp, page));
   const writeIndexAtomic = (target, text) => replaceFile(target, (temp) => writeFile(temp, text, 'utf8'));
-  /** E_CONFLICT when the expectation is set and the file is missing or its bytes hash to another value. Never echoes either. */
   const checkExpectedSha = async (target, expected) => {
     if (expected === undefined) return;
     let current;
@@ -606,7 +537,6 @@ export function createServer(options) {
       throw mcpError('E_CONFLICT', 'The page changed since it was read.');
     }
   };
-  /** BA-74: frontmatter of the page on disk, or undefined when there is no file. Uses the core parser so dates stay strings. */
   const existingFrontmatter = async (target) => {
     try {
       return core.parseFrontmatter(await readFile(target, 'utf8')).data;
@@ -615,7 +545,6 @@ export function createServer(options) {
       throw error;
     }
   };
-  // Called inside the lock: the log append is part of the same critical section as the write it records.
   const logEntry = async (action, rel) => {
     const record = JSON.stringify({ action, path: rel });
     checkWrite('wiki/log.md', record);
@@ -631,17 +560,13 @@ export function createServer(options) {
       writeFile(temp, `${content}\n- ${new Date().toISOString()} ${record}\n`, 'utf8')
     );
   };
-  // Called after the lock is released. A failed refresh must not turn a completed write into an error; the next wiki_query retries.
   const afterWrite = async () => {
     try {
       await getSearcher().refresh();
-    } catch {
-      /* Keep the last good index. */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     scheduleUpdate();
   };
-  // BA-53: the low-confidence sentence is advertised unless retrieval.pullLowConfidence is explicitly false; with the key
-  // absent (the default) or true the tool list carries the sentence, and only an explicit false restores the old one.
   const descriptionFor = (name) => {
     const summary = core.OPERATIONS.find((operation) => operation.tool === name)?.summary;
     return name === 'wiki_query' && config.retrieval?.pullLowConfidence !== false
@@ -659,16 +584,12 @@ export function createServer(options) {
         });
       }
     });
-  // Page list for index maintenance. core.listPages skips symlinked files and directories (Dirent.isSymbolicLink), so
-  // nothing outside the Wiki is read. The Wiki directory itself must resolve inside the vault.
   const listManagedPages = async () => {
     const canonicalWiki = await assertWikiInsideVault();
     return (await core.listPages(vaultDir))
       .map((rel) => ({ path: rel.slice('wiki/'.length), file: join(canonicalWiki, rel.slice('wiki/'.length)) }))
       .filter(({ path }) => !['index.md', 'log.md'].includes(path.split('/').at(-1)));
   };
-  // The Wiki directory must resolve inside the vault's real path. The vault root itself may be a symlink (its real
-  // path is the reference), but a wiki/ symlink that leaves the vault is refused for every Wiki tool.
   const assertWikiInsideVault = async () => {
     const canonicalVault = await realpath(vaultDir);
     const canonicalWiki = await realpath(wikiDir);
@@ -686,8 +607,6 @@ export function createServer(options) {
     if (!isDirectory) throw mcpError('E_VAULT_MISSING', 'The Wiki directory is missing.');
     await assertWikiInsideVault();
   };
-  // When wiki/ resolves outside the vault, these listings answer as an empty Wiki: no outside content, no error.
-  // Every other read tool, and wiki_update_index, refuses with E_PATH_ESCAPE.
   const escapedWikiViews = {
     wiki_list_pages: () => ({ pages: [] }),
     wiki_status: () => ({
@@ -740,9 +659,8 @@ export function createServer(options) {
       if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
       try {
         resolved = join(await realpath(dirname(target)), basename(target));
-      } catch {
-        /* The parent is created later, below the same canonical vault. */
-      }
+        // eslint-disable-next-line no-empty
+      } catch {}
     }
     const from = relative(canonicalVault, resolved);
     if (!from || from === '..' || from.startsWith(`..${sep}`) || isAbsolute(from))
@@ -1009,23 +927,16 @@ export function createServer(options) {
 
   const queryWiki = async ({ query, limit, compact }) => {
     const count = limit ?? 5;
-    // Edits made outside this server (Obsidian, sync, another agent's MCP process) are picked up here.
-    // A failed freshness check (e.g. a file removed between the scan and the read) keeps the current index; the next query retries.
     try {
       if (getSearcher().refreshIfChanged() && semanticEnabled) scheduleUpdate();
-    } catch {
-      /* Keep serving the last good index. */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     const answer = getSearcher().search(query, {
       limit: count,
       budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT),
       abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35,
     });
-    // BA-32: compact drops only the `snippet` key from every result; all other keys, values and their order are unchanged.
     const stripSnippets = (rows) => (compact === true ? rows.map(({ snippet, ...rest }) => rest) : rows);
-    // BA-53: pull-side low confidence, on unless retrieval.pullLowConfidence is explicitly false. Only a below-threshold
-    // abstention is re-run with no threshold, on the same searcher snapshot (no refresh), so limit, budget and excluded
-    // paths stay identical. Other abstain reasons and non-abstained answers never produce low-confidence rows.
     const lowConfidenceAnswer = () => {
       if (
         config.retrieval?.pullLowConfidence === false ||
@@ -1071,7 +982,6 @@ export function createServer(options) {
         return fallback('fingerprint-mismatch');
       }
       const snapshot = getSearcher().snapshot();
-      // BA-29: excluded pages are removed from the semantic candidates and, as a guard, from the hybrid results.
       const results = await module.searchHybrid({
         query,
         pages: snapshot.pages,
@@ -1087,11 +997,6 @@ export function createServer(options) {
       if (results.fallbackReason) return fallback(results.fallbackReason);
       if (results.abstained) return { ...lexical, semantic: { used: true }, mode: settings.mode };
       const visible = results.filter((item) => !isExcluded(item.path));
-      // BA-24: section fields use the core's anchor rule (diacritics, `-N` collisions, astral headings). Order: (1) the
-      // lexical section of this query, when the page is in the lexical answer; (2) the core's section for the query on
-      // the page's own body (bestSection with the query terms, the same choice the core makes for that page); (3) the
-      // section of the chunk's own text, used only when its headingPath equals the chunk's. Otherwise the heading is the
-      // chunk's and the anchor stays null.
       const sections = new Map(answer.results.map((row) => [row.path, row]));
       const pagesByPath = new Map(snapshot.pages.map((page) => [page.path, page]));
       const asOf = new Date(snapshot.index.now);
@@ -1106,14 +1011,11 @@ export function createServer(options) {
         return found && found.headingPath === (item.headingPath ?? '') ? found : null;
       };
       let budget = Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT);
-      // Order is the module's order (RRF in rrf mode, cosine then lexical rank in semantic-primary); `score` is the
-      // value of that ordering: rrfScore, or semanticScore in semantic-primary (0 for lexical-only hits, which the module places last).
       const semanticPrimary = settings.mode === 'semantic-primary';
       const normalized = visible.map((item) => {
         const original = answer.results.find((row) => row.path === item.path);
         const section = sections.get(item.path) ?? pageSection(item, queryTerms) ?? chunkSection(item);
         const chunkHeading = item.headingPath?.split(' > ').at(-1) || null;
-        // BA-57: the flag comes from the section object; a chunk-only heading has no section, so it is never flagged.
         const synthesized = section?.synthesized === true;
         const sectionFields = section
           ? {
@@ -1125,7 +1027,6 @@ export function createServer(options) {
           : chunkHeading
             ? { heading: chunkHeading, anchor: null, headingPath: item.headingPath }
             : {};
-        // Code-point safe: a cut never leaves a lone surrogate (core prefixKeepingPairs, as BA-17 in the core).
         const snippet = core.prefixKeepingPairs(String(item.snippet ?? ''), Math.max(0, budget));
         budget -= snippet.length;
         const row = {
@@ -1140,7 +1041,6 @@ export function createServer(options) {
           status: item.status,
           ...sectionFields,
         };
-        // A synthesized section is presented neutrally: a verified page's trust is dropped from that row.
         if (synthesized && row.trust === 'verified') delete row.trust;
         return row;
       });
@@ -1149,7 +1049,6 @@ export function createServer(options) {
       return fallback(error?.fallbackReason === 'remote-not-allowed' ? 'remote-not-allowed' : 'provider-error');
     }
   };
-  // BA-63: every result row says how complete its page's provenance is; rows keep their order and all other keys.
   const annotateProvenance = (answer) => {
     if (!Array.isArray(answer?.results) || !answer.results.length) return answer;
     const byPath = new Map(
@@ -1179,7 +1078,6 @@ export function createServer(options) {
     'wiki_read_page',
     z.object({ path: z.string(), anchor: z.unknown().optional(), maxChars: z.unknown().optional() }),
     async ({ path, anchor, maxChars }) => {
-      // A `#fragment` on the path is the anchor; an explicit `anchor` may carry one leading `#`. Path checks run first, as before.
       const hashAt = path.indexOf('#');
       const pathPart = hashAt < 0 ? path : path.slice(0, hashAt);
       const fragment = hashAt < 0 ? undefined : path.slice(hashAt + 1);
@@ -1192,13 +1090,11 @@ export function createServer(options) {
       if (anchor !== undefined && fragment !== undefined && wanted !== fragment)
         throw mcpError('E_INVALID_INPUT', 'The path fragment and the anchor differ.');
       if (wanted !== undefined && wanted === '') throw mcpError('E_INVALID_INPUT', 'The anchor is empty.');
-      // The hash covers all bytes on disk, also when the content is truncated; a write replaces the file by rename, so a read sees one whole version.
       const bytes = await readFile(target);
       const raw = bytes.toString('utf8');
       const sha256 = createHash('sha256').update(bytes).digest('hex');
       const shownPath = `wiki/${normalized}`;
       if (wanted !== undefined) {
-        // BA-32: the section is chosen from the body split of the index loader (pageSections), by its anchor only.
         const section = core.pageSections(pageBody(raw)).find((item) => item.anchor === wanted);
         if (!section) throw mcpError('E_INVALID_INPUT', 'Unknown anchor.');
         const content = maxChars === undefined ? section.text : core.prefixKeepingPairs(section.text, maxChars);
@@ -1212,7 +1108,6 @@ export function createServer(options) {
           sha256,
         };
       }
-      // Without maxChars the response is byte-identical to before (plain slice and the same truncation flag).
       if (maxChars === undefined)
         return { path: shownPath, content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT, sha256 };
       const content = core.prefixKeepingPairs(raw, Math.min(maxChars, TOOL_LIMIT));
@@ -1231,11 +1126,8 @@ export function createServer(options) {
     let indexAgeMs = null;
     try {
       indexAgeMs = Math.max(0, Date.now() - (await stat(join(wikiDir, 'index.md'))).mtimeMs);
-    } catch {
-      /* index not initialized */
-    }
-    // Coverage uses the same index reader as wiki_update_index (escaped, angle-bracket and anchored destinations). The
-    // vendored getWikiStatus reads the index with its own parser, which misreads escaped parentheses.
+      // eslint-disable-next-line no-empty
+    } catch {}
     const linked = indexedPaths(await readOptionalIndex(join(wikiDir, 'index.md')));
     const countable = pages.filter((item) => indexablePath(item.slice('wiki/'.length)));
     const covered = countable.filter((item) => linked.has(item.slice('wiki/'.length))).length;
@@ -1252,7 +1144,6 @@ export function createServer(options) {
   readTool('wiki_lint', z.object({}), () => wiki.lintWiki(wikiDir));
 
   if (config.readOnly !== true) {
-    // Optional hash of the bytes the caller read (wiki_read_page `sha256`): the write is refused with E_CONFLICT when they differ.
     const expectedSha256 = z
       .string()
       .regex(/^[0-9a-fA-F]{64}$/)
@@ -1275,12 +1166,9 @@ export function createServer(options) {
             });
             await logEntry('write-page', `wiki/${normalized}`);
           }
-          // No new bytes exist in a dry run, so no hash is reported; the expected-hash check above still ran.
           const sha256 = expectedSha256 === undefined || options.dryRun === true ? undefined : await fileSha(target);
           return { created: existing === undefined, sha256 };
         };
-        // BA-88: an internal dry run runs every check but writes nothing: no page, no log line and no lock file.
-        // It skips the lock, so it runs the lock's Wiki-directory check itself (read-only).
         if (options.dryRun === true) await dryRunWikiCheck();
         const { created, sha256 } = options.dryRun === true ? await work() : await writeLocked(work);
         if (options.dryRun !== true) await afterWrite();
@@ -1295,8 +1183,6 @@ export function createServer(options) {
         };
       }
     );
-    // patch is z.unknown() on purpose: a record schema silently drops a JSON "__proto__" key before the handler runs,
-    // so validatePatch checks the object itself (own keys, plain prototype).
     tool(
       'wiki_update_page',
       z.object({ path: z.string(), content: z.string().optional(), patch: z.unknown().optional(), expectedSha256 }),
@@ -1310,11 +1196,9 @@ export function createServer(options) {
           if (content !== undefined) {
             const parsed = core.parseFrontmatter(content);
             if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
-            // A second read is needed: `old.frontmatter` (gray-matter) turns unquoted dates into Date objects, not strings.
             const existing = await existingFrontmatter(target);
             next = { frontmatter: withReplacementProvenance(parsed.data, existing), body: parsed.body };
           } else if (patch) {
-            // body replaces the body first; append is then added to the end of the resulting body, so both are applied.
             const base = typeof patch.body === 'string' ? patch.body : old.body;
             next = {
               frontmatter: {
@@ -1345,14 +1229,10 @@ export function createServer(options) {
     );
     const create = (name, content, kind) => async () => {
       const slug = pageSlug(name);
-      // An empty slug (no ASCII letter or digit) would name a hidden `.md` file; refuse before anything is written.
       if (!slug) throw mcpError('E_INVALID_INPUT', 'The page name needs at least one ASCII letter or digit.');
       const rel = `${kind}/${slug}.md`;
-      // Frontmatter in the content (summary, description, tags, ...) is the page's own frontmatter, as in wiki_write_page:
-      // it is written as frontmatter, not as body text, and the index line is built from it as wiki_update_index does.
       const parsed = core.parseFrontmatter(content);
       if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
-      // The title is always the create name; other keys (summary, description, tags, ...) come from the content.
       const frontmatter = {
         type: kind === 'entities' ? 'entity' : 'concept',
         tags: [],
@@ -1363,7 +1243,6 @@ export function createServer(options) {
       checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body: parsed.body }));
       const { target } = await safeFile(rel, { allowIndex: false });
       const indexTarget = (await safeFile('index.md')).target;
-      // Same minimal edit as wiki_update_index, limited to this page: the rest of the index is kept byte for byte.
       const entry = {
         path: rel,
         title: typeof frontmatter.title === 'string' ? frontmatter.title : rel,
@@ -1444,14 +1323,11 @@ export function createServer(options) {
     });
     tool('wiki_update_index', z.object({}), async () => {
       const { target } = await safeFile('index.md');
-      // BA-88: an internal dry run runs every check but writes nothing: no index, no log line and no lock file.
-      // It skips the lock, so it runs the lock's Wiki-directory check itself (read-only); a missing wiki/ holds no pages.
       const wikiExists = options.dryRun === true ? await dryRunWikiCheck() : true;
       const work = async () => {
         const entries = [];
         if (wikiExists) {
           for (const { path, file } of await listManagedPages()) {
-            // A page whose frontmatter cannot be read is still listed, with the no-title fallback, so one page never fails the whole update.
             let page;
             try {
               page = await wiki.readPage(file);
@@ -1468,7 +1344,6 @@ export function createServer(options) {
         }
         const existing = await readOptionalIndex(target);
         if (existing === null) {
-          // No index yet (or an empty file): build it from the pages, with the same line format as the minimal edit.
           const output = freshIndex(entries);
           checkWrite('wiki/index.md', output);
           if (options.dryRun !== true) {
@@ -1514,8 +1389,6 @@ export function createServer(options) {
 }
 
 /**
- * Paths and config exactly as the stdio server builds them, so an in-process caller sees the same vault, config, state
- * directory and retrieval settings.
  * @param {NodeJS.ProcessEnv} env
  * @returns {Promise<{config:object,paths:object,env:object}>}
  */

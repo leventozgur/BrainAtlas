@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26 acceptance helpers. The comparison root is the main checkout: BA26_MAIN if set, otherwise the parent of the
-// repository's common git directory (the main checkout when run from a worktree, the checkout itself when run there).
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

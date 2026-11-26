@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25 hypothesis 3 (guard), part B: lock visibility, refusals, takeover, busy, cleanup, expectedSha256 edges, read-only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile, rm, stat, utimes, chmod } from 'node:fs/promises';
@@ -26,8 +25,6 @@ import {
 const lockBody = (pid, time, token = 'foreign') => `${JSON.stringify({ pid, time, token })}\n`;
 const EN = 'entities/lock-probe.md';
 
-// ---------- visibility and refusals while a live, fresh lock is held by another process ----------
-
 test('lock file is invisible to listing, query, status, maintain and recap, and unreachable through page tools', async (t) => {
   const f = await makeFixture(t);
   const c = await openClient(t, WT, f);
@@ -51,7 +48,6 @@ test('lock file is invisible to listing, query, status, maintain and recap, and 
   assert.equal(status.pageCount, list.length, 'wiki_status counts the same pages as the listing');
   assert.ok(okJson(await call(c.client, 'wiki_read_page', { path: 'index.md' })).content.length > 0);
 
-  // Reads and writes through the page tools refuse the lock file name in every spelling.
   for (const path of [`wiki/${LOCK_NAME}`, LOCK_NAME, `entities/${LOCK_NAME}`]) {
     assert.ok(isErr(await call(c.client, 'wiki_read_page', { path }), 'E_PATH_ESCAPE'), `read ${path}`);
     assert.ok(
@@ -65,7 +61,6 @@ test('lock file is invisible to listing, query, status, maintain and recap, and 
   }
   assert.equal(await readText(f.lockFile), body, 'refusals never touch the lock file');
 
-  // brainatlas maintain (CLI, read-only report) and the session-start recap hook must not list the lock file.
   const cli = spawnSync(
     process.execPath,
     [join(WT, 'packages/cli/bin/brainatlas.mjs'), 'maintain', '--json', '--vault', f.vault],
@@ -77,8 +72,6 @@ test('lock file is invisible to listing, query, status, maintain and recap, and 
   const recap = await buildRecap({ vaultPath: f.vault, stateDir: join(f.dir, 'state') });
   assert.equal(recap.includes(LOCK_NAME), false, 'recap hook output does not name the lock');
 });
-
-// ---------- takeover of stale locks and bounded refusal of live fresh locks ----------
 
 test('a lock held by a dead pid is taken over and removed after the write', async (t) => {
   const f = await makeFixture(t);
@@ -140,15 +133,12 @@ test('a live fresh lock makes writes fail with E_BUSY, writes nothing, and keeps
     'reads still work while busy'
   );
 
-  // Once the foreign lock is gone, the same write succeeds.
   await rm(f.lockFile);
   assert.equal(
     okJson(await call(c.client, 'wiki_write_page', { path: EN, content: page('Lock Probe', 'lands now') })).written,
     true
   );
 });
-
-// ---------- cleanup after success and failure, expectedSha256 edges ----------
 
 test('no lock file remains after successful and failed calls, including internal failures inside the lock', async (t) => {
   const f = await makeFixture(t);
@@ -182,7 +172,6 @@ test('no lock file remains after successful and failed calls, including internal
   assert.ok(isErr(await run('wiki_write_page', { path: '../escape.md', content: page('E', 'e') }), 'E_PATH_ESCAPE'));
   assert.ok(isErr(await run('wiki_create', { type: 'entity', name: 'Dup Probe', content: 'one' })) === false);
   assert.ok(isErr(await run('wiki_create', { type: 'entity', name: 'Dup Probe', content: 'two' }), 'E_ALREADY_EXISTS'));
-  // Crosslink to a missing target fails inside the lock; the lock must still be released.
   await run('wiki_write_page', {
     path: 'entities/xl.md',
     content: page('XL', 'see [gone](../concepts/does-not-exist.md)'),
@@ -234,8 +223,6 @@ test('expectedSha256: uppercase hex matches, a malformed value is rejected, a mi
   assert.equal(await readText(f.logFile), logBefore, 'missing-page conflict is not logged');
 });
 
-// ---------- read-only mode ----------
-
 test('readOnly mode exposes no write tools and the lock is never created', async (t) => {
   const f = await makeFixture(t, { readOnly: true });
   const c = await openClient(t, WT, f);
@@ -243,8 +230,6 @@ test('readOnly mode exposes no write tools and the lock is never created', async
   assert.deepEqual(names, ['plan_read', 'wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_page', 'wiki_status']);
   assert.equal(existsSync(f.lockFile), false);
 });
-
-// ---------- file mode bits ----------
 
 test('existing file permission bits survive page and index writes', async (t) => {
   const f = await makeFixture(t);

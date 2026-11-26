@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-32: pageSections is the exported H1–H3 split of bestSection; the anchors, heading paths and text are the same.
-// Hermetic: in-memory pages only; no file access, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bestSection, buildIndex, pageSections, tokens } from '../../packages/core/src/retrieval/index.mjs';
@@ -32,7 +30,6 @@ test('pageSections ignores headings inside fenced code blocks and text before th
   assert.deepEqual(pageSections(body), [
     { heading: 'Real', anchor: 'real', headingPath: 'Real', text: '# Real\nreal text' },
   ]);
-  // Fenced lines stay in the section they belong to, exactly as bestSection keeps them.
   const fenced = '# Topic\n```\n## Fake\n```\n';
   assert.deepEqual(pageSections(fenced), [
     { heading: 'Topic', anchor: 'topic', headingPath: 'Topic', text: '# Topic\n```\n## Fake\n```' },

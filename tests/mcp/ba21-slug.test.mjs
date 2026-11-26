@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-21: pageSlug transliterates Turkish and accented Latin letters to ASCII before the vendored slugify, and the
-// create tools use it end to end (page path + index line). Real stdio MCP server via the BA-20 harness.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pageSlug } from '../../packages/mcp/src/slug.mjs';
@@ -74,7 +72,6 @@ test('BA21-SLUG4: create concept uses the same rule; Çağrı and Ağrı are dis
   );
   assert.equal(cagri.path, 'wiki/entities/cagri-merkezi.md');
   assert.equal(agri.path, 'wiki/entities/agri-merkezi.md');
-  // A different name that maps to the same slug is refused as an existing page.
   refused(
     await call(f.client, 'wiki_create', { type: 'entity', name: 'Çagri Merkezi', content: '---\ntitle: x\n---\nG\n' }),
     'E_ALREADY_EXISTS'

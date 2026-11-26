@@ -4,23 +4,9 @@ import { caseKind } from './case-schema.mjs';
 
 const BLOCK_TITLE = / \(([^()\n]+\.md)(?:#[^()\n]*)?\)$/u;
 const HEADING_LINE = /^#{1,3}[\t ]+(.+)$/u;
-// BA-32: a progressive pointer line, `- Title › Heading [unverified] (path#anchor)`, names its page without the fragment.
 const POINTER_HEADER = 'More matches (open with wiki_read_page path + anchor):';
 const POINTER_LINE = /^- .* \(([^()\n]+\.md)(?:#[^()\n]*)?\)$/u;
 
-/**
- * Extract injected corpus paths from hook additionalContext.
- * A block starts at the beginning of the context or after an empty line, and its
- * first line has the form `Title (relative/path.md)`; a progressive block title may
- * end in `(path.md#anchor)` and names the page without the fragment (BA-32).
- * Only paths present in the corpus are accepted, so snippet text cannot create false injections.
- * BA-32: the lines directly after the exact progressive header line are pointer lines; their
- * paths are appended after the block paths, without duplicates. Pointer-like lines anywhere
- * else are ignored.
- * @param {string} context
- * @param {Set<string>} knownPaths
- * @returns {string[]} unique paths in injection order
- */
 export function parseInjectedPaths(context, knownPaths) {
   if (typeof context !== 'string' || !context) return [];
   const lines = context.split('\n');
@@ -42,14 +28,6 @@ export function parseInjectedPaths(context, knownPaths) {
   return out;
 }
 
-/**
- * Heading of the injected block for `path`: the first snippet line of that block when it is a Markdown heading.
- * A block title may end in `(path#anchor)`; the block is found by the path without the fragment (BA-32).
- * Returns null when the block is absent or its excerpt starts with plain text (no section name in the output).
- * @param {string} context
- * @param {string} path
- * @returns {string|null}
- */
 export function parseBlockHeading(context, path) {
   if (typeof context !== 'string' || !context) return null;
   const lines = context.split('\n');
@@ -68,13 +46,6 @@ const ratio = (part, whole) => (whole ? part / whole : 0);
 const hit = (r) => r.injected.some((p) => r.relevant.includes(p));
 const falseRecord = (r) => r.abstain || caseKind(r) === 'operational';
 
-/**
- * BA-31m top-1 rates. Only the first injected block (injection order) is considered.
- * top1RelevantRate: answerable cases whose first injected block is in `relevant` (no injection counts as a miss).
- * top1ExcludedRate: cases with a non-empty `excluded` list whose first injected block is in `excluded` (wrong project).
- * Both are 0 when their denominator is 0.
- * @param {Array<object>} items
- */
 function top1Rates(items) {
   const answers = items.filter((r) => !r.abstain);
   const withExcluded = items.filter((r) => Array.isArray(r.excluded) && r.excluded.length > 0);
@@ -90,13 +61,6 @@ function top1Rates(items) {
   };
 }
 
-/**
- * Aggregate per-case hook records into the hook-eval metric shape.
- * Record: {category, abstain, relevant, injected, chars, durationMs} plus the optional BA-27 fields
- * {kind, meta (flags of the first five injected blocks), poisoned, sectionHit (true|false|null), sectionSource}.
- * Records without the optional fields are read with their defaults (kind knowledge, no meta, not poisoned).
- * @param {Array<object>} records
- */
 export function summarizeHookRecords(records) {
   const n = records.length;
   const answerable = records.filter((r) => !r.abstain);
@@ -111,7 +75,6 @@ export function summarizeHookRecords(records) {
     if (!kinds.has(kind)) kinds.set(kind, []);
     kinds.get(kind).push(r);
   }
-  // Per-group shape: byCategory keeps its historical four keys; byKind adds the false-injection rate of that kind.
   const summarizeGroup = (items, withFalse) => {
     const injected = items.reduce((sum, r) => sum + r.injected.length, 0);
     const relevantInjected = items.reduce((sum, r) => sum + r.injected.filter((p) => r.relevant.includes(p)).length, 0);
@@ -136,7 +99,6 @@ export function summarizeHookRecords(records) {
       .sort(([a], [b]) => a.localeCompare(b, 'en'))
       .map(([kind, items]) => [kind, summarizeGroup(items, true)])
   );
-  // BA-31m: project-awareness summary. Only cases that carry a cwd; the same group shape plus the top-1 rates.
   const withCwd = records.filter((r) => typeof r.cwd === 'string');
   const withCwdSummary = { ...summarizeGroup(withCwd, true), ...top1Rates(withCwd) };
   const chars = records.map((r) => r.chars);
@@ -161,7 +123,6 @@ export function summarizeHookRecords(records) {
     chars: charStats,
     durationMs: { p50: percentile(durations, 0.5), p95: percentile(durations, 0.95) },
     byCategory,
-    // BA-27 additions. Existing keys above keep their meaning.
     byKind,
     injectedChars: charStats,
     charsPerHit: ratio(
@@ -177,7 +138,6 @@ export function summarizeHookRecords(records) {
       search: sectionCases.filter((r) => r.sectionSource === 'search').length,
     },
     poisonInjected: ratio(records.filter((r) => r.poisoned === true).length, n),
-    // BA-31m additions (existing keys above are unchanged).
     ...top1Rates(records),
     withCwd: withCwdSummary,
   };

@@ -1,9 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26 blind acceptance (independent tester): fixture generator.
-// Written before any product code was run. Values are assembled at run time from a seeded PRNG and the public
-// checksum algorithms (TCKN, ISO 13616 mod-97). No literal secret or personal value is stored in any file, and this
-// module does not import product code. `node gen.mjs --freeze` writes labels.json (ids, categories, expected rule
-// ids and a digest only, never values). The labels are not edited after the first product run.
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,7 +27,6 @@ const PW = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!#-';
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
 const pad2 = (n) => String(n).padStart(2, '0');
 
-// Official TCKN check digits (10th: odd*7 - even mod 10; 11th: sum of first ten mod 10).
 function tckn(first9) {
   const n = [...first9].map(Number);
   const odd = n[0] + n[2] + n[4] + n[6] + n[8],
@@ -48,7 +42,6 @@ function tcknOk(s) {
     even = n[1] + n[3] + n[5] + n[7];
   return (((odd * 7 - even) % 10) + 10) % 10 === n[9] && n.slice(0, 10).reduce((a, b) => a + b, 0) % 10 === n[10];
 }
-// ISO 13616: rearranged = BBAN + "TR" as 2927 + "00"; check = 98 - (value mod 97).
 function iban(bban) {
   const check = 98 - Number(BigInt(bban + '292700') % 97n);
   return 'TR' + pad2(check) + bban;
@@ -76,7 +69,6 @@ const fresh = (gen) => {
   }
 };
 
-// Six formats per rule: YAML, Markdown table, code block, sentence, .env line, URL. V is the value slot.
 const POS = [
   {
     cat: 'azure-storage-key',
@@ -183,7 +175,6 @@ const POS = [
     ],
   },
 ];
-// Contact data: redacted only in hook output (redact with the personal option), never a write block.
 const CONTACT = [
   {
     cat: 'email',
@@ -210,7 +201,6 @@ const CONTACT = [
   },
 ];
 
-// Hard-clean material: each item must produce no scanText finding (and no personal or secret finding).
 const CODE = [
   'const total = items.reduce((sum, item) => sum + item.price, 0);',
   "import { readFile } from 'node:fs/promises';",
@@ -354,8 +344,6 @@ function build() {
   return { positives, contacts, cleanItems };
 }
 
-// The replaced V slot: String.replace with a string pattern replaces only the first V, which is the value slot.
-// Templates contain no other capital V followed by lowercase text, so the first match is the slot. Checked below.
 function checkSlots() {
   for (const p of [...POS, ...CONTACT])
     for (const t of p.tpl) {

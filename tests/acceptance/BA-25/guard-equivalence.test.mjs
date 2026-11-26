@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25 hypothesis 3 (guard), part A: the candidate's calls without expectedSha256 leave no lock or temporary file
-// behind. Hermetic: two fixture runs, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -58,11 +56,10 @@ async function runScript(t, root) {
     let body = textOf(r);
     try {
       body = JSON.parse(body);
-    } catch {
-      /* plain error text */
-    }
-    if (name === 'wiki_read_page' && body && typeof body === 'object') delete body.sha256; // intentional BA-25 addition
-    if (name === 'wiki_status' && body && typeof body === 'object') delete body.indexAgeMs; // clock value
+      // eslint-disable-next-line no-empty
+    } catch {}
+    if (name === 'wiki_read_page' && body && typeof body === 'object') delete body.sha256;
+    if (name === 'wiki_status' && body && typeof body === 'object') delete body.indexAgeMs;
     replies.push({ name, isError: r.isError === true, body: normalize(body) });
   }
   const tree = {};

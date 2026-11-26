@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-01-F2 regression: the Markdown agent table in docs/user/agents.md must stay one contiguous block.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -8,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
-// Splits the document into runs of consecutive table rows (lines starting with '|').
 function tableRuns(lines) {
   const runs = [];
   let current = null;
@@ -39,7 +37,6 @@ test('BA-01-F2: the agent table in docs/user/agents.md is one contiguous block w
     pipes.every((n) => n === pipes[0]),
     `inconsistent cell counts: ${pipes}`
   );
-  // Nothing non-blank may sit directly after the table block, and no table row may follow a gap inside it.
   const after = lines[agentTable.end + 1];
   assert.ok(after === undefined || after.trim() === '', `text directly after table: ${after}`);
 });

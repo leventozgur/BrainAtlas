@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Child process for the BA-07 load-trace test. argv[2] is a JSON request:
-// {repo, vault, stateDir, home, profile, semanticEnabled, prompt}. Prints the hook stdout as JSON.
 import { join } from 'node:path';
 
 const request = JSON.parse(process.argv[2]);

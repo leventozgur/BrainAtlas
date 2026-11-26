@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 blind acceptance: docs/contracts/mcp-tools.md must agree with the advertised tool schemas and the behavior.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';

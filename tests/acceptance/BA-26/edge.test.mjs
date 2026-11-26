@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26 blind acceptance, edge cases. Expected values come from the brief and the rule definitions, not from a
-// previous run. Values are built at run time; the hook and MCP are driven black-box. Temporary vaults live under a
-// per-run directory in the OS temp directory and are removed afterwards. No network.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -26,7 +23,6 @@ const { defaultConfig } = await import(pathToFileURL(path.join(ROOT, 'packages/c
 const NOW = new Date('2026-11-11T00:00:00Z');
 const { positives, contacts } = fixtures();
 
-// Built at run time from fragments. No literal secret value appears in this file.
 const mix = (n, seed = 'aB3dE5gH7jK9mN1pQ2rS4tU6vW8xY0zA') =>
   Array.from({ length: n }, (_, i) => seed[i % seed.length]).join('');
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -128,7 +124,6 @@ test('turkish keys: placeholders and empty values are not findings, real lower-c
 });
 
 test('turkish keys: upper-case Turkish keys ŞİFRE and PAROLA are assignments', () => {
-  // Upper-case Turkish spelling of "şifre" is "ŞİFRE" (dotted capital İ). PAROLA has no dotted letter.
   assert.ok(rules('PAROLA: Abc12345').includes('secret-assignment'), 'PAROLA');
   assert.ok(rules('ŞİFRE: Abc12345').includes('secret-assignment'), 'ŞİFRE with dotted capital İ');
 });
@@ -248,7 +243,6 @@ test('hook: every scanText and contact positive leaves no raw value in prompt ou
       path.join(v.vault, 'wiki', `r${i}.md`),
       `---\ntitle: Kayıt ${i}\nstatus: confirmed\n---\nkwq${i} ${it.text}\n`
     );
-    // The raw value is the generator's own value (not what the product found), so a missed value is still checked.
     raw.set(i, [it.value]);
   });
   const leaks = [],
@@ -282,7 +276,6 @@ test('hook: partial digits of a TCKN or IBAN never appear at an excerpt boundary
       const out = ctxOf(await ask(v, 'kwcut', `cut-${budget}-${k}`, budget));
       runs++;
       if (out) shownRuns++;
-      // Any run of 6 or more consecutive digits of the TCKN, or of the IBAN digits, is a partial value.
       for (let s = 0; s + 6 <= TCKN.length; s++)
         if (out.includes(TCKN.slice(s, s + 6))) {
           leaks.push(`budget ${budget} k ${k}: TCKN fragment ${s}`);
@@ -334,7 +327,6 @@ test('hook: session-start recap never names a restricted page', async (t) => {
     path.join(v.vault, 'wiki/recap-open.md'),
     '---\ntitle: Açık özet kaydı\nstatus: confirmed\n---\nAçık özet kaydı içeriği.\n'
   );
-  // The recap is built from dated log lines (14-day window), so both pages are logged as recently changed.
   fs.writeFileSync(
     path.join(v.vault, 'wiki/log.md'),
     '# Log\n- 2026-11-10T10:00:00Z {"action":"write","path":"wiki/recap-secret.md"}\n- 2026-11-10T10:01:00Z {"action":"write","path":"wiki/recap-open.md"}\n'
@@ -355,8 +347,6 @@ test('hook: session-start recap never names a restricted page', async (t) => {
 });
 
 test('known gap check: assignment inside a URL with a scheme (https://...?sifre=...) is a finding', () => {
-  // Pre-existing behaviour: a URL with a scheme consumes the following text as the value of the scheme key, so a
-  // query-string assignment is not seen. The bare query form is detected by the new Turkish rule.
   const url = 'https://ornek.example/giris?sifre=' + mix(12, 'Xq7rT2mP9kL4zB8');
   assert.ok(rules(url).includes('secret-assignment'), 'https URL query sifre= assignment');
 });

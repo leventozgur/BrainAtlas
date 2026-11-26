@@ -34,7 +34,6 @@ function metrics(rows) {
   };
 }
 
-/** Calibrate on supplied development cases using an injected provider. */
 export async function calibrate({ corpusDir, casesFiles, provider, dumpScores = false }) {
   if (!provider || !Array.isArray(casesFiles) || !casesFiles.length)
     throw new TypeError('Invalid calibration configuration.');

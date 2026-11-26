@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-03 independent measurement: identifier holdout recall@1 (answerable cases) for one code root.
-// Usage: node recall-at1.mjs <repoRoot> <holdoutDir>
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';

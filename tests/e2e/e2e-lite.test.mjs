@@ -447,8 +447,6 @@ test('company Mac Lite lifecycle works offline and restores the fake HOME', asyn
         }
       } else issues.push('init-plan-command');
 
-      // Run the same CLI plan path from the source tree so adapter snapshots are
-      // still checked when a release omits the adapter's workspace dependency.
       const sourcePlan = spawnSync(
         process.execPath,
         [

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-00 blind acceptance (criterion 2): run-eval default output keeps its historical key set and the extended keys stay opt-in.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';

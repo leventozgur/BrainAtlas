@@ -117,7 +117,6 @@ test('semantic absent, disabled, and uninstalled preserve the lexical golden sha
   });
   const missingClient = await missing.connect(missing.config, missing.stateDir, fetchImpl);
   const missingResponse = payload(await call(missingClient, 'wiki_query', { query: 'violetneedle' }));
-  // PM decision: with semantic.enabled=true but the module absent, the answer stays the BM25 golden result and states why semantic was skipped.
   assert.deepEqual(
     { results: missingResponse.results, abstained: missingResponse.abstained },
     { results: missingGolden.results, abstained: missingGolden.abstained }
@@ -222,9 +221,8 @@ test('missing and malformed indexes fall back to BM25 and a first miss starts an
         recovered = true;
         break;
       }
-    } catch {
-      /* the index may not exist yet; keep polling */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   assert.equal(recovered, true, 'the malformed index should be rebuilt in the background');

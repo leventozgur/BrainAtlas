@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09 blind acceptance: link expansion (BA-08) combined with trust weighting. The first result must not change through a
-// link, and link-added pages keep their `trust` field. Contract: docs/contracts/retrieval.md, "Order" and "Page links".
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCandidate, loadMain, makeVault, removeDir, page, record, NOW } from './helpers.mjs';

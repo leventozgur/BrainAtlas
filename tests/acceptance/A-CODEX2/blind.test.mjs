@@ -140,9 +140,8 @@ test('symlinked target does not modify outside file', async (t) => {
   await symlink(outside, f.toml);
   try {
     await adapter.apply(adapter.plan(f.ctx), f.ctx);
-  } catch {
-    /* refusal is safe */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   assert.equal(await readFile(outside, 'utf8'), 'x = 1\n');
 });
 test('malformed input errors and doctor do not disclose synthetic secret', async (t) => {
@@ -172,9 +171,8 @@ test('symlinked config directory cannot redirect adapter writes outside home', a
   await symlink(outside, f.dir, 'dir');
   try {
     await adapter.apply(adapter.plan(f.ctx), f.ctx);
-  } catch {
-    /* refusal is safe */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   assert.deepEqual(await readdir(outside), ['config.toml']);
   assert.equal(await readFile(path.join(outside, 'config.toml'), 'utf8'), 'x = 1\n');
 });

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-43: `brainatlas wiki <sub>` answers exactly like the registered MCP read tools, in process, and writes nothing.
-// Hermetic: temporary vault, HOME and state directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -152,7 +150,6 @@ test('every subcommand --json deep-equals the registered MCP read tool', async (
     const fromCli = cliJson(f.run, ...PARITY[index]);
     const fromMcp = await mcpValue(client, name, args);
     if (name === 'wiki_status') {
-      // The index age is wall-clock derived and can differ by a millisecond between two processes.
       fromCli.indexAgeMs = 0;
       fromMcp.indexAgeMs = 0;
     }

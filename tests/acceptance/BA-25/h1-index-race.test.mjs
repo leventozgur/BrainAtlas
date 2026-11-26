@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25 hypothesis 1 (index loss): two separate MCP server processes create different pages at the same time, >= 50 rounds.
-// Candidate criterion: lost index lines = 0, index valid Markdown every round, no failed call.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readText, makeFixture, openClient, call, textOf, invalidIndexLines, metric, WT } from './harness.mjs';
@@ -31,7 +29,6 @@ async function raceIndex(t, root) {
         continue;
       }
       const link = `](concepts/${name.replace(/ /g, '-')}.md)`;
-      // Page written but no index line: a lost index update.
       if (!(await readText(f.indexFile)).includes(link)) lost++;
     }
     const index = await readText(f.indexFile);
@@ -41,7 +38,6 @@ async function raceIndex(t, root) {
       if (invalidSamples.length < 3) invalidSamples.push(bad.slice(0, 2));
     }
   }
-  // Every created page must be listed by the Wiki list too (both processes saw the whole vault).
   const listed = JSON.parse(textOf(await call(a.client, 'wiki_list_pages', {}))).pages.filter((p) =>
     /wiki\/concepts\/ba25-idx-[ab]-\d+\.md$/.test(p)
   ).length;
