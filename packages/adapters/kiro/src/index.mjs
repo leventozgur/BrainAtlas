@@ -6,7 +6,7 @@ import { atomicWriteFile, detectEvidence, resolvePaths } from '@brainatlas/core'
 
 export const id = 'kiro';
 export const displayName = 'Kiro';
-export const KIRO_PROMPT_TRIGGER = 'PromptSubmit';
+export const KIRO_PROMPT_TRIGGER = 'UserPromptSubmit';
 const begin = '<!-- brainatlas:begin -->';
 const end = '<!-- brainatlas:end -->';
 const mcpTools = ['wiki_query', 'wiki_read_page', 'wiki_read_index', 'wiki_list_pages', 'wiki_status'];
@@ -253,9 +253,12 @@ export async function plan(ctx) {
   }
   return {
     changes,
-    warnings: cli
-      ? []
-      : [`Kiro hook trigger "${KIRO_PROMPT_TRIGGER}" is unverified; confirm it in the Kiro hooks panel.`],
+    warnings:
+      cli || ctx.scope === 'vault'
+        ? []
+        : [
+            'Kiro IDE documents hooks in the workspace .kiro/hooks directory; ~/.kiro/hooks is documented for Kiro CLI v3. If brainatlas usage shows no kiro prompts, add the hook to the workspace.',
+          ],
     trustReviewRequired: true,
   };
 }
@@ -429,12 +432,18 @@ export async function doctor(ctx) {
       message: commandExists ? 'Shim path exists.' : 'Shim path is missing.',
     });
     checks.push({ id: 'version-drift', ok: true, message: 'No command drift detected.' });
-    return { ok: checks.every((c) => c.ok), checks };
+    return {
+      ok: checks.every((c) => c.ok),
+      checks,
+      warnings: [],
+      capabilities: { channel: 'cli', read: true, write: false, inject: 'none' },
+    };
   }
   const mcpRaw = await readOptional(files.mcp),
     hookRaw = await readOptional(files.hook);
   let registered = false,
     hookPresent = false,
+    oldTrigger = false,
     commandExists = false,
     drift = false;
   try {
@@ -455,14 +464,16 @@ export async function doctor(ctx) {
   }
   try {
     const obj = hookRaw === null ? {} : parseJson(files.hook, hookRaw);
-    hookPresent =
-      Array.isArray(obj.hooks) &&
-      obj.hooks.some(
-        (h) =>
-          typeof h?.action?.command === 'string' &&
-          h.action.command.includes(' hook kiro ') &&
-          h.action.command.includes(ctx.shimPath || '')
-      );
+    const managed = Array.isArray(obj.hooks)
+      ? obj.hooks.filter(
+          (h) =>
+            typeof h?.action?.command === 'string' &&
+            h.action.command.includes(' hook kiro ') &&
+            h.action.command.includes(ctx.shimPath || '')
+        )
+      : [];
+    hookPresent = managed.some((h) => h.trigger === KIRO_PROMPT_TRIGGER || h.trigger === 'PromptSubmit');
+    oldTrigger = managed.some((h) => h.trigger === 'PromptSubmit');
   } catch {
     /* tolerant read: an unreadable or missing file never fails the check */
   }
@@ -490,13 +501,17 @@ export async function doctor(ctx) {
     ok: hookPresent,
     message: hookPresent ? 'BrainAtlas prompt hook is present.' : 'BrainAtlas prompt hook is not present.',
   });
-  checks.push({
-    id: 'trigger-verified',
-    ok: true,
-    warning: true,
-    message: `Hook trigger "${KIRO_PROMPT_TRIGGER}" is unverified; confirm it in the Kiro hooks panel.`,
-  });
-  return { ok: checks.every((c) => c.ok), checks };
+  return {
+    ok: checks.every((c) => c.ok),
+    checks,
+    warnings: oldTrigger ? ['Kiro hook uses the old trigger "PromptSubmit"; run brainatlas agent refresh kiro.'] : [],
+    capabilities: {
+      channel: 'mcp',
+      read: true,
+      write: ctx.config?.readOnly !== true,
+      inject: 'prompt',
+    },
+  };
 }
 /** @param {object} ctx */
 export async function trustReview(ctx) {
