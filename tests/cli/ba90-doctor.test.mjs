@@ -151,7 +151,16 @@ test('a cli channel warns about the missing write path, read-only never does', a
   await writeFile(join(cli.paths.dataDir, 'bin', 'brainatlas'), '#!/bin/sh\n');
   cli.ok('init', '--yes', '--vault', cli.vault, '--agents', 'claude-code', '--channel', 'cli');
   await cli.release();
-  const cliDoctor = cli.ok('doctor');
+  // A fresh cli install has the capture skill: it can write, so there is no warning.
+  const fresh = cli.ok('doctor');
+  assert.deepEqual(fresh.capabilities['claude-code'], { channel: 'cli', read: true, write: true, inject: 'none' });
+  assert.ok(!fresh.warnings.some((warning) => warning.includes('has no write path')));
+  // A skill without the capture section (edited or from another source) leaves no write path.
+  await writeFile(
+    join(cli.home, '.claude', 'skills', 'brainatlas', 'SKILL.md'),
+    '---\nname: brainatlas\n---\nread only\n'
+  );
+  const cliDoctor = cli.json('doctor').value;
   assert.deepEqual(cliDoctor.capabilities['claude-code'], {
     channel: 'cli',
     read: true,
