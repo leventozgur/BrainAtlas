@@ -39,25 +39,6 @@ import * as wiki from '@llmwiki/core';
 const TOOL_LIMIT = 20_000;
 const PLANNING_PAGE_NAME = /(^|-)(backlog|todo|tasks|roadmap)(-|$)/i;
 const PLANNING_WARNING = 'Planning content belongs in planning/; use plan_update.';
-const descriptions = {
-  // BA-57: the list carries the synthesized flag; the one-line base description is pinned verbatim by the BA-53 test.
-  wiki_query: 'Search verified Wiki evidence and return ranked snippets; compact omits the snippets.',
-  wiki_read_page: 'Read a bounded Wiki page, or one of its sections by anchor.',
-  wiki_read_index: 'Read the bounded Wiki index.',
-  wiki_list_pages: 'List Wiki Markdown page paths.',
-  wiki_status: 'Read Wiki counts and health summary.',
-  wiki_lint: 'Run the vendored Wiki quality checks.',
-  wiki_write_page: 'Create or replace a Wiki page.',
-  wiki_update_page: 'Update a Wiki page.',
-  wiki_create_entity: 'Create an entity page.',
-  wiki_create_concept: 'Create a concept page.',
-  wiki_add_crosslinks: 'Add links to existing pages referenced by this page.',
-  wiki_update_index:
-    'Add missing pages to the Wiki index and remove entries for deleted pages; existing lines are kept.',
-  plan_read: 'Read the planning backlog or one project file.',
-  plan_update: 'Create a project, add a task, or set a project or task status.',
-};
-
 function mcpError(code, message) {
   const error = /** @type {Error & {code:string}} */ (new Error(message));
   error.code = code;
@@ -661,10 +642,12 @@ export function createServer(options) {
   };
   // BA-53: the low-confidence sentence is advertised unless retrieval.pullLowConfidence is explicitly false; with the key
   // absent (the default) or true the tool list carries the sentence, and only an explicit false restores the old one.
-  const descriptionFor = (name) =>
-    name === 'wiki_query' && config.retrieval?.pullLowConfidence !== false
-      ? `${descriptions.wiki_query} Results marked lowConfidence scored below the abstain threshold; treat them as weak evidence and verify before relying on them.`
-      : descriptions[name];
+  const descriptionFor = (name) => {
+    const summary = core.OPERATIONS.find((operation) => operation.tool === name)?.summary;
+    return name === 'wiki_query' && config.retrieval?.pullLowConfidence !== false
+      ? `${summary} Results marked lowConfidence scored below the abstain threshold; treat them as weak evidence and verify before relying on them.`
+      : summary;
+  };
   const tool = (name, schema, handler) =>
     server.registerTool(name, { description: descriptionFor(name), inputSchema: schema.shape }, async (args) => {
       try {
@@ -1236,11 +1219,6 @@ export function createServer(options) {
       return { path: shownPath, content, truncated: content.length < raw.length, sha256 };
     }
   );
-  readTool('wiki_read_index', z.object({}), async () => {
-    const { target } = await safeFile('index.md');
-    const raw = await readFile(target, 'utf8');
-    return { content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT };
-  });
   readTool('wiki_list_pages', z.object({ type: z.string().optional() }), async ({ type }) => {
     let pages = await core.listPages(vaultDir);
     pages = pages.filter((item) => item !== 'wiki/index.md' && item !== 'wiki/log.md');
@@ -1324,7 +1302,7 @@ export function createServer(options) {
       z.object({ path: z.string(), content: z.string().optional(), patch: z.unknown().optional(), expectedSha256 }),
       async ({ path, content, patch, expectedSha256 }) => {
         const { normalized, target } = await safeFile(path, { allowIndex: false });
-        const sha256 = await writeLocked(async () => {
+        const work = async () => {
           await checkExpectedSha(target, expectedSha256);
           const old = await wiki.readPage(target);
           let next;
@@ -1348,12 +1326,21 @@ export function createServer(options) {
           } else throw mcpError('E_INVALID_INPUT', 'content or patch is required.');
           const output = serializePage(next);
           checkWrite(`wiki/${normalized}`, output);
-          await writePageAtomic(target, next);
-          await logEntry('update-page', `wiki/${normalized}`);
-          return expectedSha256 === undefined ? undefined : fileSha(target);
-        });
-        await afterWrite();
-        return { path: `wiki/${normalized}`, updated: true, ...(sha256 === undefined ? {} : { sha256 }) };
+          if (options.dryRun !== true) {
+            await writePageAtomic(target, next);
+            await logEntry('update-page', `wiki/${normalized}`);
+          }
+          return expectedSha256 === undefined || options.dryRun === true ? undefined : fileSha(target);
+        };
+        if (options.dryRun === true) await dryRunWikiCheck();
+        const sha256 = options.dryRun === true ? await work() : await writeLocked(work);
+        if (options.dryRun !== true) await afterWrite();
+        return {
+          path: `wiki/${normalized}`,
+          updated: true,
+          ...(sha256 === undefined ? {} : { sha256 }),
+          ...(options.dryRun === true ? { dryRun: true } : {}),
+        };
       }
     );
     const create = (name, content, kind) => async () => {
@@ -1383,7 +1370,7 @@ export function createServer(options) {
         frontmatter,
         tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : [],
       };
-      await writeLocked(async () => {
+      const work = async () => {
         try {
           await stat(target);
           throw mcpError('E_ALREADY_EXISTS', 'The destination page already exists.');
@@ -1394,23 +1381,31 @@ export function createServer(options) {
         const indexOutput =
           existing === null ? freshIndex([entry]) : mergeIndex(existing, [entry], { prune: false }).output;
         checkWrite('wiki/index.md', indexOutput);
-        await writePageAtomic(target, { frontmatter, body: parsed.body });
-        await writeIndexAtomic(indexTarget, indexOutput);
-        await logEntry(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
-      });
-      await afterWrite();
-      const misplaced = PLANNING_PAGE_NAME.test(slug);
-      return { path: `wiki/${rel}`, created: true, ...(misplaced ? { warnings: [PLANNING_WARNING] } : {}) };
+        if (options.dryRun !== true) {
+          await writePageAtomic(target, { frontmatter, body: parsed.body });
+          await writeIndexAtomic(indexTarget, indexOutput);
+          await logEntry(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
+        }
+        return { misplaced: PLANNING_PAGE_NAME.test(slug) };
+      };
+      if (options.dryRun === true) await dryRunWikiCheck();
+      const { misplaced } = options.dryRun === true ? await work() : await writeLocked(work);
+      if (options.dryRun !== true) await afterWrite();
+      return {
+        path: `wiki/${rel}`,
+        created: true,
+        ...(misplaced ? { warnings: [PLANNING_WARNING] } : {}),
+        ...(options.dryRun === true ? { dryRun: true } : {}),
+      };
     };
-    tool('wiki_create_entity', z.object({ name: z.string().min(1), content: z.string() }), ({ name, content }) =>
-      create(name, content, 'entities')()
-    );
-    tool('wiki_create_concept', z.object({ name: z.string().min(1), content: z.string() }), ({ name, content }) =>
-      create(name, content, 'concepts')()
+    tool(
+      'wiki_create',
+      z.object({ type: z.enum(['entity', 'concept']), name: z.string().min(1), content: z.string() }),
+      ({ type, name, content }) => create(name, content, type === 'entity' ? 'entities' : 'concepts')()
     );
     tool('wiki_add_crosslinks', z.object({ path: z.string() }), async ({ path }) => {
       const { normalized, target } = await safeFile(path, { allowIndex: false });
-      const linked = await writeLocked(async () => {
+      const work = async () => {
         const page = await wiki.readPage(target);
         const normalizedTargets = wiki.getPageLinksDetailed(page.body).map(({ target: link }) => {
           const rel = posix.normalize(posix.join(posix.dirname(normalized), link));
@@ -1432,12 +1427,20 @@ export function createServer(options) {
         }
         const resultBody = `${page.body}\n\n## See also\n${links.join('\n')}`;
         checkWrite(`wiki/${normalized}`, serializePage({ frontmatter: page.frontmatter, body: resultBody }));
-        await wiki.addCrosslinks(wikiDir, normalized, normalizedTargets);
-        await logEntry('add-crosslinks', `wiki/${normalized}`);
+        if (options.dryRun !== true) {
+          await wiki.addCrosslinks(wikiDir, normalized, normalizedTargets);
+          await logEntry('add-crosslinks', `wiki/${normalized}`);
+        }
         return normalizedTargets.length;
-      });
-      await afterWrite();
-      return { path: `wiki/${normalized}`, linked };
+      };
+      if (options.dryRun === true) await dryRunWikiCheck();
+      const linked = options.dryRun === true ? await work() : await writeLocked(work);
+      if (options.dryRun !== true) await afterWrite();
+      return {
+        path: `wiki/${normalized}`,
+        linked,
+        ...(options.dryRun === true ? { dryRun: true } : {}),
+      };
     });
     tool('wiki_update_index', z.object({}), async () => {
       const { target } = await safeFile('index.md');

@@ -111,12 +111,11 @@ test('contract: "Write tools are omitted when config.readOnly is true" holds for
     await server.close();
   });
   const names = (await client.listTools()).tools.map((tool) => tool.name);
-  assert.ok(names.includes('wiki_query') && names.includes('wiki_read_index'), 'read tools stay advertised');
+  assert.ok(names.includes('wiki_query') && names.includes('wiki_read_page'), 'read tools stay advertised');
   for (const write of [
     'wiki_write_page',
     'wiki_update_page',
-    'wiki_create_entity',
-    'wiki_create_concept',
+    'wiki_create',
     'wiki_add_crosslinks',
     'wiki_update_index',
   ]) {

@@ -141,7 +141,7 @@ A Markdown page whose frontmatter cannot be parsed is skipped, not an error: `cr
 
 An excluded page is only removed from results. It stays in the index: it is counted in N, document frequencies and average lengths, and it is part of the link graph, so scores, IDF and abstention for every other page are the same as with the page present. An excluded page is never a lexical candidate, never a link neighbour (for graph expansion or `related`), and never a result in the hook's semantic step. The abstention decision uses the best score of every page, as before: a query whose best match is excluded returns no results with `abstained: false`. A limited result list is filled by the next pages.
 
-The exclusion rule is part of the cache key when it is non-empty (an empty list gives the legacy key). The cache records each document's `excluded` flag, and a cache whose flags disagree with the rule is rebuilt. Read tools (`wiki_read_index`, `wiki_read_page`, `wiki_list_pages`, `wiki_status`), the recap and `maintain` do not use the scope and are unchanged.
+The exclusion rule is part of the cache key when it is non-empty (an empty list gives the legacy key). The cache records each document's `excluded` flag, and a cache whose flags disagree with the rule is rebuilt. Read tools (`wiki_read_page`, `wiki_list_pages`, `wiki_status`), the recap and `maintain` do not use the scope and are unchanged.
 
 The MCP hybrid path (`wiki_query` with semantic enabled) applies the same rule: excluded paths are removed from the semantic entries before `searchHybrid` and from its results. Known limit: the hook's semantic step also filters by the rule in code, but no hermetic test covers it, because the retrieval worker uses the global `fetch`. Semantic is off by default.
 

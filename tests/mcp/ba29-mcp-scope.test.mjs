@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // BA-29: wiki_query ranks the same scope as the hook; the navigation and policy files at the wiki root are not ranked, but
-// they stay readable through wiki_read_index, wiki_read_page and wiki_list_pages. Hermetic: temporary directories only.
+// they stay readable through wiki_read_page and wiki_list_pages. Hermetic: temporary directories only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -68,7 +68,7 @@ test('the excluded wiki root pages stay readable through the read tools', async 
   const f = fixture(t);
   const mcp = await connect(f);
   t.after(() => mcp.close());
-  const index = await call(mcp.client, 'wiki_read_index');
+  const index = await call(mcp.client, 'wiki_read_page', { path: 'index.md' });
   assert.match(JSON.stringify(index), /Catalog/);
   const page = await call(mcp.client, 'wiki_read_page', { path: 'AGENTS.md' });
   assert.match(JSON.stringify(page), /Policy/);

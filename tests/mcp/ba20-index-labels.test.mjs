@@ -129,14 +129,20 @@ test('BA20-LABEL3: a title that is empty after cleaning falls back to the file n
 
 test('BA20-LABEL4: wiki_create_entity and wiki_create_concept with line breaks in the name write one clean line each', async (t) => {
   const f = await fixture(t, {});
-  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Yeni\u2028Ad\u0001', content: 'Gövde.\n' }), {
-    path: 'wiki/entities/yeni-ad.md',
-    created: true,
-  });
-  assert.deepEqual(await ok(f.client, 'wiki_create_concept', { name: 'Kav\u0085ram\r\nSozu', content: 'Gövde.\n' }), {
-    path: 'wiki/concepts/kav-ram-sozu.md',
-    created: true,
-  });
+  assert.deepEqual(
+    await ok(f.client, 'wiki_create', { type: 'entity', name: 'Yeni\u2028Ad\u0001', content: 'Gövde.\n' }),
+    {
+      path: 'wiki/entities/yeni-ad.md',
+      created: true,
+    }
+  );
+  assert.deepEqual(
+    await ok(f.client, 'wiki_create', { type: 'concept', name: 'Kav\u0085ram\r\nSozu', content: 'Gövde.\n' }),
+    {
+      path: 'wiki/concepts/kav-ram-sozu.md',
+      created: true,
+    }
+  );
   const text = await f.readIndex();
   assert.equal(text.match(/[\u0080-\u009f\u2028\u2029\r]/g), null, 'no line break or control character in the index');
   assert.equal(text.split('\n').filter((line) => line.includes('entities/yeni-ad.md')).length, 1);

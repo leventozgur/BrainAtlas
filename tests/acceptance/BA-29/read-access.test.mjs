@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // BA-29 independent acceptance, hypothesis 4 (read access). Pages excluded from search results (wiki/index.md, wiki/log.md,
-// wiki/AGENTS.md, wiki/CLAUDE.md, wiki/GEMINI.md) stay readable through wiki_read_page, wiki_read_index, wiki_list_pages and
+// wiki/AGENTS.md, wiki/CLAUDE.md, wiki/GEMINI.md) stay readable through wiki_read_page, wiki_list_pages and
 // wiki_status. The search-side check (wiki_query never returns them) runs on the candidate only.
 // Hermetic: temporary directories and an in-memory MCP transport; no network.
 import test from 'node:test';
@@ -96,7 +96,7 @@ test('read access 4b: the excluded pages are readable on the candidate, with con
       assert.equal(r.isError, false, `wiki_read_page ${path} must not error`);
       assert.ok(r.text && r.text.length > 0, `wiki_read_page ${path} must return text`);
     }
-    const index = await s.call('wiki_read_index');
+    const index = await s.call('wiki_read_page', { path: 'index.md' });
     assert.equal(index.isError, false);
     assert.match(index.text, /zyqorvex gateway entry|Index/u);
   } finally {

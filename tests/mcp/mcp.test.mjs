@@ -13,14 +13,7 @@ import { resolvePaths } from '../../packages/core/src/paths/index.mjs';
 import { createServer } from '../../packages/mcp/src/index.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const writeTools = [
-  'wiki_write_page',
-  'wiki_update_page',
-  'wiki_create_entity',
-  'wiki_create_concept',
-  'wiki_add_crosslinks',
-  'wiki_update_index',
-];
+const writeTools = ['wiki_write_page', 'wiki_update_page', 'wiki_create', 'wiki_add_crosslinks', 'wiki_update_index'];
 async function setup(readOnly = false) {
   const home = await mkdtemp(resolve(tmpdir(), 'brainatlas-mcp-'));
   const vault = resolve(home, 'vault');
@@ -95,12 +88,10 @@ test('stdio MCP exposes and exercises every tool with scoped writes', async (t) 
       'plan_read',
       'plan_update',
       'wiki_add_crosslinks',
-      'wiki_create_concept',
-      'wiki_create_entity',
+      'wiki_create',
       'wiki_lint',
       'wiki_list_pages',
       'wiki_query',
-      'wiki_read_index',
       'wiki_read_page',
       'wiki_status',
       'wiki_update_index',
@@ -113,7 +104,10 @@ test('stdio MCP exposes and exercises every tool with scoped writes', async (t) 
   const readPage = await client.callTool({ name: 'wiki_read_page', arguments: { path: 'entities/sample-01.md' } });
   assert.equal(readPage.isError, undefined, JSON.stringify(readPage));
   assert.match(payload(readPage).content, /Synthetic bilingual/);
-  assert.match(payload(await client.callTool({ name: 'wiki_read_index', arguments: {} })).content, /Wiki index/);
+  assert.match(
+    payload(await client.callTool({ name: 'wiki_read_page', arguments: { path: 'index.md' } })).content,
+    /Wiki index/
+  );
   assert.ok(
     payload(await client.callTool({ name: 'wiki_list_pages', arguments: { type: 'entities' } })).pages.length > 0
   );
@@ -125,8 +119,8 @@ test('stdio MCP exposes and exercises every tool with scoped writes', async (t) 
     content: '---\ntype: entity\ntitle: MCP new\n---\nNew evidence.',
   });
   await invoke(client, 'wiki_update_page', { path: 'entities/mcp-new.md', patch: { append: '\nUpdated.' } });
-  await invoke(client, 'wiki_create_entity', { name: 'MCP entity', content: 'Entity evidence.' });
-  await invoke(client, 'wiki_create_concept', { name: 'MCP concept', content: 'Concept evidence.' });
+  await invoke(client, 'wiki_create', { type: 'entity', name: 'MCP entity', content: 'Entity evidence.' });
+  await invoke(client, 'wiki_create', { type: 'concept', name: 'MCP concept', content: 'Concept evidence.' });
   await invoke(client, 'wiki_write_page', {
     path: 'entities/link-source.md',
     content: '---\ntype: entity\n---\n[Sample](sample-01.md)',
@@ -178,15 +172,7 @@ test('readOnly stdio server omits every write tool', async (t) => {
   const names = (await client.listTools()).tools.map((item) => item.name);
   assert.deepEqual(
     names.sort(),
-    [
-      'plan_read',
-      'wiki_lint',
-      'wiki_list_pages',
-      'wiki_query',
-      'wiki_read_index',
-      'wiki_read_page',
-      'wiki_status',
-    ].sort()
+    ['plan_read', 'wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_page', 'wiki_status'].sort()
   );
   assert.equal(
     names.some((name) => writeTools.includes(name)),
@@ -283,7 +269,7 @@ test('Wiki read tools return E_VAULT_MISSING when the wiki directory is absent',
   for (const [name, args] of [
     ['wiki_query', { query: 'evidence' }],
     ['wiki_read_page', { path: 'entities/sample-01.md' }],
-    ['wiki_read_index', {}],
+    ['wiki_read_page', { path: 'index.md' }],
     ['wiki_list_pages', {}],
     ['wiki_status', {}],
     ['wiki_lint', {}],

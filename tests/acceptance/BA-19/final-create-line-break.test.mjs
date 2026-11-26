@@ -16,7 +16,9 @@ for (const ch of BREAKS) {
     const f = await startServer(t, { files: { 'entities/onceki.md': '---\ntitle: Önceki\n---\nGövde.\n' } });
     okJson(await call(f.client, 'wiki_update_index', {}));
     const before = await readIndex(f);
-    const created = okJson(await call(f.client, 'wiki_create_entity', { name: `Satir${ch}Sonu`, content: 'Gövde.\n' }));
+    const created = okJson(
+      await call(f.client, 'wiki_create', { type: 'entity', name: `Satir${ch}Sonu`, content: 'Gövde.\n' })
+    );
     assert.equal(created.path, 'wiki/entities/satir-sonu.md');
     const after = await readIndex(f);
     const inserted = singleInsertion(before, after);
@@ -41,7 +43,7 @@ for (const ch of BREAKS) {
 test('create concept named with CR and U+2028 between words: the slug is the words joined by hyphens, one index line', async (t) => {
   const f = await startServer(t, {});
   const created = okJson(
-    await call(f.client, 'wiki_create_concept', { name: 'Birinci\r\nIkinci Ucuncu', content: 'Gövde.\n' })
+    await call(f.client, 'wiki_create', { type: 'concept', name: 'Birinci\r\nIkinci Ucuncu', content: 'Gövde.\n' })
   );
   assert.equal(created.path, 'wiki/concepts/birinci-ikinci-ucuncu.md');
   const text = (await readIndex(f)).toString('utf8');
@@ -51,7 +53,7 @@ test('create concept named with CR and U+2028 between words: the slug is the wor
 
 test('create with a name that slugifies to nothing (only a line break): observed behaviour, the index stays valid and break-free', async (t) => {
   const f = await startServer(t, {});
-  const res = await call(f.client, 'wiki_create_entity', { name: ' ', content: 'Gövde.\n' });
+  const res = await call(f.client, 'wiki_create', { type: 'entity', name: ' ', content: 'Gövde.\n' });
   if (res.isError) {
     t.diagnostic(`refused: ${textOf(res)}`);
     // PM update (BA-20, 2026-11-11): an empty slug is now refused with E_INVALID_INPUT and nothing is written, so the index
@@ -79,7 +81,7 @@ test('create entity whose name holds U+0085 in the title: the index entry is sti
   const f = await startServer(t, { files: { 'entities/onceki.md': '---\ntitle: Önceki\n---\nGövde.\n' } });
   okJson(await call(f.client, 'wiki_update_index', {}));
   const before = await readIndex(f);
-  okJson(await call(f.client, 'wiki_create_entity', { name: 'Satir\u0085Sonu', content: 'Gövde.\n' }));
+  okJson(await call(f.client, 'wiki_create', { type: 'entity', name: 'Satir\u0085Sonu', content: 'Gövde.\n' }));
   const after = await readIndex(f);
   const inserted = singleInsertion(before, after);
   assert.ok(linkedPages(after.toString('utf8')).has('entities/satir-sonu.md'));

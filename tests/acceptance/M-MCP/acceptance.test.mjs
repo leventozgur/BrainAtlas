@@ -9,15 +9,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const reads = ['wiki_query', 'wiki_read_page', 'wiki_read_index', 'wiki_list_pages', 'wiki_status', 'wiki_lint'];
-const writes = [
-  'wiki_write_page',
-  'wiki_update_page',
-  'wiki_create_entity',
-  'wiki_create_concept',
-  'wiki_add_crosslinks',
-  'wiki_update_index',
-];
+const reads = ['wiki_query', 'wiki_read_page', 'wiki_list_pages', 'wiki_status', 'wiki_lint'];
+const writes = ['wiki_write_page', 'wiki_update_page', 'wiki_create', 'wiki_add_crosslinks', 'wiki_update_index'];
 const secret = ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-'); // PM: built at runtime so the repo privacy scan stays clean
 const page = (title, body) => `---\ntype: entity\ntitle: ${title}\nstatus: active\n---\n${body}\n`;
 async function fixture(t, readOnly = false) {
@@ -123,7 +116,7 @@ test('D-17 list, reads, retrieval and invalid inputs over SDK stdio', async (t) 
     /Synthetic bilingual/
   );
   fail(await call(c, 'wiki_read_page', { path: '../outside.md' }), 'E_PATH_ESCAPE');
-  assert.match(ok(await call(c, 'wiki_read_index')).content, /Wiki index/i);
+  assert.match(ok(await call(c, 'wiki_read_page', { path: 'index.md' })).content, /Wiki index/i);
   assert.ok(
     ok(await call(c, 'wiki_list_pages', { type: 'entities' })).pages.every((p) => p.startsWith('wiki/entities/'))
   );
@@ -133,7 +126,7 @@ test('D-17 list, reads, retrieval and invalid inputs over SDK stdio', async (t) 
   await rejected(c, 'wiki_list_pages', { type: 7 });
   // Force real filesystem error paths for tools with empty schemas.
   await rm(join(f.vault, 'wiki/index.md'));
-  fail(await call(c, 'wiki_read_index'));
+  fail(await call(c, 'wiki_read_page', { path: 'index.md' }));
   await rm(join(f.vault, 'wiki'), { recursive: true, force: true });
   fail(await call(c, 'wiki_status'));
 });
@@ -162,13 +155,13 @@ test('all write tools: success, invalid operations, log and refreshed retrieval'
     true
   );
   fail(await call(c, 'wiki_update_page', { path: p }), 'E_INVALID_INPUT');
-  for (const [name, label] of [
-    ['wiki_create_entity', 'Acceptance Entity'],
-    ['wiki_create_concept', 'Acceptance Concept'],
+  for (const [type, label] of [
+    ['entity', 'Acceptance Entity'],
+    ['concept', 'Acceptance Concept'],
   ]) {
-    assert.equal(ok(await call(c, name, { name: label, content: 'Evidence.' })).created, true);
-    fail(await call(c, name, { name: label, content: 'Duplicate.' }), 'E_ALREADY_EXISTS');
-    await rejected(c, name, { name: '', content: 'x' });
+    assert.equal(ok(await call(c, 'wiki_create', { type, name: label, content: 'Evidence.' })).created, true);
+    fail(await call(c, 'wiki_create', { type, name: label, content: 'Duplicate.' }), 'E_ALREADY_EXISTS');
+    await rejected(c, 'wiki_create', { type, name: '', content: 'x' });
   }
   ok(
     await call(c, 'wiki_write_page', {
@@ -210,8 +203,8 @@ test('secrets and escaping paths cannot write or leak into outputs, logs or stat
   for (const [name, args] of [
     ['wiki_write_page', { path: 'entities/secret-probe.md', content: `password: ${secret}` }],
     ['wiki_update_page', { path: 'entities/sample-01.md', patch: { append: `\npassword: ${secret}` } }],
-    ['wiki_create_entity', { name: 'Secret Probe Entity', content: `password: ${secret}` }],
-    ['wiki_create_concept', { name: 'Secret Probe Concept', content: `password: ${secret}` }],
+    ['wiki_create', { type: 'entity', name: 'Secret Probe Entity', content: `password: ${secret}` }],
+    ['wiki_create', { type: 'concept', name: 'Secret Probe Concept', content: `password: ${secret}` }],
   ]) {
     const r = await call(c, name, args);
     fail(r, 'E_SECRET_DETECTED');

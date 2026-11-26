@@ -59,7 +59,7 @@ test('control-character names next to ordinary names: all pages are linked, no d
 test('a control-character page created through wiki_create_entity is not possible from the name (slugify); the index stays valid', async (t) => {
   const f = await startServer(t, {});
   const created = okJson(
-    await call(f.client, 'wiki_create_entity', { name: 'Ad\u0001Kontrol\u009b', content: 'Gövde.\n' })
+    await call(f.client, 'wiki_create', { type: 'entity', name: 'Ad\u0001Kontrol\u009b', content: 'Gövde.\n' })
   );
   assert.equal(
     created.path,

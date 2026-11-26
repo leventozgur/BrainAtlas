@@ -67,7 +67,7 @@ test('a write lock left by a dead process is taken over at once', async (t) => {
   await new Promise((done) => dead.on('exit', done));
   await writeFile(resolve(wiki, LOCK), JSON.stringify({ pid: dead.pid, time: Date.now(), token: 'x' }));
   const started = Date.now();
-  await ok(a, 'wiki_create_entity', { name: 'After Crash', content: '---\ntitle: After Crash\n---\nz\n' });
+  await ok(a, 'wiki_create', { type: 'entity', name: 'After Crash', content: '---\ntitle: After Crash\n---\nz\n' });
   assert.ok(Date.now() - started < 4000, 'a dead holder must not block the write');
 });
 
@@ -75,7 +75,11 @@ test('a fresh lock held by a live process makes writers wait, then refuse with E
   const { wiki, a } = await fixture(t);
   await writeFile(resolve(wiki, LOCK), JSON.stringify({ pid: process.pid, time: Date.now(), token: 'held' }));
   const started = Date.now();
-  const result = await call(a, 'wiki_create_entity', { name: 'Blocked', content: '---\ntitle: Blocked\n---\nz\n' });
+  const result = await call(a, 'wiki_create', {
+    type: 'entity',
+    name: 'Blocked',
+    content: '---\ntitle: Blocked\n---\nz\n',
+  });
   const waited = Date.now() - started;
   assert.equal(result.isError, true);
   assert.ok(result.text.startsWith('E_BUSY:'), result.text);

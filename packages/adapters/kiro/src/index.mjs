@@ -9,7 +9,9 @@ export const displayName = 'Kiro';
 export const KIRO_PROMPT_TRIGGER = 'UserPromptSubmit';
 const begin = '<!-- brainatlas:begin -->';
 const end = '<!-- brainatlas:end -->';
-const mcpTools = ['wiki_query', 'wiki_read_page', 'wiki_read_index', 'wiki_list_pages', 'wiki_status'];
+const mcpTools = ['wiki_query', 'wiki_read_page', 'wiki_list_pages', 'wiki_status'];
+const removedReadIndex = ['wiki', 'read', 'index'].join('_');
+const legacyMcpTools = ['wiki_query', 'wiki_read_page', removedReadIndex, 'wiki_list_pages', 'wiki_status'];
 const err = (code, message) => Object.assign(new Error(message), { code });
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 const quote = (value) => `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
@@ -445,11 +447,14 @@ export async function doctor(ctx) {
     hookPresent = false,
     oldTrigger = false,
     commandExists = false,
-    drift = false;
+    drift = false,
+    legacyTools = false;
   try {
     const obj = mcpRaw === null ? {} : parseJson(files.mcp, mcpRaw);
     const container = obj.mcpServers || obj.servers || {};
     registered = !!container.brainatlas;
+    legacyTools =
+      Array.isArray(container.brainatlas?.autoApprove) && sameJson(container.brainatlas.autoApprove, legacyMcpTools);
     if (container.brainatlas?.args?.[0] === ctx.shimPath) {
       try {
         await access(ctx.shimPath);
@@ -504,7 +509,12 @@ export async function doctor(ctx) {
   return {
     ok: checks.every((c) => c.ok),
     checks,
-    warnings: oldTrigger ? ['Kiro hook uses the old trigger "PromptSubmit"; run brainatlas agent refresh kiro.'] : [],
+    warnings: [
+      ...(oldTrigger ? ['Kiro hook uses the old trigger "PromptSubmit"; run brainatlas agent refresh kiro.'] : []),
+      ...(legacyTools
+        ? ['Kiro MCP autoApprove list is from an older release; run brainatlas agent refresh kiro.']
+        : []),
+    ],
     capabilities: {
       channel: 'mcp',
       read: true,

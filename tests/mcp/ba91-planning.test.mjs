@@ -454,8 +454,8 @@ test('wiki write tools warn when a page file name looks like planning content', 
   assert.deepEqual(page.warnings, ['Planning content belongs in planning/; use plan_update.']);
   const plain = await f.ok('wiki_write_page', { path: 'concepts/alpha.md', content: '# Alpha\n' });
   assert.equal(plain.warnings, undefined);
-  const entity = await directCall(f.options, 'wiki_create_entity', { name: 'Team Tasks', content: 'Body' });
+  const entity = await directCall(f.options, 'wiki_create', { type: 'entity', name: 'Team Tasks', content: 'Body' });
   assert.deepEqual(entity.warnings, ['Planning content belongs in planning/; use plan_update.']);
-  const concept = await directCall(f.options, 'wiki_create_concept', { name: 'Beta', content: 'Body' });
+  const concept = await directCall(f.options, 'wiki_create', { type: 'concept', name: 'Beta', content: 'Body' });
   assert.equal(concept.warnings, undefined);
 });

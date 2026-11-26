@@ -3,21 +3,10 @@
 // registration gets exactly the tool the registered MCP server exposes. BA-88 adds the two write tools.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { VERSION } from '@brainatlas/core';
+import { VERSION, toolNames } from '@brainatlas/core';
 import { createServer } from './index.mjs';
 
-const CALLABLE_TOOLS = new Set([
-  'wiki_query',
-  'wiki_read_page',
-  'wiki_read_index',
-  'wiki_list_pages',
-  'wiki_status',
-  'wiki_lint',
-  'wiki_write_page',
-  'wiki_update_index',
-  'plan_read',
-  'plan_update',
-]);
+const CALLABLE_TOOLS = new Set(toolNames());
 
 function argumentError(name) {
   const message = `Unknown Wiki tool: ${name}.`;
@@ -25,9 +14,8 @@ function argumentError(name) {
 }
 
 /**
- * Run one Wiki or planning tool in process: the six read tools plus wiki_write_page, wiki_update_index, plan_read and
- * plan_update. Any other name is refused before a server is created. Client and server are closed on every path,
- * including an error.
+ * Run one Wiki or planning tool in process. Any name outside the catalog is refused before a server is created. Client
+ * and server are closed on every path, including an error.
  * @param {{config:object,paths:object,env:object,dryRun?:boolean}} options
  * @param {string} name
  * @param {object} [args]

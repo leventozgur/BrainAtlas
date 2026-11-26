@@ -28,8 +28,8 @@ project file (the backlog file for `add_project`) and a mismatch is `E_CONFLICT`
 nothing is written or logged. If a later write or the log fails, the project and backlog are restored (a new project
 file is removed).
 
-`wiki_write_page`, `wiki_create_entity` and `wiki_create_concept` still write a page whose file name contains
-`backlog`, `todo`, `tasks` or `roadmap`, but return the warning `Planning content belongs in planning/; use plan_update.`
+`wiki_write_page` and `wiki_create` still write a page whose file name contains `backlog`, `todo`, `tasks` or
+`roadmap`, but return the warning `Planning content belongs in planning/; use plan_update.`
 
 ## Shell command
 

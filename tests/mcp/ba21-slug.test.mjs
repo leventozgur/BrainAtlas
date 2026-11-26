@@ -50,7 +50,9 @@ test('BA21-SLUG2: pageSlug keeps extension stripping and lowercasing', () => {
 test('BA21-SLUG3: create entity uses the transliterated slug and index line', async (t) => {
   const f = await startServer(t, {});
   assert.deepEqual(
-    okJson(await call(f.client, 'wiki_create_entity', { name: 'Deneme Varlık', content: '---\ntitle: x\n---\nG\n' })),
+    okJson(
+      await call(f.client, 'wiki_create', { type: 'entity', name: 'Deneme Varlık', content: '---\ntitle: x\n---\nG\n' })
+    ),
     { path: 'wiki/entities/deneme-varlik.md', created: true }
   );
   assert.deepEqual(entryLines(await readIndexText(f)), ['- [Deneme Varlık](entities/deneme-varlik.md)']);
@@ -59,20 +61,22 @@ test('BA21-SLUG3: create entity uses the transliterated slug and index line', as
 test('BA21-SLUG4: create concept uses the same rule; Çağrı and Ağrı are distinct pages', async (t) => {
   const f = await startServer(t, {});
   assert.deepEqual(
-    okJson(await call(f.client, 'wiki_create_concept', { name: 'ğüşıöç', content: '---\ntitle: x\n---\nG\n' })),
+    okJson(
+      await call(f.client, 'wiki_create', { type: 'concept', name: 'ğüşıöç', content: '---\ntitle: x\n---\nG\n' })
+    ),
     { path: 'wiki/concepts/gusioc.md', created: true }
   );
   const cagri = okJson(
-    await call(f.client, 'wiki_create_entity', { name: 'Çağrı Merkezi', content: '---\ntitle: x\n---\nG\n' })
+    await call(f.client, 'wiki_create', { type: 'entity', name: 'Çağrı Merkezi', content: '---\ntitle: x\n---\nG\n' })
   );
   const agri = okJson(
-    await call(f.client, 'wiki_create_entity', { name: 'Ağrı Merkezi', content: '---\ntitle: x\n---\nG\n' })
+    await call(f.client, 'wiki_create', { type: 'entity', name: 'Ağrı Merkezi', content: '---\ntitle: x\n---\nG\n' })
   );
   assert.equal(cagri.path, 'wiki/entities/cagri-merkezi.md');
   assert.equal(agri.path, 'wiki/entities/agri-merkezi.md');
   // A different name that maps to the same slug is refused as an existing page.
   refused(
-    await call(f.client, 'wiki_create_entity', { name: 'Çagri Merkezi', content: '---\ntitle: x\n---\nG\n' }),
+    await call(f.client, 'wiki_create', { type: 'entity', name: 'Çagri Merkezi', content: '---\ntitle: x\n---\nG\n' }),
     'E_ALREADY_EXISTS'
   );
 });
@@ -81,7 +85,7 @@ test('BA21-SLUG5: a name with no letter or digit after transliteration is still 
   const f = await startServer(t, {});
   const before = await snapshot(f.vault);
   refused(
-    await call(f.client, 'wiki_create_entity', { name: '日本語 ✨', content: '---\ntitle: x\n---\nG\n' }),
+    await call(f.client, 'wiki_create', { type: 'entity', name: '日本語 ✨', content: '---\ntitle: x\n---\nG\n' }),
     'E_INVALID_INPUT'
   );
   assert.deepEqual(await snapshot(f.vault), before, 'refusal writes nothing');
