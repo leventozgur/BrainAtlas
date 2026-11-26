@@ -4,6 +4,7 @@ import { lstat, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { packageRootFromUrl } from '../paths/index.mjs';
 import { atomicWriteFile } from '../util/index.mjs';
+import { toolNames } from '../meta/catalog.mjs';
 
 const root = packageRootFromUrl(import.meta.url);
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
@@ -14,20 +15,7 @@ const FILES = Object.freeze([
 const USER_MARKER = '<!-- migrated:user-section -->';
 const MANAGED =
   /<!-- brainatlas:managed v=(\d+) sha256=([0-9a-f]{64}) -->\r?\n([\s\S]*?)\r?\n<!-- \/brainatlas:managed -->/;
-export const POLICY_TOOLS = Object.freeze([
-  'wiki_query',
-  'wiki_read_page',
-  'wiki_read_index',
-  'wiki_list_pages',
-  'wiki_status',
-  'wiki_lint',
-  'wiki_write_page',
-  'wiki_update_page',
-  'wiki_create_entity',
-  'wiki_create_concept',
-  'wiki_add_crosslinks',
-  'wiki_update_index',
-]);
+export const POLICY_TOOLS = Object.freeze(toolNames());
 const DEFAULT_COMMANDS = Object.freeze([
   'init',
   'install',
@@ -65,10 +53,12 @@ export const POLICY_HASHES = Object.freeze({
     '8a61bab2e2d1aed25008edc85f0bfccf34f4975ea0f2a4ec56a4b23f946e8d46',
     '0661b8fddf8a2c74100a44aa07b5506932efd50c3cf7d85db1b679a9b8aca6ee',
     '44b470b59da25a993ec9c08c631cf14a60cdf0b729a2fdf441a15bdd90bf591f',
-  ]),
-  [POLICY_VERSION]: Object.freeze([
     '67e31ffd55d4cfaf0de45414b607b2b7129d67627bc1c5921c2699163a9d651e',
     '8efa131ec632da646e8bac8fbc8ef052effa06cb715256303f018fd5b88bbb3f',
+  ]),
+  [POLICY_VERSION]: Object.freeze([
+    'd2671be5d17a789c7568b52375dc705a0ac5ff9a5ba17e435601a707d7c81225',
+    '2bf578ecbdcc202c04adf06b33116066181537211726d1a35199311850566234',
     '0661b8fddf8a2c74100a44aa07b5506932efd50c3cf7d85db1b679a9b8aca6ee',
     '44b470b59da25a993ec9c08c631cf14a60cdf0b729a2fdf441a15bdd90bf591f',
   ]),
