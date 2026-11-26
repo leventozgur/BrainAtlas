@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 independent retest: forged on-disk caches whose key matches the CURRENT stat fingerprint.
-// Structural violations must never throw and must give fresh-install results (regular tests).
-// Content-level forgeries that the cache cannot detect without reading files are reported as findings:
-// they are `todo` tests, so the suite stays green while the finding is recorded with its diff.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -59,18 +55,15 @@ function fixture(t) {
   );
   return { home, vault, wiki, stateDir, cache: path.join(stateDir, 'retrieval-index.json') };
 }
-// Fresh-install reference: buildIndex over loadPages, no cache involved.
 function reference(wiki) {
   const index = buildIndex(loadPages(wiki), { now: ASOF });
   return QUERIES.map((q) => canon(search(index, q, OPTS)));
 }
-// Searcher over the vault; returns per-query results or throws (caller decides).
 function run(f) {
   const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   s.snapshot();
   return { s, results: QUERIES.map((q) => canon(s.search(q, OPTS))) };
 }
-// Queries whose results differ from a fresh install. Throws (test failure) if the searcher throws.
 function diffFromFresh(f, label) {
   let got;
   try {
@@ -81,8 +74,6 @@ function diffFromFresh(f, label) {
   const expected = reference(f.wiki);
   return QUERIES.filter((_, i) => got[i] !== expected[i]);
 }
-// Write a valid cache, then replace it with a forged payload. `mutate` edits the parsed object;
-// `raw` edits the original text (for tokens JSON cannot express, such as NaN or 1e999).
 function forge(f, { mutate, raw }) {
   createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   const original = fs.readFileSync(f.cache, 'utf8');
@@ -98,7 +89,6 @@ function forge(f, { mutate, raw }) {
   fs.writeFileSync(f.cache, text);
 }
 
-// ---- helpers over the on-disk shape: postings are flat [id, c0, c1, c2, c3, id, ...] per term ----
 const terms = (d) => Object.keys(d.index.postings);
 const tuples = (d, term) => {
   const flat = d.index.postings[term];
@@ -116,7 +106,6 @@ const recomputeAverages = (d) => {
     (i) => d.index.docs.reduce((a, x) => a + x.lengths[i], 0) / (d.index.docs.length || 1)
   );
 };
-// Consistent removal of one page: its postings go, later ids shift down, averages are recomputed.
 function removeDoc(d, id) {
   for (const term of terms(d)) {
     const kept = tuples(d, term)
@@ -128,7 +117,6 @@ function removeDoc(d, id) {
   recomputeAverages(d);
   return d;
 }
-// Reverse the document order and remap ids, keeping every posting list ascending: a valid, reordered cache.
 function reverseDocs(d) {
   const n = d.index.docs.length;
   for (const term of terms(d)) {
@@ -142,7 +130,6 @@ function reverseDocs(d) {
 }
 const firstTerm = (d) => terms(d)[0];
 
-// ---- A. Structural forgeries: must never throw and must equal a fresh install ----
 const STRUCTURAL = [
   [
     'posting ids not ascending (reversed list)',
@@ -639,8 +626,6 @@ for (const [name, spec] of STRUCTURAL) {
   });
 }
 
-// ---- B. Content-level forgeries (key matches, payload self-consistent, page content is not re-read) ----
-// Each is a finding. A passing body means the cache was rejected or the change had no visible effect.
 const FINDINGS = [
   [
     'missing real page (consistent removal of z.md; key matches, z.md on disk)',
@@ -691,8 +676,6 @@ const FINDINGS = [
     },
   ],
 ];
-// PM update (2026-11-11): the missing-page finding is fixed (indexed ∪ skipped paths must equal the walked set), so it now
-// runs as a normal test. The remaining low findings are the accepted cache-trust risk documented in docs/contracts/retrieval.md.
 for (const [name, severity, spec] of FINDINGS) {
   const fixed = name.startsWith('missing real page');
   test(
@@ -706,7 +689,6 @@ for (const [name, severity, spec] of FINDINGS) {
   );
 }
 
-// ---- C. Cache location and type ----
 test('cache path occupied by a directory: no throw, fresh-install results', (t) => {
   const f = fixture(t);
   createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
@@ -743,7 +725,6 @@ test('cache written by a different vault under the same stateDir is rejected', (
   assert.deepEqual(diffFromFresh(f, 'foreign cache'), []);
 });
 
-// ---- D. Seeded random structural mutations (deterministic) ----
 function mulberry32(seed) {
   let s = seed >>> 0;
   return () => {
@@ -754,7 +735,6 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-// Values that are never valid at any structural site of the cache (wrong type or out of range for it).
 const BAD = [null, -1, 0.5, '1', 'x', 1e308, true, [], [1, 2], { q: 1 }];
 test('300 seeded random structural mutations: no throw, fresh-install results every time', (t) => {
   const f = fixture(t);
@@ -820,13 +800,10 @@ test('300 seeded random structural mutations: no throw, fresh-install results ev
   assert.deepEqual(failures, []);
 });
 
-// ---- E. Snapshot contract: pages and index must describe the same state ----
-// PM correction (2026-11-11): superseded pages are in snapshot().pages by contract (cache-integrity.test.mjs) but never in the
-// lexical index, so the comparison excludes them. The finding itself (a page added after a cache hit missing from the index) is fixed.
 test('snapshot after an outside add (no refresh) pairs pages with an index of the same state', (t) => {
   const f = fixture(t);
-  createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF }); // writes the cache
-  const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF }); // cache hit: pages not loaded
+  createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
+  const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   fs.writeFileSync(path.join(f.wiki, 'added-late.md'), '# Late\nlatemarker only on disk\n');
   const snap = s.snapshot();
   const indexable = (p) =>
@@ -841,16 +818,15 @@ test('snapshot after an outside add (no refresh) pairs pages with an index of th
   assert.deepEqual(pagePaths, indexPaths, 'snapshot pages and lexical index describe different states');
 });
 
-// ---- F. Large valid cache (near the largest realistic size) ----
 test('large valid cache (1500 pages, ~tens of MB of postings) loads and matches a fresh install', (t) => {
   const f = fixture(t);
   for (const p of fs.readdirSync(f.wiki)) fs.rmSync(path.join(f.wiki, p), { recursive: true, force: true });
   const { queries } = writeSyntheticCorpus(f.wiki, { pages: 1500, seed: 7, wordsPerPage: 600, queryCount: 30 });
-  createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF }); // writes the large cache
+  createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   console.log(`large cache: ${(fs.statSync(f.cache).size / 1048576).toFixed(1)} MiB`);
   const idx = buildIndex(loadPages(f.wiki), { now: ASOF });
   const expected = queries.map((q) => canon(search(idx, q, OPTS)));
-  const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF }); // cache hit
+  const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   assert.deepEqual(
     queries.map((q) => canon(s.search(q, OPTS))),
     expected

@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20 independent retest (blind, after fix1): wiki_create_entity / wiki_create_concept frontmatter and index lines, the
-// unreadable-page case of wiki_update_index, and the refusal paths. Real stdio MCP server, temporary HOME and vault, no
-// network, every value is fixed or built at run time. Refusal messages are checked for the absence of caller content.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, readdir, writeFile, rm, lstat } from 'node:fs/promises';
@@ -13,7 +10,6 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 
 const WORKTREE = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-// BA20_TARGET=main runs the main checkout's server (executed only; every write goes to a temporary vault).
 const ROOT = process.env.BA20_TARGET === 'main' ? resolve(WORKTREE, '..', '..', 'BrainAtlas') : WORKTREE;
 const OPTS = { timeout: 60_000 };
 // eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
@@ -73,7 +69,6 @@ const indexPath = (f) => join(f.wiki, 'index.md');
 const indexText = (f) => readFile(indexPath(f), 'utf8');
 const entryLines = (text) => text.split('\n').filter((line) => line.startsWith('- ['));
 
-/** Byte snapshot of every entry under a directory (links recorded as links). */
 async function snapshot(dir) {
   const out = {};
   async function walk(rel) {
@@ -92,13 +87,9 @@ async function snapshot(dir) {
 
 const page = (frontmatter, body = 'Gövde.\n') => `---\n${frontmatter}\n---\n${body}`;
 
-/**
- * Creates the page through the tool in a fresh vault, then writes the same page bytes into a second fresh vault and
- * runs wiki_update_index there. Returns both index texts and the page bytes so the caller can compare the lines.
- */
-async function createAndUpdate(t, { tool, name, content, relPath }) {
+async function createAndUpdate(t, { tool, type, name, content, relPath }) {
   const created = await fixture(t);
-  const createdResult = jsonOf(await call(created, tool, { name, content }));
+  const createdResult = jsonOf(await call(created, tool, { type, name, content }));
   assert.equal(createdResult.path, `wiki/${relPath}`);
   const pageBytes = await readFile(join(created.wiki, relPath));
   const fromCreate = await indexText(created);
@@ -108,12 +99,11 @@ async function createAndUpdate(t, { tool, name, content, relPath }) {
   return { fromCreate, fromUpdate, pageBytes: pageBytes.toString('utf8') };
 }
 
-// ---- 1. create line equals the update line, for summary, description, tags and their combinations ----
-
 const VARIANTS = [
   {
     label: 'summary with emoji',
-    tool: 'wiki_create_entity',
+    tool: 'wiki_create',
+    type: 'entity',
     name: 'Ozet Sayfasi',
     relPath: 'entities/ozet-sayfasi.md',
     content: page('title: Baska\nsummary: Düz özet 🚀'),
@@ -121,21 +111,24 @@ const VARIANTS = [
   },
   {
     label: 'description only',
-    tool: 'wiki_create_entity',
+    tool: 'wiki_create',
+    type: 'entity',
     name: 'Aciklama Sayfasi',
     relPath: 'entities/aciklama-sayfasi.md',
     content: page('description: Açıklama metni ✅'),
   },
   {
     label: 'tags only',
-    tool: 'wiki_create_entity',
+    tool: 'wiki_create',
+    type: 'entity',
     name: 'Etiket Sayfasi',
     relPath: 'entities/etiket-sayfasi.md',
     content: page('tags: [alfa, beta]'),
   },
   {
     label: 'summary + description + tags + title in content',
-    tool: 'wiki_create_entity',
+    tool: 'wiki_create',
+    type: 'entity',
     name: 'Birlesik Sayfa',
     relPath: 'entities/birlesik-sayfa.md',
     content: page('title: Icerik Basligi\nsummary: "Özet: [x] (y)"\ndescription: Açıklama\ntags: [a, b]'),
@@ -143,7 +136,8 @@ const VARIANTS = [
   },
   {
     label: 'summary with a quoted colon and brackets (concept)',
-    tool: 'wiki_create_concept',
+    tool: 'wiki_create',
+    type: 'concept',
     name: 'Kavram Ozeti',
     relPath: 'concepts/kavram-ozeti.md',
     content: page('summary: "a: b [c]"\ntags: [kavram]'),
@@ -168,7 +162,8 @@ for (const v of VARIANTS) {
 test('create keeps summary, description and tags in the page frontmatter on disk', OPTS, async (t) => {
   const f = await fixture(t);
   jsonOf(
-    await call(f, 'wiki_create_entity', {
+    await call(f, 'wiki_create', {
+      type: 'entity',
       name: 'Alan Kontrol',
       content: page('summary: Özet\ndescription: Tanım\ntags: [x, y]'),
     })
@@ -184,14 +179,13 @@ test('create keeps summary, description and tags in the page frontmatter on disk
   assert.match(onDisk, /^title: Alan Kontrol$/m);
 });
 
-// ---- 2. no frontmatter in the content: behavior as before (name as label, no summary) ----
-
 test(
   'create without frontmatter in the content: name is the label, no summary suffix, body kept, update line equal',
   OPTS,
   async (t) => {
     const { fromCreate, fromUpdate, pageBytes } = await createAndUpdate(t, {
-      tool: 'wiki_create_entity',
+      tool: 'wiki_create',
+      type: 'entity',
       name: 'Plain Page',
       content: 'Sadece gövde.\n',
       relPath: 'entities/plain-page.md',
@@ -206,13 +200,11 @@ test(
 
 test('create concept without frontmatter: concept type default and plain label', OPTS, async (t) => {
   const f = await fixture(t);
-  jsonOf(await call(f, 'wiki_create_concept', { name: 'Plain Concept', content: 'Gövde.\n' }));
+  jsonOf(await call(f, 'wiki_create', { type: 'concept', name: 'Plain Concept', content: 'Gövde.\n' }));
   const page = await readFile(join(f.wiki, 'concepts/plain-concept.md'), 'utf8');
   assert.match(page, /^type: concept$/m);
   assert.deepEqual(entryLines(await indexText(f)), ['- [Plain Concept](concepts/plain-concept.md)']);
 });
-
-// ---- 3. broken frontmatter: E_INVALID_INPUT, nothing written, no caller content in the message ----
 
 const BROKEN = [
   { label: 'unclosed flow list', content: '---\ntitle: X\ntags: [a, SENTINEL_TAG\n---\nSENTINEL_BODY\n' },
@@ -228,7 +220,7 @@ for (const b of BROKEN) {
       'log.md': '# Wiki log\n',
     });
     const before = await snapshot(f.vault);
-    const r = await call(f, 'wiki_create_entity', { name: 'Bozuk Girdi', content: b.content });
+    const r = await call(f, 'wiki_create', { type: 'entity', name: 'Bozuk Girdi', content: b.content });
     assert.equal(r.isError, true, 'refused');
     const msg = textOf(r);
     assert.match(msg, /E_INVALID_INPUT/);
@@ -240,12 +232,14 @@ for (const b of BROKEN) {
   });
 }
 
-// ---- 4. title in the content does not change the create name ----
-
 test('a title in the content does not replace the create name (page title and label)', OPTS, async (t) => {
   const f = await fixture(t);
   const res = jsonOf(
-    await call(f, 'wiki_create_entity', { name: 'Create Adi', content: page('title: Icerik Basligi\nsummary: x') })
+    await call(f, 'wiki_create', {
+      type: 'entity',
+      name: 'Create Adi',
+      content: page('title: Icerik Basligi\nsummary: x'),
+    })
   );
   assert.equal(res.path, 'wiki/entities/create-adi.md');
   const onDisk = await readFile(join(f.wiki, 'entities/create-adi.md'), 'utf8');
@@ -254,8 +248,6 @@ test('a title in the content does not replace the create name (page title and la
   const lines = entryLines(await indexText(f));
   assert.deepEqual(lines, ['- [Create Adi](entities/create-adi.md) — x']);
 });
-
-// ---- 5. unreadable page (raw C0 in frontmatter) plus five normal pages ----
 
 const BAD = '---\ntype: entity\ntitle: A\u0001B\n---\nG.\n';
 
@@ -285,14 +277,11 @@ test(
   }
 );
 
-// ---- 6. secret-shaped summary: refused, nothing written ----
-
-// Built at run time from fragments; it matches the content rule for an Anthropic-style key but is not a credential.
 const SECRET = ['sk', 'ant'].join('-') + '-' + 'Q'.repeat(24);
 
-for (const tool of ['wiki_create_entity', 'wiki_create_concept']) {
+for (const type of ['entity', 'concept']) {
   test(
-    `${tool} with a secret-shaped summary is refused (E_SECRET_DETECTED), nothing is written, message has no value`,
+    `wiki_create ${type} with a secret-shaped summary is refused (E_SECRET_DETECTED), nothing is written, message has no value`,
     OPTS,
     async (t) => {
       const f = await fixture(t, {
@@ -301,7 +290,7 @@ for (const tool of ['wiki_create_entity', 'wiki_create_concept']) {
         'log.md': '# Wiki log\n',
       });
       const before = await snapshot(f.vault);
-      const r = await call(f, tool, { name: 'Sır Testi', content: page(`summary: ${SECRET}`) });
+      const r = await call(f, 'wiki_create', { type, name: 'Sır Testi', content: page(`summary: ${SECRET}`) });
       assert.equal(r.isError, true, 'refused');
       const msg = textOf(r);
       assert.match(msg, /E_SECRET_DETECTED/);

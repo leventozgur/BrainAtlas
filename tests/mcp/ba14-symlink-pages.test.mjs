@@ -11,7 +11,6 @@ import { defaultConfig } from '../../packages/core/src/config/index.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-// Read tools must not follow symlinks either: a page or directory linked from outside the Wiki is invisible to them.
 test('wiki_list_pages and wiki_status ignore symlinked pages and directories outside the Wiki', async (t) => {
   const home = await mkdtemp(resolve(tmpdir(), 'ba14-symlist-'));
   t.after(() => rm(home, { recursive: true, force: true }));

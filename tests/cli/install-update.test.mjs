@@ -222,7 +222,6 @@ test('uninstall JSON error envelope lists the changed external managed file (hom
   assert.equal(response.ok, false);
   assert.equal(response.error.code, 'E_UNINSTALL_CONFLICT');
   assert.equal(response.error.message, 'brainatlas command failed.');
-  // PM: conflicts are listed home-relative so the user can find the changed file; no absolute HOME path on stdout.
   assert.deepEqual(Object.keys(response.error).sort(), ['code', 'conflicts', 'message']);
   assert.equal(response.error.conflicts.length, 1);
   assert.ok(!response.error.conflicts[0].startsWith('/') || !resolvedChangedFile.startsWith(process.env.HOME ?? '\0'));

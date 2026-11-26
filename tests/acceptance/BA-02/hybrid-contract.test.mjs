@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 blind acceptance: searchHybrid with and without lexicalIndex, and core search, must match the main
-// (1eeec6e) outputs byte-for-byte. Golden digests were produced by running hybrid-cases.mjs on the main tree.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';

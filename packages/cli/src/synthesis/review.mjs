@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-48 phase B3: human review of stored current-state proposals. `show` only reads; `accept` writes the page and its
-// archive inside the Wiki write lock and reverts both when a post-apply check regresses. `reject` changes the store only.
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, realpath, unlink } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -35,7 +33,6 @@ const DIFF_DP_LIMIT = 4_000_000;
 const require = createRequire(import.meta.url);
 let lockModule = null;
 
-/** The same Wiki write lock loader as `compact.mjs`; it is imported only by `accept`. */
 async function lockApi() {
   if (lockModule) return lockModule;
   const candidates = [];
@@ -43,9 +40,8 @@ async function lockApi() {
     candidates.push(
       pathToFileURL(join(dirname(require.resolve('@brainatlas/mcp/package.json')), 'src', 'lock.mjs')).href
     );
-  } catch {
-    /* no installed MCP package: use the sibling copy below */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   candidates.push(new URL('../../mcp/src/lock.mjs', import.meta.url).href);
   let cause = null;
   for (const url of candidates) {
@@ -71,18 +67,15 @@ const timeOf = (value) => {
   return null;
 };
 
-/** True when a record's `expiresAt` has passed at `now`. */
 function expired(record, now) {
   const expires = timeOf(record?.expiresAt);
   return expires !== null && expires <= now.getTime();
 }
 
-/** The archive path of a page, with the same naming rule as `compact`. */
 function archivePathOf(page) {
   return `wiki/archive/${page.slice('wiki/'.length).replace(/\.md$/u, '').replaceAll('/', '--')}-history.md`;
 }
 
-/** The regular page file below `root`; symlinks anywhere on the path are refused. */
 async function pageFile(root, page) {
   const parts = page.split('/');
   let current = root;
@@ -114,7 +107,6 @@ async function readOptional(file) {
   }
 }
 
-/** The exact bytes of an optional file, or null when it does not exist. */
 async function readOptionalBytes(file) {
   try {
     return await readFile(file);
@@ -124,7 +116,6 @@ async function readOptionalBytes(file) {
   }
 }
 
-/** A recursive conflicted-copy name check over one directory; symlinks are skipped and each real directory is visited once. */
 async function hasConflictIn(directory, visited) {
   const real = await realpath(directory).catch(() => null);
   if (!real || visited.has(real)) return false;
@@ -144,7 +135,6 @@ async function hasConflictIn(directory, visited) {
   return false;
 }
 
-/** True when the page folder or `wiki/archive/` holds a conflicted copy. */
 async function hasConflictedCopy(root, page) {
   const folder = join(root, ...page.split('/').slice(0, -1));
   const visited = new Set();
@@ -152,7 +142,6 @@ async function hasConflictedCopy(root, page) {
   return hasConflictIn(join(root, 'wiki', 'archive'), visited);
 }
 
-/** The delta summary kept on the record, with the proposed conflict count. */
 function deltaOf(record) {
   const delta = isObject(record?.gates?.delta) ? record.gates.delta : {};
   const conflicts = Array.isArray(record?.proposal?.conflicts) ? record.proposal.conflicts.length : 0;
@@ -165,7 +154,6 @@ function deltaOf(record) {
   };
 }
 
-/** A list summary: identity and gate state only, never page or proposal text. */
 function summaryOf(record) {
   return {
     id: record.id,
@@ -179,7 +167,6 @@ function summaryOf(record) {
   };
 }
 
-/** Open proposals, newest first. The store marks newly expired records before the filter. */
 export async function listProposals(options = /** @type {any} */ ({})) {
   const now = options.now instanceof Date && !Number.isNaN(options.now.getTime()) ? options.now : new Date();
   const store = createStore(options.stateDir);
@@ -195,7 +182,6 @@ export async function listProposals(options = /** @type {any} */ ({})) {
   return { action: 'list', proposals };
 }
 
-/** Rendered block, page text and archive text of a proposal against one current page. */
 async function previewOf({ vault, root, page, pageText, proposal, now, plan = planCompaction, lenientPlan = true }) {
   const archiveRel = archivePathOf(page);
   const archiveFile = join(root, ...archiveRel.split('/'));
@@ -213,7 +199,6 @@ async function previewOf({ vault, root, page, pageText, proposal, now, plan = pl
   return { archiveRel, archiveFile, originalArchive, block, newPageText, newArchiveText: compacted.archiveText };
 }
 
-/** The queries of a page: its title, then its frontmatter keywords, at most five. */
 function retrievalQueries(pageText) {
   const parsed = parseFrontmatter(pageText);
   const heading = /^#\s+(.+)$/mu.exec(parsed.body)?.[1]?.trim() ?? '';
@@ -230,13 +215,11 @@ function retrievalQueries(pageText) {
   return queries;
 }
 
-/** A fresh lexical index of the Wiki pages (same root and exclusion rules as `wiki query`). */
 function wikiIndex(root, now) {
   const { pages } = loadPagesDetailed(join(root, 'wiki'));
   return buildIndex(pages, { now, exclude: DEFAULT_EXCLUDE_WIKI });
 }
 
-/** The 1-based rank of `page` (a `wiki/` path) in the top ten results of `query`, or null. */
 function rankOf(index, query, page, now) {
   const target = page.slice('wiki/'.length);
   const results = search(index, query, { limit: TOP_RESULTS, abstainThreshold: 0, asOf: now }).results;
@@ -244,10 +227,8 @@ function rankOf(index, query, page, now) {
   return at < 0 ? null : at + 1;
 }
 
-/** Identifier of one lint finding of the page, compared before and after the write. */
 const lintKey = (finding) => `${finding.category}\u0000${finding.message}`;
 
-/** The Core lint findings of one page, as a set of category/message keys. A lint failure is never hidden. */
 async function lintFindings(root, page) {
   const result = await lintWiki(root);
   const findings = Array.isArray(result?.findings) ? result.findings : [];
@@ -255,7 +236,6 @@ async function lintFindings(root, page) {
   return new Set(findings.filter((item) => item.file === rel).map(lintKey));
 }
 
-/** The OKF error findings of one page text, as a set of rule/message keys. */
 function okfErrors(pageText, page, now) {
   const parsed = parseFrontmatter(pageText);
   const findings = checkPage(
@@ -267,7 +247,6 @@ function okfErrors(pageText, page, now) {
   );
 }
 
-/** Line diff operations, with the unchanged prefix and suffix kept as context. */
 function diffOperations(before, after) {
   let start = 0;
   while (start < before.length && start < after.length && before[start] === after[start]) start++;
@@ -314,7 +293,6 @@ function diffOperations(before, after) {
   return operations;
 }
 
-/** A unified diff with three lines of context, or '' when the two texts are identical. */
 function unifiedDiff(before, after, page) {
   const operations = diffOperations(String(before).split('\n'), String(after).split('\n'));
   const changes = operations
@@ -360,7 +338,6 @@ function unifiedDiff(before, after, page) {
   return lines.join('\n');
 }
 
-/** `show`: delta summary, rendered block and a freshly computed unified diff. A changed page marks the record invalidated. */
 export async function showProposal(options = /** @type {any} */ ({})) {
   const now = options.now instanceof Date && !Number.isNaN(options.now.getTime()) ? options.now : new Date();
   const store = createStore(options.stateDir);
@@ -399,14 +376,12 @@ export async function showProposal(options = /** @type {any} */ ({})) {
   };
 }
 
-/** `reject`: only the store record changes. */
 export async function rejectProposal(options = /** @type {any} */ ({})) {
   const store = createStore(options.stateDir);
   const record = await store.markReviewed(options.id, 'rejected');
   return { action: 'reject', id: record.id, page: record.page, status: record.status };
 }
 
-/** Restores both originals byte for byte; a newly created archive is deleted. A failed step is E_APPLY_RESTORE_FAILED. */
 async function restore(file, archiveFile, originalPage, originalArchive, write = atomicWriteFile) {
   const failed = [];
   try {
@@ -432,10 +407,6 @@ async function restore(file, archiveFile, originalPage, originalArchive, write =
   }
 }
 
-/**
- * `accept`: all refusals first, then one locked apply. The page is written only after the gates pass, and both files are
- * restored when a byte verification or a post-apply lint, OKF or retrieval check regresses.
- */
 export async function acceptProposal(options = /** @type {any} */ ({})) {
   const now = options.now instanceof Date && !Number.isNaN(options.now.getTime()) ? options.now : new Date();
   const deps = isObject(options.dependencies) ? options.dependencies : {};
@@ -480,7 +451,6 @@ export async function acceptProposal(options = /** @type {any} */ ({})) {
       throw failure('E_PROPOSAL_STALE', 'page changed since the proposal');
     }
 
-    // Plan errors refuse the apply: nothing has been written at this point.
     const preview = await previewOf({
       vault: options.vault,
       root,
@@ -577,16 +547,14 @@ export async function acceptProposal(options = /** @type {any} */ ({})) {
         await restore(file, archiveFile, originalPage, originalArchive, writeFileFn);
         try {
           await store.setStatus(record.id, 'reverted');
-        } catch {
-          /* the original error is the result */
-        }
+          // eslint-disable-next-line no-empty
+        } catch {}
       }
       throw error;
     }
   });
 }
 
-/** Human output; the result comes first and every command stays short. */
 export function formatProposalResult(result) {
   if (result.action === 'list') {
     const lines = [`open proposals: ${result.proposals.length}`];

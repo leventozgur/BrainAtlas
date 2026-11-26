@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-42 independent blind acceptance fixture generator. Written from the brief only; the developer's ba42 tests were not read.
-// Deterministic: running it again rewrites identical bytes. It writes ./fixtures (vaults, fake repository), fixtures/labels.json
-// (ground truth, produced before any product run) and fixtures/MANIFEST.json (sha256 freeze of every fixture file).
 import { createHash } from 'node:crypto';
 import { cp, lstat, mkdir, readdir, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -27,7 +24,6 @@ const stripCommit = (ref) => {
 const containsWord = (text, name) =>
   new RegExp(`(?<!${WORD})${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?!${WORD})`, 'u').test(text);
 
-// ---- Fake repository: path -> exported symbols (text is generated from these; old names never appear in it).
 const REPO = new Map(
   Object.entries({
     'services/billing/invoice.ts': ['createInvoice', 'calcTax', 'issueCredit'],
@@ -58,7 +54,7 @@ const REPO = new Map(
     'tests/fixtures/sample.json': [],
   }).map(([k, v]) => [N(k), v.map(N)])
 );
-const SYMLINK_IN_REPO = ['lib/legacy-link.ts', 'util/strings.ts']; // link path, relative target (inside lib/)
+const SYMLINK_IN_REPO = ['lib/legacy-link.ts', 'util/strings.ts'];
 
 function repoBody(path, symbols) {
   const marker = `REPOBODY_${hexN(path, 10).toUpperCase()}_SECRET`;
@@ -68,7 +64,7 @@ function repoBody(path, symbols) {
   if (ext === 'yaml') return `# ${marker}\nname: example\n`;
   const comment = ext === 'py' || ext === 'sh' || ext === 'yaml' ? '#' : '//';
   const lines = [`${comment} ${marker}`];
-  if (path === 'services/notify/mailer.ts') lines.push('// renderTemplate replaces the sendLegacyBody flow'); // spec-edge: plain-text mention
+  if (path === 'services/notify/mailer.ts') lines.push('// renderTemplate replaces the sendLegacyBody flow');
   for (const s of symbols) {
     if (ext === 'ts') lines.push(`export function ${s}(): void {}`);
     else if (ext === 'py') lines.push(`def ${s}():`, '    pass');
@@ -78,7 +74,6 @@ function repoBody(path, symbols) {
   return lines.join('\n') + '\n';
 }
 
-// ---- Attribution plan. Ground truth: a repo reference is valid when its file is a regular file and its symbol is a word in it.
 const VALID_SOURCES = [
   ['services/billing/invoice.ts', ''],
   ['services/billing/invoice.ts', 'a1b2c3d'],
@@ -146,7 +141,6 @@ const VALID_SYMBOLS = [
   ['str', 'src/Modül/ÖzelDosya.ts', 'kayıtGüncelle'],
 ].map(([form, p, name]) => ({ form: form === 'str' ? 'sym-str' : 'sym-obj', path: N(p), name: N(name) }));
 
-// [category, form, ...]: source -> raw reference; sym -> path, name.
 const BROKEN = [
   ['deleted', 'sym-obj', 'services/legacy/old_mailer.ts', 'sendLegacy'],
   ['deleted', 'source', 'ops/runbooks/restore_v1.sh'],
@@ -184,7 +178,6 @@ const BROKEN = [
   return { category: row[0], form: row[1], path: N(row[2]), name: N(row[3]) };
 });
 
-// Spec-edge cases: not counted in the detection or false-positive rates; each has an explicit expectation.
 const K_MISSING = (p) => `src-missing:${p}`;
 const EDGE_SOURCES = [
   { raw: 'lib/legacy-link.ts', expect: K_MISSING('lib/legacy-link.ts'), note: 'symlink is not followed' },
@@ -217,7 +210,6 @@ const EDGE_SOURCES = [
   { raw: 'lib/util/strings.ts@', expect: K_MISSING('lib/util/strings.ts@'), note: 'empty suffix' },
 ];
 
-// ---- Build pages.
 const TOPICS = ['billing', 'auth', 'search', 'notify', 'ops', 'docs', 'lib', 'cmd', 'pkg', 'src'];
 const DIRS = ['runbooks', 'decisions', 'services', 'runbooks', 'decisions', 'services'];
 const TYPE_OF_DIR = { runbooks: 'summary', decisions: 'concept', services: 'entity' };
@@ -230,8 +222,8 @@ const topicOf = (p) => {
   return seg === 'tests' ? 'lib' : seg;
 };
 
-const ITEMS = []; // label records
-const pageSources = new Map(); // page rel -> yaml lines
+const ITEMS = [];
+const pageSources = new Map();
 const pageSymbols = new Map();
 const pageType = new Map();
 const pageTitle = new Map();
@@ -316,7 +308,6 @@ for (const it of BROKEN) {
   rec.id = `B${String(++bIdx).padStart(2, '0')}`;
 }
 
-// Edge pages, fixed placement.
 registerPage('wiki/services/edge-sources.md', 'entity', 'Edge sources');
 registerPage('wiki/runbooks/edge-symbols.md', 'summary', 'Edge symbols');
 registerPage('wiki/runbooks/edge-malformed.md', 'summary', 'Edge malformed symbols');
@@ -326,7 +317,7 @@ registerPage('wiki/services/edge-valid.md', 'entity', 'Edge valid variants');
 let eIdx = 0;
 for (const e of EDGE_SOURCES) {
   const page = 'wiki/services/edge-sources.md';
-  const yaml = q(`repo:${e.raw}`); // quoted for every entry: an unquoted "repo:" is read as a YAML mapping, not a string
+  const yaml = q(`repo:${e.raw}`);
   addLine(pageSources, page, `  - ${yaml}`);
   ITEMS.push({
     id: `E${String(++eIdx).padStart(2, '0')}`,
@@ -490,7 +481,6 @@ ITEMS.push({
   expect: null,
   yaml: q('repo:./lib/util/strings.ts'),
 });
-// Items with explicit page placement are reflected in the page builders below.
 addLine(pageSources, 'wiki/services/edge-nonarray.md', 'NONARRAY_SOURCES');
 addLine(pageSymbols, 'wiki/services/edge-nonarray.md', 'NONARRAY_SYMBOLS');
 addLine(pageSources, 'wiki/services/edge-dedupe.md', `  - ${q('repo:services/legacy/gone.ts')}`);
@@ -499,7 +489,6 @@ addLine(pageSymbols, 'wiki/services/edge-dedupe.md', `  - ${q('services/legacy/g
 addLine(pageSources, 'wiki/services/edge-valid.md', `  - ${q('repo:./lib/util/strings.ts')}`);
 addLine(pageSymbols, 'wiki/services/edge-valid.md', `  - {path: ${q('lib/util/strings.ts')}, name: ${q('slugify ')}}`);
 
-// ---- Page text.
 function pageText(rel) {
   const type = pageType.get(rel);
   const title = pageTitle.get(rel);
@@ -560,7 +549,6 @@ function indexText(pages) {
   return lines.join('\n');
 }
 
-// ---- vault-edge: baseline defects (no repo needed), plus repo references for the --repo run.
 function edgeVault() {
   const page = (rel, body, fm = []) => [rel, ['---', ...fm, '---', '', body, ''].join('\n')];
   const base = (type, status, extra = []) => [
@@ -664,7 +652,6 @@ function edgeVault() {
   return { files, index };
 }
 
-// ---- Write everything.
 async function writeTree(root, files) {
   for (const [rel, text] of files) {
     const abs = join(root, rel);
@@ -676,27 +663,22 @@ async function main() {
   await rm(FIX, { recursive: true, force: true });
   await mkdir(FIX, { recursive: true });
 
-  // Main vault: 70 content pages, every page indexed, no baseline defects.
   const mainFiles = [];
   for (const rel of CONTENT) mainFiles.push([rel, pageText(rel)]);
   mainFiles.push(['wiki/index.md', indexText(CONTENT)]);
   mainFiles.push(['wiki/log.md', '# Wiki log\n\n- 2026-11-01 synthetic BA-42 fixture written.\n']);
   await writeTree(join(FIX, 'vault-main'), mainFiles);
 
-  // Fake repository: 26 regular files in subdirectories, one symlink.
   const repoFiles = [];
   for (const [path, symbols] of REPO) repoFiles.push([path, repoBody(path, symbols)]);
   await writeTree(join(FIX, 'repo-main'), repoFiles);
   await symlink(SYMLINK_IN_REPO[1], join(FIX, 'repo-main', SYMLINK_IN_REPO[0]));
 
-  // Demo vault: a copy of the product's demo vault (read-only input).
   await cp(DEMO_SRC, join(FIX, 'vault-demo'), { recursive: true });
 
-  // Edge vault.
   const edge = edgeVault();
   await writeTree(join(FIX, 'vault-edge'), [...edge.files, ['wiki/index.md', edge.index]]);
 
-  // Labels: expected multiset per page (what a correct tool reports), written before any product run.
   const labels = {
     version: 'ba42-labels-1',
     note: 'ground truth from the generator plan; keys: src-missing:<path>, sym-missing:<path>#<name>, src-rejected',
@@ -704,7 +686,6 @@ async function main() {
   };
   await writeFile(join(FIX, 'labels.json'), JSON.stringify(labels, null, 2) + '\n', 'utf8');
 
-  // Manifest: sha256 of every fixture entry (regular files and symlink targets), excluding itself.
   const entries = [];
   async function walk(dir) {
     for (const name of (await readdir(dir)).sort()) {

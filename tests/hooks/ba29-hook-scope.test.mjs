@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-29: the hook searches the same scope as the MCP server (<vault>/wiki when present), leaves out root-level
-// navigation and policy files, and shares the retrieval cache with the MCP server that uses the same state directory.
-// The parity case imports the pre-change product from the main checkout found with `git rev-parse --git-common-dir`.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -70,7 +67,6 @@ test('wiki vault: the hook injects wiki pages only, never wiki/index.md or the r
   write(vault, 'wiki/log.md', '# Log\nquokka habitat log');
   write(vault, 'wiki/notes/habitat.md', '# Habitat\nquokka habitat is the rocky island');
   const { context, paths } = await prompt(vault, path.join(dir, 'state'), 'where does the quokka habitat live?');
-  // Hook paths stay vault-relative: the wiki page is reported as wiki/notes/habitat.md.
   assert.deepEqual(paths, ['wiki/notes/habitat.md'], context);
 });
 

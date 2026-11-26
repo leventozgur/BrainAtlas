@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-23 end to end: with one broken-frontmatter page in the vault, the prompt hook and the MCP wiki_query keep working,
-// and the page is found once it is fixed. Uses the existing hook and MCP entry points; no product code is changed here.
-// Hermetic: temporary directories only, HOME is a temporary directory, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -79,7 +76,6 @@ async function hookContext(f, prompt, session) {
 }
 
 test('prompt hook answers from the healthy pages when one page has broken frontmatter', async (t) => {
-  // BA-29: the pages live under wiki/ (the hook's search root when wiki/ exists); the block header is vault-relative.
   const f = fixture(t, { 'wiki/good.md': GOOD, 'wiki/broken.md': BROKEN });
   const context = await hookContext(f, 'zephyr', 'ba23-hook-skip');
   assert.match(context, /Good \(wiki\/good\.md\)/);
@@ -102,6 +98,5 @@ test('a page fixed after it was skipped is found by the next MCP wiki_query and 
   fs.writeFileSync(path.join(f.wiki, 'broken.md'), FIXED);
   assert.equal((await mcpQuery(mcp.client, 'zephyr broken'))[0], 'broken.md');
 
-  // The hook indexes the whole vault, so the same page is seen at wiki/broken.md.
   assert.match(await hookContext(f, 'zephyr broken', 'ba23-hook-fixed'), /Broken \(wiki\/broken\.md\)/);
 });

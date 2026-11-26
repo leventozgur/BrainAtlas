@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Performance suite: hook latency budgets. Every test here compares a measured wall-clock duration with a fixed
-// threshold, so it runs only in the `perf` CI job (`npm run test:perf`) and never in `npm test`.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -21,8 +19,6 @@ const BIN = join(ROOT, 'packages/hooks/bin/brainatlas-hook.mjs');
 const H_HOOKS_DIR = join(ROOT, 'tests', 'acceptance', 'H-HOOKS');
 const PRELOAD = join(H_HOOKS_DIR, 'slow-vault-read.mjs');
 const PROCESS_TIMEOUT = 12_000;
-
-// ---------- tests/hooks/hooks.test.mjs ----------
 
 async function hooksTestFixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'hooks-test-'));
@@ -76,10 +72,8 @@ test('command and cold start', async (t) => {
     }).sort((a, b) => a - b)[18];
   let p95 = measure();
   for (let round = 1; round < 3 && p95 >= 300; round++) p95 = Math.min(p95, measure());
-  /* PM: host load only adds latency; a real regression fails every round */ assert.ok(p95 < 300, `p95 ${p95} ms`);
+  assert.ok(p95 < 300, `p95 ${p95} ms`);
 });
-
-// ---------- tests/acceptance/H-HOOKS/hook-acceptance.test.mjs ----------
 
 async function hHooksFixture(t, { mode = 'normal', budgetChars = 4000 } = {}) {
   const createdRoot = await mkdtemp(join(tmpdir(), 'h-hooks-accept-'));
@@ -142,8 +136,6 @@ function assertSuccess(result, label) {
 test('20 cold hook subprocesses have p95 startup below 300 ms', async (t) => {
   const f = await hHooksFixture(t);
   await hHooksPage(f);
-  // PM: host load (parallel workers/test files) only adds latency, so the budget is checked on the best of up to
-  // 3 rounds of 20 fresh processes; a real regression fails every round.
   let p95 = Infinity;
   for (let round = 0; round < 3 && p95 >= 300; round++) {
     const durations = [];
@@ -180,8 +172,6 @@ test('4700 ms deadline fails open under an artificially delayed retrieval', asyn
   assert.ok(elapsed >= 4400 && elapsed < 7500, `deadline elapsed ${elapsed.toFixed(0)} ms`);
 });
 
-// ---------- tests/hooks/ba01-recap.test.mjs ----------
-
 const logLine = (ts, entry) => `- ${ts} ${JSON.stringify(entry)}`;
 
 async function recapHookFixture(t, { pages = {}, log = [], receipts = null } = {}) {
@@ -215,7 +205,6 @@ async function recapHookFixture(t, { pages = {}, log = [], receipts = null } = {
 
 test('cold session-start stays under 300 ms p95 with a 5 MB log', async (t) => {
   const f = await recapHookFixture(t);
-  // Built in one pass with a running byte count, so the fixture stays linear in size.
   const lines = [];
   let bytes = 0;
   for (let i = 0; bytes < 5 * 1024 * 1024; i++) {
@@ -257,8 +246,6 @@ test('cold session-start stays under 300 ms p95 with a 5 MB log', async (t) => {
   for (let round = 1; round < 3 && p95 >= 300; round++) p95 = Math.min(p95, measure());
   assert.ok(p95 < 300, `p95 ${p95} ms`);
 });
-
-// ---------- tests/acceptance/BA-01/recap-acceptance.test.mjs ----------
 
 const acceptEntry = (ms, path, action = 'update') =>
   `- ${new Date(ms).toISOString()} ${JSON.stringify({ action, path })}`;
@@ -310,7 +297,6 @@ test('session-start p95 is at most 300 ms with a 5 MB log.md (20 runs)', async (
   await writeFile(join(s.vault, 'wiki/entities/big.md'), acceptFmPage('Big Log Page'));
   const filler = `- ${'human line of ordinary notes '.repeat(4)}`;
   const block = Array.from({ length: Math.ceil((5 * 1024 * 1024) / (filler.length + 1)) }, () => filler).join('\n');
-  // The recap only lists entries inside its 14-day window, so the timestamp is relative to the real clock.
   await writeFile(
     join(s.wiki, 'log.md'),
     `${block}\n${acceptEntry(Date.now() - 60 * 60 * 1000, 'wiki/entities/big.md')}\n`
@@ -328,8 +314,6 @@ test('session-start p95 is at most 300 ms with a 5 MB log.md (20 runs)', async (
   assert.ok(p95 <= 300, `p95 ${p95.toFixed(1)} ms`);
 });
 
-// ---------- tests/hooks/ba16-budget.test.mjs ----------
-
 const BA16_NOW = new Date('2026-11-10T00:00:00Z');
 
 async function ba16Fixture(t, pages) {
@@ -346,7 +330,6 @@ async function ba16Fixture(t, pages) {
   };
 }
 
-/** Claude prompt hook; returns the injected additionalContext ('' when the hook injected nothing). */
 async function ba16Ask(f, prompt, session, retrieval = {}) {
   const config = { ...f.config, retrieval: { abstainThreshold: 0, ...retrieval } };
   const r = await runHook({
@@ -374,10 +357,7 @@ test('BA-16: a very large section is bounded and answered quickly', async (t) =>
   );
 });
 
-// ---------- tests/hooks/ba07-semantic-step.test.mjs ----------
-
 const STEP_SETTINGS = { ...SEMANTIC_DEFAULTS, dims: 2 };
-// Deterministic toy embedding: the Turkish query and the English page share the "zebra" concept.
 function stepVectorFor(text) {
   if (/parsiyel/u.test(text)) return [0.6, 0.8];
   return /zebra|fish|balık/iu.test(text) ? [1, 0] : [0, 1];
@@ -438,8 +418,6 @@ test('semantic step: a provider that never answers is cut at its budget and fall
   assert.ok(elapsed < 150 + 600, `took ${elapsed} ms`);
 });
 
-// ---------- tests/acceptance/BA-07/semantic-step.test.mjs ----------
-
 const ACCEPT_DIMS = 2;
 const acceptSettings = { ...SEMANTIC_DEFAULTS, model: 'ba07-test-model', dims: ACCEPT_DIMS };
 
@@ -453,7 +431,6 @@ function makeVault() {
   return { root, vault, state: join(root, 'state') };
 }
 
-// Real fingerprint for the test settings, computed by the module's own provider factory.
 async function acceptFingerprint() {
   const { createOllamaProvider } = await import(semanticEntryUrl());
   return createOllamaProvider({
@@ -474,7 +451,6 @@ function acceptFakeFetch({ mode = 'ok', calls = [] } = {}) {
   };
 }
 
-// The module is loaded for real; only readSemanticIndex is replaced with an in-memory index.
 function moduleWithIndex(index) {
   return async (url) => ({ ...(await import(url)), readSemanticIndex: async () => index });
 }

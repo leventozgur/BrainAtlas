@@ -27,7 +27,6 @@ const instructionNames = new Set([
   'CURSOR.md',
   'WINDSURF.md',
 ]);
-const instructionMarker = '<!-- migrated:user-section -->';
 
 async function pathInfo(path) {
   try {
@@ -58,13 +57,15 @@ async function initScaffoldTemplates() {
     ['wiki/index.md', new URL('../../../templates/vault/index.md', import.meta.url)],
     ['wiki/log.md', new URL('../../../templates/vault/log.md', import.meta.url)],
     ['planning/backlog.md', new URL('../../../templates/vault/backlog.md', import.meta.url)],
-    ['AGENTS.md', new URL('../../../templates/policy/AGENTS.md', import.meta.url)],
   ];
-  return new Map(
+  const files = new Map(
     /** @type {Array<[string, Buffer]>} */ (
       await Promise.all(entries.map(async ([path, url]) => [path, await readFile(url)]))
     )
   );
+  const policy = await readFile(new URL('../../../templates/policy/AGENTS.md', import.meta.url), 'utf8');
+  files.set('AGENTS.md', Buffer.from(core.managedPolicyBlock(policy)));
+  return files;
 }
 
 async function inspectInitScaffold(target, templates) {
@@ -221,26 +222,7 @@ async function inspectSource(source) {
 }
 
 function instructionBytes(item) {
-  const templateText = item.template.toString('utf8').replace(/\s*$/, '\n');
-  if (!item.old) return Buffer.from(templateText);
-  const oldText = item.old.toString('utf8');
-  if (oldText === item.template.toString('utf8')) return Buffer.from(templateText);
-  let userText;
-  if (oldText.includes(instructionMarker)) {
-    userText = oldText
-      .split(instructionMarker)
-      .slice(1)
-      .map((section) => section.split('<!-- /migrated:user-section -->')[0])
-      .join('\n')
-      .trim();
-  } else {
-    const previousTemplate = item.template.toString('utf8');
-    if (oldText.includes(previousTemplate)) userText = oldText.replace(previousTemplate, '').trim();
-    else userText = oldText.trim();
-  }
-  if (!userText) return Buffer.from(templateText);
-  const output = `${templateText}\n${instructionMarker}\n${userText.replace(/\s*$/, '')}\n<!-- /migrated:user-section -->\n`;
-  return Buffer.from(output);
+  return item.old ?? item.template;
 }
 
 function migrationSummary(record) {
@@ -303,6 +285,7 @@ export async function migrateVault(from, to, { plan = false } = {}) {
       instructionBytes(item),
       roots.targetScaffoldFiles
     );
+  const policy = await core.refreshVaultPolicy({ vaultDir: roots.target });
 
   await core.appendLog(roots.target, { action: 'migrated', path: 'wiki/index.md' });
   let bodyHashMatch = true;
@@ -332,6 +315,7 @@ export async function migrateVault(from, to, { plan = false } = {}) {
     skipped: summary.skipped,
     okfWarnings,
     lintErrors,
+    warnings: policy.warnings,
   };
 }
 
@@ -406,9 +390,8 @@ function inspectConfigText(text) {
   let parsed = null;
   try {
     parsed = JSON.parse(text);
-  } catch {
-    /* unparsable or non-serialisable JSON is treated as absent */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   const servers = new Set();
   let promptHook = false;
   if (parsed) {
@@ -417,9 +400,8 @@ function inspectConfigText(text) {
         let serialized = '';
         try {
           serialized = JSON.stringify(value);
-        } catch {
-          /* unparsable or non-serialisable JSON is treated as absent */
-        }
+          // eslint-disable-next-line no-empty
+        } catch {}
         if (/UserPromptSubmit|BeforeSubmit|prompt[-_ ]?hook|\bhook[^\n]*\bprompt\b/i.test(serialized))
           promptHook = true;
       }
@@ -432,9 +414,8 @@ function inspectConfigText(text) {
           let serialized = '';
           try {
             serialized = JSON.stringify(config);
-          } catch {
-            /* unparsable or non-serialisable JSON is treated as absent */
-          }
+            // eslint-disable-next-line no-empty
+          } catch {}
           if (name.toLowerCase() === 'second-brain' || /wiki_query/i.test(serialized)) servers.add(name);
         }
       }

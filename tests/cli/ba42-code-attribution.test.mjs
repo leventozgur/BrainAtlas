@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-42: `maintain --repo` code attribution. Module-level tests: `repo:` sources and the optional `symbols:` field are
-// checked against a repository working tree (stale-source, stale-symbol). Hermetic: temporary directories only, no git,
-// no network, nothing is written inside the vault or the repository.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, lstat, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
@@ -57,8 +54,6 @@ async function fixture(t, { vault = {}, repo = {}, outside = {} } = {}) {
 
 const SOURCE_FILE = 'export function computeTotal(items) {\n  return items.length;\n}\nexport const VERSION_TAG = 1;\n';
 
-// ---- Positive and negative cases for `repo:` sources.
-
 test('an existing repository file is accepted, with or without a commit suffix', async (t) => {
   const { vaultDir, repoDir } = await fixture(t, {
     vault: {
@@ -106,10 +101,10 @@ test('commit suffix: 7 to 64 hex digits, any case, is stripped; other @ text sta
     vault: {
       'wiki/concepts/a.md': page({
         sources: [
-          'repo:src/total.mjs@ABCDEF1', // 7 hex, upper case: a commit suffix
-          'repo:src/total.mjs@' + 'a'.repeat(64), // 64 hex: a commit suffix
-          'repo:src/total.mjs@abcdef', // 6 hex: not a commit, so the path is src/total.mjs@abcdef
-          'repo:src/total.mjs@main', // a branch name is not a commit, so the path is src/total.mjs@main
+          'repo:src/total.mjs@ABCDEF1',
+          'repo:src/total.mjs@' + 'a'.repeat(64),
+          'repo:src/total.mjs@abcdef',
+          'repo:src/total.mjs@main',
         ],
       }),
     },
@@ -173,8 +168,6 @@ test('a missing repository file named by both sources and symbols is reported on
   assert.equal(ofKind(report, 'stale-source').length, 1);
   assert.deepEqual(ofKind(report, 'stale-symbol'), []);
 });
-
-// ---- Positive and negative cases for `symbols:`.
 
 test('present symbols are accepted in both the object and the "path#name" forms', async (t) => {
   const { vaultDir, repoDir } = await fixture(t, {
@@ -288,8 +281,6 @@ test('a symbols field that is not a list is ignored', async (t) => {
   assert.deepEqual(ofKind(report, 'stale-symbol'), []);
 });
 
-// ---- Without --repo: no repository is read, and existing behaviour is unchanged.
-
 test('without repo, broken code references produce no stale-source or stale-symbol findings', async (t) => {
   const { vaultDir } = await fixture(t, {
     vault: { 'wiki/concepts/a.md': page({ sources: ['repo:src/gone.mjs'], symbols: ['src/gone.mjs#missing'] }) },
@@ -321,8 +312,9 @@ test('without repo, the findings and counts match the pre-BA-42 golden output', 
     },
   });
   const report = await runMaintenance(vaultDir, { now: NOW });
-  const { durationMs, ...stable } = report;
+  const { durationMs, policy, ...stable } = report;
   assert.equal(typeof durationMs, 'number');
+  assert.equal(policy.changes[0].action, 'create');
   assert.deepEqual(stable, {
     ok: true,
     findings: [
@@ -398,8 +390,6 @@ test('a repository where every reference resolves gives the same findings as no 
   assert.deepEqual(withRepo.findings, without.findings);
   assert.deepEqual(withRepo.counts, without.counts);
 });
-
-// ---- Repository errors, read-only behaviour and receipts.
 
 test('a missing repository directory or a file given as the repository is E_REPO_MISSING', async (t) => {
   const { vaultDir, base } = await fixture(t, { vault: { 'wiki/concepts/a.md': page({ sources: ['repo:x.mjs'] }) } });

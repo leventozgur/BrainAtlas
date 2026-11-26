@@ -13,7 +13,6 @@ if (
 )
   process.exit(2);
 const started = Date.now();
-// The process deadline includes configuration and stdin, even if either stalls.
 const timer = setTimeout(() => {
   process.stdout.write(client === 'kiro' ? '' : '{}', () => process.exit(0));
 }, HOOK_PROCESS_DEADLINE_MS);

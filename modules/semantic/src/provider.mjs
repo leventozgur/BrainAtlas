@@ -2,7 +2,6 @@
 import { createHash } from 'node:crypto';
 
 export const PREPROCESS_VERSION = '1';
-// BA-81: Ollama keep-alive duration. `0` means "let Ollama decide" and sends no field, exactly as before.
 export const KEEP_ALIVE_PATTERN = /^(?:0|[1-9][0-9]{0,4}[smh])$/u;
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 
@@ -41,7 +40,9 @@ function validateVector(value, dims) {
   return Float32Array.from(value);
 }
 
-/** Create an Ollama provider using only the supplied fetch implementation. @param {{baseUrl?:string,model?:string,dims?:number,fetchImpl?:Function,queryPrefix?:string,documentPrefix?:string,batchSize?:number,timeoutMs?:number,keepAlive?:string}} [options] */
+/**
+ * @param {{baseUrl?:string,model?:string,dims?:number,fetchImpl?:Function,queryPrefix?:string,documentPrefix?:string,batchSize?:number,timeoutMs?:number,keepAlive?:string}} [options]
+ */
 export function createOllamaProvider({
   baseUrl = DEFAULT_BASE_URL,
   model,

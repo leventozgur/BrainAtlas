@@ -1,18 +1,4 @@
 // SPDX-License-Identifier: MIT
-/**
- * Scale benchmark on deterministic synthetic vaults (no real content, no network).
- *
- * Output keys per size N: buildIndexMs, createSearcherColdMs (no cache), createSearcherWarmMs (cached
- * second setup), searchMs {p50,p95,count} (core search per query), hookMs {p50,p95,count} (runHook with
- * the real retrieval worker), hybridOverheadMs {p50,p95,count}, refreshAfterEditMs {p50,p95,count}.
- *
- * refreshAfterEditMs: a warm searcher; one page is appended to, then refreshIfChanged() and the first query are timed
- * together. Each round edits a different page; the index is rebuilt from the vault after every edit.
- *
- * hybridOverheadMs is NOT the fusion cost alone. It is the total per-query time of the MCP hybrid path:
- * loadPages + searchHybrid (which includes buildIndex and the lexical search) with a fake provider
- * returning fixed vectors. It does not measure a real embedding provider.
- */
 import { appendFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -39,13 +25,6 @@ async function timed(fn) {
   return { value, ms: Math.max(0, performance.now() - start) };
 }
 
-/**
- * Measure retrieval and hook latency on deterministic synthetic vaults.
- * hybridOverheadMs is the full per-query MCP hybrid-path time (loadPages + searchHybrid, buildIndex included),
- * measured with a fake provider; see the file header.
- * Timing values vary between runs; the synthetic content and queries do not.
- * @param {{sizes?:number[],seed?:number,queryCount?:number,hookCount?:number,editCount?:number,now?:Date}} options
- */
 export async function runScaleBench({
   sizes = DEFAULT_SIZES,
   seed = 1,
@@ -96,7 +75,6 @@ export async function runScaleBench({
         hookTimes.push(ms);
       }
 
-      // Hybrid overhead: fake provider with fixed vectors, one chunk per page; loadPages runs per query like the MCP path.
       const vectors = fixedVectors(seed, n, DIMS);
       const relPaths = loadPages(vaultPath).map((page) => page.path);
       const entries = relPaths.map((path, i) => ({ path, vector: vectors[i], text: path, headingPath: '' }));
@@ -110,7 +88,6 @@ export async function runScaleBench({
         hybridTimes.push(ms);
       }
 
-      // Refresh after edit: one page appended per round, then refreshIfChanged() and the first query, timed together.
       const editTimes = [];
       for (let i = 0; i < editCount; i++) {
         appendFileSync(join(vaultPath, relPaths[i % relPaths.length]), `\nEdit round ${i} marker.\n`);

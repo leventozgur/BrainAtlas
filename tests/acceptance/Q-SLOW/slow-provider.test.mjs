@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Acceptance (1): a slow provider (8 s per request, simulated with mocked timers) with default config.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -13,7 +12,6 @@ import { createSearcher } from '../../../packages/core/src/retrieval/index.mjs';
 import { drive, exists, sectionPage, workspace } from './helpers.mjs';
 
 const EPOCH = 1_700_000_000_000;
-// Exceeds drive's maximum virtual time, including the 5000 ms stress step.
 const CLIENT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const enable = (t) => t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: EPOCH });
 
@@ -119,7 +117,6 @@ test('wiki_query against a provider that never answers still times out at timeou
   });
   const config = configFor(w);
   assert.equal(config.semantic.timeoutMs, 5000, 'the product query timeout stays at 5000 ms');
-  // Build a valid index quickly first, with the same provider identity the server will use.
   const quick = async (url, request) => ({
     ok: true,
     json: async () => ({ embeddings: JSON.parse(request.body).input.map(() => [1, 0]) }),
@@ -139,8 +136,6 @@ test('wiki_query against a provider that never answers still times out at timeou
   await cp(join(repo, 'modules/semantic'), join(release, 'modules/semantic'), { recursive: true });
   await symlink(join(repo, 'packages'), join(release, 'packages'));
   await symlink(release, paths.currentDir);
-  // No mocked clock: the real 5000 ms product timer must abandon the request. The provider never answers, so the
-  // outcome cannot depend on how quickly the host delivers the fetch response.
   let calls = 0;
   const neverAnswers = () => {
     calls++;
@@ -159,8 +154,6 @@ test('wiki_query against a provider that never answers still times out at timeou
     timeout: CLIENT_TIMEOUT_MS,
   });
   const elapsed = performance.now() - started;
-  // Generous bounds: a loaded CI runner may add latency, but the fallback must not wait on the provider. The small
-  // lower-bound tolerance absorbs timers that fire a millisecond early relative to performance.now().
   assert.ok(elapsed >= config.semantic.timeoutMs - 50, `fallback came back after ${elapsed.toFixed(0)} ms`);
   assert.ok(elapsed <= config.semantic.timeoutMs + 10_000, `fallback took ${elapsed.toFixed(0)} ms`);
   const payload = JSON.parse(response.content[0].text);

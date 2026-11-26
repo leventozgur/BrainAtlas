@@ -3,12 +3,9 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { packageRootFromUrl } from '../../core/src/paths/index.mjs';
 
-// The semantic step runs inside the retrieval worker after the lexical search. It has its own budget, so a slow or
-// unavailable provider can never consume the whole prompt deadline; on any failure the caller keeps the BM25 list.
 export const SEMANTIC_BUDGET_MS = 350;
 const EXPIRED = Symbol('expired');
 
-/** Semantic retrieval is requested only with an explicit opt-in on a non-Lite profile that includes the module. */
 export function semanticRequested(config) {
   return (
     config?.semantic?.enabled === true &&
@@ -17,31 +14,10 @@ export function semanticRequested(config) {
   );
 }
 
-/**
- * The module is loaded only from the installed release tree, and only by dynamic import inside the worker.
- * The path is built from this file's location, so it stays inside the release that contains this hook.
- */
 export function semanticEntryUrl() {
   return pathToFileURL(join(packageRootFromUrl(import.meta.url), 'modules', 'semantic', 'src', 'index.mjs')).href;
 }
 
-/**
- * Hybrid retrieval for the prompt hook. Returns `{results, semantic}` where `semantic` is 'used' or 'fallback:<reason>'.
- * Any fallback returns the lexical list exactly as the caller computed it.
- * @param {object} options
- * @param {object} options.searcher core searcher (`snapshot()` supplies the lexical index it shares with the module)
- * @param {Array<object>} options.lexical finished lexical results (BM25, same as the semantic-off path)
- * @param {object} options.settings merged semantic settings (SEMANTIC_DEFAULTS + config.semantic)
- * @param {string} options.stateDir global BrainAtlas state directory (the index lives in its `semantic/` subdirectory)
- * @param {(result: object) => object} options.prepare finishing step (redaction and excerpt cap) for hybrid results
- * @param {string} options.query prompt text
- * @param {number} options.limit maximum lexical result count
- * @param {number} [options.abstainThreshold] lexical abstention threshold
- * @param {string} [options.entryUrl] semantic module entry URL
- * @param {number} [options.budgetMs] semantic step budget in milliseconds
- * @param {Function} [options.fetchImpl] fetch implementation for the provider
- * @param {(url:string)=>Promise<any>} [options.loadModule] dynamic module loader
- */
 export async function semanticHits({
   searcher,
   query,
@@ -80,10 +56,6 @@ export async function semanticHits({
     const trustByPath = new Map(
       docs.filter(({ trust }) => trust === 'verified' || trust === 'weak').map(({ page, trust }) => [page.path, trust])
     );
-    // BA-57: the lexical answer of the same query carries the section flag. A hybrid hit is flagged only when it carries
-    // `synthesized` itself or when its own heading/anchor/headingPath is the synthesized lexical row's one; a different
-    // section of the same page keeps its trust. Hybrid hits from the semantic module carry only `headingPath`, so its last
-    // `' > '` segment is compared with the section heading as well.
     const lexicalRows = /** @type {any[]} */ (lexical);
     const synthesizedRows = new Map(
       lexicalRows.filter((result) => result.synthesized === true).map((result) => [result.path, result])
@@ -100,7 +72,6 @@ export async function semanticHits({
         (typeof row.heading === 'string' && row.heading !== '' && item.headingPath.split(' > ').at(-1) === row.heading)
       );
     };
-    // The semantic index is built over the Wiki folder (`wiki/`), while the hook's lexical corpus is the vault root.
     const entries = index.entries.flatMap((entry) => {
       const path = [`wiki/${entry.path}`, entry.path].find((candidate) => pagePaths.has(candidate));
       return path ? [{ ...entry, path }] : [];
@@ -118,7 +89,6 @@ export async function semanticHits({
       abstainThreshold,
     });
     if (hits.fallbackReason) return { fallback: hits.fallbackReason };
-    // Abstention keeps the lexical list, as the MCP path does.
     if (hits.abstained) return { results: lexical };
     const results = hits.map((item) => {
       const synthesized = synthesizedHit(item);
@@ -136,7 +106,6 @@ export async function semanticHits({
   }));
   try {
     const outcome = await Promise.race([work, expired]);
-    // A result that arrives after the budget (a synchronous step that finished late) is not used.
     if (outcome === EXPIRED || Date.now() - started > budgetMs) return fallback('deadline');
     if (outcome.fallback) return fallback(outcome.fallback);
     return { results: outcome.results, semantic: 'used' };

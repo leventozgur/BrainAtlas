@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-03 independent final-verification tests (last-pass tester). Written from the brief and docs/contracts/retrieval.md.
-// Covers: date formats never identifiers, version strings stay identifiers, abbreviations are not identifiers,
-// deep paths (13, 20, 40 components) index basename and suffix chains, exact-index cache corruption is rebuilt.
-// Hermetic: temp dirs only, HOME injected, no network, no timing assertions (the 2000-page cost is reported only).
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -35,7 +31,6 @@ after(() => {
   fs.rmSync(tempHome, { recursive: true, force: true });
 });
 
-// A vault that contains none of the dates, versions or deep paths probed below.
 const unrelated = () =>
   buildIndex([page('notes/garden.md', 'Plain prose about gardens, rivers and bread.', { title: 'Garden' })], { now });
 
@@ -70,8 +65,6 @@ test('present dates are found by ordinary matching (dates in the vault do not ab
 test('observation: an invalid calendar date (32.13.2025) is not a date and abstains like a version string when absent (diagnostic only)', (t) => {
   const index = unrelated();
   const r = run(index, '32.13.2025 ne oldu?');
-  // Contract: a three-part numeric token is a date only when its day and month are in range; otherwise it is a
-  // version-like identifier. So an absent invalid date abstains with identifier-not-found. Reported, not asserted.
   t.diagnostic(`32.13.2025 -> abstained=${r.abstained} reason=${r.reason}`);
   assert.equal(typeof r.abstained, 'boolean');
 });
@@ -121,14 +114,10 @@ test('negative words (2026, v2, mp3, follow-up, and/or, 1.0, iOS) are not in the
   }
 });
 
-// Deep paths: `n` components in total (n-1 directories plus one basename). The body names the full path.
 function deepPath(n, leaf) {
   const dirs = Array.from({ length: n - 1 }, (_, i) => `dir${String(i).padStart(2, '0')}`);
   return [...dirs, leaf].join('/');
 }
-// The suffix window contract: for paths longer than twelve segments only the last four segments start a chain.
-// A hyphen or dot starts a new segment, so a hyphenated basename uses more of that window. Two leaf shapes are tested:
-// `handler.mjs` (no hyphen) and `handler-x-y.mjs` (hyphenated). Each variant that the vault contains must not abstain.
 function deepCase(n, leaf) {
   const full = deepPath(n, leaf);
   const parts = full.split('/');
@@ -155,20 +144,16 @@ for (const n of [13, 20, 40]) {
       assert.notEqual(r.reason, 'identifier-not-found', `${n} ${kind}`);
       assert.equal(r.results[0]?.path, `deep/page-${n}.md`, `${n} ${kind}: ${q}`);
     }
-    // A non-consecutive subpath is not a match (contract), so it is an unknown identifier.
     const gapped = [parts[0], parts[2], leaf].join('/');
     assert.equal(run(index, gapped).reason, 'identifier-not-found', `non-consecutive ${gapped}`);
   });
-  // PM update (BA-17/18, 2026-11-11): fixed — the suffix window counts path components.
   test(`a ${n}-component vault path with a hyphenated basename: its 2- and 3-component suffixes are indexed`, () => {
     const leaf = `handler-x-${n}.mjs`;
     const { index, parts } = deepCase(n, leaf);
-    // The basename itself is always found; the contract says the basename and its suffixes are always indexed.
     assert.equal(run(index, leaf).results[0]?.path, `deep/page-${n}.md`, `basename ${leaf}`);
     for (const k of [2, 3]) {
       const q = parts.slice(-k).join('/');
       const r = run(index, `Where is ${q}?`);
-      // A vault-present identifier variant must never abstain with identifier-not-found.
       assert.notEqual(
         r.reason,
         'identifier-not-found',
@@ -253,7 +238,6 @@ test('observation: a 2000-page vault with 20-component paths (cache size and bui
   t.diagnostic(
     `N=${N} comps=20 buildIndex(loadPages+build)=${buildMs.toFixed(0)}ms createSearcher(cold,writes cache)=${coldMs.toFixed(0)}ms cache=${sizeKiB.toFixed(0)}KiB exactKeys=${exactKeys}`
   );
-  // Correctness is asserted; cost is only reported.
   for (let k = 0; k < N; k += 40) {
     const r = s.search(`note-${k}.md`, { limit: 10, abstainThreshold: 0, asOf: now });
     assert.equal(r.results[0]?.path, [...comps, `note-${k}.md`].join('/'), `basename note-${k}.md`);

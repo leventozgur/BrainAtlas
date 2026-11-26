@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-73: sync conflict copies are recognised by the engine's exact name format and are never search results, while an
-// ordinary page that merely contains `.conflict-` in its name stays searchable. Hermetic: temporary vaults only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

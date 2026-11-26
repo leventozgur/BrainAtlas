@@ -11,10 +11,6 @@ const safeCaseId = (item, index) =>
   redactSensitive(typeof item?.id === 'string' && /^[\w-]{1,64}$/u.test(item.id) ? item.id : String(index + 1));
 import { reciprocalRank, ndcg, percentile } from './lib/metrics.mjs';
 
-/**
- * Evaluate retrieval metrics. Existing metric semantics and keys are preserved.
- * @param {{corpusDir:string,casesFile:string,now?:Date,verbose?:boolean,repeat?:number,abstainThreshold?:number}} options
- */
 export function runEval({
   corpusDir,
   casesFile,
@@ -74,7 +70,6 @@ export function runEval({
 
     if (rejectInvalidQueries && typeof item?.query !== 'string') throw new Error('Invalid query');
 
-    // Warm the same query once without including that call in reported latency.
     let result;
     try {
       result = search(index, item.query, { limit: 10, asOf: now, abstainThreshold });
@@ -119,7 +114,6 @@ export function runEval({
         trRecall += caseRecall;
       }
       if (typeof item?.expectedHeading === 'string') {
-        // Section hit: the top-ranked relevant result must expose the expected heading.
         sectionCases++;
         const top = results.find((entry) => relevant.includes(entry.path));
         if (top && top.heading === item.expectedHeading) sectionHits++;
@@ -159,7 +153,6 @@ export function runEval({
     indexBuildMs,
     byCategory,
     falsePositives,
-    // Opt-in: the default key set is pinned by acceptance tests and stays unchanged.
     ...(extended
       ? {
           sectionHitRate: sectionCases ? sectionHits / sectionCases : 0,

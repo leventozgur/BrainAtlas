@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 independent final verification (not written by the implementer).
-// (a) page-set mismatches between the cache and the vault force a rebuild; results equal a fresh install and the cache is rewritten.
-// (b) snapshot() pages + lexical index, fed to searchHybrid, equal a fresh buildIndex(loadPages()) after outside changes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -57,7 +54,6 @@ const freshPaths = (wiki) =>
   loadPages(wiki)
     .map((p) => p.path)
     .sort();
-// Fresh-install reference over the vault, no cache involved.
 function reference(wiki) {
   const index = buildIndex(loadPages(wiki), { now: ASOF });
   return QUERIES.map((q) => canon(search(index, q, OPTS)));
@@ -65,7 +61,6 @@ function reference(wiki) {
 function resultsOf(searcher) {
   return QUERIES.map((q) => canon(searcher.search(q, OPTS)));
 }
-// The on-disk cache must record exactly the walked page set, as indexed (docs) or skipped, with no duplicates.
 function assertCachePartition(f) {
   const d = JSON.parse(fs.readFileSync(f.cache, 'utf8'));
   const indexed = d.index.docs.map((doc) => doc.page.path);
@@ -78,7 +73,6 @@ function assertCachePartition(f) {
   );
   assert.deepEqual([...indexed, ...d.skipped].sort(), freshPaths(f.wiki), 'cache partition equals the walked page set');
 }
-// Build a valid cache, apply a forged mutation to its parsed form, and keep the key.
 function forgeCache(f, mutate) {
   createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   const d = JSON.parse(fs.readFileSync(f.cache, 'utf8'));
@@ -86,7 +80,6 @@ function forgeCache(f, mutate) {
   fs.writeFileSync(f.cache, JSON.stringify(d));
 }
 
-// ---- (a) page-set mismatch forgeries: rebuild, fresh-install results, rewritten consistent cache ----
 const PAGE_SET_CASES = [
   [
     'missing page: z.md dropped from docs and not listed as skipped',
@@ -237,7 +230,6 @@ test('(a) truncated cache file and cache with an out-of-range posting id: rebuil
   assertCachePartition(f);
 });
 
-// ---- (b) snapshot() + searchHybrid equals a fresh build after outside changes ----
 const ENTRY_QUERIES = ['alpha', 'zephyr', 'legacy', 'added', 'latemarker', 'delta echo', 'title', 'roadmap'];
 function vectorFor(i) {
   const a = (i * 0.7) % 3.1;

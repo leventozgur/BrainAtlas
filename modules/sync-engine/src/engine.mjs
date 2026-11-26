@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, rename, rm, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { scanPath, scanText } from '../../../packages/core/src/safety/index.mjs';
+import { managedPolicyBlock } from '../../../packages/core/src/vault/policy.mjs';
 import { BrainAtlasError } from '../../../packages/core/src/util/errors.mjs';
 import { globMatch, inventoryVault, isLocalOnlyFrontmatter } from './scope.mjs';
 import { mergeCanonicalPath } from './merge.mjs';
@@ -182,7 +183,6 @@ function pendingDeletePath(path, requester) {
 }
 
 /**
- * Build a transport agnostic synchronizer. Each instance owns `stateDir/sync/`.
  * @param {{vaultPath?:string,stateDir?:string,config?:object,transport?:object,env?:Record<string,string|undefined>,hostId?:string,now?:()=>Date,logger?:object}} options
  */
 export function createSyncEngine({
@@ -438,8 +438,6 @@ export function createSyncEngine({
     ]);
     if (!Array.isArray(conflicts) || !Array.isArray(pendingDeletes)) throw new SyncTransportError('E_STATE_INVALID');
     const unresolved = conflicts.filter((row) => !row.resolvedAt);
-    // Files the last completed run refused (secret filter / path deny) never reach the remote, so they must keep
-    // the status PENDING instead of SYNCED.
     const refused =
       journal?.phase === 'complete' && Array.isArray(journal.refused)
         ? journal.refused
@@ -882,12 +880,14 @@ export function createSyncEngine({
         const currentLocal = localFiles.get(path) ?? null;
         const remote = remoteFiles.get(path) ?? null;
         const base = baseFiles.get(path) ?? null;
-        // An untouched init file on a host with no sync base is scaffolding, not
-        // a competing edit. Pull the established remote bytes without merging it.
-        const local =
-          !base && remote && currentLocal && initSeedTemplates.get(path)?.equals(currentLocal.bytes)
-            ? null
-            : currentLocal;
+        const seed = initSeedTemplates.get(path);
+        const seeded =
+          seed &&
+          currentLocal &&
+          (seed.equals(currentLocal.bytes) ||
+            (path === 'AGENTS.md' &&
+              Buffer.from(managedPolicyBlock(seed.toString('utf8'))).equals(currentLocal.bytes)));
+        const local = !base && remote && currentLocal && seeded ? null : currentLocal;
         let requests = deleteRequests.get(path) ?? [];
 
         const tombstone = tombstones.get(path);

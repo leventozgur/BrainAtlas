@@ -62,7 +62,6 @@ function sourceFixture(t, { holdout = false } = {}) {
     ],
   };
   for (const [name, value] of Object.entries(cases)) fs.writeFileSync(path.join(dev, name), JSON.stringify(value));
-  // BA-27 sets: one tiny corpus and case file each (realDocs reads the fixture's docs directory).
   for (const name of ['corpus-hook-realistic', 'corpus-longpage', 'corpus-temporal', 'corpus-poison'])
     writePages(path.join(dir, name), pages);
   writePages(path.join(dir, 'docs'), pages);

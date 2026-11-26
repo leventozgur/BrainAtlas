@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 retest helper (not a test file). Loaded with --import only into the stdio MCP server process via NODE_OPTIONS.
-// When the arm file exists, the first matching fs call on the target page (readFileSync during the rebuild, or
-// lstatSync during the fingerprint walk) first deletes or renames that page, so an outside edit lands inside the
-// freshness check. The arm file is removed when it fires; a log line records that it did.
 import fs from 'node:fs';
 
 const arm = process.env.BA02_RACE_ARM;

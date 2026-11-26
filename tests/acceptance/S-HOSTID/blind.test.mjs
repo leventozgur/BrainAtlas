@@ -94,7 +94,7 @@ test('invalid stored state and symlink leaf fail closed without leaking values',
   const outside = join(root, 'outside');
   await writeFile(outside, 'outside', { mode: 0o644 });
   await symlink(outside, path);
-  await assert.rejects(resolveHostId({ stateDir }), { code: 'E_INVALID_PATH' }); // PM: symlinked path => E_INVALID_PATH (same code as git transport)
+  await assert.rejects(resolveHostId({ stateDir }), { code: 'E_INVALID_PATH' });
   assert.equal(await readFile(outside, 'utf8'), 'outside');
   assert.equal((await stat(outside)).mode & 0o777, 0o644);
 });

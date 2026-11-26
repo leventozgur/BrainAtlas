@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 final verification (independent, blind): a page whose path holds CR, U+0085, U+2028 or U+2029 is never written
-// to the index and is not counted by wiki_status coverage; the other pages are still indexed; three runs are idempotent.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, startServer, readIndex, singleInsertion } from './harness.mjs';
@@ -118,7 +116,9 @@ test('an excluded page does not stop a later create: the new ordinary page is ad
   const seed = okJson(await call(f.client, 'wiki_update_index', {}));
   assert.equal(seed.added, 3);
   const before = await readIndex(f);
-  const created = okJson(await call(f.client, 'wiki_create_entity', { name: 'Yeni Kayit', content: 'Gövde.\n' }));
+  const created = okJson(
+    await call(f.client, 'wiki_create', { type: 'entity', name: 'Yeni Kayit', content: 'Gövde.\n' })
+  );
   assert.equal(created.path, 'wiki/entities/yeni-kayit.md');
   const after = await readIndex(f);
   const inserted = singleInsertion(before, after);
@@ -133,7 +133,7 @@ test('an existing hand-written line for an excluded page (U+2028 in the name) is
   assert.equal(result.removed, 0, 'the line is for a page that exists, so it is not stale');
   const afterIndex = await readIndex(f);
   assert.ok(afterIndex.toString('utf8').startsWith(hand), 'the hand-written lines are kept as they were');
-  okJson(await call(f.client, 'wiki_create_entity', { name: 'Yeni Kayit', content: 'Gövde.\n' }));
+  okJson(await call(f.client, 'wiki_create', { type: 'entity', name: 'Yeni Kayit', content: 'Gövde.\n' }));
   const afterCreate = await readIndex(f);
   assert.ok(afterCreate.toString('utf8').startsWith(hand), 'a create keeps the hand-written lines too');
   const status = okJson(await call(f.client, 'wiki_status', {}));

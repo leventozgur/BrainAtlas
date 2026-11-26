@@ -13,7 +13,6 @@ import { cleanEnv } from './clean-env.mjs';
 const root = resolve(join(fileURLToPath(new URL('.', import.meta.url)), '../..'));
 const cli = join(root, 'packages', 'cli', 'bin', 'brainatlas.mjs');
 
-// Mirrors the sha256 helper in modules/semantic/src/index-store.mjs.
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
 function runStatus(env, command = 'status') {

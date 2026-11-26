@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20 independent acceptance (blind): docs/contracts/mcp-tools.md matches behavior for the BA-20 rules. The contract text
-// is read as the specification; each behavior claim below is checked through the real stdio server.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -30,7 +28,9 @@ test(
     const index = '# Wiki Index\n\n## Entities\n\n- [Gone](entities/gone.md)\n- [Ali](entities/ali.md)\n';
     const f = await startServer(t, { files: { 'entities/ali.md': page('title: Ali'), 'index.md': index } });
     const before = await readIndexText(f);
-    okJson(await call(f.client, 'wiki_create_entity', { name: 'Veli Yeni', content: page('title: Veli Yeni') }));
+    okJson(
+      await call(f.client, 'wiki_create', { type: 'entity', name: 'Veli Yeni', content: page('title: Veli Yeni') })
+    );
     const after = await readIndexText(f);
     const b = before.split('\n');
     const a = after.split('\n');
@@ -52,7 +52,7 @@ test(
   async (t) => {
     const content = page('title: Kısa Özet\nsummary: Düz özet 🚀\ntags: [alfa]');
     const created = await startServer(t, {});
-    okJson(await call(created.client, 'wiki_create_entity', { name: 'Kısa Özet', content }));
+    okJson(await call(created.client, 'wiki_create', { type: 'entity', name: 'Kısa Özet', content }));
     const fromCreate = entryLines(await readIndexText(created));
     const scanned = await startServer(t, { files: { 'entities/kisa-ozet.md': content } });
     okJson(await call(scanned.client, 'wiki_update_index', {}));

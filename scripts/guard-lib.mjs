@@ -110,6 +110,10 @@ export async function checkRule(root, id) {
     );
     return scanFiles(root, product, (line) => forbidden.test(line), 'forbidden-api');
   }
+  if (id === 'comments') {
+    const { findCommentViolations } = await import('./check-comments.mjs');
+    return findCommentViolations(root).map((finding) => ({ ...finding, rule: id }));
+  }
   if (id === 'license-header') {
     const out = [];
     const tree = await walk(root);
@@ -132,8 +136,7 @@ export async function checkRule(root, id) {
     } catch {
       return [{ file: 'package-lock.json', line: 1, rule: id }];
     }
-    const allowedRoots = ['@modelcontextprotocol/sdk', 'yaml', 'gray-matter', 'zod']; // zod: MCP SDK peer used directly by packages/mcp (PLAN §2)
-    // Development-only tools (lint, type check). Keep this list minimal: these never ship in a release archive and may only appear in root devDependencies.
+    const allowedRoots = ['@modelcontextprotocol/sdk', 'yaml', 'gray-matter', 'zod'];
     const devRoots = ['eslint', '@eslint/js', 'globals', 'typescript', '@types/node', 'prettier'];
     const workspaces = lock.packages || {};
     for (const pkg of Object.values(workspaces))
@@ -238,7 +241,7 @@ export async function checkRule(root, id) {
   return [];
 }
 export async function runChecks(root) {
-  const ids = ['abs-path', 'lite-purity', 'forbidden-api', 'license-header', 'lockfile'];
+  const ids = ['abs-path', 'lite-purity', 'forbidden-api', 'license-header', 'lockfile', 'comments'];
   return Promise.all(
     ids.map(async (id) => {
       const f = await checkRule(root, id);

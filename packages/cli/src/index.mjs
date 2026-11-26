@@ -40,7 +40,8 @@ const helpDescriptions = Object.freeze({
     'Wiki maintenance report (read-only unless --queue); --fix (--plan | --apply) [--sources] repairs index lines, archived links and source lists; --weekly writes a read-only snapshot; --proposals reviews stored current-state proposals.',
   compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).',
   usage: 'Summarize hook metrics for the last days or record feedback.',
-  wiki: 'Wiki tools from the shell, running the same code as the MCP tools: query, read, index, list, status, lint; write and reindex change the Wiki.',
+  wiki: 'Wiki tools from the shell, running the same code as the MCP tools: query, read, list, status, lint; write, update, create, link and reindex change the Wiki.',
+  plan: 'Read and update the planning backlog and project files: list, show, new, add, set.',
   ui: '(experimental) Open a local browser panel for status, agent channels and settings (127.0.0.1 only).',
   help: 'Show built-in and active module commands.',
 });
@@ -54,7 +55,7 @@ const helpUsages = Object.freeze({
     'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]',
   module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   agent:
-    'brainatlas agent list [--json] | agent add <agent> [--channel mcp|cli] [--plan] | agent remove <agent> [--plan] | agent set <agent> --channel mcp|cli [--plan] | agent refresh [<agent>] [--plan]',
+    'brainatlas agent list [--json] | agent add <agent> [--channel mcp|cli] [--plan] | agent remove <agent> [--plan] | agent set <agent> --channel mcp|cli [--plan] | agent refresh [<agent>] [--plan] [--safe] [--force]',
   uninstall: 'brainatlas uninstall [--plan]',
   update: 'brainatlas update --from ARCHIVE [--plan] | --check [--pre]',
   rollback: 'brainatlas rollback [--to VERSION] [--plan]',
@@ -69,7 +70,8 @@ const helpUsages = Object.freeze({
   compact:
     'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]',
   usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful',
-  wiki: 'brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint | write <path> [--dry-run] [--expect-sha256 H] (content on stdin) | reindex [--dry-run]  [--vault PATH] [--json]',
+  wiki: 'brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | list [--type T] | status | lint | write <path> [--dry-run] [--expect-sha256 H] (content on stdin) | update <path> [--append] [--expect-sha256 H] [--frontmatter-json JSON] [--dry-run] (content on stdin) | create <entity|concept> <name...> [--dry-run] (content on stdin) | link <path> [--dry-run] | reindex [--dry-run]  [--vault PATH] [--json]',
+  plan: 'brainatlas plan list | show <project> [--max-chars N] | new <slug> --title T --purpose P [--status S] | add <project> <title...> [--status S] [--id X] | set <project> [<task>] <status>  [--expect-sha256 H] [--dry-run] [--vault PATH] [--json]',
   ui: 'brainatlas ui [--no-open] [--json]',
   help: 'brainatlas --help | brainatlas help [COMMAND]',
 });
@@ -124,7 +126,6 @@ async function availableHelpCommands(paths, env) {
           });
         }
       }
-      // A transport module may add subcommands to sync without owning a top-level command.
       const sync = commands.find((item) => item.name === 'sync');
       const syncHelp = moduleHelp.get('sync');
       if (sync && syncHelp?.usage?.length) {
@@ -133,9 +134,8 @@ async function availableHelpCommands(paths, env) {
         for (const line of syncHelp.usage) if (!usage.includes(line)) usage.push(line);
         sync.usage = usage;
       }
-    } catch {
-      /* Help remains usable when an installed module is damaged. */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   return commands.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -165,15 +165,9 @@ async function showHelp(topic, { paths, env, output, json }) {
   output(json ? result : lines.join('\n'));
 }
 
-// The documentation consistency check discovers built-in commands from `command === '<name>'`
-// literals in this file. These mirror the dispatch keys below and must stay in sync with them.
-// command === 'help'
-// command === 'init', command === 'install', command === 'status', command === 'doctor'
-// command === 'config', command === 'safety', command === 'module', command === 'uninstall'
-// command === 'update', command === 'rollback', command === 'recover', command === 'eval'
-// command === 'hook', command === 'mcp', command === 'migrate', command === 'adopt'
-// command === 'maintain', command === 'compact', command === 'usage', command === 'wiki'
-// command === 'agent', command === 'ui'
+/**
+ * @type {any} command === 'help', command === 'init', command === 'install', command === 'status', command === 'doctor', command === 'config', command === 'safety', command === 'module', command === 'uninstall', command === 'update', command === 'rollback', command === 'recover', command === 'eval', command === 'hook', command === 'mcp', command === 'migrate', command === 'adopt', command === 'maintain', command === 'compact', command === 'usage', command === 'wiki', command === 'plan', command === 'agent', command === 'ui'
+ */
 const dispatch = Object.freeze({
   init: setup.init,
   install: lifecycle.install,
@@ -197,8 +191,10 @@ const dispatch = Object.freeze({
   compact: tools.compact,
   usage: tools.usage,
   wiki: tools.wiki,
+  plan: tools.plan,
 });
 const builtInCommands = new Set([...Object.keys(dispatch), 'help']);
+export const commandNames = Object.freeze([...Object.keys(dispatch), 'help']);
 
 export function enableOffline(env = process.env) {
   if (env.BRAINATLAS_OFFLINE === '1')

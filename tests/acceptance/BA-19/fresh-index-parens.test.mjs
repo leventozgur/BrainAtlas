@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 blind acceptance, criterion 2: no index yet -> wiki_update_index and wiki_create_* first write; parentheses,
-// categories, idempotence, and whether the product's own tools read the result consistently.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, readIndex, startServer, linkDestinations, sectionLines } from './harness.mjs';
@@ -13,7 +11,6 @@ const PAREN_FILES = {
   'root-note.md': page('Kök not'),
   'entities/a(b).md': page('Parantez [1] (x)'),
 };
-// Expected escaped destination for each page (backslash before every parenthesis, CommonMark escape).
 const ESCAPED = {
   'a(b).md': 'a\\(b\\).md',
   'a)b.md': 'a\\)b.md',
@@ -73,7 +70,7 @@ test('three consecutive wiki_update_index runs on a fresh index: the first write
 
 test('fresh index written by wiki_create_entity with a parenthesis page present: the new page is escaped and runs stay idempotent', async (t) => {
   const f = await startServer(t, { files: { 'entities/a(b).md': page('Parantez') } });
-  okJson(await call(f.client, 'wiki_create_entity', { name: 'Deneme Varlik', content: 'Ev.' }));
+  okJson(await call(f.client, 'wiki_create', { type: 'entity', name: 'Deneme Varlik', content: 'Ev.' }));
   const first = await readIndex(f);
   assert.equal(
     first.toString('utf8'),
@@ -91,14 +88,14 @@ test('fresh index written by wiki_create_entity with a parenthesis page present:
   assert.deepEqual(await readIndex(f), second);
 });
 
-test('product tools read the fresh index consistently: wiki_read_index returns the file, and wiki_status coverage is 100 when every page is listed', async (t) => {
+test('product tools read the fresh index consistently: wiki_read_page returns the file, and wiki_status coverage is 100 when every page is listed', async (t) => {
   const f = await startServer(t, { files: PAREN_FILES });
   okJson(await call(f.client, 'wiki_update_index', {}));
   const onDisk = (await readIndex(f)).toString('utf8');
   assert.equal(
-    okJson(await call(f.client, 'wiki_read_index', {})).content,
+    okJson(await call(f.client, 'wiki_read_page', { path: 'index.md' })).content,
     onDisk,
-    'wiki_read_index returns the same bytes'
+    'wiki_read_page returns the same bytes'
   );
   const status = okJson(await call(f.client, 'wiki_status', {}));
   assert.equal(status.pageCount, 5);

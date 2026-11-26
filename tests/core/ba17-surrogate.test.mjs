@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
-// BA-17: the snippet budget cut must never split a UTF-16 surrogate pair. Hermetic: in-memory index, no files, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildIndex, search } from '../../packages/core/src/retrieval/index.mjs';
 
 const now = new Date('2026-11-11T00:00:00Z');
-// A lone surrogate: a high (D800-DBFF) not followed by a low, or a low not preceded by a high.
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
 const EMOJI = '\u{1F600}';
 const ASTRAL = '\u{1D11E}\u{20000}';

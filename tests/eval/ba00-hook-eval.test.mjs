@@ -25,8 +25,6 @@ function fixture(t, cases) {
   return { dir, corpusDir, casesFile };
 }
 
-// Hand-calculated fixture: every query term sits in exactly one page, so a matching page scores
-// sqrt(0.4) = 0.632 (above the 0.35 threshold) and a page without matches is never injected.
 const CASES = [
   { id: 'c1', category: 'a', query: 'zebra quartz ember', relevant: ['alpha.md'] },
   { id: 'c2', category: 'a', query: 'marble lantern', relevant: ['gamma.md'] },
@@ -47,7 +45,6 @@ test('hook metrics match hand-calculated values on the fixture', async (t) => {
   assert.ok(Math.abs(result.injectionPrecision - 1 / 3) < 1e-12);
   assert.equal(result.missRate, 0.5);
   assert.equal(result.falseInjectionRate, 0.5);
-  // BA-31m: three keys added (top1ExcludedRate, top1RelevantRate, withCwd); existing keys unchanged. Pin updated by the PM decision.
   assert.deepEqual(
     Object.keys(result).sort(),
     [

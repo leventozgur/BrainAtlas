@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-23: a page whose frontmatter makes loadPages throw is skipped by the retrieval index instead of failing the whole index.
-// Pages that loadPages has always accepted (an unclosed opening `---`, a non-mapping root) stay indexed as before.
-// Hermetic: temporary directories only; no network, no HOME access.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,13 +17,11 @@ const HEALTHY = {
   'wiki/c.md': '# Plain\n\nzephyr plain page without frontmatter.\n',
 };
 const BROKEN_BODY = '\n\n# Broken\n\nzephyr broken zephyr broken body text.\n';
-// Pages that loadPages throws on (YAML syntax error, duplicate key, BOM variant): skipped by the index.
 const THROWING = {
   'invalid-yaml': '---\ntitle: [unclosed\n---' + BROKEN_BODY,
   'duplicate-key': '---\ntitle: A\ntitle: B\n---' + BROKEN_BODY,
   'bom-invalid-yaml': '﻿---\ntitle: [unclosed\n---' + BROKEN_BODY,
 };
-// Pages that loadPages accepts (frontmatter {} and the whole text, or the text after the block, as body): indexed as before.
 const ACCEPTED = {
   unclosed: '---\ntitle: Broken\nstatus: confirmed\n' + BROKEN_BODY,
   'list-root': '---\n- one\n- two\n---' + BROKEN_BODY,
@@ -44,12 +39,9 @@ function vault(t, files) {
   return root;
 }
 const wikiOf = (root) => path.join(root, 'wiki');
-// Map keys of THROWING and ACCEPTED are bare names; these become wiki/<name>.md files.
 const wikiFiles = (map) => Object.fromEntries(Object.entries(map).map(([name, text]) => [`wiki/${name}.md`, text]));
 const stateOf = (root) => path.join(root, 'state');
 const runQueries = (searcher) => QUERIES.map((q) => searcher.search(q, { limit: 10, abstainThreshold: 0 }));
-
-// --- Throwing pages: skipped; healthy results equal the vault without the page ------------------------------------------
 
 for (const [name, broken] of Object.entries(THROWING)) {
   test(`skipped page (${name}): createSearcher does not throw and healthy results equal the vault without the page`, (t) => {
@@ -101,8 +93,6 @@ test('loadPagesDetailed.pages equals loadPages on the vault without the skipped 
   assert.deepEqual(pages, reference);
 });
 
-// --- Skipped list: exactly the throwing pages, relative paths only, no content or error text -----------------------------
-
 test('loadPagesDetailed reports exactly the throwing pages as skipped, by relative path and without content', (t) => {
   const root = vault(t, {
     ...HEALTHY,
@@ -143,8 +133,6 @@ test('a loadPagesDetailed on a vault without broken pages skips nothing', (t) =>
   assert.deepEqual(loadPagesDetailed(wikiOf(root)).pages, loadPages(wikiOf(root)));
 });
 
-// --- Rules unchanged: what was valid stays valid, what was indexed stays indexed ------------------------------------------
-
 test('a page with an empty frontmatter block is still indexed', (t) => {
   const root = vault(t, { 'wiki/empty.md': '---\n---\n\n# Empty\n\nzephyr empty page.\n' });
   const { pages, skipped } = loadPagesDetailed(wikiOf(root));
@@ -166,8 +154,6 @@ test('an invalid verified date is still a neutral page, not a skipped one (BA-09
     ['dated.md']
   );
 });
-
-// --- Freshness and cache: a fixed page is found by the next refresh --------------------------------------------------------
 
 test('a page fixed after being skipped is indexed by the next refreshIfChanged, not remembered as skipped', (t) => {
   const root = vault(t, { ...HEALTHY, 'wiki/broken.md': THROWING['invalid-yaml'] });

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-00 blind acceptance: ba-suite shape, determinism across two runs, output leakage, sandboxing (HOME, TMPDIR, network).
-// Two full child runs are shared by several tests so the file stays within the npm test time budget.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -9,7 +7,6 @@ import { pathToFileURL } from 'node:url';
 import { DEV, ROOT, runNode, tempDir, removeDir, listDir } from './helpers.mjs';
 
 const SUITE = join(ROOT, 'eval', 'ba-suite.mjs');
-// BA-27: hookRealistic, longpage, temporal, poison, realDocs (new dev sets) and grepBaseline are added top-level keys; no other key changed.
 const TOP_KEYS = [
   'cases',
   'natural',
@@ -84,7 +81,6 @@ test('ba-suite: two runs at the same commit are identical except scale and timin
   const ja = JSON.parse(readFileSync(a.out, 'utf8'));
   const jb = JSON.parse(readFileSync(b.out, 'utf8'));
   assert.deepEqual(strip(ja), strip(jb));
-  // Timing fields exist (they are excluded from the comparison, not absent).
   assert.equal(typeof ja.identifier.latencyMs.p50, 'number');
   assert.equal(typeof ja.hook.durationMs.p50, 'number');
 });

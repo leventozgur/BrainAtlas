@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 blind acceptance: external edits must be visible to the next wiki_query of a real stdio MCP server.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -56,7 +55,6 @@ async function query(c, text) {
   return JSON.parse(result.content[0].text).results.map((item) => item.path);
 }
 function utimesExact(file, ref) {
-  // Restore the reference mtime to the nanosecond; Node's utimes truncates to milliseconds.
   execFileSync('python3', [
     '-c',
     'import os,sys; os.utime(sys.argv[1], ns=(int(sys.argv[2]), int(sys.argv[3])))',
@@ -91,7 +89,7 @@ test('same-size external rewrite with the original mtime restored is visible ove
   assert.deepEqual(await query(c, 'foxtrot'), ['swap.md']);
   const file = path.join(f.wiki, 'swap.md');
   const ref = fs.lstatSync(file, { bigint: true });
-  fs.writeFileSync(file, '# Swap\nwombats here\n'); // 'foxtrot' and 'wombats' both 7 bytes
+  fs.writeFileSync(file, '# Swap\nwombats here\n');
   utimesExact(file, ref);
   assert.equal(fs.lstatSync(file, { bigint: true }).mtimeNs, ref.mtimeNs);
   assert.deepEqual(await query(c, 'wombats'), ['swap.md']);
@@ -114,7 +112,6 @@ test('a page written through a second MCP process on the same vault is visible w
   });
   assert.notEqual(result.isError, true);
   assert.deepEqual(await query(reader, 'vermilion'), ['other-agent.md']);
-  // And the reverse direction: the reader's view must follow the writer's delete through its own (external) edit.
   fs.rmSync(path.join(f.wiki, 'other-agent.md'));
   assert.deepEqual(await query(writer, 'vermilion'), []);
   assert.deepEqual(await query(reader, 'vermilion'), []);
@@ -148,19 +145,16 @@ test('concurrent deletes and renames during queries do not crash the server', as
       const file = path.join(f.wiki, `churn-${i}.md`);
       try {
         fs.renameSync(file, file + '.tmp');
-      } catch {
-        /* already moved */
-      }
+        // eslint-disable-next-line no-empty
+      } catch {}
       try {
         fs.renameSync(file + '.tmp', file);
-      } catch {
-        /* already restored */
-      }
+        // eslint-disable-next-line no-empty
+      } catch {}
       try {
         fs.rmSync(file);
-      } catch {
-        /* absent */
-      }
+        // eslint-disable-next-line no-empty
+      } catch {}
       fs.writeFileSync(file, `# Churn ${i}\nchurnterm ${i}\n`);
       await new Promise((r) => setTimeout(r, 2));
     }
@@ -185,7 +179,6 @@ test('concurrent deletes and renames during queries do not crash the server', as
   await churn;
   console.log(`churn outcomes: ${JSON.stringify(outcomes)}`);
   assert.equal(outcomes.transport, 0, 'server process must stay up');
-  // After quiescence, the server must converge to the final vault state.
   const files = fs.readdirSync(f.wiki).filter((n) => /^churn-\d+\.md$/.test(n)).length;
   assert.equal(files, 20);
   const settled = await query(c, 'churnterm');

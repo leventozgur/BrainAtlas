@@ -2,7 +2,7 @@
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CHANNEL_AGENTS, effectiveChannel, loadConfig } from '@brainatlas/core';
+import { CHANNEL_AGENTS, effectiveChannel, loadConfig, refreshVaultPolicy } from '@brainatlas/core';
 import { adapterHealth, detectAdapter, installAdapter, removeAdapter } from './adapters.mjs';
 import { error, exists, redactOutput, saveTrackedConfig } from './shared.mjs';
 
@@ -37,7 +37,6 @@ function requireApplied(item) {
 }
 
 /**
- * Replace a scratch-home prefix with the real home in every string of a plan result.
  * @param {any} value @param {string} scratch @param {string} home @returns {any}
  */
 function mapHome(value, scratch, home) {
@@ -49,8 +48,6 @@ function mapHome(value, scratch, home) {
 }
 
 /**
- * Plan the install of the new channel on a clean, empty temporary home and map the paths back to the
- * real home. This is an approximation of the install after the removal. Nothing real is written.
  * @param {{agent: string, cfg: any, paths: any, env: any}} options
  */
 async function planInstallOnCleanHome({ agent, cfg, paths, env }) {
@@ -64,14 +61,15 @@ async function planInstallOnCleanHome({ agent, cfg, paths, env }) {
   }
 }
 
-/** A removal warning means nothing was removed: stop instead of continuing. @param {{warning?: string}} result */
+/**
+ * @param {{warning?: string}} result
+ */
 function requireRemoved(result) {
   if (result.warning)
     throw error(/unavailable/.test(result.warning) ? 'E_AGENT_UNKNOWN' : 'E_ARGUMENT', result.warning);
 }
 
 /**
- * `brainatlas agent list | add | remove | set | refresh`.
  * @param {{args: string[], paths: any, env: any, output: (data: any) => void, plan: boolean, flag?: (name: string) => boolean, value: (name: string) => string | undefined}} context
  */
 export async function agentCommand({ args, paths, env, output, plan, flag, value }) {
@@ -118,8 +116,20 @@ export async function agentCommand({ args, paths, env, output, plan, flag, value
   if (action === 'refresh') {
     if (agent && !cfg.agents.includes(agent)) throw error('E_ARGUMENT', `Agent ${agent} is not installed.`);
     const safe = flag?.('--safe') === true;
+    const force = flag?.('--force') === true;
     const refreshed = [];
     const skipped = [];
+    let policy;
+    if (cfg.readOnly === true) {
+      const warning = 'vault-policy: readOnly is set; the vault policy was not refreshed.';
+      policy = { changes: [], warnings: [warning] };
+      skipped.push({ agent: 'vault-policy', warnings: [warning] });
+    } else {
+      const result = await refreshVaultPolicy({ vaultDir: cfg.vault.path, plan, force });
+      policy = { changes: result.changes, warnings: result.warnings };
+      if (safe && result.needsConfirmation && !force)
+        skipped.push({ agent: 'vault-policy', warnings: result.warnings });
+    }
     for (const name of agent ? [agent] : cfg.agents) {
       const warnings = [];
       let changed = [];
@@ -153,7 +163,12 @@ export async function agentCommand({ args, paths, env, output, plan, flag, value
       }
       if (!skippedAgent) refreshed.push({ agent: name, changed, warnings });
     }
-    output({ action: 'agent-refresh', agents: refreshed, ...(safe ? { skipped } : {}) });
+    output({
+      action: 'agent-refresh',
+      agents: refreshed,
+      policy,
+      ...(safe || skipped.length ? { skipped } : {}),
+    });
     return;
   }
   if (action === 'add') {
@@ -210,7 +225,6 @@ export async function agentCommand({ args, paths, env, output, plan, flag, value
     requireApplied(await installAdapter({ agent, cfg: next, paths, env }));
   } catch (failure) {
     const codes = [failure?.code ?? 'unknown'];
-    // Remove files the failed install may have written for the new channel, then restore the old one.
     try {
       await removeAdapter({ agent, cfg: next, paths, env });
     } catch (cleanup) {

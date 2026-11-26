@@ -189,7 +189,6 @@ test('dry run reports pending chunks without writes', async (t) => {
   await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json')));
 });
 
-// Records every stderr chunk and every prompt in order; restores stderr when finished.
 async function withStderr(events, work) {
   const original = process.stderr.write;
   process.stderr.write = (chunk, ...rest) => {
@@ -203,8 +202,6 @@ async function withStderr(events, work) {
     process.stderr.write = original;
   }
 }
-// An unterminated carriage-return progress line may only be followed by another update of itself or by a newline;
-// anything else (ETA notice, prompt, step output) would continue on the same terminal line, and the last chunk must close it.
 function assertProgressLineTerminated(events) {
   const isOpen = (event) => event.type === 'stderr' && event.text.startsWith('\r') && !event.text.includes('\n');
   events.forEach((event, i) => {

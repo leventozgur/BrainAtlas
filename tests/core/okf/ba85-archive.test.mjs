@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-85: OKF checks accept the archive pages written by `brainatlas compact`.
-// Hermetic: temporary vault and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

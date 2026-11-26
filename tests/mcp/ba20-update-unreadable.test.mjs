@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20: one page whose frontmatter cannot be read (a raw C0 control character in an unquoted value) does not fail
-// wiki_update_index for the whole Wiki; that page is still listed with the no-title fallback, and the other pages are
-// indexed. Real stdio MCP server, temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';

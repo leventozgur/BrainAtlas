@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-56: data egress protection for the BA-48 synthesis path. Restricted pages never reach the model, the prompt and the
-// model output are secret-scanned, state files are private, offline skips the model and accept stays inside the
-// configured vault. Every model call is faked; no network and no real model is used.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
@@ -48,7 +45,6 @@ const pageText = (title, extra, body) =>
 const openBody = `# Open page\n\nThe open page holds the OPEN-BODY-MARKER value.\n`;
 const restrictedBody = `# Restricted page\n\nThe restricted page holds the RESTRICTED-BODY-MARKER value.\n${updates(12)}`;
 
-/** A vault whose pages are all older than seven days, so none counts as recently edited. */
 async function vaultWith(t, pages) {
   const root = await temp(t, 'ba56-vault-');
   const vault = join(root, 'vault');
@@ -107,7 +103,6 @@ test('a restricted higher-scored page is excluded from the target slot', async (
       { path: OPEN, title: 'Open', text: pageText('Open', '', openBody) },
     ]);
     if (label === 'sensitivity personal') {
-      // The fixture ranks the restricted page first, so the excluded slot is the meaningful one.
       const scored = await scorePages(vault, { now: NOW, report: await runMaintenance(vault, { now: NOW }) });
       assert.equal(scored[0].path, 'wiki/concepts/restricted.md');
     }
@@ -335,7 +330,6 @@ test('accept refuses a vault that is not the configured vault and never writes i
   );
   assert.equal(await readFile(join(other, OPEN), 'utf8'), before);
 
-  // A missing config is refused the same way; list still works on a foreign vault.
   const bareHome = await temp(t, 'ba56-home-');
   const bareEnv = cleanEnv({
     HOME: bareHome,

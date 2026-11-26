@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20: wiki_create_entity / wiki_create_concept take the frontmatter of the content as the page's own frontmatter
-// (summary, description, tags) and build the index line from it, so the create line equals the wiki_update_index line.
-// Real stdio MCP server, temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -56,7 +53,7 @@ const entryLines = (text) => text.split('\n').filter((line) => line.startsWith('
 
 test('BA20-CFM1: create writes the content frontmatter as page frontmatter, not as body text', async (t) => {
   const f = await fixture(t);
-  await ok(f.client, 'wiki_create_entity', { name: 'Kısa Özet', content: CONTENT });
+  await ok(f.client, 'wiki_create', { type: 'entity', name: 'Kısa Özet', content: CONTENT });
   const written = await readFile(resolve(f.wiki, 'entities/kisa-ozet.md'), 'utf8');
   assert.match(written, /^summary: Düz özet$/m);
   assert.match(written, /^tags:\n {2}- alfa$/m);
@@ -67,7 +64,7 @@ test('BA20-CFM1: create writes the content frontmatter as page frontmatter, not 
 
 test('BA20-CFM2: the create line for a page with summary and tags equals the wiki_update_index line for the same page', async (t) => {
   const created = await fixture(t);
-  await ok(created.client, 'wiki_create_entity', { name: 'Kısa Özet', content: CONTENT });
+  await ok(created.client, 'wiki_create', { type: 'entity', name: 'Kısa Özet', content: CONTENT });
   const fromCreate = entryLines(await readFile(resolve(created.wiki, 'index.md'), 'utf8'));
   const scanned = await fixture(t, { files: { 'entities/kisa-ozet.md': CONTENT } });
   await ok(scanned.client, 'wiki_update_index');
@@ -82,7 +79,7 @@ test('BA20-CFM2: the create line for a page with summary and tags equals the wik
 
 test('BA20-CFM3: create content without frontmatter keeps the body and gets the name as title', async (t) => {
   const f = await fixture(t);
-  await ok(f.client, 'wiki_create_concept', { name: 'Düz Kavram', content: 'Sadece gövde.\n' });
+  await ok(f.client, 'wiki_create', { type: 'concept', name: 'Düz Kavram', content: 'Sadece gövde.\n' });
   const written = await readFile(resolve(f.wiki, 'concepts/duz-kavram.md'), 'utf8');
   assert.match(written, /^title: Düz Kavram$/m);
   assert.ok(written.endsWith('Sadece gövde.\n'));

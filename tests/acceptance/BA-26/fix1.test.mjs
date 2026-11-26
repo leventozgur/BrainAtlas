@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26 blind acceptance, re-test after fix1 (commit d0dfea3): query/fragment/matrix assignments and İ/ı key folding.
-// Expected values come from the fix's stated intent and the brief, not from a product run. Values are built at run
-// time. Temporary vaults live under a per-run directory in the OS temp directory and are removed afterwards.
-// No network.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -21,7 +17,6 @@ const mainSafety = await import(pathToFileURL(path.join(MAIN, 'packages/core/src
 const { runHook } = await import(pathToFileURL(path.join(ROOT, 'packages/hooks/src/index.mjs')).href);
 const NOW = new Date('2026-11-11T00:00:00Z');
 
-// Built at run time. Non-uniform, letters and digits, so no placeholder or uniform-run rule applies.
 const V = 'Xq7rT2mP9kL4';
 const HE = 'AbCd1234EfGh5678IjKl';
 const TOKEN_SHAPE = 'AbCd1234EfGh5678IjKl';
@@ -91,7 +86,6 @@ test('fix1 hook: query, fragment, matrix and Turkish upper-case secrets never re
   const leaks = [],
     shown = [];
   for (const [i, [text]] of POSITIVES.entries()) {
-    // Each page carries a unique keyword so its own prompt retrieves it.
     fs.writeFileSync(
       path.join(vault, 'wiki', `f${i}.md`),
       `---\ntitle: Bağlantı ${i}\nstatus: confirmed\n---\nfix1kw${i} ${text}\n`
@@ -123,7 +117,6 @@ test('fix1 hook: query, fragment, matrix and Turkish upper-case secrets never re
   assert.deepEqual(leaks, []);
 });
 
-// Query-shaped clean material: none of these carries a secret. Each template gets 10 values.
 const QCLEAN = [
   (n) => `https://ornek.example/ara?page=${n}&sort=desc`,
   (n) => `https://ornek.example/giris?password_policy=strict&n=${n}`,

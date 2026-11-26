@@ -94,8 +94,15 @@ async function snapshot(base) {
 }
 async function scaffold(vault) {
   for (const d of dirs) assert.ok((await lstat(join(vault, d))).isDirectory(), d);
-  for (const [dst, src] of templates)
+  for (const [dst, src] of templates) {
+    if (dst === 'AGENTS.md') {
+      const text = await readFile(join(vault, dst), 'utf8');
+      assert.match(text, /^<!-- brainatlas:managed v=\d+ sha256=[0-9a-f]{64} -->\n/);
+      assert.ok(text.includes((await readFile(join(root, src), 'utf8')).trim()));
+      continue;
+    }
     assert.deepEqual(await readFile(join(vault, dst)), await readFile(join(root, src)), dst);
+  }
 }
 const page =
   "---\ntype: concept\ngenerated: '2025-01-01T00:00:00Z'\nstatus: proposed\nsources: []\nverified: []\nstale_after: P90D\naliases: []\nkeywords: []\n---\n\n# Fixture\n\nBody with unicode: çığ.\n";

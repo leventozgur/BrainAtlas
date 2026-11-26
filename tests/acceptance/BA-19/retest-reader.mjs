@@ -1,16 +1,9 @@
 // SPDX-License-Identifier: MIT
-// BA-19 retest helper: an independent inline-link reader written for this run. It does not import the product or the
-// vendored parser. It reads `[text](destination)` the way CommonMark does, including both destination forms:
-//   - bare: balanced unescaped parentheses belong to it; whitespace or a control character may only be followed by `)`;
-//   - angle-bracket `<...>`: spaces, tabs and other characters are allowed, an unescaped `<` or a line ending is not.
-// A backslash before ASCII punctuation is an escape. Fenced code blocks (``` or ~~~) are skipped.
-// Node 20 APIs only.
 
 const PUNCT = /[!-/:-@[-`{-~]/;
 // eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
 const CONTROL = /[\x00-\x1f\x7f]/;
 
-/** Inline link destinations of a Markdown text, unescaped. Lines are split on '\n' with a trailing '\r' removed. */
 export function readLinks(text) {
   const out = [];
   let fence = null;
@@ -99,14 +92,11 @@ function destinationAt(line, start) {
   return null;
 }
 
-/** The page path a destination names: `#fragment` and `?query` are not part of it. */
 export const pagePathOf = (dest) => dest.replace(/[#?][\s\S]*$/, '');
 
-/** Destinations that are not local page paths: anchor-only, scheme URLs, scheme-relative and absolute paths, empty. */
 export const isNonPageDestination = (dest) =>
   dest === '' || dest.startsWith('#') || dest.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(dest);
 
-/** Set of local page paths named by any link in the text (escaped, angle-bracket, anchored or query forms). */
 export function linkedPages(text) {
   return new Set(
     readLinks(text)

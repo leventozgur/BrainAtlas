@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-00 blind acceptance: scale-bench output shape at small N, temp cleanup, no network, synthetic corpus determinism.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -9,7 +8,6 @@ import { ROOT, runNode, tempDir, removeDir, listDir } from './helpers.mjs';
 
 const BENCH = join(ROOT, 'eval', 'scale-bench.mjs');
 
-// Map of relative path -> file content for every file under dir.
 function snapshot(dir) {
   const out = {};
   const walk = (d) => {
@@ -42,7 +40,6 @@ test('scale-bench: small N run returns the documented shape with the minimum que
       [30, 60]
     );
     for (const row of out.sizes) {
-      // BA-27: refreshAfterEditMs is added to each row (scale-bench `refreshAfterEditMs`); no other key changed.
       assert.deepEqual(
         Object.keys(row).sort(),
         [

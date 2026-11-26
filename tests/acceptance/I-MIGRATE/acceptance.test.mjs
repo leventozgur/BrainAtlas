@@ -122,9 +122,10 @@ test('read-only source, copied categories, exclusions, instructions, hash and ou
     await assert.rejects(lstat(join(f.target, path)), { code: 'ENOENT' });
   for (const key of ['git', 'obsidian', 'trash', 'symlinks']) assert.ok(report.skipped[key] > 0, key);
   assert.equal(report.bodyHashMatch, true);
-  const instructions = await readFile(join(f.target, 'AGENTS.md'), 'utf8');
-  assert.ok(instructions.startsWith((await readFile(join(root, 'templates/policy/AGENTS.md'), 'utf8')).trimEnd()));
-  assert.match(instructions, /Remember my custom setting\./);
+  const instructions = await readFile(join(f.target, 'AGENTS.md'));
+  assert.deepEqual(instructions, await readFile(join(f.source, 'AGENTS.md')));
+  assert.ok(report.warnings.some((warning) => warning.startsWith('AGENTS.md: no BrainAtlas managed block')));
+  assert.match(instructions.toString('utf8'), /Remember my custom setting\./);
   assert.ok(!(await readFile(join(f.target, 'wiki/log.md'), 'utf8')).includes(f.marker));
 });
 
@@ -227,8 +228,6 @@ test('reported body equality matches every final wiki page including the migrati
   const r = run(f, 'migrate', '--from', f.source, '--to', f.target, '--json');
   ok(r);
   const body = (text) => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
-  // PM correction (documented contract): log.md is append-only and receives one migration entry, so bodyHashMatch covers every
-  // page except log.md; the log is reported separately as logPrefixPreserved / logAppendedEntries.
   const out = JSON.parse(r.stdout);
   const sourceIndex = body(await readFile(join(f.source, 'wiki', 'index.md'), 'utf8'));
   const targetIndex = body(await readFile(join(f.target, 'wiki', 'index.md'), 'utf8'));

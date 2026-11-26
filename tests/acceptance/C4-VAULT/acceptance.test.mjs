@@ -169,9 +169,7 @@ test('checkpoint scope, lint and global configuration', async (t) => {
 });
 test('checkpoint refuses staged secrets without revealing them', async (t) => {
   const { d, env } = await repo(t);
-  const secret = ['sk', 'test-1234567890abcdefghijklmnop'].join(
-    '-'
-  ); /* PM: built at runtime so the repo privacy scan stays clean */
+  const secret = ['sk', 'test-1234567890abcdefghijklmnop'].join('-');
   await writeFile(join(d, 'wiki/a.md'), `api_key=${secret}\n`);
   assert.equal(git(d, env, 'add', 'wiki/a.md').status, 0);
   let error;
@@ -222,9 +220,8 @@ test('log helper must not write through a symlink outside vault', async (t) => {
   await symlink(outside, join(vault, 'wiki/log.md'));
   try {
     await appendLog(vault, { action: 'update' }, { now: new Date('2026-01-01T00:00:00Z') });
-  } catch {
-    /* the write is expected to fail; the assertion below covers the outcome */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   assert.equal(await readFile(outside, 'utf8'), 'OUTSIDE\n');
 });
 test('full and changed scans handle missing targets and unreadable pages', async (t) => {

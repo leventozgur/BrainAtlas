@@ -11,7 +11,6 @@ const ignoredName = (name) =>
   name.endsWith('.icloud') || name.startsWith('~$') || name.endsWith('.tmp') || name.startsWith('.syncthing.');
 const extensionOf = (name) => (name.toLowerCase().endsWith('.md') ? '.md' : '');
 
-/** Recognize provider-generated sibling copies without treating ordinary files as conflicts. */
 export function isFolderConflictCopy(path) {
   const name = basename(path);
   const extension = extensionOf(name);
@@ -21,9 +20,6 @@ export function isFolderConflictCopy(path) {
     / \(conflicted copy(?: [^)]*)?\)$/i.test(stem) ||
     / \([^)]*çakışan kopya[^)]*\)$/i.test(stem) ||
     / \(\d+\)$/.test(stem) ||
-    // OneDrive appends the device name after the final dash. Require an
-    // uppercase/digit host token of at least three characters so ordinary
-    // kebab-case names (for example, "meeting-notes") are not conflicts.
     /-[A-Z0-9]{3,}$/.test(stem) ||
     /\.sync-conflict-\d{8}-\d{6}-[A-Z0-9]{7}$/i.test(stem)
   );
@@ -64,8 +60,6 @@ async function validateRoot(path, vaultPath) {
   }
   const [root, vault] = await Promise.all([canonicalCandidate(path), canonicalCandidate(vaultPath)]);
   if (within(vault, root)) throw new SyncTransportError('E_INVALID_PATH');
-  // A user may intentionally configure a symlink as the transport root.
-  // Use its canonical target for subsequent path checks and filesystem work.
   return root;
 }
 
@@ -136,9 +130,6 @@ async function scanFiles(root, current = root, rows = []) {
 }
 
 /**
- * Local-folder object storage for folders synchronized by an external client.
- * Revisions include content digest and mtime. Conditional writes are best effort;
- * this transport intentionally makes no cross-process CAS guarantee.
  * @param {{path?:string,vaultPath?:string,hostId?:string,atomicWriter?:Function}} options
  */
 export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = atomicWriteFile } = {}) {
@@ -207,7 +198,6 @@ export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = 
         throw new ConflictError();
       await mkdir(dirname(target), { recursive: true });
       await ensureNoSymlinkPath(base, path, { includeLeaf: false });
-      // Recheck immediately before replacement; filesystem sync clients do not provide atomic CAS.
       const beforeWrite = await (async () => {
         try {
           const [currentBytes, info] = await Promise.all([readFile(target), lstat(target)]);
@@ -245,7 +235,6 @@ export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = 
       if (current.rev !== options.ifRev) throw new ConflictError();
       await unlink(target);
     },
-    /** Provider copies and lack of CAS make this transport degraded by design. */
     async status() {
       const rows = await listObjects();
       const conflicts = rows.filter((row) => row.conflict).map(({ path }) => path);
@@ -261,7 +250,6 @@ export function createFolderTransport({ path, vaultPath, hostId, atomicWriter = 
   });
 }
 
-/** Attach the local-folder transport only when selected in configuration. */
 export async function activate(ctx) {
   if (!ctx || typeof ctx !== 'object' || !ctx.config || !ctx.paths)
     throw new BrainAtlasError('E_MODULE_CONTEXT', 'Folder module context is incomplete.');

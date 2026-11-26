@@ -267,7 +267,6 @@ test('upgrade replaces legacy hooks, preserves user hooks, and uninstall removes
     assert.equal(secondPlan.changes.length, 0);
     await adapter.apply(secondPlan, ctx);
     assert.deepEqual(await readFile(file), beforeSecondInstall);
-    // Simulate an old hook reappearing alongside the installed hook.
     upgraded.hooks.SessionStart[0].hooks.push({ type: 'command', command: legacy('SessionStart') });
     await writeFile(file, JSON.stringify(upgraded));
     await adapter.remove(ctx);

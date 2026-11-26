@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-88: `brainatlas wiki write` and `brainatlas wiki reindex` run the MCP write handlers in process, and
-// `--dry-run` runs every check without writing anything. Hermetic: temporary vault, HOME and state directories only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -413,7 +411,7 @@ test('the unknown-subcommand text, help description and usage line are exact, an
   const f = await fixture(t);
   assert.throws(() => parseWikiArguments(['bogus']), {
     code: 'E_ARGUMENT',
-    message: 'wiki requires one of: query, read, index, list, status, lint, write, reindex.',
+    message: 'wiki requires one of: query, read, list, status, lint, write, update, create, link, reindex.',
   });
   const help = spawnSync(process.execPath, [BIN, '--help', '--json'], {
     env: f.env,
@@ -425,11 +423,11 @@ test('the unknown-subcommand text, help description and usage line are exact, an
   const command = JSON.parse(help.stdout).commands.find((item) => item.name === 'wiki');
   assert.equal(
     command.description,
-    'Wiki tools from the shell, running the same code as the MCP tools: query, read, index, list, status, lint; write and reindex change the Wiki.'
+    'Wiki tools from the shell, running the same code as the MCP tools: query, read, list, status, lint; write, update, create, link and reindex change the Wiki.'
   );
   assert.match(
     command.usage,
-    /write <path> \[--dry-run\] \[--expect-sha256 H\] \(content on stdin\) \| reindex \[--dry-run\]/u
+    /write <path> \[--dry-run\] \[--expect-sha256 H\] \(content on stdin\) \| update <path>/u
   );
-  await assert.rejects(callToolInProcess({}, 'wiki_update_page', {}), { code: 'E_ARGUMENT' });
+  await assert.rejects(callToolInProcess({}, 'wiki_read_index', {}), { code: 'E_ARGUMENT' });
 });

@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-04 tester-owned golden generator. Usage: node dump-ranking.mjs <repoRoot> > fixture.json
-// Runs buildIndex/search over every eval/dev set (same corpora, query ids and options as the BA-03 parity set) and records,
-// per query, the ranking (path, score), abstain state and reason, and the section fields. Snippets are stored as SHA-256
-// digests only, so the fixture holds no page text. Deterministic: no timestamps, no absolute paths.
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';

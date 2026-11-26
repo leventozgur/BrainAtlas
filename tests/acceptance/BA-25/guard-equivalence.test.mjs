@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25 hypothesis 3 (guard), part A: the candidate's calls without expectedSha256 leave no lock or temporary file
-// behind. Hermetic: two fixture runs, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -14,7 +12,7 @@ const SCRIPT = [
   ['wiki_list_pages', {}],
   ['wiki_query', { query: 'synthetic bilingual', limit: 3 }],
   ['wiki_read_page', { path: 'wiki/entities/sample-06.md' }],
-  ['wiki_read_index', {}],
+  ['wiki_read_page', { path: 'index.md' }],
   ['wiki_status', {}],
   ['wiki_lint', {}],
   ['wiki_write_page', { path: 'entities/eq-probe.md', content: page('Eq Probe', 'Eq probe evidence.') }],
@@ -27,11 +25,15 @@ const SCRIPT = [
     },
   ],
   ['wiki_update_page', { path: 'entities/eq-probe.md' }],
-  ['wiki_create_entity', { name: 'Eq Entity', content: 'Evidence.' }],
-  ['wiki_create_entity', { name: 'Eq Entity', content: 'Duplicate.' }],
+  ['wiki_create', { type: 'entity', name: 'Eq Entity', content: 'Evidence.' }],
+  ['wiki_create', { type: 'entity', name: 'Eq Entity', content: 'Duplicate.' }],
   [
-    'wiki_create_concept',
-    { name: 'Eq Concept', content: '---\nsummary: Concept for equivalence\ntags: [eq, check]\n---\nConcept body.' },
+    'wiki_create',
+    {
+      type: 'concept',
+      name: 'Eq Concept',
+      content: '---\nsummary: Concept for equivalence\ntags: [eq, check]\n---\nConcept body.',
+    },
   ],
   ['wiki_add_crosslinks', { path: 'entities/eq-probe.md' }],
   ['wiki_update_index', {}],
@@ -42,7 +44,7 @@ const SCRIPT = [
   ['wiki_list_pages', {}],
   ['wiki_list_pages', { type: 'entities' }],
   ['wiki_status', {}],
-  ['wiki_read_index', {}],
+  ['wiki_read_page', { path: 'index.md' }],
 ];
 
 async function runScript(t, root) {
@@ -54,11 +56,10 @@ async function runScript(t, root) {
     let body = textOf(r);
     try {
       body = JSON.parse(body);
-    } catch {
-      /* plain error text */
-    }
-    if (name === 'wiki_read_page' && body && typeof body === 'object') delete body.sha256; // intentional BA-25 addition
-    if (name === 'wiki_status' && body && typeof body === 'object') delete body.indexAgeMs; // clock value
+      // eslint-disable-next-line no-empty
+    } catch {}
+    if (name === 'wiki_read_page' && body && typeof body === 'object') delete body.sha256;
+    if (name === 'wiki_status' && body && typeof body === 'object') delete body.indexAgeMs;
     replies.push({ name, isError: r.isError === true, body: normalize(body) });
   }
   const tree = {};

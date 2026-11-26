@@ -83,7 +83,6 @@ async function queueSessionEndReceipt({ client, hookInput, config, paths, env })
   }
 }
 
-/** Queue one review candidate per finding kind through the installed receipts module (Full). Lite: nothing is written. */
 async function queueMaintenanceReceipt({ config, paths, env, candidates }) {
   const current = await readCurrent(paths).catch(() => null);
   const releaseDir = currentReleaseDir(paths, current);
@@ -117,6 +116,18 @@ export async function wiki({ args, json, output, env }) {
     return;
   }
   const text = formatWikiResult(result.sub, result.value);
+  if (text) console.log(text);
+  return;
+}
+
+export async function plan({ args, json, output, env }) {
+  const { formatPlanResult, runPlanCommand } = await import('../plan.mjs');
+  const result = await runPlanCommand(args, { env });
+  if (json) {
+    output(result.value);
+    return;
+  }
+  const text = formatPlanResult(result.sub, result.value);
   if (text) console.log(text);
   return;
 }
@@ -188,7 +199,6 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
     }
     let vaultPath;
     if (action === 'accept') {
-      // Accept is the only proposal action that writes the vault: it only ever writes the configured vault.
       const cfg = await loadConfig({ paths, env, readOnly: true }).catch(() => null);
       const target = requested ?? cfg?.vault?.path;
       if (!cfg || !target || resolve(target) !== resolve(cfg.vault.path))
@@ -239,7 +249,6 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
         ? await loadConfig({ paths, env, readOnly: true })
         : await loadConfig({ paths, env, readOnly: true }).catch(() => null);
     const vaultPath = requested === undefined ? fixConfig.vault.path : requested;
-    // The opt-out applies only to the configured vault; any other vault keeps the filter on.
     const secretFilter =
       !fixConfig || resolve(vaultPath) !== resolve(fixConfig.vault.path) || secretFilterEnabled(fixConfig);
     const options = { sources, secretFilter };
@@ -356,8 +365,6 @@ export async function hookOrMcp({ command, args, env, paths, output }) {
   const entry = command === 'hook' ? component.runHook : component.main;
   if (typeof entry !== 'function')
     throw error('E_COMPONENT_MISSING', 'Requested component entry point is unavailable.');
-  // BA-81: the shared hook helper writes and flushes stdout first, then awaits a due warm-up within the cap and
-  // ends the process, so a pending request can never keep the CLI alive past the cap.
   const emit = (result) =>
     new Promise((resolve) => {
       component.finishHookOutput(result, started, (exitCode) => {
@@ -393,9 +400,8 @@ export async function hookOrMcp({ command, args, env, paths, output }) {
         try {
           const parsed = stdin.trim() ? JSON.parse(stdin) : {};
           if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) hookInput = parsed;
-        } catch {
-          /* The hook component handles malformed payloads fail-open. */
-        }
+          // eslint-disable-next-line no-empty
+        } catch {}
         const queued = await queueSessionEndReceipt({ client, hookInput, config: cfg, paths, env });
         result = queued
           ? await entry({ client, event, stdin, env, now: new Date(), config: cfg })

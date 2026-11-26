@@ -4,13 +4,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { scanText } from '../../../packages/core/src/safety/index.mjs';
 
-/**
- * Fixture placeholders keep provider-format synthetic keys out of the repository's plain text (so hosting-side secret scanners
- * do not flag test data); they are expanded only in memory while testing.
- * @param {string} text
- */
 export function expandFixture(text) {
-  // Prefixes are assembled from parts so this file never contains a provider-format literal either.
   const prefixes = {
     SK_DASH: ['s', 'k-'],
     GH_P: ['gh', 'p_'],
@@ -34,7 +28,6 @@ export function expandFixture(text) {
     .replace(/\{\{([A-Z_]+)\}\}/g, (whole, name) => (prefixes[name] ? prefixes[name].join('') : whole));
 }
 
-/** Count per-file detections; never emit corpus contents or file names. */
 export async function metrics(dir) {
   const count = async (name) => {
     const root = join(dir, name);

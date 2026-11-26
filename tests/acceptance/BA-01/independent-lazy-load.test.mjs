@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-01 independent verification: the recap module is loaded only on the session-start branch,
-// and handoff / manual-mode behaviour is unchanged. Module loads are traced with a loader hook.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -17,7 +15,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const BIN = join(ROOT, 'packages/hooks/bin/brainatlas-hook.mjs');
 const NOW = new Date('2026-11-10T00:00:00.000Z');
 const LOG_TS = '2026-11-09T12:00:00.000Z';
-// The module-trace test spawns the hook, which uses the real clock; keep its fixture one day in the past.
 const REAL_NOW = new Date();
 const REAL_LOG_TS = new Date(REAL_NOW.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -56,7 +53,6 @@ async function fixture(t, { mode = 'normal', handoff = null, page = true, logTs 
   return { root, env, v, stateDir, config, paths };
 }
 
-// Loader hook: records every resolved specifier into the file named by BA01_TRACE.
 async function traceLoads(root, env, event, payload) {
   const hooks = join(root, 'trace-hooks.mjs');
   const register = join(root, 'trace-register.mjs');

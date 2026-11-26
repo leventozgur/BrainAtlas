@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-58: accept refuses to keep a page when the written bytes differ, or when the retrieval check regresses.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -53,7 +52,6 @@ const gateOk = () => ({
   delta: { droppedSentences: 0, changedNumbers: [], lostCaveats: 0, blockWords: 12 },
 });
 
-/** A page with four dated sections, so an apply writes a new archive and then the page. */
 async function longPage(f) {
   const page = 'wiki/concepts/long.md';
   const body = [
@@ -99,7 +97,6 @@ async function seed({ vault, stateDir, page, proposal }) {
   });
 }
 
-/** A fresh lexical index of a wiki directory, built by the same Core code as `wikiIndex` in review.mjs. */
 const indexOf = (wikiDir, now) => buildIndex(loadPagesDetailed(wikiDir).pages, { now, exclude: DEFAULT_EXCLUDE_WIKI });
 
 test('accept fails E_APPLY_VERIFY and restores both files when the written page bytes differ', async (t) => {
@@ -111,7 +108,6 @@ test('accept fails E_APPLY_VERIFY and restores both files when the written page 
   const dependencies = {
     atomicWriteFile: async (file, data, ...rest) => {
       calls++;
-      // The archive is written first, the page second: only the page write is tampered with.
       const bytes = calls === 2 ? Buffer.from('tampered page bytes\n') : data;
       return atomicWriteFile(file, bytes, ...rest);
     },
@@ -135,7 +131,6 @@ test('accept reports the retrieval regression and restores both files when the p
   const saved = await seed({ ...f, page: lp.page, proposal: lp.proposal });
   const pageBefore = await readFile(join(f.vault, lp.page));
 
-  // The post-apply index is built from a copy of the Wiki plus decoy pages that outrank the target for its own queries.
   const afterVault = join(f.root, 'after-vault');
   await cp(join(f.vault, 'wiki'), join(afterVault, 'wiki'), { recursive: true });
   for (let index = 1; index <= 12; index++) {

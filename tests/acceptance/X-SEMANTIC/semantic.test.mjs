@@ -156,8 +156,6 @@ test('corrupt persisted index is silently discarded and rebuilt', async (t) => {
   await writeFile(path.join(corpus, 'one.md'), '# One\ncar');
   await mkdir(path.join(state, 'semantic'));
   await writeFile(path.join(state, 'semantic', 'index.json'), '{broken');
-  // PM correction: the reader has no corpus, so it cannot rebuild; it must silently discard (null/empty, no throw).
-  // Rebuilding is the indexer's job on the next refresh.
   const index = await readSemanticIndex(state);
   assert.ok(index === null || (index && Array.isArray(index.entries) && index.entries.length === 0));
 });

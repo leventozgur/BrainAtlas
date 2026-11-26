@@ -162,7 +162,6 @@ test('BM25F favors title evidence over body-only evidence and returns the contra
   );
   const result = search(index, 'needle');
   assert.equal(result.results[0].path, 'title.md');
-  // PM update (Q-SECTION; BA-04 adds optional `supersedes`): contract v1 allows additive optional fields; the original six keys stay required.
   const resultKeys = Object.keys(result.results[0]).sort();
   for (const required of ['path', 'score', 'snippet', 'stale', 'status', 'title'])
     assert.ok(resultKeys.includes(required), `missing ${required}`);
@@ -319,8 +318,6 @@ test('loader ignores file, directory and root symlinks that point outside the va
   );
   const result = search(buildIndex(loadPages(vault), { now }), 'canary');
   assert.deepEqual(result.results, []);
-  // PM correction: a symlinked vault ROOT is a legitimate user setup (root is resolved once with realpath);
-  // only symlinks INSIDE the vault that escape the resolved root must be ignored.
   void rootLink;
 });
 

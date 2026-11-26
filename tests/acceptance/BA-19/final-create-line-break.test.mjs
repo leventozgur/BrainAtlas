@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 final verification (independent, blind): wiki_create_entity / wiki_create_concept with a name that holds a line
-// break. The page path comes from slugify, so no line break can reach the index. Behaviour is recorded per case.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,7 +14,9 @@ for (const ch of BREAKS) {
     const f = await startServer(t, { files: { 'entities/onceki.md': '---\ntitle: Önceki\n---\nGövde.\n' } });
     okJson(await call(f.client, 'wiki_update_index', {}));
     const before = await readIndex(f);
-    const created = okJson(await call(f.client, 'wiki_create_entity', { name: `Satir${ch}Sonu`, content: 'Gövde.\n' }));
+    const created = okJson(
+      await call(f.client, 'wiki_create', { type: 'entity', name: `Satir${ch}Sonu`, content: 'Gövde.\n' })
+    );
     assert.equal(created.path, 'wiki/entities/satir-sonu.md');
     const after = await readIndex(f);
     const inserted = singleInsertion(before, after);
@@ -41,7 +41,7 @@ for (const ch of BREAKS) {
 test('create concept named with CR and U+2028 between words: the slug is the words joined by hyphens, one index line', async (t) => {
   const f = await startServer(t, {});
   const created = okJson(
-    await call(f.client, 'wiki_create_concept', { name: 'Birinci\r\nIkinci Ucuncu', content: 'Gövde.\n' })
+    await call(f.client, 'wiki_create', { type: 'concept', name: 'Birinci\r\nIkinci Ucuncu', content: 'Gövde.\n' })
   );
   assert.equal(created.path, 'wiki/concepts/birinci-ikinci-ucuncu.md');
   const text = (await readIndex(f)).toString('utf8');
@@ -51,11 +51,9 @@ test('create concept named with CR and U+2028 between words: the slug is the wor
 
 test('create with a name that slugifies to nothing (only a line break): observed behaviour, the index stays valid and break-free', async (t) => {
   const f = await startServer(t, {});
-  const res = await call(f.client, 'wiki_create_entity', { name: ' ', content: 'Gövde.\n' });
+  const res = await call(f.client, 'wiki_create', { type: 'entity', name: ' ', content: 'Gövde.\n' });
   if (res.isError) {
     t.diagnostic(`refused: ${textOf(res)}`);
-    // PM update (BA-20, 2026-11-11): an empty slug is now refused with E_INVALID_INPUT and nothing is written, so the index
-    // file may not exist; it must be absent or empty, and no page file may be created.
     const raw = await readOrNull(join(f.wiki, 'index.md'));
     assert.ok(raw === null || raw.toString('utf8') === '', 'a refusal writes no index');
     const entities = join(f.wiki, 'entities');
@@ -73,13 +71,11 @@ test('create with a name that slugifies to nothing (only a line break): observed
   }
 });
 
-// Observation, not a contract rule: the contract restricts line breaks in PATHS. The title is the raw create name and
-// is whitespace-collapsed only where JavaScript \s applies (U+0085 is not in \s), so U+0085 can reach the link text.
 test('create entity whose name holds U+0085 in the title: the index entry is still one line that reads back (title reported)', async (t) => {
   const f = await startServer(t, { files: { 'entities/onceki.md': '---\ntitle: Önceki\n---\nGövde.\n' } });
   okJson(await call(f.client, 'wiki_update_index', {}));
   const before = await readIndex(f);
-  okJson(await call(f.client, 'wiki_create_entity', { name: 'Satir\u0085Sonu', content: 'Gövde.\n' }));
+  okJson(await call(f.client, 'wiki_create', { type: 'entity', name: 'Satir\u0085Sonu', content: 'Gövde.\n' }));
   const after = await readIndex(f);
   const inserted = singleInsertion(before, after);
   assert.ok(linkedPages(after.toString('utf8')).has('entities/satir-sonu.md'));

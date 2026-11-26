@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19: every index write (wiki_create_entity, wiki_create_concept, wiki_update_index) uses the same minimal edit and
-// escaping rules. Real stdio MCP server, temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -15,7 +13,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const page = (title, body = 'Gövde.') => `---\ntype: entity\ntitle: ${title}\n---\n${body}\n`;
 const escapeParens = (path) => path.replace(/([()\\])/g, '\\$1');
 
-/** Starts a stdio server for a fresh vault. `files` maps wiki-relative paths to text; `index` is optional. */
 async function fixture(t, { files = {}, index } = {}) {
   const home = await mkdtemp(resolve(tmpdir(), 'ba19-index-'));
   t.after(() => rm(home, { recursive: true, force: true }));
@@ -49,14 +46,11 @@ async function fixture(t, { files = {}, index } = {}) {
   return { wiki, client, indexPath, readIndex: () => readFile(indexPath, 'utf8') };
 }
 
-/** Calls a tool and returns its JSON payload; a refusal fails the test with the refusal text. */
 async function ok(client, name, args = {}) {
   const result = await client.callTool({ name, arguments: args });
   assert.notEqual(result.isError, true, result.content?.[0]?.text);
   return JSON.parse(result.content[0].text);
 }
-
-// ---------------------------------------------------------------- create tools keep a hand-edited index
 
 const HAND_EDITED = [
   '# Wiki Index',
@@ -77,7 +71,6 @@ const HAND_EDITED = [
   '',
 ].join('\n');
 
-// The new entity line goes after the last entry of ## entities; every other line is kept as it was.
 const HAND_EDITED_AFTER_CREATE = HAND_EDITED.replace(
   '- [Silinmiş](entities/gone.md) — artık yok\n',
   '- [Silinmiş](entities/gone.md) — artık yok\n- [Yeni Varlik](entities/yeni-varlik.md)\n'
@@ -87,7 +80,7 @@ const FILES = { 'entities/sample-01.md': page('Sample One') };
 
 test('BA19-CREATE1: wiki_create_entity keeps a hand-edited index byte for byte and adds its line under ## entities', async (t) => {
   const f = await fixture(t, { files: FILES, index: HAND_EDITED });
-  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' }), {
+  assert.deepEqual(await ok(f.client, 'wiki_create', { type: 'entity', name: 'Yeni Varlik', content: 'Gövde.' }), {
     path: 'wiki/entities/yeni-varlik.md',
     created: true,
   });
@@ -96,14 +89,14 @@ test('BA19-CREATE1: wiki_create_entity keeps a hand-edited index byte for byte a
 
 test('BA19-CREATE2: the same on a CRLF index keeps every line ending and gives the new line CRLF', async (t) => {
   const f = await fixture(t, { files: FILES, index: HAND_EDITED.replace(/\n/g, '\r\n') });
-  await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' });
+  await ok(f.client, 'wiki_create', { type: 'entity', name: 'Yeni Varlik', content: 'Gövde.' });
   assert.equal(await f.readIndex(), HAND_EDITED_AFTER_CREATE.replace(/\n/g, '\r\n'));
 });
 
 test('BA19-CREATE3: wiki_create_concept adds its line under the existing lower-case ## concepts heading; no second heading', async (t) => {
   const index = '# Wiki Index\n\nGiriş notu.\n\n## concepts\n\n- [K](concepts/k.md) — kalıcı #kavram\n\nSon not.\n';
   const f = await fixture(t, { files: { 'concepts/k.md': page('K') }, index });
-  await ok(f.client, 'wiki_create_concept', { name: 'Yeni Kavram', content: 'Gövde.' });
+  await ok(f.client, 'wiki_create', { type: 'concept', name: 'Yeni Kavram', content: 'Gövde.' });
   assert.equal(
     await f.readIndex(),
     '# Wiki Index\n\nGiriş notu.\n\n## concepts\n\n- [K](concepts/k.md) — kalıcı #kavram\n- [Yeni Kavram](concepts/yeni-kavram.md)\n\nSon not.\n'
@@ -112,11 +105,9 @@ test('BA19-CREATE3: wiki_create_concept adds its line under the existing lower-c
 
 test('BA19-CREATE4: wiki_create_entity without an index file writes a fresh index under ## entities (folder rule)', async (t) => {
   const f = await fixture(t, { files: FILES });
-  await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' });
+  await ok(f.client, 'wiki_create', { type: 'entity', name: 'Yeni Varlik', content: 'Gövde.' });
   assert.equal(await f.readIndex(), '# Wiki Index\n\n## entities\n\n- [Yeni Varlik](entities/yeni-varlik.md)\n');
 });
-
-// ---------------------------------------------------------------- fresh index escapes parentheses
 
 const PAREN_PAGES = {
   'entities/a)b.md': page('Kapanış Parantezi'),
@@ -142,9 +133,8 @@ test('BA19-FRESH2: a page created after a fresh parenthesis index is appended un
   const f = await fixture(t, { files: PAREN_PAGES });
   await ok(f.client, 'wiki_update_index');
   const before = await f.readIndex();
-  await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' });
+  await ok(f.client, 'wiki_create', { type: 'entity', name: 'Yeni Varlik', content: 'Gövde.' });
   const after = await f.readIndex();
-  // Every earlier line survives in order; the only addition is the new entity line.
   const kept = before.split('\n');
   const lines = after.split('\n');
   let at = 0;

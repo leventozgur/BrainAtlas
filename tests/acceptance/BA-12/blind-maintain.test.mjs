@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-12 blind acceptance: independent seeded-defect measurement of `brainatlas maintain`.
-// Writes only under the OS temp dir (per test) and runs the CLI with an isolated HOME and a network-deny preload.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -77,7 +75,7 @@ function snapshot(dir) {
 }
 
 function parseOnlyJson(stdout) {
-  return JSON.parse(stdout); // throws if stdout holds more than one JSON value or any extra text
+  return JSON.parse(stdout);
 }
 
 const FM = (type, { status = 'proposed', generated = '"2026-10-01"', stale = '"2999-12-31"', superseded } = {}) =>
@@ -97,7 +95,6 @@ const FM = (type, { status = 'proposed', generated = '"2026-10-01"', stale = '"2
     '',
   ].join('\n');
 
-// Seeded defect vault: the scored measurement.
 const seedRoot = tempDir('seed');
 const seedHome = tempDir('seed-home');
 buildSeededVault(seedRoot);
@@ -121,7 +118,7 @@ test('BA-12 seeded vault: CLI exits 0 with one JSON object and nothing on stderr
   assert.equal(seedRun.status, 0, seedRun.stderr);
   assert.equal(seedRun.stderr, '');
   assert.ok(seedOut && seedOut.ok === true);
-  assert.deepEqual(Object.keys(seedOut).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages']);
+  assert.deepEqual(Object.keys(seedOut).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy']);
   for (const kind of KINDS) {
     assert.equal(
       seedOut.counts[kind],
@@ -343,7 +340,6 @@ test('BA-12 network: CLI runs with the network-deny preload (no network use)', (
   assert.ok(!run.stderr.includes('network disabled'));
 });
 
-// Keep the sanity import used (companion list is part of the scoring contract).
 test('BA-12 companion contract: orphan pages are also index-missing', () => {
   assert.equal(COMPANIONS.length, 3);
   for (const c of COMPANIONS) assert.equal(c.kind, 'index-missing');

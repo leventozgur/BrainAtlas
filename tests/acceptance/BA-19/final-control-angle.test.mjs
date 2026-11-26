@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 final verification (independent, blind): page names with control characters other than the line breaks are
-// written inside angle brackets, read back exactly, are counted by coverage, and three runs are idempotent.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, startServer, readIndex } from './harness.mjs';
@@ -16,7 +14,6 @@ const CONTROLS = [
 const hex = (ch) => `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
 
 for (const [label, ch] of CONTROLS) {
-  // PM update (BA-20, 2026-11-11): C1 controls are bracketed now.
   test(`${label} in a page name: written as an angle-bracket destination, reads back exactly, three runs idempotent, coverage 100`, async (t) => {
     const path = `entities/c${ch}d.md`;
     const f = await startServer(t, { files: { [path]: page('Kontrol'), 'entities/normal.md': page('Normal') } });
@@ -59,7 +56,7 @@ test('control-character names next to ordinary names: all pages are linked, no d
 test('a control-character page created through wiki_create_entity is not possible from the name (slugify); the index stays valid', async (t) => {
   const f = await startServer(t, {});
   const created = okJson(
-    await call(f.client, 'wiki_create_entity', { name: 'Ad\u0001Kontrol\u009b', content: 'Gövde.\n' })
+    await call(f.client, 'wiki_create', { type: 'entity', name: 'Ad\u0001Kontrol\u009b', content: 'Gövde.\n' })
   );
   assert.equal(
     created.path,
@@ -74,7 +71,6 @@ test('a control-character page created through wiki_create_entity is not possibl
     !/[\u0000-\u001f\u007f-\u009f]/.test(entry.slice(entry.indexOf(']('))),
     'the link destination holds no control character'
   );
-  // Observation (not a contract rule): the title is the raw create name, so control characters can appear in the link text.
   t.diagnostic(`title as written in the index link text: ${JSON.stringify(entry.slice(0, entry.indexOf('](')))}`);
   assert.ok(linkedPages(text).has('entities/ad-kontrol.md'));
 });

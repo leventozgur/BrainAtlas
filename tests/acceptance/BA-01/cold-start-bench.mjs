@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-01 independent cold-start measurement (not a test file; run manually).
-// Usage: node cold-start-bench.mjs <mainRepoRoot> <worktreeRoot> [runsPerRound=30] [rounds=2]
-// Each sample is one fresh node process running the hook shim; samples are strictly sequential.
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -14,7 +11,6 @@ const RUNS = Number(runsArg ?? 30);
 const ROUNDS = Number(roundsArg ?? 2);
 const root = await mkdtemp(join(tmpdir(), 'ba01-bench-'));
 try {
-  // One isolated HOME and one identical vault per implementation: separate state, retrieval cache and session ids.
   const envFor = (name) => {
     const home = join(root, name, 'home');
     return {
@@ -29,7 +25,6 @@ try {
   const envs = { main: envFor('main'), worktree: envFor('worktree') };
   const vaults = { main: join(root, 'main', 'vault'), worktree: join(root, 'worktree', 'vault') };
   for (const n of ['main', 'worktree']) await mkdir(envs[n].TMPDIR, { recursive: true });
-  // Small vault: 5 recent pages, a log with human and machine lines, one prompt-matching page.
   const now = Date.now();
   const iso = (d) => new Date(now - d * 86400_000).toISOString();
   const pages = ['alpha', 'beta', 'gamma', 'delta', 'epsilon'];
@@ -95,7 +90,6 @@ try {
     }
     return out;
   };
-  // Reference: a bare node process with no hook work.
   const baseline = () =>
     Array.from({ length: RUNS }, () => {
       const begin = performance.now();

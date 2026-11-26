@@ -17,6 +17,7 @@
 ## Planning and execution
 
 - Use `planning/` for proposals, goals, and task status; use the Wiki for sourced decisions and durable findings.
+- Record proposals and tasks with the plan tools (MCP `plan_read`/`plan_update`, shell `brainatlas plan`); never create backlog or task pages in the Wiki.
 - Reading a backlog is not permission to execute it. Work only on tasks explicitly requested or covered by a clear authorization.
 - Record completion only when supported by repository or other verifiable evidence.
 

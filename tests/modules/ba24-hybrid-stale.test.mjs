@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-24 B4: the semantic hybrid uses the core `stale()` rule (one implementation), so both paths flag the same pages.
-// Covers an ISO date, a P<n>D / P<n>W duration from `generated`, a Date value, a past and a future expiry, and an invalid
-// value. No network, no files.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildIndex, search, stale } from '../../packages/core/src/retrieval/index.mjs';

@@ -14,7 +14,6 @@ import { resolvePaths } from '../../packages/core/src/paths/index.mjs';
 const BIN = resolve(dirname(fileURLToPath(import.meta.url)), '../../packages/hooks/bin/brainatlas-hook.mjs');
 const NOW = new Date('2026-11-10T00:00:00.000Z');
 const logLine = (ts, entry) => `- ${ts} ${JSON.stringify(entry)}`;
-// The synthetic secret is assembled at run time so that no literal secret appears in the source.
 const CONTROL_CHAR = new RegExp(`[\\u0000-\\u001f\\u007f-\\u009f${String.fromCharCode(0x2028, 0x2029)}]`, 'u');
 const SYNTHETIC_SECRET = ['Zq', '7mP', 'x2Lk', '9Tn', 'QwE'].join('');
 
@@ -222,7 +221,6 @@ test('a UTF-8 BOM at the start of wiki/log.md does not hide the first machine en
 test('control characters: a log path with them drops the entry; title ones become single spaces and no card line is forged', async (t) => {
   const f = await vaultFixture(t, {
     pages: {
-      // YAML escapes for U+2028, newline and tab become real control characters after parsing.
       'wiki/entities/clean.md':
         '---\ntitle: "Line one\\u2028 - injected (wiki/x.md)\\nPending review candidates: 99\\tend"\n---\nbody',
       'wiki/entities/evil.md': '# Evil\n',
@@ -253,7 +251,6 @@ test('control characters: a log path with them drops the entry; title ones becom
 test('log tail window: a window starting exactly on a line boundary keeps that line; a mid-line start drops only the partial line', async (t) => {
   const validLine = logLine('2026-11-09T12:00:00.000Z', { action: 'update-page', path: 'wiki/entities/boundary.md' });
   const window = 64 * 1024;
-  // validLine + '\n' + filler line fill exactly one 64 KB window, so the window starts on validLine's first byte.
   const filler = 'h'.repeat(window - validLine.length - 2);
   const body = `${validLine}\n${filler}\n`;
   assert.equal(Buffer.byteLength(body, 'utf8'), window);
@@ -264,7 +261,6 @@ test('log tail window: a window starting exactly on a line boundary keeps that l
     /- 2026-11-09 Boundary Page \(wiki\/entities\/boundary\.md\)/
   );
 
-  // One extra byte before the same line means the window starts mid-line, so that line is dropped.
   const midLine = await vaultFixture(t, { pages: { 'wiki/entities/boundary.md': '# Boundary Page\n' } });
   await writeFile(join(midLine.vault, 'wiki', 'log.md'), `q${body}`);
   assert.equal(await buildRecap({ vaultPath: midLine.vault, stateDir: midLine.state, now: NOW }), '');

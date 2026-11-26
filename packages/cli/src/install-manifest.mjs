@@ -28,7 +28,6 @@ const matchingRoot = (file, roots) =>
     .filter((root) => within(file, root))
     .sort((a, b) => b.length - a.length)[0];
 
-/** Resolve symlinked parent directories while keeping the final path itself intact. */
 export async function resolveManagedPath(file, { followFinal = false } = {}) {
   checkedPath(file);
   if (followFinal) {
@@ -60,7 +59,6 @@ function checkedPath(file) {
   return file;
 }
 
-/** Return a stable snapshot without following the final symlink. */
 export async function snapshotPath(file) {
   file = await resolveManagedPath(file);
   try {
@@ -108,7 +106,6 @@ async function writeManifest(paths, value) {
   }
 }
 
-/** Preserve the original state for uninstall and record the latest managed state. */
 export async function recordManagedWrite(
   paths,
   file,
@@ -155,7 +152,6 @@ export async function recordManagedWrite(
   return item;
 }
 
-/** Execute a write while capturing the original and resulting bytes in the manifest. */
 export async function managePath(paths, file, action) {
   const before = await snapshotPath(file);
   await action();

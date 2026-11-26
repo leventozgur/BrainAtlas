@@ -26,7 +26,6 @@ function isExecutable(path) {
 }
 
 /**
- * Resolve an entry to a filesystem path and a safe evidence label (never an absolute path).
  * @param {unknown} entry @param {string} home @returns {{path: string, label: string} | null}
  */
 function resolveEntry(entry, home) {
@@ -41,8 +40,6 @@ function resolveEntry(entry, home) {
 }
 
 /**
- * Evidence-based, read-only detection of an agent installation. Synchronous, no network, never throws.
- * Evidence strings never contain absolute paths.
  * @param {{env?: Record<string, any> | null, dirs?: DetectPath[], files?: DetectPath[], commands?: string[], globs?: {dir: string, prefix: string}[]}} options
  * @returns {{detected: boolean, evidence: string[]}}
  */
@@ -69,17 +66,15 @@ export function detectEvidence({ env, dirs = [], files = [], commands = [], glob
       try {
         if (readdirSync(join(home, glob.dir)).some((name) => name.startsWith(glob.prefix)))
           add(`~/${glob.dir}/${glob.prefix}*`);
-      } catch {
-        /* unreadable or missing directory: not found */
-      }
+        // eslint-disable-next-line no-empty
+      } catch {}
     }
     const entries = typeof env?.PATH === 'string' ? env.PATH.split(':').filter((item) => isAbsolute(item)) : [];
     for (const name of commands ?? []) {
       if (typeof name !== 'string' || !name || name.includes('/')) continue;
       if (entries.some((entry) => isExecutable(join(entry, name)))) add(`PATH:${name}`);
     }
-  } catch {
-    /* detection never throws */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   return { detected: evidence.length > 0, evidence };
 }

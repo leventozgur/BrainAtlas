@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Case schema helpers shared by the hook evaluation, the BM25 evaluation and the dev-set validator tests.
-// Every field added after BA-00 is optional: a case with only id, query, relevant (and abstain/category/expectedHeading
-// where they already applied) keeps its old meaning. See eval/README-ba.md for the documented schema.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -12,17 +9,10 @@ const PROJECT = /^[a-z0-9][a-z0-9-]{0,39}$/u;
 const USER_PATH = /\/Users\/|\/home\/|^[A-Za-z]:\\/u;
 const HEADING_LINE = /^#{1,3}[\t ]+(.+)$/u;
 
-/** Kind of a case; anything missing or unknown is a knowledge question (the historical default). */
 export function caseKind(item) {
   return KINDS.includes(item?.kind) ? item.kind : 'knowledge';
 }
 
-/**
- * Glob to RegExp for corpus-relative paths: `**` crosses `/`, `*` and `?` do not, everything else is literal.
- * `planning/**` matches every page under planning/; `index.md` matches only the root page.
- * @param {string} glob
- * @returns {RegExp}
- */
 export function globToRegExp(glob) {
   let source = '';
   for (let i = 0; i < glob.length; i++) {
@@ -42,12 +32,6 @@ export function globToRegExp(glob) {
   return new RegExp(`^${source}$`, 'u');
 }
 
-/**
- * Meta-page predicate for one corpus. Reads the optional `eval-meta.json` at the corpus root
- * (`{"meta": ["index.md", "planning/**"]}`); without it the default root pages apply.
- * @param {string} corpusDir
- * @returns {(relPath: string) => boolean}
- */
 export function loadMetaPredicate(corpusDir) {
   const file = join(corpusDir, 'eval-meta.json');
   let globs = DEFAULT_META;
@@ -66,7 +50,6 @@ export function loadMetaPredicate(corpusDir) {
   return (relPath) => patterns.some((pattern) => pattern.test(relPath));
 }
 
-/** True when a corpus page carries the eval-only poison flag (`eval_poison: true`). The product never reads it. */
 export function isPoisonPage(frontmatter) {
   return frontmatter?.eval_poison === true || frontmatter?.eval_poison === 'true';
 }
@@ -80,11 +63,6 @@ function headingExists(body, heading) {
     });
 }
 
-/**
- * Validate one case against its corpus. Throws an Error naming the case id and the broken rule.
- * @param {object} item
- * @param {{paths: Map<string,{body:string}>, projects?: Set<string>}} context paths maps corpus-relative page paths to their body
- */
 export function validateCase(item, { paths, projects = null }) {
   const fail = (rule) => {
     throw new Error(`${item?.id ?? '?'}: ${rule}`);

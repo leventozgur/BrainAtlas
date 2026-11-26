@@ -11,7 +11,6 @@ import {
   activateEnabledModules,
 } from './shared.mjs';
 
-/** Route one module command and return whatever the module produced (no printing, no exit code). */
 async function runModuleCommand(command, args, { paths, env, dependencies = {} }) {
   const current = await readCurrent(paths);
   const releaseDir = currentReleaseDir(paths, current);
@@ -76,8 +75,6 @@ export async function dispatchModuleCommand(command, args, { paths, env, output,
 }
 
 /**
- * BA-87: run a module command that prints JSON and return the parsed report, without writing to stdout or
- * setting `process.exitCode`. The panel uses this to read the `semanticSetup --dry-run --json` report.
  * @param {string} command @param {string[]} args @param {{paths:any,env:any,dependencies?:any}} options
  * @returns {Promise<any>}
  */
@@ -118,7 +115,6 @@ export async function installedSyncSchedule(action, { paths, env, config: cfg, d
 }
 
 /**
- * Remove the weekly maintain timer owned by the optional maintain-schedule module, when it is installed.
  * @param {string} action @param {{paths:any,env:any,config:any,dependencies?:{plan?:boolean}}} options
  */
 export async function installedMaintainSchedule(action, { paths, env, config: cfg, dependencies = {} }) {

@@ -183,9 +183,8 @@ test(
     await symlink(outside, join(s.home, '.claude'));
     try {
       await adapter.apply(adapter.plan(s.ctx), s.ctx);
-    } catch {
-      /* rejection is acceptable */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     await assert.rejects(readFile(join(outside, 'settings.json')), code('ENOENT'));
   }
 );
@@ -201,9 +200,8 @@ test('forged plan cannot write an unrelated file', async (t) => {
       },
       s.ctx
     );
-  } catch {
-    /* rejection is acceptable */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   assert.equal(await readFile(outside, 'utf8'), 'original');
 });
 test('errors and diagnostics do not expose user secrets', async (t) => {

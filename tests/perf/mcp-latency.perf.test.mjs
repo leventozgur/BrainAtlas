@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Performance suite: MCP write-lock wait bounds. Two real MCP server processes write the same vault; the tests
-// compare measured waits with fixed bounds, so they run only in the `perf` CI job (`npm run test:perf`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -67,7 +65,7 @@ test('a write lock left by a dead process is taken over at once', async (t) => {
   await new Promise((done) => dead.on('exit', done));
   await writeFile(resolve(wiki, LOCK), JSON.stringify({ pid: dead.pid, time: Date.now(), token: 'x' }));
   const started = Date.now();
-  await ok(a, 'wiki_create_entity', { name: 'After Crash', content: '---\ntitle: After Crash\n---\nz\n' });
+  await ok(a, 'wiki_create', { type: 'entity', name: 'After Crash', content: '---\ntitle: After Crash\n---\nz\n' });
   assert.ok(Date.now() - started < 4000, 'a dead holder must not block the write');
 });
 
@@ -75,7 +73,11 @@ test('a fresh lock held by a live process makes writers wait, then refuse with E
   const { wiki, a } = await fixture(t);
   await writeFile(resolve(wiki, LOCK), JSON.stringify({ pid: process.pid, time: Date.now(), token: 'held' }));
   const started = Date.now();
-  const result = await call(a, 'wiki_create_entity', { name: 'Blocked', content: '---\ntitle: Blocked\n---\nz\n' });
+  const result = await call(a, 'wiki_create', {
+    type: 'entity',
+    name: 'Blocked',
+    content: '---\ntitle: Blocked\n---\nz\n',
+  });
   const waited = Date.now() - started;
   assert.equal(result.isError, true);
   assert.ok(result.text.startsWith('E_BUSY:'), result.text);

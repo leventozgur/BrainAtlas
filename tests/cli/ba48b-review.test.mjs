@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-48 phase B3: review and safe apply of stored current-state proposals.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -85,7 +84,6 @@ async function pageText(vault, page = PAGE) {
   return readFile(join(vault, page), 'utf8');
 }
 
-/** A page with four dated sections, so an apply writes a new archive and then the page. */
 async function longPage(f) {
   const page = 'wiki/concepts/long.md';
   const body = [

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-04: date-aware section choice for snippets, and superseded routing (`supersedes`) with its cache validation.
-// Hermetic: in-memory pages and temporary directories only; no network, no HOME access.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,8 +23,6 @@ function temp(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
-
-// --- Section choice -------------------------------------------------------------------------------------------------
 
 test('among equally matching dated sections, the newest ISO date wins', () => {
   const body =
@@ -108,8 +104,6 @@ test('ordinary results carry no supersedes field', () => {
   const result = top(buildIndex([page('plain.md', '# Topic\nalpha')], { now }), 'alpha');
   assert.equal(Object.hasOwn(result, 'supersedes'), false);
 });
-
-// --- Superseded routing --------------------------------------------------------------------------------------------
 
 test('a replacement page lists the superseded page it replaces; the old page stays out of the index', () => {
   const index = buildIndex(
@@ -213,8 +207,6 @@ test('a superseded page does not change the ranking of the replacement', () => {
   const strip = (r) => r.results.map((x) => ({ path: x.path, score: x.score, snippet: x.snippet }));
   assert.deepEqual(strip(search(routed, 'delta', { limit: 5 })), strip(search(plain, 'delta', { limit: 5 })));
 });
-
-// --- Cache ---------------------------------------------------------------------------------------------------------
 
 function writeVault(vault) {
   fs.mkdirSync(vault, { recursive: true });

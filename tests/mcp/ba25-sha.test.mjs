@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25: wiki_read_page returns the SHA-256 of the file's bytes; wiki_update_page and wiki_write_page accept an optional
-// expectedSha256. A mismatch (or a missing file with an expectation) is refused with E_CONFLICT before anything is written
-// or logged. Calls without expectedSha256 behave as before. Real stdio MCP server, temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -88,8 +85,6 @@ test('wiki_update_page with a matching expectedSha256 writes and returns the new
     expectedSha256: sha(PAGE),
   });
   assert.equal(result.updated, true);
-  // BA-74: replacing a page that had no `generated` adds none, and `status` is never added, so the stored bytes differ
-  // from `next` only in how the frontmatter is serialized.
   const stored = await readFile(page, 'utf8');
   assert.ok(stored.includes('title: Shared') && !stored.includes('status:') && !stored.includes('generated:'));
   assert.ok(stored.endsWith('Beta body.\n'));
@@ -174,13 +169,7 @@ test('calls without expectedSha256 keep the previous behaviour, including overwr
 test('readOnly mode still offers no write tool, and wiki_read_page still returns the hash', async (t) => {
   const { client } = await fixture(t, { readOnly: true });
   const names = (await client.listTools()).tools.map((tool) => tool.name);
-  for (const name of [
-    'wiki_write_page',
-    'wiki_update_page',
-    'wiki_create_entity',
-    'wiki_create_concept',
-    'wiki_update_index',
-  ]) {
+  for (const name of ['wiki_write_page', 'wiki_update_page', 'wiki_create', 'wiki_update_index']) {
     assert.ok(!names.includes(name), `${name} must not be offered in readOnly mode`);
   }
   const read = await ok(client, 'wiki_read_page', { path: 'concepts/shared.md' });

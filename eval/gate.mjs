@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 const OPS = new Set(['>=', '<=', '==']);
 const EPSILON = 1e-12;
 
-/** Read a dotted metric path; returns undefined for any missing or non-own segment. */
 export function getMetric(object, path) {
   let cursor = object;
   for (const key of path.split('.')) {
@@ -35,7 +34,6 @@ function validateCriterion(item, group) {
   };
 }
 
-/** Validate a criteria document: at least one primary criterion; guards are optional. */
 export function parseCriteria(criteria) {
   if (!criteria || typeof criteria !== 'object' || Array.isArray(criteria)) throw new Error('Invalid criteria');
   if (!Array.isArray(criteria.primary) || criteria.primary.length === 0) throw new Error('Invalid criteria');
@@ -46,11 +44,6 @@ export function parseCriteria(criteria) {
   ];
 }
 
-/**
- * Decide KEEP or DISCARD for a candidate against a baseline.
- * A criterion with a missing or non-numeric metric in either document fails; it never passes silently.
- * @param {{baseline:object,candidate:object,criteria:object}} input
- */
 export function evaluateGate({ baseline, candidate, criteria }) {
   const parsed = parseCriteria(criteria);
   const results = parsed.map((item) => {

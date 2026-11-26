@@ -108,7 +108,6 @@ async function readReceipt(file) {
   }
 }
 
-/** Persist a bounded, redacted session-end receipt using only the event payload. */
 export async function onSessionEnd(ctx, hookInput = {}) {
   const client = hookInput?.client;
   if (!CLIENTS.has(client)) return null;
@@ -135,9 +134,8 @@ export async function listReceipts(ctx) {
     if (!entry.isFile() || !ID.test(entry.name.slice(0, -5)) || !entry.name.endsWith('.json')) continue;
     try {
       items.push(await readReceipt(join(directory, entry.name)));
-    } catch {
-      /* invalid records are not displayed */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -174,7 +172,11 @@ function pageContent(candidate, receipt) {
   return `---\ntype: summary\ngenerated: "${generated}"\nstatus: proposed\nsources:${sources ? `\n${sources}` : ' []'}\nverified: []\nstale_after: "P90D"\n---\n\n# ${title}\n\n${summary}\n`;
 }
 
-/** Human approval is the sole path from the queue into the vault. @param {any} ctx @param {string} id @param {{edit?:Array<{title?:string,summary?:string,suggestedPath?:string}>}} [options] */
+/**
+ * @param {any} ctx
+ * @param {string} id
+ * @param {{edit?:Array<{title?:string,summary?:string,suggestedPath?:string}>}} [options]
+ */
 export async function approveReceipt(ctx, id, { edit } = {}) {
   const receipt = await showReceipt(ctx, id);
   const { vault } = paths(ctx);

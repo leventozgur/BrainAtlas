@@ -16,9 +16,6 @@ const DEFAULT_IDLE_MS = 30 * 60 * 1000;
 const SEMANTIC_NOTE = 'Semantic search needs the Full profile and release. See docs/user/semantic.md.';
 const SEMANTIC_LATENCY = 'Each prompt waits up to 350 ms for semantic search.';
 const CHANNELS = ['mcp', 'cli'];
-// BA-70: the panel edits only these tuning keys (an allowlist, so a key added to the schema later stays closed). Anything
-// that can redirect content (semantic.baseUrl, semantic.allowRemote, sync.*), weaken a safety rule (safety.*, readOnly),
-// run a command (maintain.synthesis.*, node.path) or move state (vault, stateDir, channels, agents, modules) is absent.
 export const EDITABLE_KEYS = new Set([
   'retrieval.budgetChars',
   'retrieval.abstainThreshold',
@@ -31,7 +28,6 @@ export const EDITABLE_KEYS = new Set([
   'semantic.minScore',
 ]);
 
-/** BA-87: one short English line per editable key, shown under the control. */
 const HELP = Object.freeze({
   'retrieval.budgetChars': 'Maximum characters of retrieved context added to a prompt.',
   'retrieval.abstainThreshold': 'Lowest retrieval confidence before an answer abstains.',
@@ -44,11 +40,6 @@ const HELP = Object.freeze({
   'semantic.minScore': 'Lowest similarity score a semantic result needs.',
 });
 
-/**
- * BA-87: effective defaults for optional editable keys that `defaultConfig` omits. They mirror runtime behaviour:
- * the hook discloses fully unless `hooks.disclosure` is 'progressive' (packages/hooks/src/index.mjs), and MCP pull
- * returns low-confidence results unless `retrieval.pullLowConfidence` is false (packages/mcp/src/index.mjs).
- */
 const OPTIONAL_DEFAULTS = Object.freeze({
   'hooks.disclosure': 'full',
   'retrieval.pullLowConfidence': true,
@@ -145,7 +136,6 @@ async function load(){
 load().catch((e)=>show(String(e.message)));
 </script></body></html>`;
 
-/** The default for one editable key: the profile default, the documented optional default, or SEMANTIC_DEFAULTS. */
 function defaultFor(profile, key) {
   if (key.startsWith('semantic.')) return SEMANTIC_DEFAULTS[key.slice('semantic.'.length)];
   const value = key.split('.').reduce((item, part) => item?.[part], defaultConfig(profile));
@@ -153,8 +143,6 @@ function defaultFor(profile, key) {
 }
 
 /**
- * BA-87: derive one typed control row from the schema node, never a hand-written copy of the schema. Every
- * allowlisted key gets a row; an optional key that the config does not carry has no value but keeps its default.
  * @param {string} key @param {any} value @param {any} schema @param {'lite'|'full'|'custom'} profile
  */
 function settingRow(key, value, schema, profile) {
@@ -178,7 +166,6 @@ function settingRow(key, value, schema, profile) {
 }
 
 /**
- * Flatten the editable leaves of the configuration (scalars only, schema keys only, allowlisted keys only).
  * @param {any} cfg @param {{semantic?:boolean}} [options]
  */
 export function editableSettings(cfg, options = {}) {
@@ -200,10 +187,6 @@ export function editableSettings(cfg, options = {}) {
   return rows;
 }
 
-/**
- * BA-87: the semantic module is usable only in a non-lite profile whose release ships `modules/semantic` and whose
- * module list enables it (the `'*'` marker or an explicit `'semantic'` entry).
- */
 async function semanticInstalled(paths, cfg) {
   if (cfg.profile === 'lite' || !paths.currentDir) return false;
   const modules = Array.isArray(cfg.modules) ? cfg.modules : [];
@@ -211,7 +194,6 @@ async function semanticInstalled(paths, cfg) {
   return exists(join(paths.currentDir, 'modules', 'semantic'));
 }
 
-/** The allowed values or range of one row, as a short phrase for the error message. */
 function rangePhrase(row) {
   if (row.min !== undefined && row.max !== undefined) return `between ${row.min} and ${row.max}`;
   if (row.min !== undefined) return `at least ${row.min}`;
@@ -220,9 +202,6 @@ function rangePhrase(row) {
 }
 
 /**
- * BA-87: the server stays authoritative for the typed value. A wrong JSON type, an out-of-range number or an
- * unknown enum member is refused before anything is written. The error carries `panelMessage` so only these
- * validation failures return a human sentence; errors from the command handlers keep the plain body.
  * @param {any} row @param {unknown} value
  */
 function validateSetting(row, value) {
@@ -249,8 +228,6 @@ function validateSetting(row, value) {
 }
 
 /**
- * BA-87: run the same in-process semantic setup dry-run the CLI runs and keep its report. The module handler is
- * called exactly once; a module that throws means the check itself failed, not that a step reported a problem.
  * @param {{paths:any, env:any}} options
  */
 async function semanticReadiness({ paths, env }) {
@@ -290,7 +267,6 @@ function sameToken(a, b) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-/** Run a CLI command handler in process and return what it printed. The panel has no second code path for changes. */
 async function runHandler(handler, args, { paths, env, plan }) {
   let result;
   const context = {
@@ -312,8 +288,6 @@ async function runHandler(handler, args, { paths, env, plan }) {
 }
 
 /**
- * Start the panel. It listens on 127.0.0.1 only, on a random port, and requires a per-run token.
- * It closes itself after `idleMs` without a request; `idle` resolves when that happens.
  * @param {{paths:any, env:any, host?:string, idleMs?:number}} options
  */
 export async function startUiServer({ paths, env, host = '127.0.0.1', idleMs = DEFAULT_IDLE_MS }) {
@@ -511,13 +485,11 @@ function openBrowser(url, env) {
     const child = spawn(command, args, { stdio: 'ignore', detached: true, env });
     child.on('error', () => {});
     child.unref();
-  } catch {
-    /* The URL is printed anyway. */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
 }
 
 /**
- * `brainatlas ui [--no-open] [--json]`: serve the panel until interrupted.
  * @param {{args:string[], flag:(name:string)=>boolean, json:boolean, output:(data:any)=>void, paths:any, env:any, dependencies?:any}} context
  */
 export async function uiCommand({ args, flag, json, output, paths, env, dependencies = {} }) {

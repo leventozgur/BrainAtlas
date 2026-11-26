@@ -1,16 +1,4 @@
 // SPDX-License-Identifier: MIT
-/**
- * Plain-grep baseline: how an agent that only greps the vault would rank the pages of a case set.
- *
- * Query terms: folded with the core normalizer (Turkish dotless i, case, diacritics), split on letters and digits,
- * stop words removed, no stemming. A term matches a line when the folded line contains it as a substring (grep -F).
- * Ranking per file: number of distinct matched terms (desc), then number of matching lines summed over terms (desc),
- * then relative path (asc). Only files with at least one matched term are returned, as grep prints only matching files.
- * Superseded pages are searched like any other page: grep does not read indexes.
- *
- * `rgRanking` produces the same ordering with `rg -i -c -F` per term (local cross-check only, not used by the tests):
- * rg folds case but not Turkish dotless i or diacritics, so the two can differ on Turkish-only queries.
- */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -23,7 +11,6 @@ const STOP = new Set(
   )
 );
 
-/** Folded, de-duplicated query terms without stop words. */
 export function grepTerms(query) {
   const words = normalizeText(String(query)).match(/[\p{L}\p{N}]+/gu) || [];
   return [...new Set(words.filter((w) => !STOP.has(w)))];
@@ -42,7 +29,6 @@ function markdownFiles(root) {
   return files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-// Per-file folded text is cached per corpus directory: one read per corpus, however many queries.
 const corpusCache = new Map();
 function corpusText(corpusDir) {
   if (!corpusCache.has(corpusDir)) {
@@ -70,13 +56,6 @@ function rgLineCounts(corpusDir, term) {
   return counts;
 }
 
-/**
- * Rank every page of the corpus for one query.
- * @param {string} corpusDir
- * @param {string} query
- * @param {{rg?: boolean}} [options]
- * @returns {string[]} corpus-relative paths of the matching files, best first
- */
 export function grepRanking(corpusDir, query, { rg = false } = {}) {
   const root = resolve(corpusDir);
   const { files, lines } = corpusText(root);
@@ -98,13 +77,6 @@ export function grepRanking(corpusDir, query, { rg = false } = {}) {
     .sort((a, b) => distinct.get(b) - distinct.get(a) || total.get(b) - total.get(a) || (a < b ? -1 : a > b ? 1 : 0));
 }
 
-/**
- * Grep-baseline metrics for one case file. Recall and MRR follow the BM25 definitions (answerable cases only).
- * currentFirstRate covers current-state cases: category `current-state` or an `expectedHeading`; null when there are none.
- * unansweredReturnedRate: share of unanswerable cases where some term matches (grep then prints lines, i.e. "returns").
- * abstainAccuracy is 1 - unansweredReturnedRate (0 when there are no unanswerable cases); abstainN is the denominator.
- * @param {{corpusDir:string,casesFile:string,rg?:boolean}} options
- */
 export function runGrepBaseline({ corpusDir, casesFile, rg = false }) {
   const cases = JSON.parse(readFileSync(casesFile, 'utf8'));
   if (!Array.isArray(cases)) throw new Error('Invalid cases');
@@ -118,7 +90,6 @@ export function runGrepBaseline({ corpusDir, casesFile, rg = false }) {
   for (const item of cases) {
     const relevant = Array.isArray(item?.relevant) ? item.relevant : [];
     if (item?.abstain || !relevant.length) {
-      // Grep has no abstention of its own: an unanswerable case counts as answered when some term matches a line.
       abstainN++;
       if (grepRanking(corpusDir, item?.query ?? '', { rg }).length) unanswered++;
       continue;

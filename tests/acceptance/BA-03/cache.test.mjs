@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-03 independent cache tests: schema-tag change rebuilds the cache once; malformed or fake `exact` is rebuilt.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -32,8 +31,6 @@ function workspace(t, files) {
   return { vault, state, cache: path.join(state, 'retrieval-index.json') };
 }
 
-// Mirrors the documented fingerprint: sha256 over the schema tag, then `rel\0size\0mtime\0ctime\0ino\n` per file.
-// Used only to construct a cache that carries the previous schema tag (retrieval-stat-v4).
 function fingerprintKey(vault, schema) {
   const hash = createHash('sha256').update(schema);
   for (const name of fs.readdirSync(vault).sort()) {
@@ -63,7 +60,6 @@ test('a cache written with the previous schema tag is rebuilt, and the rebuilt c
   const oldKey = fingerprintKey(w.vault, 'retrieval-stat-v4');
   assert.notEqual(oldKey, cleanData.key, 'test setup: old and new keys must differ');
 
-  // Previous-schema cache whose content is deliberately wrong (title changed), so a silent reuse would show.
   const stale = JSON.parse(clean);
   stale.key = oldKey;
   stale.index.docs[0].page.title = 'STALE-V4-TITLE';
@@ -93,7 +89,6 @@ test('after the one rebuild a current cache is reused on the next start', (t) =>
 });
 
 test('a cache whose exact identifier postings are malformed is rebuilt, and results match a fresh build', (t) => {
-  // Two documents share E_WIDGET_TIMEOUT, so the valid postings are [0, 1].
   const variants = {
     'exact is null': (e) => {
       e.index.exact = null;

@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20: a create name whose slug is empty (no ASCII letter or digit) is refused with E_INVALID_INPUT, without a fixed
-// message that echoes the name, and nothing is written: no hidden `.md` page and no index change. Real stdio MCP
-// server, temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -62,7 +59,6 @@ async function refused(client, name, args) {
   return text;
 }
 
-/** Names of everything directly inside a Wiki folder (empty when the folder is missing). */
 async function listDir(dir) {
   try {
     return await readdir(dir);
@@ -75,7 +71,7 @@ async function listDir(dir) {
 test('BA20-SLUG1: wiki_create_entity with a name that has no ASCII letter or digit is refused; no hidden page, no index', async (t) => {
   const f = await fixture(t, {});
   const name = '\u0001\u009b ';
-  const text = await refused(f.client, 'wiki_create_entity', { name, content: 'Gövde.\n' });
+  const text = await refused(f.client, 'wiki_create', { type: 'entity', name, content: 'Gövde.\n' });
   assert.ok(!text.includes('\u0001') && !text.includes('\u009b'), 'the refusal does not echo the name');
   assert.deepEqual(await listDir(resolve(f.wiki, 'entities')), [], 'no file in entities/');
   await assert.rejects(readFile(f.indexPath, 'utf8'), { code: 'ENOENT' }, 'no index is written');
@@ -84,21 +80,21 @@ test('BA20-SLUG1: wiki_create_entity with a name that has no ASCII letter or dig
 test('BA20-SLUG2: wiki_create_concept with punctuation only is refused; an existing index keeps its bytes', async (t) => {
   const index = '# Wiki Index\n\n## concepts\n\n- [K](concepts/k.md)\n';
   const f = await fixture(t, { files: { 'concepts/k.md': page('K') }, index });
-  await refused(f.client, 'wiki_create_concept', { name: '!!! ---', content: 'Gövde.\n' });
+  await refused(f.client, 'wiki_create', { type: 'concept', name: '!!! ---', content: 'Gövde.\n' });
   assert.deepEqual(await listDir(resolve(f.wiki, 'concepts')), ['k.md'], 'only the existing page is in concepts/');
   assert.equal(await f.readIndex(), index);
 });
 
 test('BA20-SLUG3: a single dot and a dash-only name are refused the same way', async (t) => {
   const f = await fixture(t, {});
-  await refused(f.client, 'wiki_create_entity', { name: '.', content: 'Gövde.\n' });
-  await refused(f.client, 'wiki_create_entity', { name: ' - ', content: 'Gövde.\n' });
+  await refused(f.client, 'wiki_create', { type: 'entity', name: '.', content: 'Gövde.\n' });
+  await refused(f.client, 'wiki_create', { type: 'entity', name: ' - ', content: 'Gövde.\n' });
   assert.deepEqual(await listDir(resolve(f.wiki, 'entities')), []);
 });
 
 test('BA20-SLUG4: a name with at least one ASCII letter or digit is still created (control characters are dropped from the slug)', async (t) => {
   const f = await fixture(t, {});
-  assert.deepEqual(await ok(f.client, 'wiki_create_entity', { name: 'Ad\u0001', content: 'Gövde.\n' }), {
+  assert.deepEqual(await ok(f.client, 'wiki_create', { type: 'entity', name: 'Ad\u0001', content: 'Gövde.\n' }), {
     path: 'wiki/entities/ad.md',
     created: true,
   });

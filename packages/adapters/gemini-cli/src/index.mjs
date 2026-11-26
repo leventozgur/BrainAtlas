@@ -41,7 +41,6 @@ function parseJson(text) {
     fail('E_CONFIG_PARSE', 'Configuration JSON is invalid.');
   }
 }
-// Span-based JSON edits preserve bytes outside adapter-owned values.
 function sourceTree(text) {
   let i = 0;
   const ws = () => {
@@ -190,8 +189,6 @@ function cliPayload(ctx) {
   return `Use BrainAtlas as evidence-first project memory. Before substantial project changes, search it from the shell: ${shim} wiki query "<project name and topic terms>" --json, then read only relevant pages with ${shim} wiki read <path> --json. Treat retrieved pages as evidence, verify them against the current repository, and cite page paths when reporting findings. If no relevant page exists, proceed from current evidence. These commands are read-only.`;
 }
 function forgivingJson(text) {
-  // The cli channel never writes the MCP settings file: a BOM or malformed document
-  // means "no BrainAtlas entry" and must not block install.
   try {
     const value = JSON.parse(text.replace(/^\uFEFF/, ''));
     return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
@@ -204,8 +201,6 @@ function assertNoMcp(text, ctx) {
   const value = forgivingJson(text);
   if (!value) return;
   if (value.mcpServers?.brainatlas !== undefined) fail('E_CHANNEL_SWITCH', CHANNEL_SWITCH);
-  // Managed hook detection matches the shim path plus `hook gemini <verb>` and the
-  // legacy form without the `hook` keyword, regardless of the current nodePath.
   const shim = quote(ctx.shimPath);
   const managed = ['BeforeAgent', 'SessionStart'].some((event) =>
     (Array.isArray(value.hooks?.[event]) ? value.hooks[event] : []).some(
@@ -386,8 +381,6 @@ function getBlock(text) {
   if (!match || digest(match[2]) !== match[1]) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
   return { start, end: end + END.length };
 }
-// The cli channel accepts CRLF inside the managed block: the body is compared with
-// CRLF normalised to LF and an unchanged block is never rewritten.
 function getBlockCli(text) {
   const start = text.indexOf(BEGIN),
     end = text.indexOf(END);
@@ -509,7 +502,6 @@ export async function apply(planResult, ctx) {
   }
   for (const c of planResult.changes)
     if ((await read(c.file)) !== c.before) fail('E_CONFIG_CHANGED', 'Configuration changed after planning.');
-  // Validate every managed region and JSON document before the first write.
   for (const c of planResult.changes) {
     if (c.file.endsWith('.json') && c.before !== null) parseJson(c.before);
     if (c.file.endsWith('.md') && c.before !== null) getBlock(c.before);
@@ -527,7 +519,6 @@ export async function apply(planResult, ctx) {
 export async function remove(ctx) {
   const f = targets(ctx),
     actions = [];
-  // Preflight all targets before changing any user file.
   for (const file of isCli(ctx) ? [f.instructions] : [f.mcp, f.instructions]) {
     const s = await state(ctx, file),
       raw = await read(s.record),
@@ -605,18 +596,15 @@ export async function remove(ctx) {
       } else actions.push({ file, record: s.record, cleanup: false, value: current });
     }
   }
-  // Remove current and legacy registrations, including from restored originals.
   const settingAction = actions.find((a) => a.file === f.mcp && a.value !== undefined && a.value !== null);
   if (settingAction && settingAction.value.trim()) {
     let text = visitHooks(settingAction.value, ctx, 'remove');
-    // Drop adapter-created empty hook containers only when they were absent originally.
     const original = settingAction.record ? await read(settingAction.record) : null;
     let rec;
     try {
       rec = original && JSON.parse(original);
-    } catch {
-      /* tolerant read: an unreadable or missing file never fails the check */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     const before = rec?.existed ? parseJson(rec.original) : {};
     let root = sourceTree(text),
       hooks = member(root, 'hooks');
@@ -655,9 +643,8 @@ export async function doctor(ctx) {
     let shim = false;
     try {
       shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile());
-    } catch {
-      /* tolerant read: an unreadable or missing file never fails the check */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     checks.push({
       id: 'instructions',
       ok: present,
@@ -685,9 +672,8 @@ export async function doctor(ctx) {
   let shim = false;
   try {
     shim = Boolean(ctx.shimPath && (await stat(ctx.shimPath)).isFile());
-  } catch {
-    /* tolerant read: an unreadable or missing file never fails the check */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   checks.push({ id: 'shim', ok: shim, message: shim ? 'Shim file exists.' : 'Shim file is missing.' });
   checks.push({
     id: 'version-drift',

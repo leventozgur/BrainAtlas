@@ -11,12 +11,9 @@ import { SEMANTIC_DEFAULTS } from '../../core/src/config/index.mjs';
 import { SEMANTIC_BUDGET_MS, semanticEntryUrl, semanticRequested } from './semantic.mjs';
 
 const clients = new Set(['claude', 'codex', 'kiro', 'copilot', 'gemini']);
-// BA-81: the hook process deadline and the post-output warm-up wait are shared with the bin.
 export const HOOK_PROCESS_DEADLINE_MS = 4700;
 export const WARMUP_WAIT_MS = 2000;
-// BA-81: at most one warm-up per state directory in this window.
 const WARMUP_RATE_LIMIT_MS = 60000;
-// BA-26: hook output also redacts e-mail addresses and TR phone numbers (contact data is kept in pages, not in injected context).
 const REDACT_OUTPUT = { personal: true };
 const events = new Set(['prompt', 'session-start', 'session-end']);
 const hash = (s) => createHash('sha256').update(s).digest('hex');
@@ -33,9 +30,6 @@ function envelope(client, event, context) {
     },
   });
 }
-// BA-26: a restricted page (sensitivity personal or inject never) is never injected. The sentinel is read from the first 4 KB of
-// the file, so it also works for results that come from the semantic step (which carries no index field).
-// Returns true (restricted), false (readable and unrestricted) or null (unreadable or outside the vault).
 const RESTRICTED_HEAD = /^[ \t]*(?:sensitivity[ \t]*:[^\n]*\bpersonal\b|inject[ \t]*:[^\n]*\bnever\b)/im;
 async function pageRestriction(vault, rel) {
   let h;
@@ -54,8 +48,6 @@ async function pageRestriction(vault, rel) {
     await h?.close().catch(() => {});
   }
 }
-// Drops recap page lines whose page is restricted. A candidate path is the text inside any parenthesis pair at the end of a line;
-// a candidate that is not a readable page is not a page and is kept as it is.
 async function withoutRestrictedRecap(text, vault) {
   if (!text) return text;
   const kept = [];
@@ -69,17 +61,12 @@ async function withoutRestrictedRecap(text, vault) {
       restricted = (await pageRestriction(vault, line.slice(i + 1, -1))) === true;
     if (!restricted) kept.push(line);
   }
-  // A recap card whose page lines were all removed must not keep an empty list heading.
   const heading = kept.indexOf('Recently changed pages:');
   if (heading >= 0 && !(kept[heading + 1] ?? '').startsWith('- ')) kept.splice(heading, 1);
   return kept.join('\n');
 }
-// Packs one retrieved result after the current context. The "Title (path)" line must fit whole or the block is
-// refused (null, and the caller stops). The excerpt is cut to the room left and ends with an ellipsis.
 function packBlock(client, event, context, item, cap) {
   const fits = (text) => envelope(client, event, text).length <= cap;
-  // Weak (proposed or disputed) pages get a short marker before the path; a synthesized block (BA-57) adds its own marker
-  // after it. The line still ends with the path.
   const marker = `${item.trust === 'weak' ? ' [unverified]' : ''}${item.synthesized === true ? ' [synthesized]' : ''}`;
   const marked = item.title + marker;
   const base = context + (context ? '\n\n' : '') + redact(`${marked} (${item.path})`, REDACT_OUTPUT);
@@ -89,12 +76,10 @@ function packBlock(client, event, context, item, cap) {
   const text = (n) => {
     if (n >= snippet.length) return `${base}\n${snippet}`;
     let k = n;
-    // Never split a surrogate pair.
     if (/[\uD800-\uDBFF]/u.test(snippet[k - 1])) k--;
     return `${base}\n${snippet.slice(0, k)}…`;
   };
   if (!fits(text(1))) return null;
-  // The envelope length never shrinks as the excerpt grows, so the largest fitting length is a binary search.
   let lo = 1,
     hi = snippet.length;
   while (lo < hi) {
@@ -104,31 +89,23 @@ function packBlock(client, event, context, item, cap) {
   }
   return text(lo);
 }
-// BA-32: opt-in progressive packing. The first two results stay full blocks, the next up to six become one-line pointers
-// after a fixed header. BA-32b: the first excerpt is not clipped (only the cap of `packBlock` applies), the second is
-// clipped to 300 UTF-16 units, never inside a surrogate pair. Nothing else changes: selection, dedup, restriction
-// filtering, redaction and the cap are those of `full`. No page is read here.
 const PROGRESSIVE_BLOCKS = 2,
   PROGRESSIVE_POINTERS = 6,
   PROGRESSIVE_SNIPPET = 300;
 const PROGRESSIVE_FIRST_SNIPPET = Infinity;
 const POINTER_HEADER = 'More matches (open with wiki_read_page path + anchor):';
-// `cut` is the core's prefixKeepingPairs, imported lazily with the search scope so the full path stays lazy. `Infinity`
-// means no clip at all, so the block reaches `packBlock` unchanged.
 const clipSnippet = (item, cut, limit) =>
   limit < Infinity && typeof item.snippet === 'string' && item.snippet.length > limit
     ? { ...item, snippet: cut(item.snippet, limit - 1) + '…' }
     : item;
 const withAnchor = (item) =>
   typeof item.anchor === 'string' && item.anchor ? { ...item, path: `${item.path}#${item.anchor}` } : item;
-// `- Title › Heading [unverified] [synthesized] (path#anchor)`; heading, markers and anchor appear only when they exist.
 function pointerLine(item) {
   const heading = typeof item.heading === 'string' && item.heading ? ` › ${item.heading}` : '';
   const marker = `${item.trust === 'weak' ? ' [unverified]' : ''}${item.synthesized === true ? ' [synthesized]' : ''}`;
   const anchor = typeof item.anchor === 'string' && item.anchor ? `#${item.anchor}` : '';
   return `- ${item.title}${heading}${marker} (${item.path}${anchor})`;
 }
-/** Packs `items` progressively; returns the new context, the number of injected results and the full-block paths. */
 function packProgressive(client, event, context, items, cap, cut) {
   const fits = (text) => envelope(client, event, text).length <= cap;
   const shown = [];
@@ -142,7 +119,6 @@ function packProgressive(client, event, context, items, cap, cut) {
     results++;
     shown.push(item.path);
   }
-  // Pointers are written only after at least one full block.
   if (!results) return { context, results, shown };
   for (const item of items.slice(PROGRESSIVE_BLOCKS, PROGRESSIVE_BLOCKS + PROGRESSIVE_POINTERS)) {
     const line = redact(pointerLine(item), REDACT_OUTPUT);
@@ -154,7 +130,6 @@ function packProgressive(client, event, context, items, cap, cut) {
   }
   return { context, results, shown };
 }
-// Open the inode itself without following links; check its identity and permissions before use.
 async function secureFile(file, flags) {
   const handle = await open(file, flags | (constants.O_NOFOLLOW || 0), 0o600);
   try {
@@ -220,11 +195,9 @@ async function metric(stateDir, record) {
     } finally {
       await h.close();
     }
-  } catch {
-    /* Metrics never affect the hook. */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
 }
-// Settings for the semantic step, or null when the hook must not touch the semantic module at all (Lite, opt-out, no HOME).
 function semanticStep(config, env) {
   if (!semanticRequested(config)) return null;
   try {
@@ -238,9 +211,6 @@ function semanticStep(config, env) {
     return null;
   }
 }
-// BA-81: a timestamp file written atomically before each request keeps one warm-up per state directory per minute.
-// An unparsable file, a missing or invalid `at`, or an `at` later than now is stale and gets overwritten; only a
-// readable past timestamp within the window suppresses the warm-up. A read or write error means "do not warm up".
 async function warmupDue(stateDir, now) {
   if (!stateDir) return false;
   const file = join(stateDir, 'semantic-warmup.json');
@@ -255,9 +225,8 @@ async function warmupDue(stateDir, now) {
     try {
       const stored = JSON.parse(previous)?.at;
       if (typeof stored === 'string') at = Date.parse(stored);
-    } catch {
-      /* An unparsable file is stale. */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     if (Number.isFinite(at) && at <= now.getTime() && now.getTime() - at < WARMUP_RATE_LIMIT_MS) return false;
   }
   const tmp = `${file}.${process.pid}.${now.getTime()}.tmp`;
@@ -271,10 +240,6 @@ async function warmupDue(stateDir, now) {
     return false;
   }
 }
-// BA-81: one in-process request through the same validated provider after stdout has been written. It never reads
-// the vault or the semantic index, never sends prompt or page text, and every error is swallowed. `deadline` is the
-// end of the post-output cap; the rate-limit I/O and the module import are charged against it, and a request that
-// would start with no time left is skipped.
 function warmupTask(settings, stateDir, env, now) {
   return async (deadline = Date.now() + WARMUP_WAIT_MS) => {
     if (env.BRAINATLAS_OFFLINE === '1' || Date.now() >= deadline) return;
@@ -286,16 +251,11 @@ function warmupTask(settings, stateDir, env, now) {
       module.validateConfiguredProvider(settings);
       const provider = module.createOllamaProvider({ ...settings, timeoutMs });
       await provider.embed(['warm-up']);
-    } catch {
-      /* A warm-up never reports anything. */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   };
 }
 /**
- * Writes the hook output first and flushes it, then waits for a due warm-up for at most WARMUP_WAIT_MS in total.
- * The cap starts when stdout was flushed; a warm-up that would start with less than WARMUP_WAIT_MS left on the
- * process deadline is skipped, never aborted part-way, and every warm-up error is swallowed. `done` receives the
- * hook exit code after the flush and warm-up.
  * @param {{stdout?:string,exitCode?:number,warmup?:(deadline:number)=>(void|Promise<void>)}} result
  * @param {number} started process start timestamp (`Date.now()`)
  * @param {(exitCode:number)=>void} done
@@ -315,8 +275,8 @@ export function finishHookOutput(result, started, done) {
             cap = setTimeout(resolve, WARMUP_WAIT_MS);
           }),
         ]);
+        // eslint-disable-next-line no-empty
       } catch {
-        /* The warm-up never changes the hook result. */
       } finally {
         clearTimeout(cap);
       }
@@ -326,7 +286,6 @@ export function finishHookOutput(result, started, done) {
   if (!result?.stdout) void after();
   else process.stdout.write(result.stdout, after);
 }
-// BA-28: an opt-in shadow threshold from `retrieval.shadow`. Absent or invalid means the shadow search does not run.
 function shadowThreshold(retrieval) {
   const shadow = retrieval?.shadow;
   if (!shadow || typeof shadow !== 'object' || Array.isArray(shadow) || !hasOnlyKey(shadow, 'abstainThreshold'))
@@ -338,7 +297,6 @@ function hasOnlyKey(object, key) {
   const keys = Object.keys(object);
   return keys.length === 1 && keys[0] === key;
 }
-// Resolves `{results, shadow?, semantic?}`; `shadow` is present only when the shadow search ran and succeeded.
 function retrieve(options, query, searchOptions, remaining, semantic, shadow) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./worker.mjs', import.meta.url), {
@@ -369,9 +327,8 @@ export async function runHook(input = {}) {
   if (!stateDir && config.vault?.path) {
     try {
       stateDir = join(resolvePaths({ env }).stateDir, vaultId(config.vault.path));
-    } catch {
-      /* fail-open: an unavailable optional value stays unset or empty */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   let session = '',
     context = '',
@@ -392,21 +349,16 @@ export async function runHook(input = {}) {
       event === 'session-end' ||
       (client === 'copilot' && event === 'prompt') ||
       (event === 'session-start' && !['claude', 'copilot', 'gemini'].includes(client))
+      // eslint-disable-next-line no-empty
     ) {
-      /* unsupported */
     } else if (event === 'session-start') {
       const geminiStartup = client !== 'gemini' || ['startup', 'resume', 'clear'].includes(data.source);
-      // BA-81: a session-start card also exposes one post-output warm-up, so the first prompt finds the model loaded.
-      // It never reads the vault or the semantic index and a failure never changes the card or its timing.
       if (stateDir && geminiStartup) {
         let handoff = '';
         try {
           handoff = await readFile(join(stateDir, 'handoff.md'), 'utf8');
-        } catch {
-          /* fail-open: an unavailable optional value stays unset or empty */
-        }
-        // An explicit handoff card wins; otherwise build the bounded recap (never in manual mode).
-        // The recap module loads lazily so prompt hooks never pay for it; a load failure means an empty card.
+          // eslint-disable-next-line no-empty
+        } catch {}
         if (handoff.trim()) context = handoff;
         else if (mode !== 'manual' && config.vault?.path) {
           try {
@@ -430,13 +382,11 @@ export async function runHook(input = {}) {
           query
         );
       if (query && (mode === 'normal' || trigger || (mode === 'economic' && knowledge))) {
-        // BA-29: the same search scope as the MCP server (wiki root when present) and its root-level exclusions.
         const { searchScope, isExcludedPath, prefixKeepingPairs } = await import('../../core/src/retrieval/index.mjs');
         const scope = searchScope(config.vault.path, config.retrieval?.exclude);
         const dir = await stateSubdirectory(stateDir, 'hooks');
         const file = join(dir, `${client}-${hash(session)}.json`);
         const seen = session ? await readState(file) : [];
-        // No cumulative snippet budget here: the hook packs every result itself under its own cap.
         const hit = await retrieve(
           { vaultDir: scope.root, stateDir, now, exclude: scope.exclude },
           query,
@@ -445,22 +395,17 @@ export async function runHook(input = {}) {
           semanticStep(config, env),
           shadowThreshold(config.retrieval)
         );
-        // Paths leave the hook vault-relative, as before (`wiki/x.md`); only the set of searched pages changed.
-        // The semantic step can name excluded pages (its entries come from the whole snapshot), so the same rule filters here.
         const found = hit.results
           .filter((item) => !isExcludedPath(item.path, scope.exclude))
           .map((item) => ({ ...item, path: scope.prefix + item.path }));
         semanticState = hit.semantic;
         shadowState = hit.shadow;
-        // BA-81: a semantic step that missed its budget means the model was probably cold; warm it after the prompt.
         if (semanticState === 'fallback:deadline') {
           const step = semanticStep(config, env);
           if (step) warmup = warmupTask(step.settings, stateDir, env, now);
         }
         if (Date.now() - start >= deadline) throw new Error('deadline');
         const unseen = found.filter((item) => !seen.includes(item.path));
-        // BA-26: restricted results are removed before packing, so they are never injected and never marked as shown.
-        // The index field covers lexical results; once the semantic step has run, every result is also checked on disk.
         const fresh = [];
         for (const item of unseen) {
           if (item.inject === 'never') continue;
@@ -471,7 +416,6 @@ export async function runHook(input = {}) {
           client === 'codex' ? 1400 : mode === 'economic' ? 1500 : 4002,
           config.retrieval?.budgetChars ?? 4002
         );
-        // BA-32: progressive packing is opt-in; without it the loop below is byte-identical to before.
         if (config.hooks?.disclosure === 'progressive') {
           const packed = packProgressive(client, event, context, fresh, cap, prefixKeepingPairs);
           context = packed.context;
@@ -503,8 +447,6 @@ export async function runHook(input = {}) {
     results = 0;
     outcome = error.message === 'deadline' ? 'deadline' : 'error';
   }
-  // The `semantic` field appears only when the semantic step ran or was attempted; it never carries query or page text.
-  // BA-28: the `shadow` field appears only when a valid shadow threshold was configured and its search succeeded.
   await metric(stateDir, {
     ts: now.toISOString(),
     client,
@@ -520,7 +462,6 @@ export async function runHook(input = {}) {
   });
   return { stdout: envelope(client, event, context), exitCode: 0, ...(warmup ? { warmup } : {}) };
 }
-/** Build the node command used by client hook configuration. */
 export function buildHookCommand({ nodePath, shimPath, client, event, paths }) {
   const version = process.versions.node.split('.').map(Number);
   const supported =
@@ -538,22 +479,18 @@ export function buildHookCommand({ nodePath, shimPath, client, event, paths }) {
     let defaultConfig;
     try {
       defaultConfig = resolvePaths({ env: process.env }).configFile;
-    } catch {
-      /* fail-open: an unavailable optional value stays unset or empty */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     let yamlDir;
     try {
       yamlDir = dirname(createRequire(import.meta.url).resolve('yaml/package.json'));
-    } catch {
-      /* fail-open: an unavailable optional value stays unset or empty */
-    }
-    // The global semantic index (read-only) lives beside the per-vault state directories.
+      // eslint-disable-next-line no-empty
+    } catch {}
     let semanticIndexDir;
     try {
       semanticIndexDir = join(resolvePaths({ env: process.env }).stateDir, 'semantic');
-    } catch {
-      /* fail-open: an unavailable optional value stays unset or empty */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     const reads = [
       paths.vault,
       paths.state,
@@ -566,7 +503,6 @@ export function buildHookCommand({ nodePath, shimPath, client, event, paths }) {
       shimPath,
       semanticIndexDir,
     ].filter(Boolean);
-    // Retrieval runs in a worker so its deadline can interrupt synchronous search.
     args.push(
       '--permission',
       ...[...new Set(reads.flatMap((value) => [value, canonical(value)]))].map((value) => `--allow-fs-read=${value}`),

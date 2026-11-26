@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MIT
-// `brainatlas maintain`: read-only Wiki maintenance report. Nothing here writes to the vault or to a `--repo` working tree.
 import { execFile } from 'node:child_process';
 import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { join, posix, resolve } from 'node:path';
-import { checkPage, loadPagesDetailed, parseFrontmatter } from '@brainatlas/core';
+import {
+  checkPage,
+  lintPolicyReferences,
+  loadPagesDetailed,
+  parseFrontmatter,
+  refreshVaultPolicy,
+} from '@brainatlas/core';
+import { commandNames } from './index.mjs';
 
 export const KINDS = Object.freeze([
   'stale',
@@ -15,9 +21,6 @@ export const KINDS = Object.freeze([
   'oversized',
   'update-sprawl',
 ]);
-// BA-23: `invalid-frontmatter` is reported in findings, the human output and receipt candidates. It is not a key of `counts`:
-// `counts` keeps the KINDS keys that the BA-12 acceptance contract pins. BA-42 adds `stale-source` and `stale-symbol`
-// (only with `--repo`), and BA-54 adds `unknown-commit`, `source-drift` and `unverifiable`, the same way.
 export const FINDING_KINDS = Object.freeze([
   ...KINDS,
   'invalid-frontmatter',
@@ -29,8 +32,6 @@ export const FINDING_KINDS = Object.freeze([
 ]);
 export const LIMITS = Object.freeze({ oversizedWords: 3000, updateSprawl: 6 });
 const SKIP_ROOT = new Set(['wiki/index.md', 'wiki/log.md']);
-// Same wikilink and Markdown link shapes as the retrieval link graph (packages/core/src/retrieval), copied because that
-// module does not export its resolver.
 const wikiLinkPattern = /(?<!!)\[\[([^\]\n]+)\]\]/gu;
 const markdownLinkPattern = /(?<!!)\[[^\]\n]*\]\(([^)\s]+)(?:\s+"[^"\n]*")?\)/gu;
 const externalOrAbsolute = /^(?:[a-z][a-z0-9+.-]*:|[/\\#])/iu;
@@ -40,7 +41,6 @@ const INDEX_CATEGORY_LINE = /^##\s+(.+)$/;
 const FENCE_OPEN = /^(`{3,}|~{3,})/;
 
 const finding = (kind, path, detail) => ({ kind, path, detail });
-// Exported for `maintain --fix` (packages/cli/src/maintain-fix.mjs), which reuses the report's exact scanning rules.
 export const keyOf = (text) =>
   String(text)
     .normalize('NFKD')
@@ -49,7 +49,6 @@ export const keyOf = (text) =>
     .trim();
 const short = (value, limit = 120) => String(value).replace(/\s+/g, ' ').slice(0, limit);
 
-/** Vault root as a real directory. Symlinked pages and directories are never followed below it. */
 export async function vaultRoot(vault) {
   let root;
   try {
@@ -78,7 +77,6 @@ export async function readOptionalText(root, rel) {
   return text.length ? text : null;
 }
 
-/** Every Markdown file under wiki/, vault-relative, sorted. Symlinks are skipped; a symlinked wiki/ counts as absent. */
 export async function listWikiMarkdown(root) {
   const wiki = await lstat(join(root, 'wiki')).catch(() => null);
   if (!wiki || !wiki.isDirectory() || wiki.isSymbolicLink()) return [];
@@ -96,7 +94,6 @@ export async function listWikiMarkdown(root) {
   return out.sort();
 }
 
-/** The body with fenced and inline code removed, line structure kept (same rule as the retrieval link graph). */
 export function withoutCode(body) {
   let out = '',
     fenceLength = 0,
@@ -119,7 +116,6 @@ export function withoutCode(body) {
   return out;
 }
 
-// ---- Index parsing: same rules as packages/mcp (CommonMark-style destinations, fences opaque, anchors and queries dropped).
 function unescapeDestination(raw) {
   return raw.replace(/\\([!-/:-@[-`{-~])/g, '$1');
 }
@@ -162,7 +158,6 @@ function indexLineInfo(line) {
   const path = destination.replace(/[#?].*$/s, '');
   return path ? { entryPath: posix.normalize(path) } : {};
 }
-/** Entries of an index text: wiki-relative local targets (entries are relative to wiki/, as in the MCP coverage check). */
 export function indexEntries(content) {
   const entries = [];
   let fence = null;
@@ -184,7 +179,6 @@ export function indexEntries(content) {
   return entries;
 }
 
-/** Superseded-by and wikilink/Markdown link resolution against the scanned Wiki pages. */
 export function buildNameIndex(pagePaths, pages) {
   const byPath = new Map(),
     byName = new Map();
@@ -214,15 +208,12 @@ export function resolveWikiName(index, name) {
   return { target: [...nameHits][0] };
 }
 
-/** Wiki pages whose frontmatter the retrieval index cannot parse (BA-23), as vault-relative paths. Symlinks are not followed. */
 async function unreadableWikiPages(root) {
   const wiki = await lstat(join(root, 'wiki')).catch(() => null);
   if (!wiki || !wiki.isDirectory() || wiki.isSymbolicLink()) return [];
   return loadPagesDetailed(join(root, 'wiki')).skipped.map((rel) => `wiki/${rel}`);
 }
 
-// ---- BA-42: code attribution (`--repo DIR`). No symlink is followed and findings carry repository-relative paths and
-// symbol names, never file content. BA-54 verifies `@<commit>` suffixes with read-only git calls; nothing is written.
 const COMMIT_SUFFIX = /^[0-9a-f]{7,64}$/iu;
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 const SYMBOL_NAME_LIMIT = 200;
@@ -230,7 +221,6 @@ const REJECTED_REPO_PATH = 'repo path is not a file path inside the repository';
 const GIT_TIMEOUT_MS = 5000;
 const COMMIT_DISPLAY = 7;
 
-/** The repository working tree as a real directory, or E_REPO_MISSING. */
 async function repoDirectory(repo) {
   const missing = () =>
     Object.assign(new Error('Repository is missing or not a directory.'), { code: 'E_REPO_MISSING' });
@@ -246,11 +236,6 @@ async function repoDirectory(repo) {
   return root;
 }
 
-/**
- * A repository-relative POSIX path, or null. Null for an empty path, a trailing slash (a directory, never a file), a
- * backslash, a NUL, a drive letter, a leading slash, any `..` segment, or a path that names the repository root. The raw
- * text is never echoed back.
- */
 function repoRelativePath(rel) {
   if (
     typeof rel !== 'string' ||
@@ -267,10 +252,6 @@ function repoRelativePath(rel) {
   return norm;
 }
 
-/**
- * Text of a regular file at a repository-relative path, or null. Every path component is checked with lstat; a symlink
- * anywhere on the way, a directory at the end, or an unreadable file yields null. Memoized per path within one run.
- */
 async function repoFileText(repoRoot, rel, cache) {
   if (cache.has(rel)) return cache.get(rel);
   let text = null;
@@ -291,9 +272,6 @@ async function repoFileText(repoRoot, rel, cache) {
 }
 
 /**
- * The path part and the optional commit of a `repo:` entry. `repo:<path>@<commit>` strips the suffix only when it is 7 to
- * 64 hexadecimal digits (any case); the commit is then lower-cased. Any other text after the last `@`, such as a branch
- * name, stays part of the path. Returns null for entries that are not `repo:` references.
  * @param {unknown} entry
  * @returns {{path:string, commit:string|null}|null}
  */
@@ -307,9 +285,6 @@ function repoSourceRef(entry) {
 }
 
 /**
- * One `git` call inside `repoRoot`. Never throws. `code` is the numeric exit code of a non-zero exit (null when git is
- * missing or the call failed before exiting), and `timeout` is true when the 5 s limit killed it. The environment keeps
- * `process.env` and only adds the two variables that make git quiet and read-only.
  * @param {string} repoRoot
  * @param {string[]} args
  * @returns {Promise<{ok:boolean, out:string, code:number|null, timeout:boolean}>}
@@ -342,10 +317,6 @@ const gitCall = (repoRoot, args) =>
  */
 
 /**
- * Lazily probed git state of `repoRoot`, shared by every page of one maintain run. No process starts until the first
- * commit-bearing source asks. The probe runs once (`rev-parse --is-inside-work-tree`, `rev-parse --verify HEAD^{commit}`,
- * `rev-parse --is-shallow-repository`); then `cat-file` runs once per distinct commit and `diff` once per distinct
- * (commit, path). Nothing is ever written.
  * @param {string} repoRoot
  * @returns {GitVerifier}
  */
@@ -398,11 +369,6 @@ function gitVerifier(repoRoot) {
   return { checkCommit, checkDrift };
 }
 
-/**
- * A `symbols:` entry, `{path, name}` or `"<path>#<name>"` (the name follows the last `#`). Anything else is malformed and
- * yields null, so it is ignored silently: a non-string or non-object entry, a missing or empty path or name, a name with a
- * line break, or a name longer than 200 characters.
- */
 function symbolReference(entry) {
   let path, name;
   if (typeof entry === 'string') {
@@ -420,7 +386,6 @@ function symbolReference(entry) {
   return { path: path.trim(), name };
 }
 
-/** Plain-text search for `name` bounded at both ends by a non-word character. No regular expression is built from the name. */
 function containsWord(text, name) {
   for (let at = text.indexOf(name); at >= 0; at = text.indexOf(name, at + 1)) {
     const before = at > 0 ? text[at - 1] : '';
@@ -431,9 +396,6 @@ function containsWord(text, name) {
 }
 
 /**
- * Repository checks for one page: its `repo:` sources (stale-source, plus BA-54 commit findings) and its `symbols:` list
- * (stale-symbol when the file exists and the name is not in it, stale-source when the file does not). Each finding is
- * reported once per page.
  * @param {{path:string, data:object}} page
  * @param {string} repoRoot
  * @param {Map<string, string|null>} cache
@@ -470,7 +432,6 @@ async function checkCodeReferences(page, repoRoot, cache, add, git) {
     if (ref === null) continue;
     const found = await resolveRef(ref.path);
     if (ref.commit === null) continue;
-    // BA-54: the commit is checked even when the path is rejected or missing; drift needs both a commit and a real file.
     const status = await git.checkCommit(ref.commit);
     if (status === 'unverifiable') {
       unverifiable(ref.commit);
@@ -504,13 +465,6 @@ async function checkCodeReferences(page, repoRoot, cache, add, git) {
   }
 }
 
-/**
- * Read-only maintenance scan of the Wiki under `vault`. Returns findings `{kind, path, detail}` (detail holds only counts,
- * paths, field names or short link targets, never page bodies), counts per kind, the number of content pages scanned
- * (wiki/index.md and wiki/log.md excluded) and the duration. Nothing is written.
- * With `repo` (BA-42), `sources` `repo:` entries and `symbols:` are also checked against that working tree, and BA-54
- * verifies a commit suffix with read-only git; without `repo` no repository is read and no git process runs.
- */
 /** @param {string} vault @param {{now?:Date,repo?:string}} [options] */
 export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
   const started = Date.now();
@@ -527,11 +481,9 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
   const findings = [];
   const add = (kind, path, detail) => findings.push(finding(kind, path, detail));
 
-  // invalid-frontmatter: the same pages the retrieval index skips (BA-23). Paths only; the parser message is not kept.
   for (const path of await unreadableWikiPages(root))
     add('invalid-frontmatter', path, 'frontmatter cannot be parsed; the page is not indexed');
 
-  // stale: reuse the OKF page check and keep only its expiry rule.
   for (const page of content.map((path) => pages.get(path))) {
     for (const item of checkPage(
       { path: page.path, data: page.data, raw: page.raw, errors: page.errors },
@@ -542,7 +494,6 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
     }
   }
 
-  // superseded-broken: missing target, a target that is itself superseded, or a superseded_by loop.
   const supersededNext = (page) => {
     if (page.data.status !== 'superseded' || typeof page.data.superseded_by !== 'string') return null;
     return pages.get(page.data.superseded_by) ?? null;
@@ -570,7 +521,6 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
       add('superseded-broken', page.path, 'superseded_by target is itself superseded');
   }
 
-  // broken-link, and the inbound-link graph used for orphan detection.
   const names = buildNameIndex(pagePaths, pages);
   const inbound = new Set();
   for (const path of content) {
@@ -601,7 +551,6 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
       }
       if (!/\.md$/iu.test(target)) continue;
       const resolvedPath = posix.normalize(posix.join(posix.dirname(path), target));
-      // Links that leave the vault are ignored, not reported.
       if (resolvedPath === '.' || resolvedPath.startsWith('../') || posix.isAbsolute(resolvedPath)) continue;
       if (pages.has(resolvedPath)) {
         if (resolvedPath !== path) inbound.add(resolvedPath);
@@ -617,7 +566,6 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
       inbound.add(data.superseded_by);
   }
 
-  // index-missing / index-stale.
   const indexText = await readOptionalText(root, 'wiki/index.md');
   const indexed = new Set();
   if (indexText === null) {
@@ -636,14 +584,12 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
     }
   }
 
-  // orphan: no inbound link from another page and not listed in the index.
   for (const path of content) {
     if (inbound.has(path)) continue;
     if (indexed.has(path.slice('wiki/'.length))) continue;
     add('orphan', path, 'no page links to it and it is not in the index');
   }
 
-  // oversized and update-sprawl.
   for (const path of content) {
     const page = pages.get(path);
     const words = page.body.trim().split(/\s+/u).filter(Boolean).length;
@@ -655,8 +601,6 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
       add('update-sprawl', path, `${dated} dated Update sections (threshold ${LIMITS.updateSprawl})`);
   }
 
-  // stale-source and stale-symbol: only with `repo`. Files are read, never written; symlinks are not followed. BA-54
-  // verifies the `@<commit>` suffix of `repo:` sources with read-only git calls; no process runs without such a source.
   if (repoRoot !== null) {
     const cache = new Map();
     const git = gitVerifier(repoRoot);
@@ -671,10 +615,24 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
   );
   const counts = Object.fromEntries(KINDS.map((kind) => [kind, 0]));
   for (const item of findings) if (Object.hasOwn(counts, item.kind)) counts[item.kind]++;
-  return { ok: true, findings, counts, pages: content.length, durationMs: Date.now() - started };
+  const plan = await refreshVaultPolicy({ vaultDir: root, plan: true });
+  const policyWarnings = [...plan.warnings];
+  for (const change of plan.changes)
+    if (change.action !== 'none')
+      policyWarnings.push(`${change.path}: the managed policy is out of date; run brainatlas agent refresh.`);
+  policyWarnings.push(
+    ...(await lintPolicyReferences({ vaultDir: root, home: process.env.HOME, knownCommands: commandNames })).warnings
+  );
+  return {
+    ok: true,
+    findings,
+    counts,
+    pages: content.length,
+    durationMs: Date.now() - started,
+    policy: { changes: plan.changes, warnings: policyWarnings },
+  };
 }
 
-/** Human summary: counts per kind, then each finding grouped by kind. */
 export function formatMaintenance(report) {
   const lines = [
     `BrainAtlas maintenance report (read-only): ${report.pages} pages, ${report.findings.length} findings, ${report.durationMs} ms`,
@@ -686,10 +644,13 @@ export function formatMaintenance(report) {
     lines.push('', `${kind} (${items.length})`);
     for (const item of items) lines.push(`  ${item.path}: ${item.detail}`);
   }
+  if (report.policy?.warnings?.length) {
+    lines.push('', `policy (${report.policy.warnings.length})`);
+    for (const warning of report.policy.warnings) lines.push(`  ${warning}`);
+  }
   return lines.join('\n');
 }
 
-/** One review candidate per finding kind for the receipts queue: paths and counts only, never page content. */
 export function receiptCandidates(findings) {
   return FINDING_KINDS.flatMap((kind) => {
     const items = findings.filter((item) => item.kind === kind);

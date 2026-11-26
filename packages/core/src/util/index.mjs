@@ -7,7 +7,6 @@ import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 export { NotImplementedError, BrainAtlasError };
-/** @param {string} file @param {string|Uint8Array} data @param {{mode?:number,tempPrefix?:string,fsOps?:typeof fsPromises}} options */
 export async function atomicWriteFile(file, data, options = {}) {
   if (typeof file !== 'string' || data === undefined) throw new NotImplementedError('util.atomicWriteFile');
   const target = resolve(file);
@@ -22,13 +21,11 @@ export async function atomicWriteFile(file, data, options = {}) {
   } catch (error) {
     try {
       await fsOps.unlink(temp);
-    } catch {
-      /* best-effort temp cleanup; the original error is rethrown */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     throw error;
   }
 }
-/** Synchronous counterpart for synchronous APIs that must persist before returning. @param {string} file @param {string|Uint8Array} data @param {{mode?:number,tempPrefix?:string,fsSyncOps?:typeof fsSync}} options */
 export function atomicWriteFileSync(file, data, options = {}) {
   if (typeof file !== 'string' || data === undefined) throw new NotImplementedError('util.atomicWriteFileSync');
   const target = resolve(file);
@@ -43,13 +40,11 @@ export function atomicWriteFileSync(file, data, options = {}) {
   } catch (error) {
     try {
       fsOps.unlinkSync(temp);
-    } catch {
-      /* best-effort temp cleanup; the original error is rethrown */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     throw error;
   }
 }
-/** @param {string} root @param {string} rel */
 export function safeJoin(root, rel) {
   if (typeof root !== 'string' || typeof rel !== 'string') throw new NotImplementedError('util.safeJoin');
   const clean = rel.replace(/\/+$/, '');
@@ -70,15 +65,12 @@ export function safeJoin(root, rel) {
   return target;
 }
 
-/** Return a vault-relative path after checking every existing component's real path. */
 export async function resolveSafePath(root, rel) {
-  // PM fix: resolve the root itself once (symlinked vault roots and macOS /var -> /private/var are legitimate).
   let base = resolve(root);
   try {
     base = await realpath(base);
-  } catch {
-    /* root may not exist yet */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   const target = safeJoin(base, rel);
   const parts = relative(base, target).split(sep);
   let current = base;
@@ -105,9 +97,7 @@ export async function resolveSafePath(root, rel) {
   }
   return current;
 }
-/** @param {string} cmd @param {string[]} args @param {{cwd?:string,env?:Record<string,string|undefined>,timeoutMs?:number,input?:string|Uint8Array}} options @returns {Promise<{code:number,stdout:string,stderr:string}>} */
 export async function runCommand(cmd, args, options) {
-  // Preserve the unimplemented contract for an invalid, argument-free call.
   if (cmd === undefined && args === undefined && options === undefined)
     throw new NotImplementedError('util.runCommand');
   if (

@@ -60,7 +60,7 @@ test('BA-63: written pages gain generated but never a status; author fields and 
   assert.match(b, /^generated: ['"]?2026-01-01['"]?$/m);
   assert.doesNotMatch(b, /proposed/);
 
-  await ok(client, 'wiki_create_concept', { name: 'New Idea', content: 'Plain body.' });
+  await ok(client, 'wiki_create', { type: 'concept', name: 'New Idea', content: 'Plain body.' });
   const created = await readFile(resolve(wiki, 'concepts/new-idea.md'), 'utf8');
   assert.doesNotMatch(created, /^status:/m);
   assert.match(created, /^generated: /m);

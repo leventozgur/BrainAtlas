@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-41: incremental index update must equal a from-scratch build (spec items 1-6).
-// Oracle: a searcher built from the same vault with a new stateDir. Run against another tree with BA_ROOT=<tree>.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,7 +26,6 @@ function tempRoot(prefix = 'ba41v') {
   return { dir, vault, state };
 }
 
-// ---------------- deterministik rastgele ----------------
 function rng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -70,8 +67,7 @@ const QUERIES = [
   ['title0 alpha', { limit: 10 }],
 ];
 
-// ---------------- sayfa modeli ----------------
-let clock = 1_800_000_000; // monoton artan mtime (saniye)
+let clock = 1_800_000_000;
 function stamp(file) {
   clock += 1;
   fs.utimesSync(file, clock, clock);
@@ -318,12 +314,11 @@ class Vault {
       }
     }
     if (this.pages.size > 42 && kind === 'add') kind = 'delete';
-    const times = r() < 0.15 ? 2 + Math.floor(r() * 3) : 1; // ayni duzenlemede birden cok sayfa
+    const times = r() < 0.15 ? 2 + Math.floor(r() * 3) : 1;
     for (let i = 0; i < times; i++) this.apply(i === 0 ? kind : kinds[Math.floor(r() * (kinds.length - 1))][0]);
   }
 }
 
-// ---------------- esdegerlik ----------------
 const entries = (o) => (o instanceof Map ? [...o.entries()] : Object.entries(o ?? {}));
 const plain = (v) => JSON.parse(JSON.stringify(v));
 function normIndex(index) {
@@ -367,7 +362,6 @@ function normIndex(index) {
     .map(([id, ns]) => [pathOf(Number(id)), ns.map(pathOf).sort()])
     .sort(([a], [b]) => (a < b ? -1 : 1));
   out.links = Object.fromEntries(links);
-  // df ve doc sayisi ayrica acik alan olarak (spec madde 1 listesi)
   out.df = Object.fromEntries(Object.entries(out.postings).map(([t, l]) => [t, l.length]));
   return out;
 }
@@ -433,7 +427,6 @@ function assertEquivalent(inc, vault, base, exclude, label, { snapshot = true, s
   }
 }
 
-// ---------------- okuma/yazma izleme ----------------
 function trackReads(t, roots) {
   const seen = [];
   const note = (p) => {
@@ -486,7 +479,6 @@ function seedVault(v, n) {
   for (let i = 0; i < n; i++) v.add();
 }
 
-// ================= seeded random edit sequences (smaller than the acceptance run) =================
 for (const [seed, steps, exclude, size] of [
   [9001, 130, EXCLUDE, 24],
   [9002, 90, undefined, 18],
@@ -505,7 +497,6 @@ for (const [seed, steps, exclude, size] of [
       assert.equal(inc.refreshIfChanged(), false, `${label}: second check is false`);
       assertEquivalent(inc, vault, dir, exclude, label, { snapshot: step % 2 === 0, second: step % 15 === 0 });
     }
-    // a new process on the same stateDir agrees as well
     assertEquivalent(
       createSearcher({ vaultDir: vault, stateDir: state, now, ...(exclude ? { exclude } : {}) }),
       vault,
@@ -516,7 +507,6 @@ for (const [seed, steps, exclude, size] of [
   });
 }
 
-// ================= unchanged vault =================
 test('unchanged vault: refreshIfChanged is false, no page is read, the state directory is untouched', (t) => {
   const { vault, state } = tempRoot();
   const v = new Vault(vault, rng(5));
@@ -534,7 +524,6 @@ test('unchanged vault: refreshIfChanged is false, no page is read, the state dir
   assert.deepStrictEqual(dirDigest(state), before);
 });
 
-// ================= changed vault reads only what changed =================
 function readsOnly(name, seed, mutate) {
   test(`changed vault (${name}) reads only the changed or added pages`, (t) => {
     const { dir, vault, state } = tempRoot();
@@ -597,7 +586,6 @@ test('a new process after an edit starts from the cache and reads only the chang
   assertEquivalent(s, vault, dir, undefined, 'new process');
 });
 
-// ================= caches =================
 test('corrupt, foreign, stale and structurally invalid caches rebuild to an equivalent result', () => {
   const { dir, vault, state } = tempRoot();
   const v = new Vault(vault, rng(81));
@@ -622,7 +610,6 @@ test('corrupt, foreign, stale and structurally invalid caches rebuild to an equi
       snapshot: i % 2 === 0,
     });
   }
-  // stale: an older cache restored after more edits
   fs.writeFileSync(target, good);
   for (let i = 0; i < 6; i++) v.step();
   assertEquivalent(createSearcher({ vaultDir: vault, stateDir: state, now }), vault, dir, undefined, 'stale cache');
@@ -643,7 +630,6 @@ test('an unwritable state directory does not stop search, and nothing is written
   assert.deepEqual(Object.keys(dirDigest(vault)).sort(), v.paths());
 });
 
-// ================= specific edit kinds =================
 function mk(dir, rel, text) {
   const f = path.join(dir, rel);
   fs.mkdirSync(path.dirname(f), { recursive: true });

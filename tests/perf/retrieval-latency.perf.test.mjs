@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Performance suite: warm retrieval latency on 2,000-page synthetic vaults. These tests compare a measured
-// median with a fixed budget, so they run only in the `perf` CI job (`npm run test:perf`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

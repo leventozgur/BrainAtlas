@@ -25,16 +25,13 @@ const filter = process.argv[2];
 const perfDir = join(root, 'tests', 'perf') + sep;
 const inPerf = (file) => file.startsWith(perfDir);
 let files = (await walk(join(root, 'tests'))).sort();
-if (filter === 'perf')
-  files = files.filter(inPerf); // `npm run test:perf`: only the wall-clock latency suite.
+if (filter === 'perf') files = files.filter(inPerf);
 else if (filter) files = files.filter((file) => file.slice(root.length + 1).startsWith(filter));
-// Timing tests live in tests/perf/ and run only in the separate `perf` CI job, never in the default suite.
 else files = files.filter((file) => !inPerf(file));
 if (!files.length) {
   console.error('No test files found');
   process.exit(1);
 }
-// A single hung test fails by name after 15 min instead of silently using up the job's time budget.
 const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-timeout=900000', ...files], {
   cwd: root,
   stdio: 'inherit',

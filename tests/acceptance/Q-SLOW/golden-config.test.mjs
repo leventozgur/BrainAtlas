@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Acceptance (9) golden/byte-compat for fast providers, (10) config, (11) unchanged hook and wiki_query paths.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
@@ -27,7 +26,6 @@ import {
 } from '../../../modules/semantic/src/index.mjs';
 import { normalizedIndexText, sectionPage, sha256, tempRoot, workspace } from './helpers.mjs';
 
-// ---------------- golden (9) ----------------
 const FILES = {
   'a.md': '# Alpha\n\n## One\nalpha one text\n\n## Two\nalpha two text\n',
   'b.md': '---\ntype: entity\n---\n# Beta\nbeta body only\n',
@@ -201,7 +199,6 @@ test('semanticIndex and semanticStatus command outputs keep their keys (status g
   assert.deepEqual(commands.semanticStatus([]), { enabled: false, gatePassed: false }, 'no-ctx form unchanged');
 });
 
-// ---------------- config (10) ----------------
 const base = () => defaultConfig('custom');
 const withSemantic = (semantic) => {
   const cfg = base();
@@ -365,11 +362,6 @@ test('invalid semantic index settings are refused by the commands without callin
   assert.equal(calls, 0);
 });
 
-// ---------------- hook path and wiki_query (11) ----------------
-// Refined 2026-11-11 (PM, BA-07): the hook may now run an optional, time-budgeted semantic step that loads the
-// semantic module only by dynamic import (Lite purity is enforced by the runtime profile gate and by
-// tests/acceptance/BA-07, not by `npm run guard`). The invariant kept here:
-// no hook source statically imports the semantic module, and none depends on the index-build settings.
 test('the hook sources do not depend on the semantic module or the new settings', async () => {
   const dir = new URL('../../../packages/hooks/src/', import.meta.url).pathname;
   for (const name of await readdir(dir)) {

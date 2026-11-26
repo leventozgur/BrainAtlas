@@ -22,7 +22,6 @@ const docs = await Promise.all(
 const cli = await readFile(resolve(root, 'packages/cli/src/index.mjs'), 'utf8');
 const commands = new Set([...cli.matchAll(/command\s*===\s*['"]([\w-]+)['"]/g)].map((m) => m[1]));
 const moduleCommands = new Set();
-// PM update (Q-SEMWIRE): optional modules expose CLI commands dynamically (dispatchModuleCommand); count their `commands` export keys as dispatchable.
 for (const moduleName of await readdir(resolve(root, 'modules'))) {
   let source;
   try {
@@ -102,7 +101,7 @@ test('published built-in command names agree with CLI --help', () => {
   });
   assert.equal(result.status, 0, result.stderr);
   for (const name of commands) {
-    if (name === 'sync' || name === '--help' || name === '-h') continue; // Optional module commands and help aliases are not built-in rows.
+    if (name === 'sync' || name === '--help' || name === '-h') continue;
     assert.match(result.stdout, new RegExp(`^\\s+${name}\\s`, 'm'), `help omits ${name}`);
   }
   for (const name of ['doctor', 'init', 'config'])

@@ -1,10 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Deterministic generator for the BA-27 text dev corpora and their case files:
-//   eval/corpus-hook-realistic + eval/dev/hook-realistic-cases.json
-//   eval/corpus-temporal       + eval/dev/temporal-cases.json
-//   eval/corpus-poison         + eval/dev/poison-cases.json
-// All content is fictional (kestrel-api, lumen-web, quarry-jobs, ...). Run: node eval/gen/dev-corpora.mjs
-// The generator is the source of truth for these files; edit it and regenerate instead of editing the outputs.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,7 +21,6 @@ const writeCases = (file, cases) => {
   writeFileSync(file, `${JSON.stringify(cases, null, 2)}\n`, 'utf8');
 };
 
-// ---------------------------------------------------------------- hook-realistic
 const HR_PAGES = {
   'index.md': page(
     'Vault dizini',
@@ -457,7 +450,6 @@ function hookRealisticCases() {
   const KS = '/srv/work/kestrel-api',
     LW = '/srv/work/lumen-web',
     QJ = '/srv/work/quarry-jobs';
-  // Knowledge: eight with cwd and project (named queries), nine without, plus the ambiguous eight below.
   add(
     K(1),
     'knowledge',
@@ -536,7 +528,6 @@ function hookRealisticCases() {
   ]);
   add(K(15), 'knowledge', 'kestrel-api', 'Entegrasyon testleri hangi porta bağlanır?', ['kestrel-api/test-setup.md']);
   add(K(16), 'knowledge', 'lumen-web', 'Giriş e2e testi neden karantinaya alındı?', ['lumen-web/e2e-tests.md']);
-  // Ambiguous: the query names no project; only the working directory tells which project's test page is meant.
   const ambiguous = [
     ['A1', KS, 'kestrel-api', 'testi düzelt', 'kestrel-api/test-setup.md'],
     ['A2', LW, 'lumen-web', 'şu başarısız testi düzelt', 'lumen-web/e2e-tests.md'],
@@ -547,7 +538,6 @@ function hookRealisticCases() {
     ['A7', LW, 'lumen-web', 'snapshot testini güncelle', 'lumen-web/theme-tokens.md'],
     ['A8', KS, 'kestrel-api', 'testte kırılan kodu düzelt', 'kestrel-api/test-setup.md'],
   ];
-  // Each ambiguous case excludes the test pages of the other projects: a page from another project is a wrong answer.
   const TEST_PAGES = ['kestrel-api/test-setup.md', 'lumen-web/e2e-tests.md', 'quarry-jobs/testing.md'];
   for (const [label, cwd, project, query, rel] of ambiguous) {
     add(`hr-${label.toLowerCase()}`, 'knowledge', 'ambiguous-project', query, [rel], {
@@ -556,7 +546,6 @@ function hookRealisticCases() {
       excluded: TEST_PAGES.filter((p) => !p.startsWith(`${project}/`)),
     });
   }
-  // Followups: short continuations that name a topic word of the earlier answer.
   add('hr-f01', 'followup', 'kestrel-api', 'peki döndürme penceresi kaç dakika?', ['kestrel-api/tokens.md'], {
     cwd: KS,
     project: 'kestrel-api',
@@ -591,7 +580,6 @@ function hookRealisticCases() {
   add('hr-f10', 'followup', 'quarry-jobs', 'geriye doldurmada from parametresi nasıl verilir?', [
     'quarry-jobs/backfill.md',
   ]);
-  // Long briefs (>= 600 characters) that end in one question.
   const longs = [
     ['l1', 'kestrel-api/tokens.md'],
     ['l2', 'kestrel-api/rate-limits.md'],
@@ -603,7 +591,6 @@ function hookRealisticCases() {
     ['l8', 'quarry-jobs/dead-letter.md'],
   ];
   for (const [key, rel] of longs) add(`hr-${key}`, 'long-brief', rel.split('/')[0], LONG[key], [rel]);
-  // Pasted errors: a stack trace or log line followed by the question.
   const pasted = [
     ['p1', 'kestrel-api/connection-pool.md'],
     ['p2', 'kestrel-api/webhook-retries.md'],
@@ -615,14 +602,12 @@ function hookRealisticCases() {
     ['p8', 'quarry-jobs/dead-letter.md'],
   ];
   for (const [key, rel] of pasted) add(`hr-${key}`, 'pasted-error', rel.split('/')[0], PASTED[key], [rel]);
-  // Operational prompts: no knowledge is needed, so every injection is a false injection.
   HR_OPERATIONAL.forEach((query, i) =>
     add(`hr-o${String(i + 1).padStart(2, '0')}`, 'operational', 'operational', query, [])
   );
   return cases;
 }
 
-// ---------------------------------------------------------------- temporal
 const TEMPORAL_PAGES = {
   'index.md': page(
     'Dizin',
@@ -767,7 +752,6 @@ function temporalCases() {
   });
 }
 
-// ---------------------------------------------------------------- poison
 const CLEAN = [
   [
     'guide/kisayollar.md',
@@ -953,7 +937,6 @@ function poisonCases() {
   ];
 }
 
-// ---------------------------------------------------------------- write
 export function buildTextCorpora(evalRoot) {
   const dev = join(evalRoot, 'dev');
   const pagesFor = (pages) => Object.fromEntries(Object.entries(pages));

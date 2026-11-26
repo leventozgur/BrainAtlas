@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-17 end-to-end through the real stdio MCP server (packages/mcp/bin/brainatlas-mcp.mjs), the same way the existing
-// MCP contract tests do it. The Wiki budget comes from config.retrieval.budgetChars, which the server reads at start,
-// so each budget is a fresh server process. Hermetic: temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

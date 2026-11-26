@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 independent acceptance harness (blind). Starts a real stdio MCP server against a temporary vault and talks to it
-// through the MCP SDK client. BA19_TARGET=main runs the main checkout's server (executed only, never written).
-// No network, no user paths: HOME and XDG_* are injected into the temporary directory.
 import { mkdtemp, mkdir, writeFile, readdir, rm, lstat, readlink, readFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -15,13 +12,11 @@ export const TARGET = process.env.BA19_TARGET === 'main' ? 'main' : 'worktree';
 export const SERVER_ROOT =
   TARGET === 'main' ? resolve(process.env.BA19_MAIN_ROOT || join(ROOT, '..', '..', 'BrainAtlas')) : ROOT;
 
-// Runtime-built secret-shaped values; they match the product's content rules but are not real credentials.
 export const SECRET_OPENAI = ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-');
 export const SECRET_GITHUB = ['gh' + 'p_', 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789'].join('');
 
 const { defaultConfig } = await import(pathToFileURL(join(SERVER_ROOT, 'packages/core/src/config/index.mjs')).href);
 
-/** Starts one stdio server for a fresh temporary vault. `files` maps wiki-relative paths to string or Buffer contents. */
 export async function startServer(t, { files = {}, links = {}, wikiLink = null } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'ba19-accept-'));
   const home = join(dir, 'home');
@@ -94,14 +89,12 @@ export function okJson(r) {
   assert.notEqual(r.isError, true, `unexpected refusal: ${textOf(r)}`);
   return JSON.parse(textOf(r));
 }
-/** Asserts a refusal and returns its text (the text is fixed server wording, never caller content). */
 export function refused(r, code) {
   assert.equal(r.isError, true, 'expected a refusal but the call succeeded');
   if (code) assert.match(textOf(r), new RegExp(code));
   return textOf(r);
 }
 
-/** Byte-level snapshot of every entry under a directory (symlinks recorded as links, not followed). */
 export async function snapshot(dir) {
   const out = {};
   async function walk(rel) {
@@ -131,7 +124,6 @@ export async function readOrNull(path) {
   }
 }
 
-/** Lines of `before` and `after` as a single insertion: after === before[0..k) + inserted + before[k..). Returns { at, line }. */
 export function singleInsertion(before, after) {
   const a = before.toString('utf8').split('\n');
   const b = after.toString('utf8').split('\n');
@@ -142,12 +134,6 @@ export function singleInsertion(before, after) {
   return { at: k, line: b[k] };
 }
 
-/**
- * Independent CommonMark-subset reader for inline link destinations, written for this acceptance run (it does not use
- * the product or vendored parser). Fenced code blocks (``` or ~~~) are skipped. A destination ends at the first unescaped
- * `)` at depth zero; `\` before ASCII punctuation is an escape; whitespace makes the destination invalid (not a link).
- * @returns {{dest:string, line:number}[]}
- */
 export function linkDestinations(text) {
   const out = [];
   let fence = null;
@@ -220,7 +206,6 @@ function readDestination(line, start) {
   return null;
 }
 
-/** Lines of the section that starts at the first `## <name>` line (case-insensitive) and ends at the next `## ` heading. */
 export function sectionLines(text, name) {
   const lines = text.split('\n').map((l) => l.replace(/\r$/, ''));
   const start = lines.findIndex((l) => l.toLowerCase() === `## ${name}`.toLowerCase());

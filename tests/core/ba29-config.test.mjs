@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-29: retrieval.exclude is an optional array of vault-relative glob patterns; absent means the default scope.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultConfig, validateConfig } from '../../packages/core/src/config/index.mjs';

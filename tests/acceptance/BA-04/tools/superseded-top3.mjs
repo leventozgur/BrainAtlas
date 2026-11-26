@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-04 holdout measurement (tester-owned): for each current-state case with superseded `excluded` pages, checks whether
-// its `relevant` replacement page is in the top 3 results. Usage: node superseded-top3.mjs <repoRoot> <holdoutDir>
-// Prints one JSON object with the hit rate and per-case outcome (ids and booleans only; no query text or snippets).
 import path from 'node:path';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';

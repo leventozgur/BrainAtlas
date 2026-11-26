@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// `brainatlas maintain --fix`: mechanical index and link repairs for the Wiki. `--plan` only reads. `--apply` recomputes
-// the plan from a fresh read inside the Wiki write lock, proves that no original line was lost, writes every changed file
-// with atomicWriteFile and appends one wiki/log.md entry per changed file. Nothing outside `wiki/` is ever written.
 import { lstat, readFile, readdir, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, posix } from 'node:path';
@@ -25,7 +22,6 @@ const WIKI_ARCHIVE_PREFIX = 'wiki/archive/';
 const SOURCE_HEADING = 'Source files';
 const UNSORTED_HEADING = 'Unsorted (maintain --fix)';
 const SUMMARY_LIMIT = 160;
-// Same link shapes as the read-only report (packages/cli/src/maintain.mjs).
 const WIKILINK = /(?<!!)\[\[([^\]\n]+)\]\]/gu;
 const MARKDOWN_LINK = /(?<!!)\[[^\]\n]*\]\(([^)\s]+)(?:\s+"[^"\n]*")?\)/gu;
 const EXTERNAL_OR_ABSOLUTE = /^(?:[a-z][a-z0-9+.-]*:|[/\\#])/iu;
@@ -43,7 +39,6 @@ const verifyFailure = () => failure('E_FIX_VERIFY', 'Maintenance fix verificatio
 const require = createRequire(import.meta.url);
 let lockModule = null;
 
-/** The Wiki write lock module, or E_LOCK_UNAVAILABLE. Loaded only by `--apply`, as `compact` does. */
 async function lockApi() {
   if (lockModule) return lockModule;
   const candidates = [];
@@ -51,9 +46,8 @@ async function lockApi() {
     candidates.push(
       pathToFileURL(join(dirname(require.resolve('@brainatlas/mcp/package.json')), 'src', 'lock.mjs')).href
     );
-  } catch {
-    /* no installed MCP package: use the sibling copy below */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   candidates.push(new URL('../../mcp/src/lock.mjs', import.meta.url).href);
   let cause = null;
   for (const url of candidates) {
@@ -68,10 +62,6 @@ async function lockApi() {
   throw failure('E_LOCK_UNAVAILABLE', `The Wiki write lock module could not be loaded${detail}.`);
 }
 
-/**
- * Index of the first body line: just after the closing `---`, or the whole file when it has no closed frontmatter.
- * A leading UTF-8 BOM is ignored for the comparison only (`parseFrontmatter` strips it too); bytes are never changed.
- */
 function bodyOffset(lines) {
   if (!lines.length) return 0;
   const first = stripCr(lines[0]).replace(/^\uFEFF/u, '');
@@ -80,10 +70,6 @@ function bodyOffset(lines) {
   return lines.length;
 }
 
-/**
- * Per-line character flags: 1 where a character is inside a fence or an inline code span (the report's `withoutCode`).
- * Lines before `start`, such as frontmatter, are marked as code, so no section or link inside them is ever scanned.
- */
 function codeMask(lines, start = 0) {
   const mask = lines.map(() => null);
   const front = Math.min(start, lines.length);
@@ -125,33 +111,24 @@ function makeFile(path, text) {
     text,
     eol: text.includes('\r\n') ? '\r' : '',
     terminated: text.endsWith('\n'),
-    // src of the original last line when the file has no final line terminator, else -1
     lastSrc: text.endsWith('\n') ? -1 : entries.length - 1,
     entries,
     changes: [],
   };
 }
 
-/** A change line as reported: the file's own line content without its CRLF carriage return. */
 const displayLine = (text) => (text === null ? null : text.replace(/\r$/u, ''));
 
 const recordChange = (file, kind, entry, before, after) =>
   file.changes.push({ kind, entry, before: displayLine(before), after: displayLine(after) });
 
-/** Inserts new lines right after `anchor`, or at the end of the file when there is no anchor. */
 function insertAfter(file, anchor, texts) {
   const at = anchor ? file.entries.indexOf(anchor) + 1 : file.entries.length;
   return insertTexts(file, at, texts);
 }
 
-/** Index of the trailing empty entry that stands for the final newline, or -1 when there is none (yet). */
 const sentinelIndex = (file) => (file.terminated && file.entries.length ? file.entries.length - 1 : -1);
 
-/**
- * New lines take the file's own line ending, so a CRLF file never gets mixed endings. Inserting after the original
- * last line of a file without a final line terminator first gives that line its own ending, and the insertion ends
- * with a final terminator: no bare LF and no lone trailing CR is ever left behind.
- */
 function insertTexts(file, at, texts) {
   const previous = at > 0 ? file.entries[at - 1] : null;
   if (previous && previous.src === file.lastSrc && file.eol && !previous.text.endsWith(file.eol)) {
@@ -170,7 +147,6 @@ function insertTexts(file, at, texts) {
   return added;
 }
 
-/** Appends lines at the end of the file, preceded by one blank line when the last real line is not empty. */
 function appendBlock(file, texts) {
   const sentinel = sentinelIndex(file);
   const at = sentinel >= 0 ? sentinel : file.entries.length;
@@ -186,7 +162,6 @@ function appendBlock(file, texts) {
 
 const capitalize = (folder) => folder.charAt(0).toUpperCase() + folder.slice(1).toLowerCase();
 
-/** Line index after which a new index entry for `headingText` belongs: the last list line, else the heading itself. */
 function indexSectionAnchor(lines, mask, headingText) {
   const wanted = headingText.toLowerCase();
   for (let heading = 0; heading < lines.length; heading++) {
@@ -210,7 +185,6 @@ function indexSectionAnchor(lines, mask, headingText) {
   return -1;
 }
 
-/** Percent-encodes a link destination so the next run's Markdown and index parsing sees the same target. */
 function encodeTarget(target) {
   try {
     return encodeURI(target).replace(/[()?#]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
@@ -219,7 +193,6 @@ function encodeTarget(target) {
   }
 }
 
-/** Decodes a percent-encoded index destination; an entry that cannot be decoded is kept as written. */
 function decodeEntry(entry) {
   try {
     return decodeURI(entry);
@@ -228,7 +201,6 @@ function decodeEntry(entry) {
   }
 }
 
-/** Title text for one index line: whitespace collapsed, trimmed and `]` escaped so the line parses back. */
 function indexTitle(page, rel) {
   return pageTitle(page, rel).replace(/\s+/gu, ' ').trim().replace(/\]/gu, '\\]');
 }
@@ -260,10 +232,6 @@ const indexLine = (page, rel) => {
   return `- [${indexTitle(page, rel)}](${encodeTarget(rel)})${summary ? ` — ${summary}` : ''}`;
 };
 
-/**
- * Symlinks below `wiki/`: a page-file symlink (`.md`) and every directory symlink are reported. A symlink to anything
- * else, such as an image, is not a page and is not reported. Nothing is ever read through a link.
- */
 async function listWikiSymlinks(root) {
   const out = [];
   const wiki = await lstat(join(root, 'wiki')).catch(() => null);
@@ -288,7 +256,6 @@ async function listWikiSymlinks(root) {
   return out.sort();
 }
 
-/** Regular files under vault-root `archive/**`, keyed by the lower-cased base name without a trailing `.md`. */
 async function archiveIndex(root) {
   const byName = new Map();
   const base = join(root, 'archive');
@@ -314,14 +281,11 @@ async function archiveIndex(root) {
   return byName;
 }
 
-/** Exact archive key: lower case and a trailing `.md` removed, with no other folding (no `_`/space/`-`/diacritics). */
 const archiveKey = (name) => name.toLowerCase().replace(/\.md$/u, '');
 
-/** The report's short form of a link target; used to match a rewrite against the report's `broken-link` finding. */
 const shortText = (value) => String(value).replace(/\s+/gu, ' ').slice(0, 120);
 const linkKey = (path, target) => `${path}\u0000${shortText(target)}`;
 
-/** A Markdown link destination resolved from the page's folder, or null for external, absolute and undecodable links. */
 function decodeTarget(href) {
   if (EXTERNAL_OR_ABSOLUTE.test(href)) return null;
   try {
@@ -338,10 +302,6 @@ function resolveTarget(page, target) {
 
 const resolveLink = (page, href) => resolveTarget(page, decodeTarget(href));
 
-/**
- * The replacement text for one broken wikilink, or null. A link that resolves in `wiki/` (uniquely or ambiguously) is
- * never rewritten; an ambiguous link stays a report-only `broken-link`. Only `resolved === null` looks in `archive/`.
- */
 function archivedReplacement(raw, page, names, archive, state) {
   const pipe = raw.indexOf('|');
   const namePart = pipe < 0 ? raw : raw.slice(0, pipe);
@@ -353,7 +313,6 @@ function archivedReplacement(raw, page, names, archive, state) {
   const base = archiveKey(posix.basename(target));
   const matches = base ? (archive.get(base) ?? []) : [];
   if (matches.length === 1) {
-    // The alias is the whole text after the first `|`; only the name drops a `#Heading`.
     const label = pipe < 0 ? target : raw.slice(pipe + 1).trim();
     state.fixed.add(key);
     return `${label} (archived: \`${matches[0]}\`)`;
@@ -365,7 +324,6 @@ function archivedReplacement(raw, page, names, archive, state) {
   return null;
 }
 
-/** Fix 2: rewrite broken wikilinks that name exactly one vault-root archive file to plain text, in place. */
 function planArchived(file, page, names, archive, state) {
   const lines = file.text.split('\n');
   const mask = codeMask(lines);
@@ -394,7 +352,6 @@ function planArchived(file, page, names, archive, state) {
   assertBodyChanges(file, start);
 }
 
-/** Markdown link targets the page body already carries, resolved from the page's folder. */
 function linkedTargets(page) {
   const targets = new Set();
   for (const match of withoutCode(page.body).matchAll(MARKDOWN_LINK)) {
@@ -404,7 +361,6 @@ function linkedTargets(page) {
   return targets;
 }
 
-/** Fix 3: list frontmatter `sources` files the body does not link to under `## Source files`. */
 async function planSources(file, page, root) {
   const entries = Array.isArray(page.data.sources) ? page.data.sources : [];
   const linked = linkedTargets(page);
@@ -456,19 +412,12 @@ async function planSources(file, page, root) {
   assertBodyChanges(file, start);
 }
 
-/** True when the text opens a `---` block that no second `---` closes: the file has no body lines at all. */
 function unclosedFrontmatter(lines, offset) {
   if (offset < lines.length) return false;
   const first = stripCr(lines[0] ?? '').replace(/^\uFEFF/u, '');
   return first === '---' && !lines.some((line, index) => index > 0 && stripCr(line) === '---');
 }
 
-/**
- * Fix 1: append one index line per content page the index does not list. Returns the wiki-relative entries the index
- * already had and the page paths this plan adds to it (so their report-only `orphan` items can be dropped).
- * Frontmatter lines are never scanned for sections and never receive an insertion. With an unclosed frontmatter block
- * the index has no body at all, so any insertion fails the verification (E_FIX_VERIFY) instead of being written.
- */
 async function planIndex(root, content, pages, files, unfixed, secretFilter = true) {
   const text = await readOptionalText(root, 'wiki/index.md');
   if (text === null) {
@@ -497,7 +446,6 @@ async function planIndex(root, content, pages, files, unfixed, secretFilter = tr
     const rel = path.slice('wiki/'.length);
     if (indexed.has(rel)) continue;
     const line = indexLine(pages.get(path), rel);
-    // A page title or summary that matches a safety rule never reaches the index: only the rule ids are reported.
     const findings = secretFilter ? scanText(line) : [];
     if (findings.length) {
       const ruleIds = [...new Set(findings.map((item) => item.ruleId))].sort();
@@ -539,13 +487,11 @@ async function planIndex(root, content, pages, files, unfixed, secretFilter = tr
   return { indexed, added };
 }
 
-/** The link target of a report `broken-link` finding, or null for a Markdown-link finding. */
 function reportedLinkTarget(detail) {
   const match = /^wikilink target (?:not found|is ambiguous): "(.*)"$/u.exec(detail);
   return match ? match[1] : null;
 }
 
-/** The full read-only plan: index lines, archive rewrites, optional source lists, plus the report-only unfixed items. */
 async function computePlan(root, { sources, now, secretFilter = true }) {
   const pagePaths = await listWikiMarkdown(root);
   const loaded = await Promise.all(
@@ -577,7 +523,6 @@ async function computePlan(root, { sources, now, secretFilter = true }) {
     })
   );
   for (const file of planned) if (file) files.push(file);
-  // Report-only items come from the read-only report, so the link graph and orphan rules are not duplicated here.
   const report = await runMaintenance(root, { now });
   for (const item of report.findings) {
     if (item.kind === 'broken-link') {
@@ -593,7 +538,6 @@ async function computePlan(root, { sources, now, secretFilter = true }) {
   return { files, unfixed };
 }
 
-/** No line may be touched or inserted before the first body line: a change inside the frontmatter aborts everything. */
 function assertBodyChanges(file, start) {
   for (const change of file.changes) {
     const at = change.entry.src === null ? file.entries.indexOf(change.entry) : change.entry.src;
@@ -604,7 +548,6 @@ function assertBodyChanges(file, start) {
   }
 }
 
-/** Line-based proof that only fix-2 lines changed and only new lines were inserted; no original line is ever lost. */
 function verifyFile(file) {
   const original = file.text.split('\n');
   const changed = new Map();
@@ -656,7 +599,6 @@ function resultOf(mode, files, unfixed, written, started) {
   return { ok: true, mode, changes, unfixed, counts, written, durationMs: Date.now() - started };
 }
 
-/** Read-only plan. Validates the vault, reads the Wiki and writes nothing (no lock file, no log entry). */
 export async function planFix(vault, options = {}) {
   const started = Date.now();
   const root = await vaultRoot(vault);
@@ -669,10 +611,6 @@ export async function planFix(vault, options = {}) {
   return resultOf('plan', files, unfixed, false, started);
 }
 
-/**
- * Apply: recompute the plan from a fresh read inside the Wiki write lock, verify every file line by line, then write each
- * changed file and append one `maintain-fix` log entry for it. A second run finds nothing to change and writes nothing.
- */
 export async function applyFix(vault, options = {}) {
   const started = Date.now();
   const root = await vaultRoot(vault);
@@ -699,7 +637,6 @@ export async function applyFix(vault, options = {}) {
   });
 }
 
-/** Human output: a header line, one block per changed file, then the unfixed items. */
 export function formatFix(result) {
   const paths = [...new Set(result.changes.map((change) => change.path))];
   const lines = [

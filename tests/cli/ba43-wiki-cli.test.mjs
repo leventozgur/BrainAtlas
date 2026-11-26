@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-43: `brainatlas wiki <sub>` answers exactly like the registered MCP read tools, in process, and writes nothing.
-// Hermetic: temporary vault, HOME and state directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -121,7 +119,7 @@ const PARITY = [
   ['read', 'concepts/alpha.md#details'],
   ['read', 'concepts/alpha.md', '--anchor', 'details'],
   ['read', 'concepts/alpha.md', '--max-chars', '10'],
-  ['index'],
+  ['read', 'index.md'],
   ['list'],
   ['list', '--type', 'concepts'],
   ['status'],
@@ -136,7 +134,7 @@ const TOOL_CASES = [
   ['wiki_read_page', { path: 'concepts/alpha.md#details' }],
   ['wiki_read_page', { path: 'concepts/alpha.md', anchor: 'details' }],
   ['wiki_read_page', { path: 'concepts/alpha.md', maxChars: 10 }],
-  ['wiki_read_index', {}],
+  ['wiki_read_page', { path: 'index.md' }],
   ['wiki_list_pages', {}],
   ['wiki_list_pages', { type: 'concepts' }],
   ['wiki_status', {}],
@@ -152,7 +150,6 @@ test('every subcommand --json deep-equals the registered MCP read tool', async (
     const fromCli = cliJson(f.run, ...PARITY[index]);
     const fromMcp = await mcpValue(client, name, args);
     if (name === 'wiki_status') {
-      // The index age is wall-clock derived and can differ by a millisecond between two processes.
       fromCli.indexAgeMs = 0;
       fromMcp.indexAgeMs = 0;
     }
@@ -259,7 +256,7 @@ test('every subcommand leaves the vault byte for byte unchanged', async (t) => {
   const commands = [
     ['query', 'alpha'],
     ['read', 'concepts/alpha.md'],
-    ['index'],
+    ['read', 'index.md'],
     ['list'],
     ['status'],
     ['lint'],
@@ -282,7 +279,7 @@ test('help lists wiki with its description and usage', async (t) => {
   const command = JSON.parse(all.stdout).commands.find((item) => item.name === 'wiki');
   assert.equal(
     command.description,
-    'Wiki tools from the shell, running the same code as the MCP tools: query, read, index, list, status, lint; write and reindex change the Wiki.'
+    'Wiki tools from the shell, running the same code as the MCP tools: query, read, list, status, lint; write, update, create, link and reindex change the Wiki.'
   );
   assert.match(
     command.usage,

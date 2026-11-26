@@ -16,7 +16,6 @@ function validString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-/** @param {string} dir @returns {ModuleManifest} */
 export function readModuleManifest(dir) {
   const file = resolve(dir, 'module.json');
   let raw;
@@ -65,7 +64,6 @@ export function readModuleManifest(dir) {
   };
 }
 
-/** @param {string} releaseDir @returns {Promise<ModuleManifest[]>} */
 export async function discoverModules(releaseDir) {
   let entries;
   try {
@@ -87,7 +85,6 @@ export async function discoverModules(releaseDir) {
   return manifests;
 }
 
-/** @param {ModuleManifest[]} manifests @returns {ModuleManifest[]} */
 export function resolveModuleOrder(manifests) {
   if (!Array.isArray(manifests)) throw new BrainAtlasError('E_MODULE_MANIFEST', 'Module list is invalid.');
   const byName = new Map();
@@ -123,7 +120,6 @@ export function resolveModuleOrder(manifests) {
   return ordered;
 }
 
-/** @param {'lite'|'full'|'custom'} profile @param {ModuleManifest[]} discoveredManifests @returns {string[]} */
 export function resolveProfileModules(profile, discoveredManifests) {
   if (!profiles.has(profile)) throw new BrainAtlasError('E_PROFILE', 'Unknown configuration profile.');
   if (profile !== 'full') return [];
@@ -132,7 +128,6 @@ export function resolveProfileModules(profile, discoveredManifests) {
     .map((manifest) => manifest.name);
 }
 
-/** Activate a validated module entry, keeping the import inside its release directory. */
 export async function activate(ctx) {
   if (!ctx?.moduleDir || !ctx?.manifest)
     throw new BrainAtlasError('E_MODULE_CONTEXT', 'Module activation context is incomplete.');

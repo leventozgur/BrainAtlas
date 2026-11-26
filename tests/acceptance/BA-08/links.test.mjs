@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-08 blind acceptance: link graph extraction and name resolution, checked against docs/contracts/retrieval.md
-// ("Page links and graph expansion"). Vaults are real temporary files read by loadPages, as in production.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadWorktreeRetrieval } from './helpers/main-core.mjs';

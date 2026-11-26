@@ -6,7 +6,6 @@ import { readJsonl } from './usage.mjs';
 
 const DAY_MS = 86_400_000;
 
-/** Counts of OKF findings by severity (core rules only; `okf check` adds strict module rules when installed). */
 async function okfCounts(vaultPath) {
   try {
     const findings = await checkVault(vaultPath);
@@ -29,7 +28,6 @@ async function maintainCounts(vaultPath) {
   }
 }
 
-/** Share of recent prompt-hook records whose semantic path was used; null when the hook recorded nothing. */
 async function hookSemantic(stateDir, now, days = 7) {
   try {
     const records = await readJsonl(join(stateDir, 'metrics', 'hooks.jsonl'));
@@ -49,10 +47,6 @@ async function hookSemantic(stateDir, now, days = 7) {
   }
 }
 
-/**
- * One read-only health view built from the doctor result plus the checks that are otherwise spread over
- * `wiki lint`, `okf check` and `maintain`. It adds fields only; the existing commands keep their output.
- */
 export async function buildHealthSummary({ doctor, currentVersion, config, agentChannels, paths, now = new Date() }) {
   const vaultPath = config?.vault?.path;
   const stateDir = vaultPath ? join(paths.stateDir, vaultId(vaultPath)) : null;

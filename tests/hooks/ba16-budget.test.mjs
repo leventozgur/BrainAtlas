@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-16 regressions: prompt-hook budget packing (F1, F1b, F2) and the no-partial-header property.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -23,7 +22,6 @@ async function fixture(t, pages) {
   };
 }
 
-/** Claude prompt hook; returns the injected additionalContext ('' when the hook injected nothing). */
 async function ask(f, prompt, session, retrieval = {}) {
   const config = { ...f.config, retrieval: { abstainThreshold: 0, ...retrieval } };
   const r = await runHook({
@@ -47,7 +45,6 @@ const twoPages = {
 test('BA-16-F1: a small retrieval budget never leaves a path header cut short', async (t) => {
   const f = await fixture(t, twoPages);
   const context = await ask(f, 'zebrafish', 'f1', { budgetChars: 96 });
-  // A cut header looks like "Alpha (alpha." : an open parenthesis that never closes on its line.
   assert.doesNotMatch(context, /\([^()\n]*$/mu);
 });
 
@@ -58,14 +55,12 @@ test('BA-16-F1b: only pages whose header was injected are recorded as seen', asy
   const pages = ['alpha.md', 'beta.md'];
   const injected = pages.filter((p) => first.includes(`(${p})`));
   const missing = pages.filter((p) => !first.includes(`(${p})`));
-  // The scenario only means something if the first call fit one page and not the other.
   assert.equal(injected.length, 1, `first call: ${JSON.stringify(first)}`);
   assert.equal(missing.length, 1, `first call: ${JSON.stringify(first)}`);
   for (const p of injected) assert.doesNotMatch(second, new RegExp(`\\(${p.replace('.', '\\.')}\\)`, 'u'));
   for (const p of missing) assert.match(second, new RegExp(`\\(${p.replace('.', '\\.')}\\)`, 'u'));
 });
 
-/** Split injected context into blocks, each starting at a "Title (path.md)" header line. */
 function blocksOf(context) {
   const blocks = [];
   for (const line of context.split('\n')) {
@@ -75,9 +70,6 @@ function blocksOf(context) {
   return blocks;
 }
 
-// Each section redacts to a short marker, so the hook has room left after the search has spent its
-// raw snippet budget on the first results; later results then reach the hook with empty snippets.
-// Assembled at run time so the source never contains a key-shaped literal.
 const privateKey = [
   ['-----BEGIN', 'PRIVATE KEY-----'].join(' '),
   'MIIB'.repeat(110),

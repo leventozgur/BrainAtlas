@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 fix1 regressions: wiki_status coverage reads escaped destinations; anchored and query-suffixed entries name their
-// page; paths with spaces are written and read as angle-bracket destinations. Real stdio MCP server, temporary vault.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises';
@@ -53,8 +51,6 @@ async function ok(client, name, args = {}) {
   return JSON.parse(result.content[0].text);
 }
 
-// ---------------------------------------------------------------- wiki_status coverage
-
 test('BA19-STATUS1: coverage counts a page as indexed when its escaped destination is in a hand-written index (1 of 3 = 33)', async (t) => {
   const index = '# Wiki Index\n\n## entities\n\n- [A](entities/a\\(b\\).md)\n';
   const f = await fixture(t, {
@@ -81,8 +77,6 @@ test('BA19-STATUS2: after wiki_update_index on a fresh vault, coverage is 100 an
   assert.equal(status.readOnly, false);
 });
 
-// ---------------------------------------------------------------- anchors and query strings name their page
-
 test('BA19-ANCHOR1: an entry with #fragment or ?query to an existing page counts as linked; no duplicate line is added', async (t) => {
   const index =
     '# Wiki Index\n\n## entities\n\n- [Ali bölümü](entities/ali.md#ozet) — bölüm\n- [Ali sorgu](entities/ali.md?v=2) — sorgu\n';
@@ -101,8 +95,6 @@ test('BA19-ANCHOR2: an entry whose page is gone is removed even with a #fragment
     '# Wiki Index\n\n## entities\n\n- [Bölüm](#bolum) — çapa\n- [A](entities/a.md#s)\n'
   );
 });
-
-// ---------------------------------------------------------------- paths with spaces: angle-bracket destinations
 
 test('BA19-ANGLE1: a fresh index writes a spaced path in angle brackets (parentheses still escaped inside); three runs add nothing', async (t) => {
   const f = await fixture(t, {
@@ -129,14 +121,12 @@ test('BA19-ANGLE2: a hand-written angle-bracket entry counts as linked; a stale 
 test('BA19-ANGLE3: wiki_create_entity on an index that already has a spaced entry inserts its line and keeps the angle entry', async (t) => {
   const index = '# Wiki Index\n\n## entities\n\n- [My Note](<entities/my note.md>)\n';
   const f = await fixture(t, { files: { 'entities/my note.md': page('My Note') }, index });
-  await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' });
+  await ok(f.client, 'wiki_create', { type: 'entity', name: 'Yeni Varlik', content: 'Gövde.' });
   assert.equal(
     await f.readIndex(),
     '# Wiki Index\n\n## entities\n\n- [My Note](<entities/my note.md>)\n- [Yeni Varlik](entities/yeni-varlik.md)\n'
   );
 });
-
-// ---------------------------------------------------------------- fix2: unsafe names are never indexed
 
 test('BA19-UNSAFE1: a page whose name has a line feed or U+2028 is not written to the index and is not counted in coverage; a tab name is kept', async (t) => {
   const f = await fixture(t, {
@@ -154,7 +144,6 @@ test('BA19-UNSAFE1: a page whose name has a line feed or U+2028 is not written t
   assert.equal(first.split('\n').filter((line) => line.startsWith('- [')).length, 2);
   assert.deepEqual(await ok(f.client, 'wiki_update_index'), { indexed: 4, added: 0, removed: 0 });
   assert.equal(await f.readIndex(), first, 'idempotent');
-  // Pages stay listed; coverage counts only the two indexable pages, both linked: 100.
   assert.equal((await ok(f.client, 'wiki_status')).indexCoveragePct, 100);
   assert.equal((await ok(f.client, 'wiki_status')).pageCount, 4);
 });

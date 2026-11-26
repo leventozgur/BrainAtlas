@@ -17,7 +17,9 @@ import { spawnSync } from 'node:child_process';
 import {
   defaultConfig,
   effectiveChannel,
+  lintPolicyReferences,
   loadConfig,
+  refreshVaultPolicy,
   SECRET_FILTER_OFF_WARNING,
   secretFilterEnabled,
   validateConfig,
@@ -39,6 +41,7 @@ import { installedMaintainSchedule, installedSyncSchedule } from './sync.mjs';
 import { buildHealthSummary, formatHealthSummary } from '../health.mjs';
 import { readJsonl } from '../usage.mjs';
 import { adapterHealth, removeAdapter } from './adapters.mjs';
+import { commandNames } from '../index.mjs';
 import {
   error,
   validVersion,
@@ -96,7 +99,6 @@ function isRecord(value) {
 }
 
 /**
- * A GitHub release URL under the expected prefix that contains no shell-unsafe characters.
  * @param {unknown} value
  * @param {string} prefix
  * @returns {string|undefined}
@@ -109,7 +111,6 @@ function prefixedUrl(value, prefix) {
 }
 
 /**
- * Whether a version string carries a pre-release part; build metadata alone does not count.
  * @param {string|null|undefined} version
  * @returns {boolean}
  */
@@ -118,7 +119,6 @@ function isPrereleaseVersion(version) {
 }
 
 /**
- * Version of the installed release, tolerating build metadata in the current link target.
  * @param {{currentDir: string, releasesDir: string}} paths
  * @returns {Promise<string|null>}
  */
@@ -141,7 +141,6 @@ async function installedVersion(paths) {
 }
 
 /**
- * Pick the highest eligible release from the GitHub releases API array.
  * @param {unknown} releases
  * @param {string|null} currentVersion
  * @param {boolean} pre
@@ -164,7 +163,6 @@ function selectRelease(releases, currentVersion, pre) {
 }
 
 /**
- * Map release assets to the exact expected names, ignoring foreign or unsafe URLs.
  * @param {Record<string, any>} entry
  * @param {string} version
  * @returns {Record<string, string>}
@@ -183,7 +181,6 @@ function releaseAssets(entry, version) {
 }
 
 /**
- * Whether the release lists the distribution archive with an allowed download URL.
  * @param {Record<string, any>} entry
  * @param {string} version
  * @returns {boolean}
@@ -200,7 +197,6 @@ function hasDistributionAsset(entry, version) {
 }
 
 /**
- * The profile archive name suffix for the installed configuration.
  * @param {{configFile?: string}} paths
  * @param {Record<string, string|undefined>} env
  * @returns {Promise<'lite'|'full'>}
@@ -215,7 +211,6 @@ async function installedProfile(paths, env) {
 }
 
 /**
- * Shell lines that download, verify and install the selected release.
  * @param {{version: string, profile: 'lite'|'full', hasDistribution: boolean}} options
  * @returns {string[]}
  */
@@ -236,7 +231,6 @@ function updateNextLines({ version, profile, hasDistribution }) {
 }
 
 /**
- * Human-readable update check summary with the commands to run next.
  * @param {Record<string, any>} result
  * @returns {string}
  */
@@ -461,6 +455,19 @@ export async function doctorResult(paths, env, now = new Date()) {
   }
   for (const name of orphanState)
     warnings.push(`State directory ${name} does not belong to the configured vault; remove it after checking.`);
+  if (cfg.vault?.path) {
+    const policy = await refreshVaultPolicy({ vaultDir: cfg.vault.path, plan: true });
+    warnings.push(...policy.warnings);
+    for (const change of policy.changes)
+      if (change.action !== 'none')
+        warnings.push(`${change.path}: the managed policy is out of date; run brainatlas agent refresh.`);
+    const references = await lintPolicyReferences({
+      vaultDir: cfg.vault.path,
+      home: env.HOME,
+      knownCommands: commandNames,
+    });
+    warnings.push(...references.warnings);
+  }
   if (checks.release && cfg.modules?.length) {
     try {
       const current = await readCurrent(paths);
@@ -483,9 +490,8 @@ export async function doctorResult(paths, env, now = new Date()) {
               await readFile(join(paths.stateDir, 'sync', 'last-synced-manifest.json'), 'utf8')
             );
             if (typeof manifest.generatedAt === 'string') lastSync = manifest.generatedAt;
-          } catch {
-            /* No successful sync has been recorded. */
-          }
+            // eslint-disable-next-line no-empty
+          } catch {}
           moduleHealth.push({
             name: 'sync',
             transport: cfg.sync?.transport ?? null,
@@ -548,7 +554,6 @@ function checkCurrentRelease(paths, env) {
   return report;
 }
 
-/** Re-apply adapters with the new release CLI. Any failure is reported, never thrown. */
 function refreshAdapters(paths, env) {
   const failed = (message) => ({ refreshed: [], skipped: [], error: message });
   try {
@@ -728,7 +733,6 @@ export async function install({ args, flag, plan, output, paths, env }) {
   throw error('E_ARGUMENT', 'Command arguments are invalid.');
 }
 
-/** Inputs of the health summary, shared by `status --summary` and `brainatlas ui`. */
 export async function summaryInputs({ paths, env }) {
   const doctor = await doctorResult(paths, env);
   const current = await readCurrent(paths);
@@ -746,7 +750,6 @@ export async function status({ command, flag, json, output, paths, env }) {
   const current = await readCurrent(paths);
   if (command === 'status') {
     const cfg = await loadConfig({ paths, env }).catch(() => null);
-    // A config that cannot be loaded gives null, not {}: an empty object would read as "no agents".
     const agentChannels = cfg
       ? Object.fromEntries(
           (Array.isArray(cfg.agents) ? cfg.agents : []).map((name) => [name, effectiveChannel(cfg, name)])
@@ -807,9 +810,8 @@ export async function uninstall({ plan, output, paths, env, dependencies }) {
   if (priorConfig)
     try {
       priorVault = JSON.parse(await readFile(priorConfig.backupPath, 'utf8'))?.vault?.path;
-    } catch {
-      /* a missing or unreadable backup means there is no prior vault path */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   const restored = await uninstallManagedFiles(paths, { home: env.HOME, roots });
   const dataDir = await resolveManagedPath(paths.dataDir, { followFinal: true });
   const preserved = activeManifest.files

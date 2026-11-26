@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09 blind acceptance: multipliers (verified x1.5, weak x0.9, neutral x1), abstention before weighting, and parity with
-// main 111732b for neutral pages and for corpora without provenance. Contract: docs/contracts/retrieval.md, "Provenance trust".
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -91,16 +89,13 @@ test('abstention uses the pre-weight best score: a weak page answers at the neut
   const verifiedDir = makeVault({ 'v.md': page({ fm: VERIFIED, body: BODY }) }, 'ba09-abs-v-');
   try {
     const s = search(rt, neutralDir).results[0].score;
-    // Threshold equal to the lexical score: the boundary is inclusive (best < threshold abstains), so all three answer.
     for (const dir of [neutralDir, weakDir, verifiedDir]) {
       const out = search(rt, dir, QUERY, { abstainThreshold: s });
       assert.equal(out.abstained, false, `answered at the lexical threshold in ${path.basename(dir)}`);
     }
-    // A weak page scores 0.9s but still answers when the threshold is 0.95s, because the decision uses s.
     const weakAt = search(rt, weakDir, QUERY, { abstainThreshold: 0.95 * s });
     assert.equal(weakAt.abstained, false, 'weak page answers at 0.95s');
     assert.ok(weakAt.results[0].score < 0.95 * s, 'and its returned score is below that threshold');
-    // A verified page with a score of 1.5s must still abstain when the lexical score is below the threshold.
     const verifiedAbove = search(rt, verifiedDir, QUERY, { abstainThreshold: s + 1e-9 });
     assert.equal(verifiedAbove.abstained, true);
     assert.equal(verifiedAbove.reason, 'below_threshold');
@@ -138,8 +133,6 @@ test('a neutral page in a mixed corpus keeps main score exactly, and no trust ke
   }
 });
 
-// Queries from the development and holdout case files of this repository (read-only); each file is a JSON list of objects
-// with a string `query`. Corpora without any provenance must answer exactly like main, including every result field.
 const CORPORA = [
   { corpus: 'eval/corpus', cases: ['eval/dev/cases.json'] },
   {

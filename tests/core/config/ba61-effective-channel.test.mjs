@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-61: effectiveChannel() and the optional `channels` schema key.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';

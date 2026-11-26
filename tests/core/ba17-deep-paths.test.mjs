@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-17: deep vault paths (more than twelve separator segments) index the suffix chains of their last four path
-// components, however many `.`/`-` pieces those components contain. Hermetic: in-memory index, no files, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildIndex, search } from '../../packages/core/src/retrieval/index.mjs';
@@ -8,7 +6,6 @@ import { buildIndex, search } from '../../packages/core/src/retrieval/index.mjs'
 const now = new Date('2026-11-11T00:00:00Z');
 const run = (index, query) => search(index, query, { limit: 10, abstainThreshold: 0, asOf: now });
 
-// `dirs` directory components, then `middle`, then `leaf`; directory names are `d00`, `d01`, ...
 function components(dirs, leaf, middle = []) {
   return [...Array.from({ length: dirs }, (_, i) => `d${String(i).padStart(2, '0')}`), ...middle, leaf];
 }

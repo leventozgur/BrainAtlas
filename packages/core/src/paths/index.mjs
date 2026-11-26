@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { BrainAtlasError } from '../util/errors.mjs';
 
 /** @typedef {{dataDir:string,configFile:string,stateDir:string,installManifest:string,releasesDir:string,currentDir:string,binPath:string}} ResolvedPaths */
-/** @param {{platform?:string,env?:Record<string,string|undefined>}} options @returns {ResolvedPaths} */
 export function resolvePaths(options = {}) {
   const { platform = process.platform, env = {} } = options;
   if (!env.HOME) throw new BrainAtlasError('E_NO_HOME', 'HOME must be provided to resolve BrainAtlas paths.');
@@ -39,18 +38,12 @@ export function resolvePaths(options = {}) {
   };
 }
 
-/** @param {string} absPath @returns {string} */
 export function vaultId(absPath) {
   if (typeof absPath !== 'string' || !absPath || !absPath.startsWith('/'))
     throw new BrainAtlasError('E_VAULT_PATH', 'Vault path must be absolute.');
   return createHash('sha256').update(absPath).digest('hex').slice(0, 16);
 }
 
-/**
- * Root of the release or workspace that contains a BrainAtlas package file, from path segments only.
- * `node_modules/@brainatlas/<name>/` (installed copy) or `packages/<name>/` (workspace); the last occurrence wins.
- * @param {string|URL} fileUrl @returns {string}
- */
 export function packageRootFromUrl(fileUrl) {
   const bad = (why) => new BrainAtlasError('E_PACKAGE_ROOT', `Cannot determine the package root: ${why}.`);
   let path;

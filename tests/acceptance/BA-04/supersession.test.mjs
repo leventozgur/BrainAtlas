@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-04 independent acceptance: `supersedes` routing. Superseded pages never appear in results, a replacement lists every
-// superseded page that resolves to it (sorted), chains resolve to their final indexed page, loops and dangling targets route
-// nothing, and ranking, score and abstention are unaffected. Hermetic: in-memory pages, fixed as-of date.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, run, indexOf, NOW } from './helpers.mjs';
@@ -23,7 +20,6 @@ test('the replacement carries supersedes with the superseded page, and ranking i
   const r = run(pages, 'quota per day');
   const b = r.results.find((x) => x.path === 'b.md');
   assert.deepEqual(b.supersedes, ['a.md']);
-  // Compared with the same vault minus the superseded page: identical paths, scores, abstain state.
   const without = run([current('b.md')], 'quota per day');
   assert.deepEqual(
     r.results.map(({ path, score }) => ({ path, score })),

@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-48: the weekly read-only maintenance snapshot. No vault file is ever written here: the snapshot lives under the
-// BrainAtlas state directory and every step only reads the Wiki. Running it on a schedule is left to the user's own
-// scheduler (`brainatlas maintain --weekly` writes nothing into the vault).
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { vaultId } from '@brainatlas/core';
@@ -10,9 +7,7 @@ import { planFix } from './maintain-fix.mjs';
 import { receiptCandidates, runMaintenance } from './maintain.mjs';
 import { proposeCurrentState, synthesisSettings } from './synthesis/propose.mjs';
 
-/** Snapshots kept per vault; older `weekly-YYYY-MM-DD.json` files are deleted. */
 export const WEEKLY_KEEP = 12;
-/** A weekly run older than this many days is overdue. */
 export const WEEKLY_OVERDUE_MS = 8 * 24 * 60 * 60 * 1000;
 
 const WEEKLY_FILE = /^weekly-\d{4}-\d{2}-\d{2}\.json$/u;
@@ -28,7 +23,6 @@ async function readJson(file) {
   }
 }
 
-/** `{ ranAt }` of the last weekly run in one directory, or null when it is missing or unreadable. */
 async function readLastWeekly(directory) {
   const value = await readJson(join(directory, 'last-weekly.json'));
   return value && typeof value.ranAt === 'string' ? value : null;
@@ -36,7 +30,6 @@ async function readLastWeekly(directory) {
 
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T/u;
 
-/** Epoch milliseconds of a recorded run, or null when `ranAt` is not an ISO date-time that `Date.parse` accepts. */
 function runTime(ranAt) {
   if (typeof ranAt !== 'string' || !ISO_DATE_TIME.test(ranAt)) return null;
   const time = Date.parse(ranAt);
@@ -48,15 +41,10 @@ const isOverdue = (ranAt, now) => {
   return time !== null && now.getTime() - time > WEEKLY_OVERDUE_MS;
 };
 
-/** `<stateDir>/<vaultId>/maintenance`, where the weekly snapshots live. */
 export function weeklyDirectory(paths, vaultPath) {
   return join(paths.stateDir, vaultId(resolve(vaultPath)), 'maintenance');
 }
 
-/**
- * The overdue reminder for plain `maintain`: only when `last-weekly.json` exists for the vault and its `ranAt` is more
- * than 8 days old. Every read error is swallowed; this check never starts a process and never writes.
- */
 export async function weeklyReminder(options = /** @type {any} */ ({})) {
   const { paths, vaultPath, now = new Date() } = options;
   try {
@@ -73,7 +61,6 @@ export async function weeklyReminder(options = /** @type {any} */ ({})) {
   }
 }
 
-/** Review candidates for the receipts queue: report findings first, then the fix plan and the compaction pages. */
 export function weeklyCandidates(report, fix, compact) {
   const candidates = receiptCandidates(report.findings);
   const changes = Array.isArray(fix?.changes) ? fix.changes : [];
@@ -107,7 +94,6 @@ const formatWeekly = (snapshot, findings, compactionCandidates, queue) => {
   return lines.join('\n');
 };
 
-/** Write the snapshot, then `last-weekly.json`, then drop the oldest snapshots beyond WEEKLY_KEEP. */
 async function writeWeeklyState(directory, snapshot) {
   await mkdir(directory, { recursive: true });
   await writeFile(
@@ -121,10 +107,6 @@ async function writeWeeklyState(directory, snapshot) {
 }
 
 /**
- * One read-only weekly run: the maintenance report, the fix plan and a compaction plan per oversized page. `queue` is
- * the receipts hook of the CLI, or null when the vault is not the configured vault. A queue failure never fails the run.
- * In `maintain.synthesis.mode` `shadow` or `on` the external model step runs last; its errors are recorded, never thrown.
- * `configuredVault: false` (a `--vault` outside the configured vault) records `not-configured-vault` instead of calling it.
  * @param {string} vault @param {{paths:any,env:any,queue?:(candidates:any[])=>Promise<any>,now?:Date,config?:any,runCommand?:Function,dependencies?:{runCommand?:Function},configuredVault?:boolean}} options
  */
 export async function runWeeklyMaintenance(vault, options = /** @type {any} */ ({})) {

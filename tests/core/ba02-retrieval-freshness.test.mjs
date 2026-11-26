@@ -41,7 +41,6 @@ function pageText(r, seq) {
       : r() < 0.3
         ? `---\ntitle: T${Math.floor(r() * 9)}\nstale_after: P1D\ngenerated: 2020-01-01\n---\n`
         : '';
-  // Padding grows with every write, so each rewrite changes the file size and the fingerprint never depends on timestamp resolution.
   return `${frontmatter}# ${pick()} heading\n${pick()} ${pick()} body ${Math.floor(r() * 1000)} ${'x'.repeat(seq)}\n`;
 }
 function applyRandomOperation(r, vault, seq) {
@@ -94,7 +93,6 @@ test('incremental searcher matches a fresh build after 60 random external edits'
     assert.equal(typeof changed, 'boolean');
     assertMatchesFreshBuild(searcher, vault, `step ${step}`);
     if (step % 15 === 0) {
-      // A cold searcher started from the persisted cache must agree too.
       assertMatchesFreshBuild(createSearcher({ vaultDir: vault, stateDir: state, now }), vault, `cold ${step}`);
     }
   }

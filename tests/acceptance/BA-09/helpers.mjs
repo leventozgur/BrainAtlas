@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09 independent acceptance helpers (test-only). The candidate is the worktree retrieval module. The reference is main
-// commit 111732b, extracted at test time with `git archive` into a private temporary directory; no checkout, branch change
-// or repository write happens, and no golden file is stored.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,7 +14,6 @@ export async function loadCandidate() {
   return import(pathToFileURL(path.join(repoRoot, 'packages/core/src/retrieval/index.mjs')).href);
 }
 
-/** Extracts packages/core/src of MAIN_COMMIT and imports its retrieval module. Call `dispose()` when done. */
 export async function loadMain() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ba09-main-'));
   const tarFile = path.join(dir, 'main.tar');
@@ -39,7 +35,6 @@ export async function loadMain() {
   }
 }
 
-/** Writes {relative path: content} into a fresh temporary vault and returns its directory. */
 export function makeVault(files, prefix = 'ba09-vault-') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   writeVault(dir, files);
@@ -58,7 +53,6 @@ export function removeDir(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-/** Provenance record block (list item form) with overrides; each value is raw YAML text. */
 export function record({
   date = '"2026-11-01"',
   evidence = '"review note"',
@@ -68,7 +62,6 @@ export function record({
   return `verified:\n  - date: ${date}\n    evidence: ${evidence}\n    scope: ${scope}\n    source: ${source}\n`;
 }
 
-/** A page with optional raw frontmatter lines (already YAML) and a body. */
 export function page({ title = 'Probe', fm = '', body = 'zephyr quorum ledger reconciliation.' } = {}) {
   return `---\ntitle: "${title}"\n${fm}---\n${body}\n`;
 }

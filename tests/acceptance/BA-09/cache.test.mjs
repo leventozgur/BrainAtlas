@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09 blind acceptance: the persisted index stores each document's trust class. A cache whose class is missing or wrong is
-// rejected and rebuilt once; a changed page is picked up through the freshness key. Contract: docs/contracts/retrieval.md, "Cache".
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -81,7 +79,6 @@ test('a cache whose class is missing or not one of the three values is rejected 
 test('an edited page is re-read through the freshness key, and its new class is used', () => {
   const { vault, searcher } = setup('edit');
   assert.equal(answer(searcher()).results.find((r) => r.path === 'w.md').trust, 'weak');
-  // A different status changes the file size, so the stat-based freshness key changes with the write.
   fs.writeFileSync(path.join(vault, 'w.md'), page({ fm: 'status: draft\n', body: BODY }), 'utf8');
   const out = answer(searcher());
   assert.equal(out.results.find((r) => r.path === 'w.md')?.trust, undefined, 'draft is neutral');

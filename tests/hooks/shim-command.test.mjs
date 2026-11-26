@@ -34,8 +34,6 @@ test('hook command executes a polyglot shim in a path with spaces', async (t) =>
     event: 'session-start',
     paths: { vault, state, release },
   });
-  // The permission-model child cannot read the clock-shift preload outside its allowlist, and this test has no dates.
-  // Remove only that preload so the default run keeps NODE_OPTIONS untouched.
   const runEnv = { ...process.env };
   if (process.env.BRAINATLAS_TEST_CLOCK_SHIFT_DAYS && runEnv.NODE_OPTIONS) {
     const nodeOptions = runEnv.NODE_OPTIONS.replace(/--import\s+\S*shift-clock\.mjs/g, '').trim();

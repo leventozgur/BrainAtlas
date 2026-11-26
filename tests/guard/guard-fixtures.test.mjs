@@ -22,8 +22,6 @@ for (const rule of ['abs-path', 'lite-purity', 'forbidden-api', 'license-header'
   });
 }
 
-// Development-only roots (see `devRoots` in scripts/guard-lib.mjs). A locked package may be dev-only when the lockfile
-// marks it `dev: true` and it is reachable from one of these roots; everything else follows the runtime rules.
 const rootPackage = (extra = {}) => ({ name: 'fixture', version: '1.0.0', ...extra });
 async function syntheticRepo(root, locked) {
   const dir = await mkdtemp(join(tmpdir(), 'ba-guard-dev-'));

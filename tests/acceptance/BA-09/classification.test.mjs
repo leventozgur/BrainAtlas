@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09 blind acceptance: provenance trust class of each page, observed through the public `trust` result field.
-// Every probe page has the same title and body, so the lexical score is identical and only the class can differ.
-// Contract: docs/contracts/retrieval.md, "Provenance trust", **Classes**.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCandidate, makeVault, removeDir, page, record, NOW } from './helpers.mjs';
@@ -11,7 +8,6 @@ const QUERY = 'zephyr quorum ledger';
 const verified = (fields) => record(fields);
 const confirmed = 'status: confirmed\n';
 
-// [name, frontmatter (raw YAML lines after title), expected class]
 const CASES = [
   ['confirmed-quoted-date', `${confirmed}${verified({})}`, 'verified'],
   ['confirmed-unquoted-date', `${confirmed}${verified({ date: '2026-11-01' })}`, 'verified'],
@@ -119,8 +115,6 @@ test('superseded pages are not indexed, so they have no class', () => {
   }
 });
 
-// Contract: an impossible calendar day such as 2026-02-30 is invalid, quoted or not (retrieval/index.mjs, validDate comment).
-// An unquoted scalar is first parsed as a YAML 1.1 timestamp and rolled over (2026-02-30 becomes 2026-03-02) before the check.
 test('unquoted impossible calendar days and times are invalid, like their quoted forms', () => {
   const impossible = {
     'unq-feb30.md': '2026-02-30',

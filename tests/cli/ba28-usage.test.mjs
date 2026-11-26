@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-28: `brainatlas usage` aggregates content-free hook metrics, and `usage feedback` appends one word.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';

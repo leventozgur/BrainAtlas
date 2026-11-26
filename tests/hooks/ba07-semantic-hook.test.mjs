@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-07: the prompt hook's semantic step. Hermetic: temporary HOME, vault and state directories; no network.
-// Every case here ends before an embedding request (semantic off, Lite, index missing, fingerprint mismatch,
-// remote URL refused), so no fetch is ever attempted. The embedding path itself is covered in ba07-semantic-step.test.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
@@ -106,7 +103,6 @@ test('semantic on with an index built for another model: fingerprint mismatch fa
   const f = await fixture(t);
   const { buildSemanticIndex, markdownChunks, createOllamaProvider } =
     await import('../../modules/semantic/src/index.mjs');
-  // The provider is only used for the index build; the fake fetch answers locally, so no request leaves the process.
   const fake = async (url, options) => ({
     ok: true,
     json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }),

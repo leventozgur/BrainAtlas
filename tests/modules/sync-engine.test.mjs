@@ -268,7 +268,6 @@ test('secret path and content refusals expose only path and ruleId and do not up
   assert.equal(await transport.get('wiki/entities/local.md'), null);
   assert.equal(JSON.stringify({ result, logs }).includes('Z9kLm2Pq8R4tWx7V3cN'), false);
   assert.ok(result.refused.every((row) => Object.keys(row).sort().join(',') === 'path,ruleId'));
-  // status must agree with the run result instead of reporting SYNCED while files are refused
   const status = await engine.status();
   assert.equal(status.status, 'PENDING');
   assert.equal(status.refusedCount, 2);
@@ -277,7 +276,6 @@ test('secret path and content refusals expose only path and ruleId and do not up
     { path: 'wiki/entities/leak.md', ruleId: 'high-entropy-assignment' },
   ]);
   assert.equal(JSON.stringify(status).includes('Z9kLm2Pq8R4tWx7V3cN'), false);
-  // once the offending files are gone the next run and status return to SYNCED
   await rm(join(vaultPath, 'wiki/entities/leak.md'));
   await rm(join(vaultPath, '.env'));
   assert.equal((await engine.run()).status, 'SYNCED');

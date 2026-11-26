@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.0-rc.19 — 2026-11-26
+
+First step of a common standard for every device: backlog items always go to `planning/`, the vault policy stays current, and the MCP tools and the shell commands offer the same operations. The default install (Lite, MCP + hooks) is otherwise unchanged.
+
+**After updating, run `brainatlas agent refresh`** once (rc.18's `update` already does this for you). It rewrites the agent files and adds the versioned policy block to the vault `AGENTS.md` and `CLAUDE.md`; a vault policy BrainAtlas does not recognise is reported and kept until you run `brainatlas agent refresh --force` (a backup is written first).
+
+- BA-91: standard planning layout. New MCP tools `plan_read` and `plan_update` and the shell command `brainatlas plan list | show | new | add | set` read and write only `planning/backlog.md` and `planning/projects/<slug>.md` (task lines `- [<status>] <ID> · <title> (<date>)` under `## Tasks`), keep the backlog row in the same locked write and undo a half-finished write. A Wiki page named like a backlog, todo, tasks or roadmap page is still written but returns a warning that planning belongs in `planning/`.
+- BA-92: the vault `AGENTS.md` and `CLAUDE.md` carry a managed block with a policy version and sha256. `agent refresh` (and `update`) keeps it current; text outside the block is never changed. A block edited by hand, or an unknown older policy, is kept and reported until `agent refresh --force`, which writes a backup and keeps the old text below the block. A block written by a newer BrainAtlas is never rewritten by an older one. `doctor` and `maintain` report references outside the block to tools, commands or paths that no longer exist. `migrate` reuses the same logic.
+- BA-93: one operation catalog drives the MCP tool list, the shell commands and the agent instructions, so every channel offers the same operations. `wiki_create {type}` replaces `wiki_create_entity` and `wiki_create_concept`; `wiki_read_index` is removed (`wiki_read_page index.md`). The shell gains `wiki update` (replace or `--append` a section), `wiki create` and `wiki link`; `wiki index` is removed (`wiki read index.md`). Adapter configs that list the old tool names are upgraded by `agent refresh`.
+- BA-100: explanatory comments are removed from the code (license headers, tool directives and type annotations stay), about 3,000 fewer lines; a guard keeps new comments out.
+
 ## 0.1.0-rc.18 — 2026-11-26
 
 Fixes from a maintainer's rc.17 use on a machine where Claude Code runs on the `cli` channel (MCP blocked by policy): that channel had no way to write to the Wiki, and `doctor` did not notice. The default install (Lite, MCP + hooks) is otherwise unchanged.

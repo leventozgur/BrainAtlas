@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 final verification (S8): when wiki/ resolves outside the vault, every Wiki tool either refuses with
-// E_PATH_ESCAPE or answers as an empty Wiki. No response carries outside content and nothing is written outside.
-// A vault root that is itself a symlink stays legitimate. Real stdio server, temporary vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, rm, symlink, rename } from 'node:fs/promises';
@@ -11,7 +8,6 @@ import { startServer, call, okJson, refused, textOf, snapshot } from './harness.
 const page = (frontmatter, body = 'Gövde.') => `---\n${frontmatter}\n---\n${body}\n`;
 const MARKERS = ['DISWIKI-ZQ', 'DISBODY-ZQ', 'DISIDX-ZQ', 'DISLOG-ZQ', 'DISROOT-ZQ', 'DISDIR-ZQ'];
 
-/** A vault whose wiki/ is a symlink to a directory outside the vault. Every outside file carries markers. */
 async function outsideWikiFixture(t) {
   const f = await startServer(t);
   const outsideWiki = join(f.dir, 'outside-wiki');
@@ -32,19 +28,18 @@ async function outsideWikiFixture(t) {
 
 const NEW_PAGE = page('title: Yeni', 'Yeni gövde.');
 
-// One case per Wiki tool. `expect` is either 'refused' (E_PATH_ESCAPE) or a function over the parsed response.
 const CASES = [
   ['wiki_query', { query: 'DISBODY' }, (r) => assert.deepEqual(okJson(r).results, [])],
   ['wiki_list_pages', {}, (r) => assert.deepEqual(okJson(r), { pages: [] })],
   ['wiki_status', {}, (r) => assert.equal(okJson(r).pageCount, 0)],
   ['wiki_read_page', { path: 'entities/dis.md' }, 'refused'],
-  ['wiki_read_index', {}, 'refused'],
+  ['wiki_read_page', { path: 'index.md' }, 'refused'],
   ['wiki_lint', {}, 'refused'],
   ['wiki_update_index', {}, 'refused'],
   ['wiki_write_page', { path: 'entities/new.md', content: NEW_PAGE }, 'refused'],
   ['wiki_update_page', { path: 'entities/dis.md', patch: { body: 'MARK-WRITE' } }, 'refused'],
-  ['wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' }, 'refused'],
-  ['wiki_create_concept', { name: 'Yeni Kavram', content: 'Gövde.' }, 'refused'],
+  ['wiki_create', { type: 'entity', name: 'Yeni Varlik', content: 'Gövde.' }, 'refused'],
+  ['wiki_create', { type: 'concept', name: 'Yeni Kavram', content: 'Gövde.' }, 'refused'],
   ['wiki_add_crosslinks', { path: 'entities/dis.md' }, 'refused'],
 ];
 
@@ -86,7 +81,7 @@ test('S8 positive control: a vault root that is a symlink to a real vault is leg
   await symlink(join(f.dir, 'realvault'), f.vault);
   assert.deepEqual(okJson(await call(f.client, 'wiki_list_pages', {})), { pages: ['wiki/entities/a.md'] });
   assert.equal(okJson(await call(f.client, 'wiki_status', {})).pageCount, 1);
-  assert.match(okJson(await call(f.client, 'wiki_read_index', {})).content, /# Wiki Index/);
+  assert.match(okJson(await call(f.client, 'wiki_read_page', { path: 'index.md' })).content, /# Wiki Index/);
   assert.equal(okJson(await call(f.client, 'wiki_read_page', { path: 'entities/a.md' })).truncated, false);
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index', {})), { indexed: 1, added: 1, removed: 0 });
 });

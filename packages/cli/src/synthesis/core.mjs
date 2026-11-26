@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-48 phase B1: the deterministic core of "current state" synthesis proposals. Target selection, input sanitising,
-// output schema validation, the five blocking gates, the current-state block renderer and the proposal store live here.
-// Pure helpers take `now`/`date` arguments; nothing in this module calls a model, writes a vault page or reads the clock.
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -12,7 +9,6 @@ const failure = (code, message) => Object.assign(new Error(message), { code });
 const asString = (value) => (typeof value === 'string' ? value : '');
 const countWords = (text) => asString(text).trim().split(/\s+/u).filter(Boolean).length;
 
-// Same dated-update rule as `maintain`: an `Update`/`Güncelleme` heading that contains an ISO date.
 const UPDATE_HEADING = /^\s{0,3}#{1,6}\s+(?:update|güncelleme)\b[^\n]*$/iu;
 const ISO_DATE = /\d{4}-\d{2}-\d{2}/u;
 const NEAR_DUPLICATE_THRESHOLD = 0.8;
@@ -38,11 +34,8 @@ const RAW_CAVEAT_MARKERS = Object.freeze([
   'blocked',
 ]);
 
-// A token that gate G3 must find in an anchor quote: an ISO date, a version token, or a plain number. The alternatives
-// are ordered so a date or a version is consumed as one token and its parts are not counted again as numbers.
 const NUMBER_TOKEN = /\d{4}-\d{2}-\d{2}|v?\d+(?:\.\d+)+(?:-[A-Za-z0-9.]+)?|\d+/gu;
 
-/** The caveat normalization shared by text and markers: NFC first, Turkish letters folded, dots removed, spaces and '-' collapsed. */
 function normalizeCaveat(value) {
   return String(value)
     .normalize('NFC')
@@ -62,11 +55,9 @@ function normalizeCaveatTr(value) {
     .trim();
 }
 
-/** Caveat markers normalized the same way as the text they are searched in. */
 const CAVEAT_MARKERS = Object.freeze(RAW_CAVEAT_MARKERS.map(normalizeCaveat));
 const CAVEAT_MARKERS_TR = Object.freeze(RAW_CAVEAT_MARKERS.map(normalizeCaveatTr));
 
-/** True when either locale normalization of `text` contains a marker normalized the same way. */
 const hasCaveat = (text) => {
   const form = normalizeCaveat(text);
   const formTr = normalizeCaveatTr(text);
@@ -76,18 +67,15 @@ const hasCaveat = (text) => {
   );
 };
 
-/** G3 tokens of a text or a quote, with one leading `v` stripped from versions so `v2.4.0` matches `2.4.0`. */
 const g3Tokens = (value) => [...asString(value).matchAll(NUMBER_TOKEN)].map((match) => match[0].replace(/^v/u, ''));
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-/** A vault-relative `wiki/...md` page path. */
 function validPagePath(page) {
   if (typeof page !== 'string' || !page.startsWith('wiki/') || !page.endsWith('.md')) return false;
   if (page.includes('\\') || page.includes('\0')) return false;
   return !page.split('/').some((part) => !part || part === '.' || part === '..');
 }
 
-/** Lowercase word tokens that contain at least three letters. */
 function tokenSet(text) {
   const tokens = new Set();
   for (const match of String(text)
@@ -107,15 +95,6 @@ function jaccard(left, right) {
   return intersection / (left.size + right.size - intersection);
 }
 
-/**
- * Ranks the Wiki content pages of `vault` for a current-state proposal. `report` is a `runMaintenance` result; findings
- * of kind oversized, stale, orphan and update-sprawl contribute, and a page that is a near duplicate of another page
- * (Jaccard similarity ≥ 0.8 between the lowercase 3+ letter tokens of title plus first 200 body words) gets 0.5.
- * Pages with score 0 are dropped. Sorted by score descending, then path ascending.
- * @param {string} vault
- * @param {{now?: Date, report?: any}} [options]
- * @returns {Promise<Array<{path: string, score: number, reasons: string[]}>>}
- */
 export async function scorePages(vault, options = {}) {
   const report = options.report ?? { findings: [] };
   const root = await vaultRoot(vault);
@@ -175,7 +154,6 @@ export async function scorePages(vault, options = {}) {
   return scored;
 }
 
-/** True for a path that a proposal may never target. */
 function ineligiblePath(path) {
   if (typeof path !== 'string' || !path) return true;
   const lowered = path.toLowerCase();
@@ -183,13 +161,6 @@ function ineligiblePath(path) {
   return EXCLUDED_PREFIXES.some((prefix) => lowered.startsWith(prefix));
 }
 
-/**
- * Picks at most `maxPages` (1..3) target paths from a `scorePages` result. Excludes reserved folders, index and log,
- * paths that already have an open proposal and paths the caller marks as recently edited.
- * @param {Array<{path: string}>} scored
- * @param {{now?: Date, maxPages?: number, openProposalPaths?: string[], recentlyEdited?: (path: string) => boolean}} [options]
- * @returns {string[]}
- */
 export function selectTargets(scored, options = {}) {
   const maxPages = options.maxPages ?? 3;
   if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 3) {
@@ -211,12 +182,6 @@ export function selectTargets(scored, options = {}) {
   return picked;
 }
 
-/**
- * Removes HTML comments (including multi-line), zero-width and bidi control characters, and normalises CRLF to LF.
- * Nothing else changes.
- * @param {string} text
- * @returns {string}
- */
 export function sanitizeForModel(text) {
   return asString(text)
     .replace(/\r\n/gu, '\n')
@@ -230,7 +195,6 @@ const SENTENCE_END = /[.!?](?=\s|$)/gu;
 const HEADING_LINE = /^#{1,6}\s+\S/u;
 const LIST_ITEM = /^(?:[-*+]|\d+[.)])\s+\S/u;
 
-/** Splits one paragraph-like text on sentence punctuation. */
 function splitParagraph(text) {
   const out = [];
   const source = text.trim();
@@ -247,14 +211,6 @@ function splitParagraph(text) {
   return out;
 }
 
-/**
- * Deterministic sentence split for markdown body text. Sentence punctuation (`.` `!` `?`) followed by whitespace or the
- * end of the text splits; headings and list items are one item per line, and hard line breaks also end a paragraph. A
- * line inside a fenced code block is kept whole as one sentence; the fence delimiters themselves are dropped. Empty
- * strings are dropped.
- * @param {string} text
- * @returns {string[]}
- */
 export function splitSentences(text) {
   const out = [];
   let fence = null;
@@ -314,12 +270,6 @@ const anchorErrors = (anchor, where, errors) => {
     errors.push(`${where}.quote must be 1..600 characters`);
 };
 
-/**
- * Validates a proposal object against the phase B1 schema. Extra keys at any level are errors; the total word count of
- * all `sentences[].text` values may not exceed 250.
- * @param {any} obj
- * @returns {{ok: boolean, errors: string[]}}
- */
 export function validateProposal(obj) {
   const errors = [];
   if (!isObject(obj)) return { ok: false, errors: ['proposal must be an object'] };
@@ -377,7 +327,6 @@ export function validateProposal(obj) {
   return { ok: errors.length === 0, errors };
 }
 
-/** Stable JSON for frontmatter comparison (keys sorted, so YAML key order never matters). */
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (isObject(value))
@@ -388,7 +337,6 @@ function stable(value) {
   return JSON.stringify(value) ?? 'null';
 }
 
-/** The text between the current-state markers of a page, or '' when the page has no complete block. */
 function blockBody(text) {
   const source = asString(text);
   const start = source.indexOf(OPEN_MARKER);
@@ -397,12 +345,6 @@ function blockBody(text) {
   return end < 0 ? '' : source.slice(start + OPEN_MARKER.length, end);
 }
 
-/**
- * Runs the five blocking gates over an old page, its old archive and the proposed new texts. `archiveText` and
- * `newArchiveText` may be ''. `delta` is computed even when one or more gates fail.
- * @param {{pageText: string, archiveText?: string, newPageText: string, newArchiveText?: string, proposal: any}} input
- * @returns {{ok: boolean, failures: Array<{gate: string, detail: string}>, delta: {droppedSentences: number, changedNumbers: string[], lostCaveats: number, blockWords: number}}}
- */
 export function runGates(input) {
   const pageText = asString(input?.pageText);
   const archiveText = asString(input?.archiveText);
@@ -411,7 +353,6 @@ export function runGates(input) {
   const proposal = input?.proposal;
   const failures = [];
 
-  // Fail closed: a proposal that does not satisfy the schema never reaches a gate, and nothing is treated as empty.
   const schema = validateProposal(proposal);
   if (!schema.ok) {
     return {
@@ -423,7 +364,6 @@ export function runGates(input) {
   const sentences = proposal.sentences;
   const conflicts = proposal.conflicts;
 
-  // G1: every old body sentence survives, in the new page or the new archive.
   const oldSentences = splitSentences(parseFrontmatter(pageText).body);
   const missing = oldSentences.filter(
     (sentence) => !newPageText.includes(sentence) && !newArchiveText.includes(sentence)
@@ -432,7 +372,6 @@ export function runGates(input) {
     failures.push({ gate: 'G1', detail: `${missing.length} old sentence(s) not preserved` });
   }
 
-  // G2: frontmatter is unchanged, except that status may become disputed when conflicts are proposed.
   const oldData = parseFrontmatter(pageText).data;
   const newData = parseFrontmatter(newPageText).data;
   const keys = new Set([...Object.keys(oldData), ...Object.keys(newData)]);
@@ -448,8 +387,6 @@ export function runGates(input) {
       failures.push({ gate: 'G2', detail: 'status may only change to disputed when conflicts are proposed' });
   }
 
-  // G3: numbers, dates and version tokens in a sentence text are anchored, and each quote exists verbatim in its source.
-  // Matching is token-exact: "5" never matches "512", "2.4.0" never matches "2.4.0-rc.12", "7070" never matches "17070".
   const sanitizedPage = sanitizeForModel(pageText);
   const sanitizedArchive = sanitizeForModel(archiveText);
   const changedNumbers = new Set();
@@ -475,7 +412,6 @@ export function runGates(input) {
     });
   });
 
-  // G4: a caveat in an anchor quote must be present in the sentence, and no old caveat sentence may disappear.
   let lostCaveats = 0;
   oldSentences.forEach((sentence, index) => {
     if (!hasCaveat(sentence)) return;
@@ -492,8 +428,6 @@ export function runGates(input) {
     failures.push({ gate: 'G4', detail: `sentences[${index}] quotes a caveat but does not repeat one` });
   });
 
-  // G5: each conflict pair is real (two distinct, non-trivial strings in the old text), visible in the new block, and the
-  // page is marked disputed.
   if (conflicts.length) {
     const block = blockBody(newPageText);
     const oldText = `${sanitizedPage}\n${sanitizedArchive}`;
@@ -523,13 +457,6 @@ export function runGates(input) {
   };
 }
 
-/**
- * Renders the proposed current-state block: heading, opening marker, one bullet per sentence, one disputed bullet per
- * conflict pair, closing marker.
- * @param {any} proposal
- * @param {{date: string|Date}} options
- * @returns {string}
- */
 export function renderBlock(proposal, options = /** @type {any} */ ({})) {
   const sentences = Array.isArray(proposal?.sentences) ? proposal.sentences : [];
   const conflicts = Array.isArray(proposal?.conflicts) ? proposal.conflicts : [];
@@ -544,22 +471,12 @@ export function renderBlock(proposal, options = /** @type {any} */ ({})) {
   return lines.join('\n');
 }
 
-/** Index just after a closed frontmatter block, or 0. */
 function frontmatterEnd(lines) {
   if (lines[0] !== '---') return 0;
   for (let index = 1; index < lines.length; index++) if (lines[index] === '---') return index + 1;
   return 0;
 }
 
-/**
- * Inserts `block` after the first `# ` heading line that follows the frontmatter and is outside a fenced code block,
- * with one blank line before and after. Without such a heading the block goes right after the frontmatter (or at the
- * top when there is none). An existing block between the markers (plus its `## Current state` heading) is replaced, and
- * its lines are returned as `replaced`. No other line changes.
- * @param {string} pageText
- * @param {string} block
- * @returns {{pageText: string, replaced: string[]}}
- */
 export function insertBlock(pageText, block) {
   const lines = asString(pageText).split('\n');
   let replaced = [];
@@ -606,7 +523,6 @@ const PROPOSAL_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const REVIEW_VERDICTS = new Set(['accepted', 'rejected']);
 const NON_REVIEWABLE_STATUSES = new Set(['gate-failed', 'rejected-schema']);
 
-/** Epoch milliseconds of a Date, epoch number or ISO string, or null. */
 function timeOf(value) {
   if (value instanceof Date) {
     const time = value.getTime();
@@ -626,7 +542,6 @@ function requiredTime(value, field) {
   return time;
 }
 
-/** `<YYYYMMDD>` in UTC. */
 const dayStamp = (time) => new Date(time).toISOString().slice(0, 10).replaceAll('-', '');
 
 function proposalId(page, baseHash, createdAt) {
@@ -634,7 +549,6 @@ function proposalId(page, baseHash, createdAt) {
   return `${dayStamp(createdAt)}-${digest}`;
 }
 
-/** A stored record, or null only when the file does not exist. Anything unreadable, unparsable or misnamed is E_STORE_CORRUPT. */
 async function readRecord(file) {
   const corrupt = () => failure('E_STORE_CORRUPT', `proposal record is unreadable or invalid: ${basename(file)}`);
   let text;
@@ -657,18 +571,11 @@ async function readRecord(file) {
   return value;
 }
 
-/**
- * The proposal store under `<stateDir>/synthesis/proposals`. Records are written atomically with mode 0600 inside a
- * directory created with mode 0700 and contain no page text beyond the proposal itself. `now` is always an explicit
- * argument; the store never reads the clock.
- * @param {string} stateDir
- */
 export function createStore(stateDir) {
   if (typeof stateDir !== 'string' || !stateDir) throw failure('E_ARGUMENT', 'stateDir must be a directory path');
   const directory = join(stateDir, 'synthesis', 'proposals');
   const fileOf = (id) => join(directory, `${id}.json`);
 
-  /** Creates the store directories with mode 0700, then overwrites one record with mode 0600. */
   async function writeRecord(record) {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await atomicWriteFile(fileOf(record.id), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
@@ -769,7 +676,6 @@ export function createStore(stateDir) {
     return new Set(records.filter((record) => record.status === 'open').map((record) => record.batch)).size;
   }
 
-  /** Overwrites the review status of an existing record (for example `invalidated` or `reverted`). */
   async function setStatus(id, status) {
     if (typeof id !== 'string' || !PROPOSAL_ID.test(id)) throw failure('E_ARGUMENT', 'invalid proposal id');
     if (typeof status !== 'string' || !status) throw failure('E_ARGUMENT', 'status must be a non-empty string');

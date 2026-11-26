@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 independent retest (second blind pass). Covers symlink variants, read-tool visibility, case-insensitive
-// categories, duplicate links across preface/categories, mixed CRLF/LF files, patch ordering and idempotency.
-// Every case runs against a real stdio MCP server built from ROOT (worktree) or the main checkout (BA14_TARGET=main).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdir, symlink, rename, rm } from 'node:fs/promises';
@@ -11,14 +8,11 @@ import { startServer, call, okJson, refused, textOf, snapshot, logCount, SECRET 
 const page = (frontmatter, body = 'Gövde.') => `---\n${frontmatter}\n---\n${body}\n`;
 const EMPTY_INDEX = '# Wiki Index\n\n';
 
-/** Lines of `text` that exist, in order, as a subsequence of `lines` (exact string equality per line). */
 function isSubsequence(survivors, lines) {
   let at = 0;
   for (const line of lines) if (at < survivors.length && line === survivors[at]) at++;
   return at === survivors.length;
 }
-
-// ---------------------------------------------------------------- symlink variants (wiki_update_index)
 
 test('S1: page symlink to a target inside the vault is not indexed as a page and not listed in the index', async (t) => {
   const f = await startServer(t, {
@@ -96,8 +90,6 @@ test('S6: vault root is itself a symlink to a real directory (legitimate layout)
   assert.ok(out.includes('(entities/a.md)') && out.includes('(concepts/k.md)'));
 });
 
-// ---------------------------------------------------------------- read tools never expose outside/symlinked pages
-
 test('S7: wiki_list_pages, wiki_status and wiki_query hide page and directory symlinks that point outside the vault', async (t) => {
   const f = await startServer(t, { files: { 'entities/real.md': page('title: Gerçek INSIDEZQ') } });
   const outsideDir = join(f.dir, 'outside');
@@ -135,8 +127,6 @@ test('S8: wiki/ symlinked outside the vault: read tools must not expose outside 
   const q = textOf(await call(f.client, 'wiki_query', { query: 'DISWIKI-ZQ' }));
   assert.equal(q.includes('DISWIKI-ZQ'), false, 'wiki_query returned an outside page');
 });
-
-// ---------------------------------------------------------------- categories, duplicates, preface
 
 test('C1: a category heading in another letter case (## Entities) receives the new page; no second heading is created', async (t) => {
   const f = await startServer(t, {
@@ -188,8 +178,6 @@ test('P2: a deleted page linked from the preface and from two categories loses e
   assert.equal(out.split('(entities/a.md)').length - 1, 1);
 });
 
-// ---------------------------------------------------------------- mixed line endings
-
 test('M1: mixed CRLF and LF lines: surviving lines keep their bytes, no bare CR, a second run is a no-op', async (t) => {
   const orig =
     '# Wiki Index\r\n\n## entities\r\n- [Ahmet](entities/ahmet.md) — özet\n- [Gone](entities/gone.md) — eski\r\n\n## concepts\n- [K](concepts/k.md)\r\n';
@@ -225,8 +213,6 @@ test('M2: CRLF file whose removed last stale line is LF-terminated ends with a c
   );
 });
 
-// ---------------------------------------------------------------- idempotency
-
 for (const [label, body] of [
   ['LF', '# Wiki Index\n\n## entities\n\n- [Eski](entities/eski.md) — özet\n'],
   ['CRLF', '# Wiki Index\r\n\r\n## entities\r\n\r\n- [Eski](entities/eski.md) — özet\r\n'],
@@ -256,11 +242,8 @@ test('I2: a page whose file name contains parentheses is listed once; a second r
   assert.deepEqual(await readFile(join(f.wiki, 'index.md')), afterFirst);
 });
 
-// ---------------------------------------------------------------- wiki_update_page patch ordering and validation
-
 const PAGE_PATH = 'entities/p.md';
 const PAGE = '---\ntype: entity\ntitle: Patch Sayfası\nstatus: active\n---\nEski gövde 🧪\n';
-// Body text after the closing frontmatter fence, without surrounding newlines (serialization whitespace is not under test).
 const parsedBody = async (f) =>
   (await readFile(join(f.wiki, PAGE_PATH), 'utf8')).split('---\n').slice(2).join('---\n').trim();
 

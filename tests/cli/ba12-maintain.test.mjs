@@ -221,7 +221,6 @@ test('index-stale: missing targets are reported; anchors, escaped parentheses, a
 });
 
 test('oversized: more than 3000 body words is reported, 3000 is not', async (t) => {
-  // The heading line is part of the body and "# Big" counts as two words: 2999 + 2 = 3001 (over), 2998 + 2 = 3000 (at limit).
   const big = Array.from({ length: 2999 }, () => 'word').join(' ');
   const ok = Array.from({ length: 2998 }, () => 'word').join(' ');
   const dir = await vaultWith(t, {
@@ -357,7 +356,7 @@ test('CLI: report mode writes nothing, --json is one object, and errors use the 
   assert.equal(json.status, 0, json.stderr);
   const parsed = JSON.parse(json.stdout);
   assert.equal(parsed.ok, true);
-  assert.deepEqual(Object.keys(parsed).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages']);
+  assert.deepEqual(Object.keys(parsed).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy']);
   assert.equal(parsed.pages, 2);
   assert.ok(parsed.findings.some((f) => f.kind === 'stale' && f.path === 'wiki/concepts/a.md'));
   assert.equal(text.status, 0, text.stderr);

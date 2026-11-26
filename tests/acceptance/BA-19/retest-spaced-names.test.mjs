@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 retest (independent): file names with spaces, parentheses, tabs and other control characters on a fresh index.
-// Checked with the independent reader; three runs must be idempotent. Real stdio MCP server, temporary vault.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
@@ -9,7 +7,6 @@ import { readLinks, linkedPages } from './retest-reader.mjs';
 
 const page = (title) => `---\ntitle: ${title}\n---\nKısa gövde.\n`;
 
-/** Three runs of wiki_update_index: the first adds `added` lines, runs two and three add nothing and keep the bytes. */
 async function assertThreeRuns(f, indexed, added) {
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index', {})), { indexed, added, removed: 0 }, 'run 1');
   const afterFirst = await readIndex(f);
@@ -79,9 +76,6 @@ test('a line feed in the file name cannot be a CommonMark destination: the serve
     assert.equal(await readOrNull(join(f.wiki, 'index.md')), null, 'a refused run writes no index');
     return;
   }
-  // PM update (2026-11-11): a third valid outcome — the page is silently left out of the index (line-breaking characters cannot
-  // form a CommonMark destination; refusing the whole update for one file name would block every other page). The index must
-  // then contain no entry for it, and repeated runs must add nothing.
   const first = await readOrNull(join(f.wiki, 'index.md'));
   if (first !== null && !first.includes('name.md')) {
     for (let i = 0; i < 2; i++) {

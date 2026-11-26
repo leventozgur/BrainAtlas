@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
-/** Split markdown by heading sections, then by a conservative word limit. */
 export function markdownChunks(markdown, sourcePath, { maxWords = 180 } = {}) {
   if (typeof markdown !== 'string' || typeof sourcePath !== 'string' || !Number.isInteger(maxWords) || maxWords < 1) {
     throw new TypeError('Invalid chunking input.');
