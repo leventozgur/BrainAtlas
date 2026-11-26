@@ -110,8 +110,8 @@ export function parseWikiArguments(argv) {
     pathArgument(sub, positional);
   } else if (sub === 'create') {
     if (positional.length < 2) throw failure('E_ARGUMENT', 'wiki create requires a type and a page name.');
-    if (!['entity', 'concept'].includes(positional[0]))
-      throw failure('E_ARGUMENT', 'wiki create type must be entity or concept.');
+    if (!['entity', 'concept', 'source', 'summary', 'query'].includes(positional[0]))
+      throw failure('E_ARGUMENT', 'wiki create type must be entity, concept, source, summary or query.');
   } else if (positional.length) {
     throw failure('E_ARGUMENT', `wiki ${sub} accepts no positional arguments.`);
   }
@@ -153,12 +153,15 @@ function toolFailure(text) {
   return failure(match[1], match[2]);
 }
 
-async function readPageContent(stdin, sub) {
+async function readPageContent(stdin, sub, optional = false) {
   const required = `wiki ${sub} requires page content on standard input.`;
   let text;
   if (typeof stdin === 'string') text = stdin;
   else {
-    if (stdin === process.stdin && process.stdin.isTTY === true) throw failure('E_ARGUMENT', required);
+    if (stdin === process.stdin && process.stdin.isTTY === true) {
+      if (optional) return '';
+      throw failure('E_ARGUMENT', required);
+    }
     const chunks = [];
     let bytes = 0;
     for await (const chunk of stdin) {
@@ -170,7 +173,10 @@ async function readPageContent(stdin, sub) {
     text = Buffer.concat(chunks).toString('utf8');
   }
   if (Buffer.byteLength(text) > MAX_CONTENT_BYTES) throw failure('E_ARGUMENT', 'Page content is larger than 1 MiB.');
-  if (text.trim() === '') throw failure('E_ARGUMENT', required);
+  if (text.trim() === '') {
+    if (optional) return '';
+    throw failure('E_ARGUMENT', required);
+  }
   return text;
 }
 
@@ -207,7 +213,7 @@ export async function runWikiCommand(argv, { env = process.env, stdin = process.
     delete args.append;
     delete args.frontmatter;
   } else if (sub === 'create') {
-    args.content = await readPageContent(stdin, sub);
+    args.content = await readPageContent(stdin, sub, true);
   }
   if (changes && dryRun) options.dryRun = true;
   const result = await callToolInProcess(options, TOOL_FOR[sub], args);
@@ -228,11 +234,13 @@ export async function runWikiCommand(argv, { env = process.env, stdin = process.
       okfFindings,
     };
     if (args.expectedSha256 !== undefined && value.sha256 !== undefined) output.sha256 = value.sha256;
+    if (Array.isArray(value.warnings)) output.warnings = value.warnings;
     return { sub, value: output };
   }
   if (sub === 'update') {
     const output = { ok: true, path: value.path, updated: true, dryRun };
     if (value.sha256 !== undefined) output.sha256 = value.sha256;
+    if (Array.isArray(value.warnings)) output.warnings = value.warnings;
     return { sub, value: output };
   }
   if (sub === 'create') {

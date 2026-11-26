@@ -164,10 +164,7 @@ test('readOnly refuses update, create and link before stdin; the new subcommands
     assert.equal(result.status, 1, args.join(' '));
     assert.deepEqual(result.value.error, { code: 'E_READ_ONLY', message: 'The vault is read-only (readOnly: true).' });
   }
-  for (const args of [
-    ['update', 'concepts/alpha.md'],
-    ['create', 'entity', 'Empty'],
-  ]) {
+  for (const args of [['update', 'concepts/alpha.md']]) {
     const result = f.json(args, { input: '  \n' });
     assert.equal(result.status, 1);
     assert.equal(result.value.error.code, 'E_ARGUMENT');
