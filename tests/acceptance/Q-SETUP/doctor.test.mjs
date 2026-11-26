@@ -72,6 +72,7 @@ test('doctor omits the missing-index warning while semantic is disabled and stay
     [
       'capabilities',
       'checks',
+      'conformance',
       'currentVersion',
       'hookActivity',
       'moduleHealth',
@@ -102,6 +103,7 @@ test('doctor keeps the missing-index warning while semantic is enabled and prese
     [
       'capabilities',
       'checks',
+      'conformance',
       'currentVersion',
       'hookActivity',
       'moduleHealth',

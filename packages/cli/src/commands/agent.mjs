@@ -2,7 +2,15 @@
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CHANNEL_AGENTS, effectiveChannel, loadConfig, refreshVaultPolicy } from '@brainatlas/core';
+import {
+  CHANNEL_AGENTS,
+  effectiveChannel,
+  loadConfig,
+  readStandard,
+  refreshVaultPolicy,
+  standardFromConfig,
+  writeStandard,
+} from '@brainatlas/core';
 import { adapterHealth, detectAdapter, installAdapter, removeAdapter } from './adapters.mjs';
 import { error, exists, redactOutput, saveTrackedConfig } from './shared.mjs';
 
@@ -119,6 +127,17 @@ export async function agentCommand({ args, paths, env, output, plan, flag, value
     const force = flag?.('--force') === true;
     const refreshed = [];
     const skipped = [];
+    let standard = { action: 'none' };
+    if (cfg.readOnly !== true) {
+      const current = await readStandard(cfg.vault.path);
+      if (!current.standard && current.errors.length === 0) {
+        if (plan) standard = { action: 'create' };
+        else {
+          await writeStandard(cfg.vault.path, standardFromConfig(cfg));
+          standard = { action: 'create' };
+        }
+      }
+    }
     let policy;
     if (cfg.readOnly === true) {
       const warning = 'vault-policy: readOnly is set; the vault policy was not refreshed.';
@@ -167,6 +186,7 @@ export async function agentCommand({ args, paths, env, output, plan, flag, value
       action: 'agent-refresh',
       agents: refreshed,
       policy,
+      standard,
       ...(safe || skipped.length ? { skipped } : {}),
     });
     return;

@@ -5,6 +5,7 @@ import { scanPath, scanText, isSafetyFindingAllowed } from '../../../packages/co
 import { SyncTransportError } from './transport.mjs';
 
 const DEFAULT_INCLUDE = Object.freeze(['**/*.md']);
+const STANDARD_PATH = '.brainatlas/standard.json';
 const normalize = (path) => path.replace(/\\/g, '/').replace(/^\.\//, '');
 const conflictArtifact = (path) => /\.conflict-[a-z0-9_-]+-\d{8}T\d{6}Z(?:-\d+)?\.md$/i.test(path);
 const cachePath = (path) => {
@@ -70,7 +71,11 @@ export function resolveSyncScope(config = {}) {
       throw new SyncTransportError('E_STATE_INVALID');
     }
   }
-  return { include: [...include], localOnly: [...localOnly], deny: [...deny] };
+  return {
+    include: include.includes(STANDARD_PATH) ? [...include] : [...include, STANDARD_PATH],
+    localOnly: [...localOnly],
+    deny: [...deny],
+  };
 }
 
 export function isLocalOnlyFrontmatter(text) {
@@ -104,7 +109,12 @@ async function walk(root, ignoredDir, output, allowedPaths, excluded, current = 
     if (entry.isDirectory()) {
       const rel = normalize(relative(root, absolute));
       if (ignoredDir && (rel === ignoredDir || rel.startsWith(`${ignoredDir}/`))) continue;
-      if (scanPath(`${rel}/sentinel.md`).length && !allowedPaths.some((path) => path.startsWith(`${rel}/`))) continue;
+      if (
+        rel !== '.brainatlas' &&
+        scanPath(`${rel}/sentinel.md`).length &&
+        !allowedPaths.some((path) => path.startsWith(`${rel}/`))
+      )
+        continue;
       await walk(root, ignoredDir, output, allowedPaths, excluded, absolute);
     } else if (entry.isFile()) {
       const path = normalize(relative(root, absolute));
@@ -138,15 +148,19 @@ export async function inventoryVault({ vaultPath, stateDir, config = {} }) {
   const seen = new Map();
   const extraDenyGlobs = Array.isArray(config?.safety?.extraDenyGlobs) ? config.safety.extraDenyGlobs : [];
   for (const { path, absolute } of candidates.sort((a, b) => a.path.localeCompare(b.path))) {
+    const forced = path === STANDARD_PATH;
     const denied = scanPath(path, { denyGlobs: scope.deny, extraDenyGlobs }).filter(
       (finding) => !isSafetyFindingAllowed(path, '', finding, allowed)
     );
-    if (denied.length) {
+    if (denied.length && !forced) {
       for (const finding of denied) refused.push({ path, ruleId: finding.ruleId });
       excluded.add(path);
       continue;
     }
-    if (!scope.include.some((glob) => globMatch(glob, path)) || scope.localOnly.some((glob) => globMatch(glob, path))) {
+    if (
+      !forced &&
+      (!scope.include.some((glob) => globMatch(glob, path)) || scope.localOnly.some((glob) => globMatch(glob, path)))
+    ) {
       excluded.add(path);
       continue;
     }
