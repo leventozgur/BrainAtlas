@@ -357,7 +357,7 @@ test('CLI: report mode writes nothing, --json is one object, and errors use the 
   assert.equal(json.status, 0, json.stderr);
   const parsed = JSON.parse(json.stdout);
   assert.equal(parsed.ok, true);
-  assert.deepEqual(Object.keys(parsed).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages']);
+  assert.deepEqual(Object.keys(parsed).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy']);
   assert.equal(parsed.pages, 2);
   assert.ok(parsed.findings.some((f) => f.kind === 'stale' && f.path === 'wiki/concepts/a.md'));
   assert.equal(text.status, 0, text.stderr);

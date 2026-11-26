@@ -122,9 +122,10 @@ test('read-only source, copied categories, exclusions, instructions, hash and ou
     await assert.rejects(lstat(join(f.target, path)), { code: 'ENOENT' });
   for (const key of ['git', 'obsidian', 'trash', 'symlinks']) assert.ok(report.skipped[key] > 0, key);
   assert.equal(report.bodyHashMatch, true);
-  const instructions = await readFile(join(f.target, 'AGENTS.md'), 'utf8');
-  assert.ok(instructions.startsWith((await readFile(join(root, 'templates/policy/AGENTS.md'), 'utf8')).trimEnd()));
-  assert.match(instructions, /Remember my custom setting\./);
+  const instructions = await readFile(join(f.target, 'AGENTS.md'));
+  assert.deepEqual(instructions, await readFile(join(f.source, 'AGENTS.md')));
+  assert.ok(report.warnings.some((warning) => warning.startsWith('AGENTS.md: no BrainAtlas managed block')));
+  assert.match(instructions.toString('utf8'), /Remember my custom setting\./);
   assert.ok(!(await readFile(join(f.target, 'wiki/log.md'), 'utf8')).includes(f.marker));
 });
 

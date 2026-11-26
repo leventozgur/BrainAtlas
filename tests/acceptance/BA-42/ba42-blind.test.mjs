@@ -66,10 +66,14 @@ function runJson(which, args, opts) {
   return { ...r, body: JSON.parse(r.stdout) };
 }
 const withoutDuration = (body) => {
-  const { durationMs, ...rest } = body;
+  const { durationMs, policy, ...rest } = body;
   return rest;
 };
-const humanNormal = (text) => text.replace(/, \d+ ms\n/u, ', N ms\n');
+const humanNormal = (text) => {
+  const normalized = text.replace(/, \d+ ms\n/u, ', N ms\n');
+  const policy = normalized.indexOf('\npolicy (');
+  return policy < 0 ? normalized : normalized.slice(0, policy);
+};
 const gitLog = async () => (existsSync(GIT_LOG) ? readFile(GIT_LOG, 'utf8') : '');
 
 async function digestOf(root) {

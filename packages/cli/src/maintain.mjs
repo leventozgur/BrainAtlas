@@ -3,7 +3,14 @@
 import { execFile } from 'node:child_process';
 import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { join, posix, resolve } from 'node:path';
-import { checkPage, loadPagesDetailed, parseFrontmatter } from '@brainatlas/core';
+import {
+  checkPage,
+  lintPolicyReferences,
+  loadPagesDetailed,
+  parseFrontmatter,
+  refreshVaultPolicy,
+} from '@brainatlas/core';
+import { commandNames } from './index.mjs';
 
 export const KINDS = Object.freeze([
   'stale',
@@ -671,7 +678,22 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
   );
   const counts = Object.fromEntries(KINDS.map((kind) => [kind, 0]));
   for (const item of findings) if (Object.hasOwn(counts, item.kind)) counts[item.kind]++;
-  return { ok: true, findings, counts, pages: content.length, durationMs: Date.now() - started };
+  const plan = await refreshVaultPolicy({ vaultDir: root, plan: true });
+  const policyWarnings = [...plan.warnings];
+  for (const change of plan.changes)
+    if (change.action !== 'none')
+      policyWarnings.push(`${change.path}: the managed policy is out of date; run brainatlas agent refresh.`);
+  policyWarnings.push(
+    ...(await lintPolicyReferences({ vaultDir: root, home: process.env.HOME, knownCommands: commandNames })).warnings
+  );
+  return {
+    ok: true,
+    findings,
+    counts,
+    pages: content.length,
+    durationMs: Date.now() - started,
+    policy: { changes: plan.changes, warnings: policyWarnings },
+  };
 }
 
 /** Human summary: counts per kind, then each finding grouped by kind. */
@@ -685,6 +707,10 @@ export function formatMaintenance(report) {
     if (!items.length) continue;
     lines.push('', `${kind} (${items.length})`);
     for (const item of items) lines.push(`  ${item.path}: ${item.detail}`);
+  }
+  if (report.policy?.warnings?.length) {
+    lines.push('', `policy (${report.policy.warnings.length})`);
+    for (const warning of report.policy.warnings) lines.push(`  ${warning}`);
   }
   return lines.join('\n');
 }

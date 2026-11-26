@@ -5,6 +5,7 @@ import YAML from 'yaml';
 import { BrainAtlasError } from '../util/errors.mjs';
 import { packageRootFromUrl } from '../paths/index.mjs';
 import { atomicWriteFile, resolveSafePath } from '../util/index.mjs';
+import { managedPolicyBlock } from './policy.mjs';
 
 const root = packageRootFromUrl(import.meta.url);
 const markdown = (s) => (typeof s === 'string' ? s : String(s ?? ''));
@@ -45,7 +46,7 @@ export async function initVault(dir, options = {}) {
     ['planning/backlog.md', await readFile(join(root, 'templates/vault/backlog.md'), 'utf8')],
   ];
   const policy = await readFile(join(root, 'templates/policy/AGENTS.md'), 'utf8');
-  files.push(['AGENTS.md', policy]);
+  files.push(['AGENTS.md', managedPolicyBlock(policy)]);
   for (const [rel, content] of files) {
     const file = await resolveSafePath(base, rel);
     await mkdir(dirname(file), { recursive: true });

@@ -54,7 +54,7 @@ const helpUsages = Object.freeze({
     'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]',
   module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   agent:
-    'brainatlas agent list [--json] | agent add <agent> [--channel mcp|cli] [--plan] | agent remove <agent> [--plan] | agent set <agent> --channel mcp|cli [--plan] | agent refresh [<agent>] [--plan]',
+    'brainatlas agent list [--json] | agent add <agent> [--channel mcp|cli] [--plan] | agent remove <agent> [--plan] | agent set <agent> --channel mcp|cli [--plan] | agent refresh [<agent>] [--plan] [--safe] [--force]',
   uninstall: 'brainatlas uninstall [--plan]',
   update: 'brainatlas update --from ARCHIVE [--plan] | --check [--pre]',
   rollback: 'brainatlas rollback [--to VERSION] [--plan]',
@@ -199,6 +199,7 @@ const dispatch = Object.freeze({
   wiki: tools.wiki,
 });
 const builtInCommands = new Set([...Object.keys(dispatch), 'help']);
+export const commandNames = Object.freeze([...Object.keys(dispatch), 'help']);
 
 export function enableOffline(env = process.env) {
   if (env.BRAINATLAS_OFFLINE === '1')

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, rename, rm, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { scanPath, scanText } from '../../../packages/core/src/safety/index.mjs';
+import { managedPolicyBlock } from '../../../packages/core/src/vault/policy.mjs';
 import { BrainAtlasError } from '../../../packages/core/src/util/errors.mjs';
 import { globMatch, inventoryVault, isLocalOnlyFrontmatter } from './scope.mjs';
 import { mergeCanonicalPath } from './merge.mjs';
@@ -884,10 +885,15 @@ export function createSyncEngine({
         const base = baseFiles.get(path) ?? null;
         // An untouched init file on a host with no sync base is scaffolding, not
         // a competing edit. Pull the established remote bytes without merging it.
-        const local =
-          !base && remote && currentLocal && initSeedTemplates.get(path)?.equals(currentLocal.bytes)
-            ? null
-            : currentLocal;
+        // AGENTS.md also counts as scaffolding when it carries the current managed policy block.
+        const seed = initSeedTemplates.get(path);
+        const seeded =
+          seed &&
+          currentLocal &&
+          (seed.equals(currentLocal.bytes) ||
+            (path === 'AGENTS.md' &&
+              Buffer.from(managedPolicyBlock(seed.toString('utf8'))).equals(currentLocal.bytes)));
+        const local = !base && remote && currentLocal && seeded ? null : currentLocal;
         let requests = deleteRequests.get(path) ?? [];
 
         const tombstone = tombstones.get(path);

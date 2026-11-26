@@ -12,7 +12,24 @@
 
 At session start, the hook provides a short recap: the `handoff.md` card if one exists, otherwise a deterministic card of up to 800 characters listing recently changed wiki pages (last 14 days) and the pending review count. Set `hooks.mode` to `manual` to turn off the generated card; `handoff.md` is still used. The card is reference data, not instructions.
 
-After a release update, BrainAtlas re-applies the configured adapters with the new release. Run the same step by hand with `brainatlas agent refresh [<agent>] [--plan]`; `--plan` shows the changes without writing them. `brainatlas update` refreshes adapters only after the new release passes its health check, and a refresh failure is reported in `adapters` without failing or rolling back the update. Agents that would replace unmanaged content are skipped and listed under `skipped` when the refresh runs with `--safe`.
+After a release update, BrainAtlas re-applies the configured adapters with the new release. Run the same step by hand with `brainatlas agent refresh [<agent>] [--plan] [--safe] [--force]`; `--plan` shows the changes without writing them. `brainatlas update` refreshes adapters only after the new release passes its health check, and a refresh failure is reported in `adapters` without failing or rolling back the update. Agents that would replace unmanaged content are skipped and listed under `skipped` when the refresh runs with `--safe`.
+
+## Vault policy refresh
+
+The vault's `AGENTS.md` and `CLAUDE.md` carry a versioned managed block:
+
+```text
+<!-- brainatlas:managed v=2 sha256=<64 hex> -->
+...policy text...
+<!-- /brainatlas:managed -->
+```
+
+`brainatlas agent refresh` (and therefore `brainatlas update`) refreshes this block from the current release on every device. Text outside the block is preserved byte for byte, including a `<!-- migrated:user-section -->` section. The JSON output adds `policy: { changes, warnings }` with one `create`, `update` or `none` entry per file.
+
+- A managed block whose `sha256` matches its text is replaced when the template changed. Older released policy text without a block is upgraded to the managed block.
+- An edited block, or a file without a block that is not a known released policy, is left untouched with a warning. Run `brainatlas agent refresh --force` to replace it: the old file is copied to `<file>.bak.<ISO timestamp>` first, and unmanaged text is kept below the block inside `<!-- brainatlas:previous -->` … `<!-- /brainatlas:previous -->`.
+- A symlinked policy file is never followed. With `readOnly` set, the refresh is skipped and reported as `vault-policy: readOnly is set; the vault policy was not refreshed.`
+- `brainatlas doctor` runs the same refresh as a plan and warns when a policy is out of date; `brainatlas maintain` lists the same warnings under `policy`. Both also report stale references in the user-owned text: a path that does not exist on this device, a `wiki_*`/`plan_*` tool that is not an MCP tool, an unknown `brainatlas <command>`, or a reference to the removed `ba.mjs` and `checkpoint.mjs`.
 
 Exact global versus workspace locations depend on adapter scope and agent conventions. Trust-review each planned edit before relying on it. Uninstall removes only changes it can identify as managed and preserves the configured vault.
 

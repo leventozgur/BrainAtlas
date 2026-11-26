@@ -2,7 +2,7 @@
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CHANNEL_AGENTS, effectiveChannel, loadConfig } from '@brainatlas/core';
+import { CHANNEL_AGENTS, effectiveChannel, loadConfig, refreshVaultPolicy } from '@brainatlas/core';
 import { adapterHealth, detectAdapter, installAdapter, removeAdapter } from './adapters.mjs';
 import { error, exists, redactOutput, saveTrackedConfig } from './shared.mjs';
 
@@ -118,8 +118,20 @@ export async function agentCommand({ args, paths, env, output, plan, flag, value
   if (action === 'refresh') {
     if (agent && !cfg.agents.includes(agent)) throw error('E_ARGUMENT', `Agent ${agent} is not installed.`);
     const safe = flag?.('--safe') === true;
+    const force = flag?.('--force') === true;
     const refreshed = [];
     const skipped = [];
+    let policy;
+    if (cfg.readOnly === true) {
+      const warning = 'vault-policy: readOnly is set; the vault policy was not refreshed.';
+      policy = { changes: [], warnings: [warning] };
+      skipped.push({ agent: 'vault-policy', warnings: [warning] });
+    } else {
+      const result = await refreshVaultPolicy({ vaultDir: cfg.vault.path, plan, force });
+      policy = { changes: result.changes, warnings: result.warnings };
+      if (safe && result.needsConfirmation && !force)
+        skipped.push({ agent: 'vault-policy', warnings: result.warnings });
+    }
     for (const name of agent ? [agent] : cfg.agents) {
       const warnings = [];
       let changed = [];
@@ -153,7 +165,12 @@ export async function agentCommand({ args, paths, env, output, plan, flag, value
       }
       if (!skippedAgent) refreshed.push({ agent: name, changed, warnings });
     }
-    output({ action: 'agent-refresh', agents: refreshed, ...(safe ? { skipped } : {}) });
+    output({
+      action: 'agent-refresh',
+      agents: refreshed,
+      policy,
+      ...(safe || skipped.length ? { skipped } : {}),
+    });
     return;
   }
   if (action === 'add') {
