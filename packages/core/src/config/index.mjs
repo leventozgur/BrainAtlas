@@ -2,6 +2,9 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { BrainAtlasError } from '../util/errors.mjs';
+import { readStandard, STANDARD_VERSION, VAULT_STANDARD_KEYS } from './standard.mjs';
+
+export * from './standard.mjs';
 
 /** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',channels?:{'claude-code'?:'mcp'|'cli',codex?:'mcp'|'cli','copilot-vscode'?:'mcp'|'cli','gemini-cli'?:'mcp'|'cli',kiro?:'mcp'|'cli'},vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:boolean,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,keepAlive?:string,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
@@ -312,6 +315,53 @@ export function secretFilterEnabled(cfg) {
   return cfg?.safety?.secretFilter !== false;
 }
 
+function withStandardApplied(config, applied) {
+  return Object.defineProperty(config, 'standardApplied', {
+    value: applied,
+    enumerable: false,
+    configurable: true,
+  });
+}
+
+function pathValue(obj, key) {
+  return key.split('.').reduce((value, part) => (value && typeof value === 'object' ? value[part] : undefined), obj);
+}
+
+function setPathValue(obj, key, value) {
+  const parts = key.split('.');
+  let target = obj;
+  for (const part of parts.slice(0, -1)) target = target[part];
+  target[parts.at(-1)] = clone(value);
+}
+
+function deletePathValue(obj, key) {
+  const parts = key.split('.');
+  let target = obj;
+  for (const part of parts.slice(0, -1)) target = target[part];
+  delete target[parts.at(-1)];
+}
+
+async function preserveDeviceStandardValues(config, file, deviceKeys) {
+  const { standard } = await readStandard(config.vault?.path);
+  if (!standard || standard.standardVersion !== STANDARD_VERSION) return config;
+  let existing;
+  try {
+    existing = JSON.parse(await readFile(file, 'utf8'));
+  } catch (cause) {
+    if (cause?.code === 'ENOENT') return config;
+    throw new BrainAtlasError('E_CONFIG_READ', 'Could not read configuration.');
+  }
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return config;
+  const out = clone(config);
+  for (const key of VAULT_STANDARD_KEYS) {
+    if (deviceKeys.includes(key)) continue;
+    const prior = pathValue(existing, key);
+    if (prior === undefined) deletePathValue(out, key);
+    else setPathValue(out, key, prior);
+  }
+  return out;
+}
+
 export function validateConfig(obj) {
   const errors = [];
   validateSchema(obj, CONFIG_SCHEMA, '', errors);
@@ -414,7 +464,10 @@ export async function loadConfig(options) {
     text = await readFile(paths.configFile, 'utf8');
   } catch (cause) {
     if (cause?.code === 'ENOENT')
-      return defaultConfig(/** @type {'lite'|'full'|'custom'} */ (env.BRAINATLAS_PROFILE || 'lite'));
+      return withStandardApplied(
+        defaultConfig(/** @type {'lite'|'full'|'custom'} */ (env.BRAINATLAS_PROFILE || 'lite')),
+        false
+      );
     throw new BrainAtlasError('E_CONFIG_READ', 'Could not read configuration.');
   }
   let value;
@@ -430,21 +483,35 @@ export async function loadConfig(options) {
   }
   const result = validateConfig(value);
   if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
-  return { ...value, semantic: { ...WRITTEN_SEMANTIC_DEFAULTS, ...value.semantic } };
+  const loaded = { ...value, semantic: { ...WRITTEN_SEMANTIC_DEFAULTS, ...value.semantic } };
+  const { standard } = loaded.vault?.path ? await readStandard(loaded.vault.path) : { standard: null };
+  if (!standard || standard.standardVersion !== STANDARD_VERSION) return withStandardApplied(loaded, false);
+  const effective = clone(loaded);
+  if (standard.okf && has(standard.okf, 'level')) effective.okf.level = standard.okf.level;
+  if (standard.retrieval) {
+    if (has(standard.retrieval, 'budgetChars')) effective.retrieval.budgetChars = standard.retrieval.budgetChars;
+    if (has(standard.retrieval, 'abstainThreshold'))
+      effective.retrieval.abstainThreshold = standard.retrieval.abstainThreshold;
+    if (has(standard.retrieval, 'exclude')) effective.retrieval.exclude = [...standard.retrieval.exclude];
+  }
+  if (standard.safety && has(standard.safety, 'extraDenyGlobs'))
+    effective.safety.extraDenyGlobs = [...standard.safety.extraDenyGlobs];
+  return withStandardApplied(effective, true);
 }
 
 export async function saveConfig(cfg, options) {
   const { paths } = options || {};
-  const result = validateConfig(cfg);
-  if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
   const file = paths?.configFile;
   if (typeof file !== 'string' || !isAbsolute(file) || file.split(/[\\/]/).includes('..') || normalize(file) !== file)
     throw new BrainAtlasError('E_PATH_ESCAPE', 'Configuration file path is invalid.');
+  const prepared = await preserveDeviceStandardValues(cfg, file, options?.deviceKeys ?? []);
+  const result = validateConfig(prepared);
+  if (!result.ok) throw new BrainAtlasError('E_CONFIG_INVALID', 'Configuration is invalid.', result.errors);
   const dir = dirname(file);
   const tmp = join(dir, `.config-${process.pid}-${Date.now()}.tmp`);
   await mkdir(dir, { recursive: true });
   try {
-    await writeFile(tmp, `${JSON.stringify(cfg, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    await writeFile(tmp, `${JSON.stringify(prepared, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
     await rename(tmp, file);
   } catch {
     try {

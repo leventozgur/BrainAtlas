@@ -2,6 +2,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { commandNames } from '../index.mjs';
 import { loadConfig, secretFilterEnabled, vaultId } from '@brainatlas/core';
 import { recordCreatedDirectories, missingDirectories } from '../install-manifest.mjs';
 import { formatMaintenance, receiptCandidates, runMaintenance } from '../maintain.mjs';
@@ -17,6 +18,7 @@ import {
 } from '../synthesis/review.mjs';
 import { formatUsage, isFeedbackVerdict, recordFeedback, usageSummary } from '../usage.mjs';
 import {
+  activeCommandNames,
   error,
   readCurrent,
   currentReleaseDir,
@@ -264,7 +266,12 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
   const cfg = requested === undefined || queue ? await loadConfig({ paths, env }) : null;
   if (queue && requested !== undefined && resolve(requested) !== resolve(cfg.vault.path))
     throw error('E_ARGUMENT', '--queue only works with the configured vault.');
-  const report = await runMaintenance(requested ?? cfg.vault.path, repo === undefined ? {} : { repo });
+  const moduleConfig = cfg ?? (await loadConfig({ paths, env, readOnly: true }).catch(() => null));
+  const knownCommands = await activeCommandNames(paths, env, moduleConfig, commandNames);
+  const report = await runMaintenance(requested ?? cfg.vault.path, {
+    knownCommands,
+    ...(repo === undefined ? {} : { repo }),
+  });
   if (queue) {
     const candidates = receiptCandidates(report.findings);
     report.queue = candidates.length
