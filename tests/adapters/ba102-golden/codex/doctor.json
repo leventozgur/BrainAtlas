@@ -1,0 +1,30 @@
+{
+  "ok": false,
+  "checks": [
+    {
+      "id": "registered",
+      "ok": true,
+      "message": "MCP server is registered."
+    },
+    {
+      "id": "shim",
+      "ok": false,
+      "message": "Shim path is missing."
+    },
+    {
+      "id": "version-drift",
+      "ok": true,
+      "message": "No version drift detected."
+    },
+    {
+      "id": "hook",
+      "ok": true,
+      "message": "Prompt hook is registered."
+    },
+    {
+      "id": "instructions",
+      "ok": true,
+      "message": "Instructions are present."
+    }
+  ]
+}

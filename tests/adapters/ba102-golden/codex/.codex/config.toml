@@ -1,0 +1,13 @@
+model = "example-model"
+approval_policy = "on-request"
+
+[profiles.default]
+model_reasoning_effort = "medium"
+
+
+# brainatlas:begin
+# brainatlas:sha256=1cd08867357a
+[mcp_servers.brainatlas]
+command = "/usr/bin/node"
+args = ["/opt/brainatlas/bin/brainatlas", "mcp"]
+# brainatlas:end

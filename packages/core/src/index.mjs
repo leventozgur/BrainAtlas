@@ -11,3 +11,4 @@ export * from './safety/index.mjs';
 export * from './retrieval/index.mjs';
 export * from './util/index.mjs';
 export * from './util/detect.mjs';
+export * as adapterKit from './adapter-kit/index.mjs';
