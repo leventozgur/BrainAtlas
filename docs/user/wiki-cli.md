@@ -7,7 +7,7 @@ not duplicated. `write`, `update`, `create`, `link` and `reindex` change the Wik
 `lint` are read-only.
 
 ```text
-brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | list [--type T] | status | lint | write <path> [--dry-run] [--expect-sha256 H] (content on stdin) | update <path> [--append] [--expect-sha256 H] [--frontmatter-json JSON] [--dry-run] (content on stdin) | create <entity|concept> <name...> [--dry-run] (content on stdin) | link <path> [--dry-run] | reindex [--dry-run]  [--vault PATH] [--json]
+brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | list [--type T] | status | lint | write <path> [--dry-run] [--expect-sha256 H] (content on stdin) | update <path> [--append] [--expect-sha256 H] [--frontmatter-json JSON] [--dry-run] (content on stdin) | create <entity|concept|source|summary|query> <name...> [--dry-run] (content on stdin) | link <path> [--dry-run] | reindex [--dry-run]  [--vault PATH] [--json]
 ```
 
 | Subcommand | MCP tool | Arguments |
@@ -19,7 +19,7 @@ brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path
 | `lint` | `wiki_lint` | none |
 | `write <path>` | `wiki_write_page` | exactly one path ending in `.md`; content (frontmatter and body) on standard input; `--expect-sha256 H` and `--dry-run` are optional |
 | `update <path>` | `wiki_update_page` | exactly one path ending in `.md`; body text on standard input; `--append` adds it to the existing body instead, `--frontmatter-json JSON` merges frontmatter, and `--expect-sha256 H` and `--dry-run` are optional |
-| `create <entity\|concept> <name…>` | `wiki_create` | the page type, the name (all remaining words joined by one space) and the content on standard input; `--dry-run` is optional |
+| `create <entity\|concept\|source\|summary\|query> <name…>` | `wiki_create` | the page type, the name (all remaining words joined by one space) and optional content on standard input; `--dry-run` is optional |
 | `link <path>` | `wiki_add_crosslinks` | exactly one path ending in `.md`; `--dry-run` is optional |
 | `reindex` | `wiki_update_index` | none; `--dry-run` is optional |
 
@@ -79,10 +79,27 @@ its negation. Without `--json` the command prints `Wrote wiki/<path> (created|up
 existing frontmatter. The target page must already exist, and `--expect-sha256 H` refuses with `E_CONFLICT` when its
 bytes differ.
 
-`brainatlas wiki create <entity|concept> <name…>` reads the page content from standard input and sends
-`{type, name, content}` to `wiki_create`: the same path, frontmatter, index line and `create-entity`/`create-concept` log
-action as before. A name with no ASCII letter or digit is refused with `E_INVALID_INPUT`; an existing page is
-`E_ALREADY_EXISTS`.
+`brainatlas wiki create <entity|concept|source|summary|query> <name…>` reads optional page content from standard input and
+sends `{type, name, content}` to `wiki_create`: the same path, frontmatter, index line and `create-<type>` log action.
+Each type has a template with `title`, `type`, `generated`, `status: proposed`, `sources: []`, `verified: []` and
+`stale_after: P90D` frontmatter, and these body headings:
+
+| Type | Folder | Template body headings |
+|---|---|---|
+| `entity` | `entities/` | `## Identity`, `## Current state`, `## Evidence`, `## History` |
+| `concept` | `concepts/` | `## Summary`, `## Current state`, `## Evidence`, `## History` |
+| `source` | `sources/` | `## Source`, `## Key points`, `## Reliability` |
+| `summary` | `summaries/` | `## Scope`, `## Summary`, `## Sources` |
+| `query` | `queries/` | `## Question`, `## Answer`, `## Evidence` |
+
+Without standard input, or with empty standard input, the template body is used. A name with no ASCII letter or digit is
+refused with `E_INVALID_INPUT`; an existing page is `E_ALREADY_EXISTS`.
+
+Every Wiki write uses the same naming rule: each path segment is lowercase ASCII `[a-z0-9-]` with no leading, trailing or
+double `-`, the file name is at most 80 characters before `.md`, the top folder is one of the five type folders or
+`archive/`, and a page whose frontmatter has a type sits in that type's folder. Violations are returned in `warnings` as
+`<path>: <rule>`; with `okf.level` set to `strict` the write is refused with `E_OKF_INVALID` and the same messages.
+Existing pages are never renamed, and `brainatlas wiki lint` reports their violations as warnings.
 
 `brainatlas wiki link <path>` adds a `## See also` section with links to the pages the target names (MCP
 `wiki_add_crosslinks`); it never changes the linked pages.

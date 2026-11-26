@@ -26,7 +26,7 @@ export const OPERATIONS = Object.freeze([
     tool: 'wiki_create',
     cli: 'wiki create <entity|concept> <name>',
     kind: 'write',
-    summary: 'Create an entity or concept page.',
+    summary: 'Create an entity, concept, source, summary or query page from its template.',
   },
   {
     tool: 'wiki_add_crosslinks',
