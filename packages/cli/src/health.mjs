@@ -69,6 +69,7 @@ export async function buildHealthSummary({ doctor, currentVersion, config, agent
     profile: doctor.profile,
     modules: doctor.modules,
     agentChannels,
+    capabilities: doctor.capabilities ?? null,
     hooks: config?.hooks ? { mode: config.hooks.mode, deadlineMs: config.hooks.deadlineMs } : null,
     semantic: {
       enabled: semantic?.enabled === true,
@@ -128,6 +129,13 @@ export function formatHealthSummary(summary) {
   ]);
   const width = Math.max(...rows.map(([label]) => label.length));
   const lines = rows.map(([label, value]) => `${label.padEnd(width)}  ${value}`);
+  for (const [agent, capability] of Object.entries(summary.capabilities ?? {})) {
+    lines.push(
+      capability
+        ? `${agent}: ${capability.channel}, read ${capability.read ? 'yes' : 'no'}, write ${capability.write ? 'yes' : 'no'}, inject ${capability.inject}`
+        : `${agent}: unavailable`
+    );
+  }
   for (const warning of summary.warnings ?? []) lines.push(`warning: ${warning}`);
   lines.push('', summary.note);
   return lines.join('\n');
