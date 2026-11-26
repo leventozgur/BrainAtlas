@@ -4,9 +4,9 @@
 
 | Agent | Files managed by this repository | Mode and caveats |
 |---|---|---|
-| Claude Code | `.claude.json` or `.mcp.json` (scope dependent), `.claude/settings.json`, `CLAUDE.md` | MCP, `UserPromptSubmit` and `SessionStart` hooks, managed instruction block. |
+| Claude Code | `.claude.json` or `.mcp.json` (scope dependent), `.claude/settings.json`, `CLAUDE.md`, `.claude/skills/brainatlas/SKILL.md` (cli channel) | MCP, `UserPromptSubmit` and `SessionStart` hooks, managed instruction block; the cli channel writes a managed skill with retrieval and capture steps. |
 | GitHub Copilot in VS Code | MCP config, hook JSON, instructions Markdown | Session-start hook and pull-mode MCP; per-prompt hooks are unsupported by Copilot. Global instructions path is unverified. Workspace hooks may require workspace trust. |
-| Kiro | `.kiro/settings/mcp.json`, `.kiro/steering/brainatlas.md`, `.kiro/hooks/brainatlas.json` | MCP, steering instructions, prompt hook. **Prompt trigger name is unverified.** |
+| Kiro | `.kiro/settings/mcp.json`, `.kiro/steering/brainatlas.md`, `.kiro/hooks/brainatlas.json` | MCP, steering instructions, prompt hook (`UserPromptSubmit`). |
 | Codex CLI | Agent MCP and instruction configuration | MCP and pull-mode instruction pointer. Confirm the exact behavior in the installed Codex CLI. |
 | Gemini CLI | `~/.gemini/settings.json` | MCP and managed instructions plus `BeforeAgent` (`brainatlas-context`) and `SessionStart` (`brainatlas-session`) hooks. Enable them from Gemini CLI's `/hooks` panel if needed. |
 

@@ -73,7 +73,6 @@ for (const scope of ['global', 'vault'])
       const health = await kiro.doctor(f.ctx);
       assert.equal(health.checks.find((c) => c.id === 'registered').ok, true);
       assert.equal(health.checks.find((c) => c.id === 'hook').ok, true);
-      assert.equal(health.checks.find((c) => c.id === 'trigger-verified').warning, true); // PM hotfix: warning, not a failing check
       const review = await kiro.trustReview(f.ctx);
       assert.equal(review.client, 'Kiro');
       assert.equal(review.required, true);

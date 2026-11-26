@@ -66,7 +66,7 @@ test('detect requires injected HOME; plan is pure and describes MCP, steering, a
       JSON.parse(hook.after).hooks[0].action.command,
       /"\/path with spaces\/node" "\/path with spaces\/brainatlas" hook kiro prompt/
     );
-    assert.equal(adapter.KIRO_PROMPT_TRIGGER, 'PromptSubmit');
+    assert.equal(adapter.KIRO_PROMPT_TRIGGER, 'UserPromptSubmit');
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -140,7 +140,6 @@ test('vault scope writes project configuration and doctor/trust review identify 
     assert.equal(health.checks.find((c) => c.id === 'registered').ok, true);
     assert.equal(health.checks.find((c) => c.id === 'command').ok, true);
     assert.equal(health.checks.find((c) => c.id === 'hook').ok, true);
-    assert.equal(health.checks.find((c) => c.id === 'trigger-verified').warning, true); // PM hotfix: warning, not a failing check
     await adapter.remove(ctx);
   } finally {
     await rm(home, { recursive: true, force: true });
