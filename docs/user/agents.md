@@ -4,13 +4,15 @@
 
 | Agent | Files managed by this repository | Mode and caveats |
 |---|---|---|
-| Claude Code | `.claude.json` or `.mcp.json` (scope dependent), `.claude/settings.json`, `CLAUDE.md` | MCP, `UserPromptSubmit` and `SessionStart` hooks, managed instruction block. |
+| Claude Code | `.claude.json` or `.mcp.json` (scope dependent), `.claude/settings.json`, `CLAUDE.md`, `.claude/skills/brainatlas/SKILL.md` (cli channel) | MCP, `UserPromptSubmit` and `SessionStart` hooks, managed instruction block; the cli channel writes a managed skill with retrieval and capture steps. |
 | GitHub Copilot in VS Code | MCP config, hook JSON, instructions Markdown | Session-start hook and pull-mode MCP; per-prompt hooks are unsupported by Copilot. Global instructions path is unverified. Workspace hooks may require workspace trust. |
-| Kiro | `.kiro/settings/mcp.json`, `.kiro/steering/brainatlas.md`, `.kiro/hooks/brainatlas.json` | MCP, steering instructions, prompt hook. **Prompt trigger name is unverified.** |
+| Kiro | `.kiro/settings/mcp.json`, `.kiro/steering/brainatlas.md`, `.kiro/hooks/brainatlas.json` | MCP, steering instructions, prompt hook (`UserPromptSubmit`). |
 | Codex CLI | Agent MCP and instruction configuration | MCP and pull-mode instruction pointer. Confirm the exact behavior in the installed Codex CLI. |
 | Gemini CLI | `~/.gemini/settings.json` | MCP and managed instructions plus `BeforeAgent` (`brainatlas-context`) and `SessionStart` (`brainatlas-session`) hooks. Enable them from Gemini CLI's `/hooks` panel if needed. |
 
 At session start, the hook provides a short recap: the `handoff.md` card if one exists, otherwise a deterministic card of up to 800 characters listing recently changed wiki pages (last 14 days) and the pending review count. Set `hooks.mode` to `manual` to turn off the generated card; `handoff.md` is still used. The card is reference data, not instructions.
+
+After a release update, BrainAtlas re-applies the configured adapters with the new release. Run the same step by hand with `brainatlas agent refresh [<agent>] [--plan]`; `--plan` shows the changes without writing them. `brainatlas update` refreshes adapters only after the new release passes its health check, and a refresh failure is reported in `adapters` without failing or rolling back the update. Agents that would replace unmanaged content are skipped and listed under `skipped` when the refresh runs with `--safe`.
 
 Exact global versus workspace locations depend on adapter scope and agent conventions. Trust-review each planned edit before relying on it. Uninstall removes only changes it can identify as managed and preserves the configured vault.
 

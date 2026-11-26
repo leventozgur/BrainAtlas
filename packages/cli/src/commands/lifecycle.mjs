@@ -21,6 +21,7 @@ import {
   SECRET_FILTER_OFF_WARNING,
   secretFilterEnabled,
   validateConfig,
+  vaultId,
 } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from '../archive.mjs';
 import {
@@ -36,6 +37,7 @@ import {
 } from '../install-manifest.mjs';
 import { installedMaintainSchedule, installedSyncSchedule } from './sync.mjs';
 import { buildHealthSummary, formatHealthSummary } from '../health.mjs';
+import { readJsonl } from '../usage.mjs';
 import { adapterHealth, removeAdapter } from './adapters.mjs';
 import {
   error,
@@ -346,7 +348,33 @@ async function readJournal(paths) {
 async function clearJournal(paths) {
   await rm(journalPath(paths), { force: true });
 }
-async function doctorResult(paths, env) {
+const HOOK_CLIENTS = Object.freeze({
+  'claude-code': 'claude',
+  codex: 'codex',
+  kiro: 'kiro',
+  'copilot-vscode': 'copilot',
+  'gemini-cli': 'gemini',
+});
+const HOOK_INJECTION = Object.freeze({
+  'claude-code': 'prompt',
+  codex: 'prompt',
+  kiro: 'prompt',
+  'gemini-cli': 'prompt',
+  'copilot-vscode': 'session-start',
+});
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function defaultCapabilities(cfg, agent) {
+  const channel = effectiveChannel(cfg, agent);
+  return {
+    channel,
+    read: true,
+    write: channel === 'mcp' && cfg.readOnly !== true,
+    inject: channel === 'mcp' ? (HOOK_INJECTION[agent] ?? 'none') : 'none',
+  };
+}
+
+export async function doctorResult(paths, env, now = new Date()) {
   let cfg;
   let configOk;
   try {
@@ -365,14 +393,74 @@ async function doctorResult(paths, env) {
   }
   const warnings = [];
   if (!secretFilterEnabled(cfg)) warnings.push(SECRET_FILTER_OFF_WARNING);
+  const capabilities = {};
   const moduleHealth = [];
-  if (checks.release && cfg.agents?.length) {
+  if (cfg.agents?.length) {
     for (const agent of cfg.agents) {
       const health = await adapterHealth({ agent, cfg, paths, env });
-      if (health.warning) warnings.push(health.warning);
-      else checks[`adapter:${agent}`] = health.ok;
+      if (health.warning) {
+        warnings.push(health.warning);
+        capabilities[agent] =
+          health.warning === `Adapter ${agent} is unavailable.` ? null : defaultCapabilities(cfg, agent);
+      } else {
+        if (checks.release) checks[`adapter:${agent}`] = health.ok;
+        capabilities[agent] = health.capabilities ?? defaultCapabilities(cfg, agent);
+        for (const warning of health.warnings || []) warnings.push(`${agent}: ${warning}`);
+      }
     }
   }
+  for (const [agent, capability] of Object.entries(capabilities)) {
+    if (capability && capability.write === false && cfg.readOnly !== true)
+      warnings.push(
+        `${agent} has no write path (channel ${capability.channel}); run brainatlas agent refresh ${agent}.`
+      );
+  }
+  const hookActivity = {};
+  const hookAgents = Object.entries(capabilities).filter(
+    ([, capability]) => capability && capability.inject && capability.inject !== 'none'
+  );
+  if (hookAgents.length && cfg.vault?.path) {
+    let records = null;
+    try {
+      records = await readJsonl(join(paths.stateDir, vaultId(cfg.vault.path), 'metrics', 'hooks.jsonl'));
+    } catch (cause) {
+      warnings.push(`Hook metrics could not be read (${cause?.code ?? 'error'}).`);
+    }
+    const lastByClient = new Map();
+    for (const record of records || []) {
+      if (typeof record.client !== 'string') continue;
+      const time = typeof record.ts === 'string' || typeof record.ts === 'number' ? new Date(record.ts).getTime() : NaN;
+      if (!Number.isFinite(time)) continue;
+      if (!lastByClient.has(record.client) || time > lastByClient.get(record.client))
+        lastByClient.set(record.client, time);
+    }
+    for (const [agent] of hookAgents) {
+      const client = HOOK_CLIENTS[agent];
+      const last = client ? lastByClient.get(client) : undefined;
+      hookActivity[agent] = { lastHookAt: last === undefined ? null : new Date(last).toISOString() };
+      if (records === null) continue;
+      if (last === undefined) warnings.push(`${agent} hook is installed but has never run.`);
+      else {
+        const age = now.getTime() - last;
+        if (age > 7 * DAY_MS) warnings.push(`${agent} hook last ran ${Math.floor(age / DAY_MS)} days ago.`);
+      }
+    }
+  }
+  let orphanState = [];
+  if (cfg.vault?.path) {
+    try {
+      const entries = await readdir(paths.stateDir, { withFileTypes: true });
+      const own = vaultId(cfg.vault.path);
+      orphanState = entries
+        .filter((entry) => entry.isDirectory() && /^[0-9a-f]{16}$/.test(entry.name) && entry.name !== own)
+        .map((entry) => entry.name)
+        .sort();
+    } catch (cause) {
+      if (cause?.code !== 'ENOENT') warnings.push(`State directory could not be read (${cause?.code ?? 'error'}).`);
+    }
+  }
+  for (const name of orphanState)
+    warnings.push(`State directory ${name} does not belong to the configured vault; remove it after checking.`);
   if (checks.release && cfg.modules?.length) {
     try {
       const current = await readCurrent(paths);
@@ -431,6 +519,9 @@ async function doctorResult(paths, env) {
     checks,
     profile: cfg.profile,
     modules: cfg.modules,
+    capabilities,
+    hookActivity,
+    orphanState,
     moduleHealth,
     warnings,
   };
@@ -455,6 +546,39 @@ function checkCurrentRelease(paths, env) {
   if (!report || typeof report.ok !== 'boolean') return { ok: false, checks: { doctor: false } };
   if (result.error || result.status !== 0) report.ok = false;
   return report;
+}
+
+/** Re-apply adapters with the new release CLI. Any failure is reported, never thrown. */
+function refreshAdapters(paths, env) {
+  const failed = (message) => ({ refreshed: [], skipped: [], error: message });
+  try {
+    const cli = join(paths.currentDir, 'packages', 'cli', 'bin', 'brainatlas.mjs');
+    const result = spawnSync(process.execPath, [cli, 'agent', 'refresh', '--safe', '--json'], {
+      env,
+      encoding: 'utf8',
+      timeout: 30000,
+    });
+    if (result.error) {
+      const code = /** @type {{code?: string}} */ (result.error).code;
+      return failed(`Agent refresh could not run (${code ?? 'error'}).`);
+    }
+    if (result.status !== 0) return failed(`Agent refresh exited with status ${result.status}.`);
+    let report;
+    try {
+      report = JSON.parse(result.stdout || '');
+    } catch {
+      return failed('Agent refresh returned invalid JSON.');
+    }
+    if (!report || !Array.isArray(report.agents)) return failed('Agent refresh returned invalid JSON.');
+    return {
+      refreshed: report.agents.map((item) => item?.agent).filter((agent) => typeof agent === 'string'),
+      skipped: (Array.isArray(report.skipped) ? report.skipped : [])
+        .filter((item) => item && typeof item.agent === 'string')
+        .map((item) => ({ agent: item.agent, warnings: Array.isArray(item.warnings) ? item.warnings : [] })),
+    };
+  } catch {
+    return failed('Agent refresh could not run.');
+  }
 }
 
 function shellQuote(value) {
@@ -844,8 +968,9 @@ export async function update({ args, flag, value, json, plan, output, paths, env
       await savePrevious(paths, previous, env);
       state.phase = 'complete';
       await writeJsonFile(journalPath(paths), state, paths, env);
+      const adapters = refreshAdapters(paths, env);
       await clearJournal(paths);
-      output({ action: 'update', version: manifest.version, profile: manifest.profile, doctor: health });
+      output({ action: 'update', version: manifest.version, profile: manifest.profile, doctor: health, adapters });
       return;
     } catch (cause) {
       const currentJournal = await readJournal(paths).catch(() => null);

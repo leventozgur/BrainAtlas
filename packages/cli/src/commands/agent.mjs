@@ -71,14 +71,26 @@ function requireRemoved(result) {
 }
 
 /**
- * `brainatlas agent list | add | remove | set`.
- * @param {{args: string[], paths: any, env: any, output: (data: any) => void, plan: boolean, value: (name: string) => string | undefined}} context
+ * `brainatlas agent list | add | remove | set | refresh`.
+ * @param {{args: string[], paths: any, env: any, output: (data: any) => void, plan: boolean, flag?: (name: string) => boolean, value: (name: string) => string | undefined}} context
  */
-export async function agentCommand({ args, paths, env, output, plan, value }) {
-  const action = args.shift();
-  if (!['list', 'add', 'remove', 'set'].includes(action ?? '')) throw error('E_ARGUMENT', 'Agent action is invalid.');
-  const agent = action === 'list' ? undefined : args.shift();
-  if (action !== 'list' && (!agent || agent.startsWith('--'))) throw error('E_ARGUMENT', 'Agent name is required.');
+export async function agentCommand({ args, paths, env, output, plan, flag, value }) {
+  const positionals = [];
+  for (let index = 0; index < args.length; index++) {
+    const token = args[index];
+    if (token === '--channel') {
+      index++;
+      continue;
+    }
+    if (token.startsWith('--')) continue;
+    positionals.push(token);
+  }
+  const action = positionals.shift();
+  if (!['list', 'add', 'remove', 'set', 'refresh'].includes(action ?? ''))
+    throw error('E_ARGUMENT', 'Agent action is invalid.');
+  const agent = positionals.shift();
+  if (positionals.length || (action === 'list' && agent)) throw error('E_ARGUMENT', 'Agent arguments are invalid.');
+  if (action !== 'list' && action !== 'refresh' && !agent) throw error('E_ARGUMENT', 'Agent name is required.');
   const channel = value('--channel');
   if (channel !== undefined && !CHANNELS.includes(channel)) throw error('E_ARGUMENT', 'Channel must be mcp or cli.');
   if (action === 'set' && channel === undefined) throw error('E_ARGUMENT', 'Channel is required.');
@@ -101,6 +113,47 @@ export async function agentCommand({ args, paths, env, output, plan, value }) {
       });
     }
     output({ action: 'agent-list', agents });
+    return;
+  }
+  if (action === 'refresh') {
+    if (agent && !cfg.agents.includes(agent)) throw error('E_ARGUMENT', `Agent ${agent} is not installed.`);
+    const safe = flag?.('--safe') === true;
+    const refreshed = [];
+    const skipped = [];
+    for (const name of agent ? [agent] : cfg.agents) {
+      const warnings = [];
+      let changed = [];
+      let canApply = true;
+      let skippedAgent = false;
+      try {
+        if (safe) {
+          const preview = await installAdapter({ agent: name, cfg, paths, env, plan: true });
+          if (preview.warning) {
+            warnings.push(preview.warning);
+            canApply = false;
+          } else if (preview.changes?.needsConfirmation === true) {
+            skipped.push({
+              agent: name,
+              warnings: Array.isArray(preview.changes?.warnings) ? preview.changes.warnings : [],
+            });
+            canApply = false;
+            skippedAgent = true;
+          }
+        }
+        if (canApply) {
+          const result = await installAdapter({ agent: name, cfg, paths, env, plan });
+          if (result.warning) warnings.push(result.warning);
+          if (Array.isArray(result.changes?.warnings)) warnings.push(...result.changes.warnings);
+          changed = Array.isArray(result.changes?.changes)
+            ? result.changes.changes.map((change) => change?.file).filter((file) => typeof file === 'string')
+            : [];
+        }
+      } catch (cause) {
+        warnings.push(`${cause?.code ?? 'error'}: ${cause?.message ?? String(cause)}`);
+      }
+      if (!skippedAgent) refreshed.push({ agent: name, changed, warnings });
+    }
+    output({ action: 'agent-refresh', agents: refreshed, ...(safe ? { skipped } : {}) });
     return;
   }
   if (action === 'add') {

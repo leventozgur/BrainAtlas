@@ -280,7 +280,10 @@ test('help lists wiki with its description and usage', async (t) => {
   const all = f.run('--help', '--json');
   assert.equal(all.status, 0, all.stderr);
   const command = JSON.parse(all.stdout).commands.find((item) => item.name === 'wiki');
-  assert.equal(command.description, 'Read-only Wiki tools from the shell (same results as the MCP read tools).');
+  assert.equal(
+    command.description,
+    'Wiki tools from the shell, running the same code as the MCP tools: query, read, index, list, status, lint; write and reindex change the Wiki.'
+  );
   assert.match(
     command.usage,
     /^brainatlas wiki query <text> \[--limit N\] \[--compact\] \[--provenance\] \| read <path>/u

@@ -12,7 +12,15 @@ import {
 } from '../install-manifest.mjs';
 import { adapterConfig, managedRoots } from './shared.mjs';
 
-const adapterRoot = fileURLToPath(new URL('../../../adapters/', import.meta.url));
+const defaultAdapterRoot = fileURLToPath(new URL('../../../adapters/', import.meta.url));
+
+/** Tests may point at a temporary adapter directory; both variables must be set. */
+function adapterRootFor(env) {
+  const root = env?.BRAINATLAS_ADAPTER_ROOT;
+  return env?.BRAINATLAS_TEST_ADAPTERS === '1' && typeof root === 'string' && root.length > 0
+    ? resolve(root)
+    : defaultAdapterRoot;
+}
 
 /** @param {string} directory */
 const listNames = (directory) =>
@@ -28,7 +36,7 @@ const listNames = (directory) =>
  */
 export async function detectAdapter({ agent, env }) {
   try {
-    const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
+    const adapter = await import(pathToFileURL(join(adapterRootFor(env), agent, 'src/index.mjs')).href);
     const result = adapter.detect(env);
     if (result && typeof result.detected === 'boolean' && Array.isArray(result.evidence)) return result;
   } catch {
@@ -45,13 +53,13 @@ export async function detectAdapter({ agent, env }) {
 export async function installAdapter({ agent, cfg, paths, env, plan }) {
   let available = [];
   try {
-    available = await readdir(adapterRoot);
+    available = await readdir(adapterRootFor(env));
   } catch {
     /* a missing adapters directory means no adapters are available */
   }
   if (!available.includes(agent)) return { warning: `Adapter ${agent} is unavailable.` };
   try {
-    const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
+    const adapter = await import(pathToFileURL(join(adapterRootFor(env), agent, 'src/index.mjs')).href);
     const ctx = {
       env,
       config: adapterConfig(cfg, agent),
@@ -119,7 +127,7 @@ export async function installAdapter({ agent, cfg, paths, env, plan }) {
  */
 export async function removeAdapter({ agent, cfg, paths, env, plan }) {
   try {
-    const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
+    const adapter = await import(pathToFileURL(join(adapterRootFor(env), agent, 'src/index.mjs')).href);
     if (typeof adapter.remove !== 'function') return { warning: `Adapter ${agent} has no remove operation.` };
     const ctx = {
       env,
@@ -196,11 +204,11 @@ export async function removeAdapter({ agent, cfg, paths, env, plan }) {
 /**
  * Health of one installed adapter, as computed by `doctor` for `adapter:<agent>`.
  * @param {{agent: string, cfg: any, paths: any, env: any}} options
- * @returns {Promise<{ok?: boolean, warning?: string}>}
+ * @returns {Promise<{ok?: boolean, warnings?: string[], capabilities?: any, warning?: string}>}
  */
 export async function adapterHealth({ agent, cfg, paths, env }) {
   try {
-    const adapter = await import(pathToFileURL(join(adapterRoot, agent, 'src/index.mjs')).href);
+    const adapter = await import(pathToFileURL(join(adapterRootFor(env), agent, 'src/index.mjs')).href);
     if (typeof adapter.doctor !== 'function') return { warning: `Adapter ${agent} has no health check.` };
     const report = await adapter.doctor({
       env,
@@ -211,7 +219,11 @@ export async function adapterHealth({ agent, cfg, paths, env }) {
       shimPath: paths.binPath,
       now: new Date(),
     });
-    return { ok: Boolean(report?.ok) };
+    return {
+      ok: Boolean(report?.ok),
+      warnings: Array.isArray(report?.warnings) ? report.warnings.filter((warning) => typeof warning === 'string') : [],
+      capabilities: report?.capabilities ?? null,
+    };
   } catch (cause) {
     if (cause?.code === 'ERR_MODULE_NOT_FOUND' || cause?.code === 'E_NOT_IMPLEMENTED')
       return { warning: `Adapter ${agent} is unavailable.` };

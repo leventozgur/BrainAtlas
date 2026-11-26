@@ -2,7 +2,7 @@
 
 On some machines an agent cannot register MCP servers or hooks: managed desktops, locked-down IDEs, or a policy that
 blocks local executables. The `cli` channel installs only an instruction block that tells the agent to query the vault
-with the read-only `brainatlas wiki` commands from the shell.
+with the `brainatlas wiki` commands from the shell, and to capture verified findings with `wiki write` and `wiki reindex`.
 
 ## When to use it
 
@@ -31,16 +31,18 @@ contain a BrainAtlas MCP entry or a BrainAtlas-managed hook.
   (vault scope). The whole skill file is managed.
 - No MCP server entry, no hook, no settings change, and no skill file for other agents.
 
-The payload names the installed `brainatlas` launcher and the read-only commands:
+The payload names the installed `brainatlas` launcher and the commands:
 `brainatlas wiki query "<project name and topic terms>" --json`, `brainatlas wiki read <path> --json`, and the
-`list` / `index` / `status` variants.
+`list` / `index` / `status` variants. Claude Code's managed skill also documents capture with
+`brainatlas wiki write <path>` (page on stdin), `brainatlas wiki reindex`, and `brainatlas wiki lint`.
 
 ## What is lost
 
 - No automatic context injection: hooks and the MCP server are what put relevant pages in front of the agent.
 - The agent must decide to search, so results depend on it following the instruction block.
 - Every query starts a new process and reloads the vault; there is no long-lived MCP session or warm index.
-- Only the read-only tools are reachable. Writes and maintenance stay in the CLI.
+- Writes go through `brainatlas wiki write` and `brainatlas wiki reindex` (content on standard input), not MCP tools;
+  the skill tells the agent to ask before saving a finding. Maintenance commands stay in the CLI.
 
 ## Switch back to the default channel
 

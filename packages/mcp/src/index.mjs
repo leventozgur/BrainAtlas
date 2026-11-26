@@ -365,7 +365,7 @@ async function readOptionalIndex(target) {
 }
 
 /** @param {{config:object,paths:object,env:object}} options @returns {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} */
-/** @param {{config:any,paths:any,env:any,fetchImpl?:Function}} options */
+/** @param {{config:any,paths:any,env:any,fetchImpl?:Function,dryRun?:boolean}} options */
 export function createServer(options) {
   if (!options || !options.config || !options.paths || !options.env)
     throw mcpError('E_MCP_OPTIONS', 'config, paths and env are required.');
@@ -394,7 +394,11 @@ export function createServer(options) {
   // root-level navigation and policy pages are not returned, unless retrieval.exclude says otherwise.
   const excludeRules = config.retrieval?.exclude ?? core.DEFAULT_EXCLUDE_WIKI;
   const isExcluded = (rel) => core.isExcludedPath(rel, excludeRules);
-  let searcher = core.createSearcher({ vaultDir: wikiDir, stateDir, exclude: excludeRules });
+  // BA-88: a dry run may run against a vault without wiki/ (nothing is created), so the searcher is built on first use
+  // there; every other server still builds it eagerly, exactly as before.
+  let searcher = null;
+  const getSearcher = () => (searcher ??= core.createSearcher({ vaultDir: wikiDir, stateDir, exclude: excludeRules }));
+  if (options.dryRun !== true) getSearcher();
   const semanticEnabled =
     config.semantic?.enabled === true &&
     config.profile !== 'lite' &&
@@ -531,6 +535,22 @@ export function createServer(options) {
     const canonicalWiki = await assertWikiInsideVault();
     return withLock(join(canonicalWiki, LOCK_FILE_NAME), work);
   };
+  /**
+   * BA-88: a dry run skips writeLocked, so it repeats its wiki/ handling read-only. A missing wiki/ is not an error and
+   * is not created (the real call creates it); an existing wiki/ (including a dangling symlink) must resolve inside the
+   * vault, exactly as assertWikiInsideVault checks in the lock path.
+   * @returns {Promise<boolean>} whether wiki/ exists
+   */
+  const dryRunWikiCheck = async () => {
+    try {
+      await lstat(wikiDir);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      return false;
+    }
+    await assertWikiInsideVault();
+    return true;
+  };
   const fileSha = async (file) =>
     createHash('sha256')
       .update(await readFile(file))
@@ -585,7 +605,7 @@ export function createServer(options) {
   // Called after the lock is released. A failed refresh must not turn a completed write into an error; the next wiki_query retries.
   const afterWrite = async () => {
     try {
-      await searcher.refresh();
+      await getSearcher().refresh();
     } catch {
       /* Keep the last good index. */
     }
@@ -665,11 +685,11 @@ export function createServer(options) {
     // Edits made outside this server (Obsidian, sync, another agent's MCP process) are picked up here.
     // A failed freshness check (e.g. a file removed between the scan and the read) keeps the current index; the next query retries.
     try {
-      if (searcher.refreshIfChanged() && semanticEnabled) scheduleUpdate();
+      if (getSearcher().refreshIfChanged() && semanticEnabled) scheduleUpdate();
     } catch {
       /* Keep serving the last good index. */
     }
-    const answer = searcher.search(query, {
+    const answer = getSearcher().search(query, {
       limit: count,
       budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT),
       abstainThreshold: config.retrieval?.abstainThreshold ?? 0.35,
@@ -686,7 +706,7 @@ export function createServer(options) {
         answer.reason !== 'below_threshold'
       )
         return null;
-      const weak = searcher.search(query, {
+      const weak = getSearcher().search(query, {
         limit: count,
         budgetChars: Math.min(config.retrieval?.budgetChars ?? 4000, TOOL_LIMIT),
         abstainThreshold: 0,
@@ -723,7 +743,7 @@ export function createServer(options) {
         scheduleUpdate(false);
         return fallback('fingerprint-mismatch');
       }
-      const snapshot = searcher.snapshot();
+      const snapshot = getSearcher().snapshot();
       // BA-29: excluded pages are removed from the semantic candidates and, as a guard, from the hybrid results.
       const results = await module.searchHybrid({
         query,
@@ -805,7 +825,11 @@ export function createServer(options) {
   // BA-63: every result row says how complete its page's provenance is; rows keep their order and all other keys.
   const annotateProvenance = (answer) => {
     if (!Array.isArray(answer?.results) || !answer.results.length) return answer;
-    const byPath = new Map(searcher.snapshot().pages.map((page) => [page.path, page.frontmatter]));
+    const byPath = new Map(
+      getSearcher()
+        .snapshot()
+        .pages.map((page) => [page.path, page.frontmatter])
+    );
     return {
       ...answer,
       results: answer.results.map((row) => ({ ...row, provenance: provenanceOf(byPath.get(row.path)) })),
@@ -919,18 +943,32 @@ export function createServer(options) {
         checkWrite(`wiki/${normalized}`, content);
         const parsed = core.parseFrontmatter(content);
         if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
-        const sha256 = await writeLocked(async () => {
+        const work = async () => {
           await checkExpectedSha(target, expectedSha256);
           const existing = await existingFrontmatter(target);
-          await writePageAtomic(target, {
-            frontmatter: withReplacementProvenance(parsed.data, existing),
-            body: parsed.body,
-          });
-          await logEntry('write-page', `wiki/${normalized}`);
-          return expectedSha256 === undefined ? undefined : fileSha(target);
-        });
-        await afterWrite();
-        return { path: `wiki/${normalized}`, written: true, ...(sha256 === undefined ? {} : { sha256 }) };
+          if (options.dryRun !== true) {
+            await writePageAtomic(target, {
+              frontmatter: withReplacementProvenance(parsed.data, existing),
+              body: parsed.body,
+            });
+            await logEntry('write-page', `wiki/${normalized}`);
+          }
+          // No new bytes exist in a dry run, so no hash is reported; the expected-hash check above still ran.
+          const sha256 = expectedSha256 === undefined || options.dryRun === true ? undefined : await fileSha(target);
+          return { created: existing === undefined, sha256 };
+        };
+        // BA-88: an internal dry run runs every check but writes nothing: no page, no log line and no lock file.
+        // It skips the lock, so it runs the lock's Wiki-directory check itself (read-only).
+        if (options.dryRun === true) await dryRunWikiCheck();
+        const { created, sha256 } = options.dryRun === true ? await work() : await writeLocked(work);
+        if (options.dryRun !== true) await afterWrite();
+        return {
+          path: `wiki/${normalized}`,
+          written: true,
+          created,
+          ...(options.dryRun === true ? { dryRun: true } : {}),
+          ...(sha256 === undefined ? {} : { sha256 }),
+        };
       }
     );
     // patch is z.unknown() on purpose: a record schema silently drops a JSON "__proto__" key before the handler runs,
@@ -1056,30 +1094,37 @@ export function createServer(options) {
     });
     tool('wiki_update_index', z.object({}), async () => {
       const { target } = await safeFile('index.md');
-      const result = await writeLocked(async () => {
+      // BA-88: an internal dry run runs every check but writes nothing: no index, no log line and no lock file.
+      // It skips the lock, so it runs the lock's Wiki-directory check itself (read-only); a missing wiki/ holds no pages.
+      const wikiExists = options.dryRun === true ? await dryRunWikiCheck() : true;
+      const work = async () => {
         const entries = [];
-        for (const { path, file } of await listManagedPages()) {
-          // A page whose frontmatter cannot be read is still listed, with the no-title fallback, so one page never fails the whole update.
-          let page;
-          try {
-            page = await wiki.readPage(file);
-          } catch {
-            page = { frontmatter: {}, body: '' };
+        if (wikiExists) {
+          for (const { path, file } of await listManagedPages()) {
+            // A page whose frontmatter cannot be read is still listed, with the no-title fallback, so one page never fails the whole update.
+            let page;
+            try {
+              page = await wiki.readPage(file);
+            } catch {
+              page = { frontmatter: {}, body: '' };
+            }
+            entries.push({
+              path,
+              title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path,
+              tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [],
+              frontmatter: page.frontmatter,
+            });
           }
-          entries.push({
-            path,
-            title: typeof page.frontmatter.title === 'string' ? page.frontmatter.title : path,
-            tags: Array.isArray(page.frontmatter.tags) ? page.frontmatter.tags : [],
-            frontmatter: page.frontmatter,
-          });
         }
         const existing = await readOptionalIndex(target);
         if (existing === null) {
           // No index yet (or an empty file): build it from the pages, with the same line format as the minimal edit.
           const output = freshIndex(entries);
           checkWrite('wiki/index.md', output);
-          await writeIndexAtomic(target, output);
-          await logEntry('update-index', 'wiki/index.md');
+          if (options.dryRun !== true) {
+            await writeIndexAtomic(target, output);
+            await logEntry('update-index', 'wiki/index.md');
+          }
           return {
             indexed: entries.length,
             added: entries.filter((entry) => indexablePath(entry.path)).length,
@@ -1088,12 +1133,15 @@ export function createServer(options) {
         }
         const { output, added, removed } = mergeIndex(existing, entries);
         checkWrite('wiki/index.md', output);
-        await writeIndexAtomic(target, output);
-        await logEntry('update-index', 'wiki/index.md');
+        if (options.dryRun !== true) {
+          await writeIndexAtomic(target, output);
+          await logEntry('update-index', 'wiki/index.md');
+        }
         return { indexed: entries.length, added, removed };
-      });
-      await afterWrite();
-      return result;
+      };
+      const result = options.dryRun === true ? await work() : await writeLocked(work);
+      if (options.dryRun !== true) await afterWrite();
+      return { ...result, ...(options.dryRun === true ? { dryRun: true } : {}) };
     });
   }
   return server;

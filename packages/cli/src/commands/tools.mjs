@@ -111,7 +111,7 @@ async function queueMaintenanceReceipt({ config, paths, env, candidates }) {
 
 export async function wiki({ args, json, output, env }) {
   const { formatWikiResult, runWikiCommand } = await import('../wiki.mjs');
-  const result = await runWikiCommand(args, { env });
+  const result = await runWikiCommand(args, { env, stdin: process.stdin });
   if (json) {
     output(result.value);
     return;

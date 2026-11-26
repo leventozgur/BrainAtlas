@@ -12,6 +12,11 @@ brainatlas usage [--days N] [--json]
 injection rate, mean results, duration p50/p95, mean characters, shadow comparison rates and feedback
 counts. Missing metric files count as zero records.
 
+After the `Prompts:` line it also prints `Events: prompt <n>, session-start <n>` and one line per client,
+sorted by client name: `  <client>: prompt <n>, session-start <n>, last <ISO|never>`. The final
+`Metrics:` line names the per-vault `metrics/hooks.jsonl` file that was read. The JSON form adds
+`events`, `byClient` and `stateDir`; the existing keys keep their values.
+
 ## Feedback
 
 ```sh

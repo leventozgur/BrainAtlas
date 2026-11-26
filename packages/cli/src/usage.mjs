@@ -105,9 +105,24 @@ export async function usageSummary({ stateDir, days = 7, now = new Date() } = {}
     if (record.verdict === 'useful') feedback.useful++;
     else if (record.verdict === 'not-useful') feedback.notUseful++;
   }
+  const events = { prompt: 0, 'session-start': 0 };
+  const byClient = {};
+  for (const record of hooks) {
+    if (!inWindow(record, from, to)) continue;
+    if (record.event !== 'prompt' && record.event !== 'session-start') continue;
+    events[record.event]++;
+    if (typeof record.client !== 'string') continue;
+    const entry = (byClient[record.client] ??= { prompt: 0, 'session-start': 0, lastAt: null });
+    entry[record.event]++;
+    const time = new Date(record.ts).getTime();
+    if (entry.lastAt === null || time > Date.parse(entry.lastAt)) entry.lastAt = new Date(time).toISOString();
+  }
   return {
     days,
+    stateDir,
     prompts: prompts.length,
+    events,
+    byClient,
     outcomes,
     injectionRate: prompts.length ? results.filter((value) => value > 0).length / prompts.length : 0,
     meanResults: mean(results),
@@ -126,9 +141,18 @@ export async function usageSummary({ stateDir, days = 7, now = new Date() } = {}
 /** Human-readable form of a summary; it repeats only the aggregates. */
 export function formatUsage(summary) {
   const { days, prompts, outcomes, injectionRate, meanResults, durationMs, meanChars, shadow, feedback } = summary;
+  const events = summary.events ?? { prompt: 0, 'session-start': 0 };
+  const byClient = summary.byClient ?? {};
   return [
     `BrainAtlas usage (last ${days} days)`,
     `Prompts: ${prompts}`,
+    `Events: prompt ${events.prompt}, session-start ${events['session-start']}`,
+    ...Object.keys(byClient)
+      .sort()
+      .map(
+        (client) =>
+          `  ${client}: prompt ${byClient[client].prompt}, session-start ${byClient[client]['session-start']}, last ${byClient[client].lastAt ?? 'never'}`
+      ),
     `Outcomes: ok ${outcomes.ok}, empty ${outcomes.empty}, deadline ${outcomes.deadline}, error ${outcomes.error}`,
     `Injection rate: ${injectionRate}`,
     `Mean results: ${meanResults}`,
@@ -136,6 +160,7 @@ export function formatUsage(summary) {
     `Mean chars: ${meanChars}`,
     `Shadow: n ${shadow.n}, top1Same ${shadow.top1SameRate}, meanOverlap5 ${shadow.meanOverlap5}, injectDiff ${shadow.injectDiffRate}`,
     `Feedback: useful ${feedback.useful}, not-useful ${feedback.notUseful}`,
+    `Metrics: ${summary.stateDir}/metrics/hooks.jsonl`,
   ].join('\n');
 }
 
