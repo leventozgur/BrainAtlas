@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep, posix } from 'node:path';
 import { chmodSync, mkdirSync } from 'node:fs';
-import { chmod, lstat, readFile, realpath, rename, stat, unlink, writeFile, mkdir } from 'node:fs/promises';
+import { chmod, lstat, readFile, readdir, realpath, rename, stat, unlink, writeFile, mkdir } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -11,26 +11,34 @@ import { z } from 'zod';
 import * as core from '@brainatlas/core';
 import { LOCK_FILE_NAME, withLock } from './lock.mjs';
 import { pageSlug } from './slug.mjs';
+import {
+  BACKLOG_REL,
+  PROJECTS_REL,
+  PROJECT_STATUSES,
+  TASK_STATUSES,
+  SLUG,
+  PROJECT_ID,
+  TASK_ID,
+  parseBacklog,
+  parseTasks,
+  projectDocument,
+  backlogDocument,
+  taskIds,
+  backlogRow,
+  nextProjectId,
+  nextTaskId,
+  appendBacklogRow,
+  setUpdatedLine,
+  setBacklogStatus,
+  appendTask,
+  setTaskStatus,
+  setProjectStatus,
+} from './planning.mjs';
 
 import * as wiki from '@llmwiki/core';
 const TOOL_LIMIT = 20_000;
-const descriptions = {
-  // BA-57: the list carries the synthesized flag; the one-line base description is pinned verbatim by the BA-53 test.
-  wiki_query: 'Search verified Wiki evidence and return ranked snippets; compact omits the snippets.',
-  wiki_read_page: 'Read a bounded Wiki page, or one of its sections by anchor.',
-  wiki_read_index: 'Read the bounded Wiki index.',
-  wiki_list_pages: 'List Wiki Markdown page paths.',
-  wiki_status: 'Read Wiki counts and health summary.',
-  wiki_lint: 'Run the vendored Wiki quality checks.',
-  wiki_write_page: 'Create or replace a Wiki page.',
-  wiki_update_page: 'Update a Wiki page.',
-  wiki_create_entity: 'Create an entity page.',
-  wiki_create_concept: 'Create a concept page.',
-  wiki_add_crosslinks: 'Add links to existing pages referenced by this page.',
-  wiki_update_index:
-    'Add missing pages to the Wiki index and remove entries for deleted pages; existing lines are kept.',
-};
-
+const PLANNING_PAGE_NAME = /(^|-)(backlog|todo|tasks|roadmap)(-|$)/i;
+const PLANNING_WARNING = 'Planning content belongs in planning/; use plan_update.';
 function mcpError(code, message) {
   const error = /** @type {Error & {code:string}} */ (new Error(message));
   error.code = code;
@@ -43,9 +51,20 @@ function textResult(value) {
 function asText(error) {
   if (error?.code === 'E_SECRET_DETECTED')
     return 'E_SECRET_DETECTED: write refused because secret-like content was detected.';
+  if (error?.code === 'E_PATH_ESCAPE' && error.message === 'Path is outside planning/.')
+    return 'E_PATH_ESCAPE: Path is outside planning/.';
   if (error?.code === 'E_PATH_ESCAPE') return 'E_PATH_ESCAPE: path is outside the Wiki.';
   // Messages on E_INVALID_INPUT are fixed strings in this file and never contain caller content.
   if (error?.code === 'E_INVALID_INPUT') return `E_INVALID_INPUT: ${error.message}`;
+  // Planning refusals use fixed messages plus the caller's field or identifier.
+  if (
+    (error?.code === 'E_ARGUMENT' &&
+      /^(project|maxChars|title|purpose|status|priority|slug|id|task|op|expectedSha256) /u.test(error.message)) ||
+    (error?.code === 'E_NOT_FOUND' &&
+      (/^(Project|Task) .+ is not in planning\//u.test(error.message) ||
+        error.message === 'planning/backlog.md is missing.'))
+  )
+    return `${error.code}: ${error.message}`;
   if (typeof error?.code === 'string' && /^E_[A-Z_]+$/.test(error.code)) return `${error.code}: operation refused.`;
   return 'E_MCP_OPERATION: operation failed.';
 }
@@ -600,7 +619,17 @@ export function createServer(options) {
   const logEntry = async (action, rel) => {
     const record = JSON.stringify({ action, path: rel });
     checkWrite('wiki/log.md', record);
-    await core.appendLog(vaultDir, { action, path: rel });
+    if (rel.startsWith('wiki/')) return core.appendLog(vaultDir, { action, path: rel });
+    const target = join(await assertWikiInsideVault(), 'log.md');
+    let content = '';
+    try {
+      content = await readFile(target, 'utf8');
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+    await replaceFile(target, (temp) =>
+      writeFile(temp, `${content}\n- ${new Date().toISOString()} ${record}\n`, 'utf8')
+    );
   };
   // Called after the lock is released. A failed refresh must not turn a completed write into an error; the next wiki_query retries.
   const afterWrite = async () => {
@@ -613,10 +642,12 @@ export function createServer(options) {
   };
   // BA-53: the low-confidence sentence is advertised unless retrieval.pullLowConfidence is explicitly false; with the key
   // absent (the default) or true the tool list carries the sentence, and only an explicit false restores the old one.
-  const descriptionFor = (name) =>
-    name === 'wiki_query' && config.retrieval?.pullLowConfidence !== false
-      ? `${descriptions.wiki_query} Results marked lowConfidence scored below the abstain threshold; treat them as weak evidence and verify before relying on them.`
-      : descriptions[name];
+  const descriptionFor = (name) => {
+    const summary = core.OPERATIONS.find((operation) => operation.tool === name)?.summary;
+    return name === 'wiki_query' && config.retrieval?.pullLowConfidence !== false
+      ? `${summary} Results marked lowConfidence scored below the abstain threshold; treat them as weak evidence and verify before relying on them.`
+      : summary;
+  };
   const tool = (name, schema, handler) =>
     server.registerTool(name, { description: descriptionFor(name), inputSchema: schema.shape }, async (args) => {
       try {
@@ -679,6 +710,302 @@ export function createServer(options) {
       }
       return handler(args);
     });
+
+  const today = () => new Date().toISOString().slice(0, 10);
+  const shaText = (text) => createHash('sha256').update(text).digest('hex');
+  const restorePlanningFile = (target, content) =>
+    replaceFile(target, (temp) => writeFile(temp, content, 'utf8')).catch(() => {});
+  const planningTarget = async (rel) => {
+    if (typeof rel !== 'string' || !rel.startsWith('planning/') || rel.includes('\\') || rel.includes('\0'))
+      throw mcpError('E_PATH_ESCAPE', 'Path is outside planning/.');
+    const parts = rel.split('/');
+    if (parts.some((part) => !part || part === '.' || part === '..'))
+      throw mcpError('E_PATH_ESCAPE', 'Path is outside planning/.');
+    const canonicalVault = await realpath(vaultDir);
+    let cursor = canonicalVault;
+    for (const part of parts) {
+      cursor = join(cursor, part);
+      try {
+        if ((await lstat(cursor)).isSymbolicLink()) throw mcpError('E_PATH_ESCAPE', 'Path is outside planning/.');
+      } catch (error) {
+        if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
+        break;
+      }
+    }
+    const target = join(canonicalVault, rel);
+    let resolved = target;
+    try {
+      resolved = await realpath(target);
+    } catch (error) {
+      if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
+      try {
+        resolved = join(await realpath(dirname(target)), basename(target));
+      } catch {
+        /* The parent is created later, below the same canonical vault. */
+      }
+    }
+    const from = relative(canonicalVault, resolved);
+    if (!from || from === '..' || from.startsWith(`..${sep}`) || isAbsolute(from))
+      throw mcpError('E_PATH_ESCAPE', 'Path is outside planning/.');
+    return { target: resolved, rel };
+  };
+  const ensurePlanningDirs = async () => {
+    const canonicalVault = await realpath(vaultDir);
+    for (const rel of ['planning', PROJECTS_REL]) {
+      const target = join(canonicalVault, rel);
+      try {
+        const info = await lstat(target);
+        if (info.isSymbolicLink() || !info.isDirectory()) throw mcpError('E_PATH_ESCAPE', 'Path is outside planning/.');
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+        await mkdir(target, { recursive: true });
+      }
+    }
+  };
+  const readBacklog = async (required) => {
+    const { target } = await planningTarget(BACKLOG_REL);
+    try {
+      return await readFile(target, 'utf8');
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+        if (required) throw mcpError('E_NOT_FOUND', 'planning/backlog.md is missing.');
+        return null;
+      }
+      throw error;
+    }
+  };
+  const findProject = (rows, ref) => {
+    const byId = PROJECT_ID.test(ref) ? rows.find((row) => row.id === ref) : undefined;
+    return byId ?? rows.find((row) => row.file === `projects/${ref}.md`);
+  };
+  const resolveProject = async (ref) => {
+    if (typeof ref !== 'string' || !ref) throw mcpError('E_ARGUMENT', 'project must be a non-empty string.');
+    const rows = parseBacklog((await readBacklog(false)) ?? '');
+    const row = findProject(rows, ref);
+    if (!row) throw mcpError('E_NOT_FOUND', `Project ${ref} is not in planning/backlog.md.`);
+    return row;
+  };
+  const readProjectText = async (ref, target) => {
+    try {
+      return await readFile(target, 'utf8');
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR')
+        throw mcpError('E_NOT_FOUND', `Project ${ref} is not in planning/backlog.md.`);
+      throw error;
+    }
+  };
+  /** @param {{project?:string,maxChars?:number}} [args] */
+  const planRead = async (args = {}) => {
+    const { project, maxChars } = args;
+    if (maxChars !== undefined && (!Number.isInteger(maxChars) || maxChars < 1 || maxChars > 200000))
+      throw mcpError('E_ARGUMENT', 'maxChars must be an integer between 1 and 200000.');
+    if (project === undefined) {
+      const text = await readBacklog(false);
+      if (text === null) return { projects: [], warnings: ['planning/backlog.md is missing.'] };
+      const projects = parseBacklog(text);
+      const warnings = [];
+      let entries = [];
+      try {
+        entries = await readdir((await planningTarget(PROJECTS_REL)).target, { withFileTypes: true });
+      } catch (error) {
+        if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
+      }
+      const names = entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name)
+        .sort();
+      for (const name of names)
+        if (!projects.some((row) => row.file === `projects/${name}`))
+          warnings.push(`planning/projects/${name} is not listed in backlog.md.`);
+      return { projects, warnings };
+    }
+    if (typeof project !== 'string' || !project) throw mcpError('E_ARGUMENT', 'project must be a non-empty string.');
+    const row = await resolveProject(project);
+    const { target } = await planningTarget(posix.normalize(`planning/${row.file}`));
+    let bytes;
+    try {
+      bytes = await readFile(target);
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR')
+        throw mcpError('E_NOT_FOUND', `Project ${project} is not in planning/backlog.md.`);
+      throw error;
+    }
+    const raw = bytes.toString('utf8');
+    const content = core.prefixKeepingPairs(raw, maxChars ?? 20000);
+    return {
+      id: row.id,
+      file: row.file,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      content,
+      truncated: content.length < raw.length,
+      tasks: parseTasks(raw),
+    };
+  };
+  const planString = (description) => z.string().optional().catch(null).describe(description);
+  const planStatusSchema = z
+    .enum(['idea', 'ready', 'in_progress', 'blocked', 'done', 'archived', 'dropped'])
+    .optional()
+    .catch(null)
+    .describe('Project or task status.');
+  const planReadSchema = z.object({
+    project: planString('Project id (PRJ-NNN) or slug; omit to list the backlog.'),
+    maxChars: z
+      .number()
+      .int()
+      .min(1)
+      .max(200000)
+      .optional()
+      .catch(null)
+      .describe('Maximum content characters (1 to 200000; default 20000).'),
+  });
+  tool('plan_read', planReadSchema, async (args) => planRead(args));
+
+  const planLine = (name, value) => {
+    if (
+      typeof value !== 'string' ||
+      value.length < 1 ||
+      value.length > 200 ||
+      value.trim() === '' ||
+      /[\r\n|]/u.test(value)
+    )
+      throw mcpError('E_ARGUMENT', `${name} must be a single line of 1 to 200 characters without "|".`);
+    return value;
+  };
+  const planStatus = (name, value, allowed) => {
+    if (typeof value !== 'string' || !allowed.includes(value))
+      throw mcpError('E_ARGUMENT', `${name} must be one of: ${allowed.join(', ')}.`);
+    return value;
+  };
+  const planSha = (value) => {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || !/^[0-9a-fA-F]{64}$/u.test(value))
+      throw mcpError('E_ARGUMENT', 'expectedSha256 must be a 64-character hex SHA-256.');
+    return value;
+  };
+  const planUpdate = async (args = {}) => {
+    if (!['add_project', 'add_task', 'set_status'].includes(args.op))
+      throw mcpError('E_ARGUMENT', 'op must be add_project, add_task or set_status.');
+    const expectedSha256 = planSha(args.expectedSha256);
+    const work = async () => {
+      if (args.op === 'add_project') {
+        if (typeof args.slug !== 'string' || !SLUG.test(args.slug)) throw mcpError('E_ARGUMENT', 'slug is invalid.');
+        const title = planLine('title', args.title);
+        const purpose = planLine('purpose', args.purpose);
+        const status = args.status === undefined ? 'idea' : planStatus('status', args.status, PROJECT_STATUSES);
+        const priority = args.priority === undefined ? '—' : planLine('priority', args.priority);
+        const backlog = (await planningTarget(BACKLOG_REL)).target;
+        await checkExpectedSha(backlog, expectedSha256);
+        const existingBacklog = await readBacklog(false);
+        const text = existingBacklog ?? (await backlogDocument());
+        const rows = parseBacklog(text);
+        const rel = `planning/projects/${args.slug}.md`;
+        const { target } = await planningTarget(rel);
+        let exists = true;
+        try {
+          await lstat(target);
+        } catch (error) {
+          if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
+          exists = false;
+        }
+        if (exists || rows.some((row) => row.file === `projects/${args.slug}.md`))
+          throw mcpError('E_CONFLICT', 'The project already exists.');
+        const id = nextProjectId(rows);
+        const content = await projectDocument({ id, title, status, goal: purpose });
+        const nextBacklog = setUpdatedLine(
+          appendBacklogRow(text, backlogRow({ id, title, purpose, priority, status, slug: args.slug })),
+          today()
+        );
+        checkWrite(rel, content);
+        checkWrite(BACKLOG_REL, nextBacklog);
+        if (options.dryRun !== true) {
+          await ensurePlanningDirs();
+          try {
+            await replaceFile(target, (temp) => writeFile(temp, content, 'utf8'));
+            await replaceFile(backlog, (temp) => writeFile(temp, nextBacklog, 'utf8'));
+            await logEntry('plan-update', rel);
+          } catch (error) {
+            await unlink(target).catch(() => {});
+            if (existingBacklog === null) await unlink(backlog).catch(() => {});
+            else await restorePlanningFile(backlog, existingBacklog);
+            throw error;
+          }
+        }
+        return { op: args.op, file: rel, sha256: shaText(content), id };
+      }
+      if (args.op === 'add_task') {
+        const title = planLine('title', args.title);
+        const status = args.status === undefined ? 'ready' : planStatus('status', args.status, TASK_STATUSES);
+        if (args.id !== undefined && (typeof args.id !== 'string' || !TASK_ID.test(args.id)))
+          throw mcpError('E_ARGUMENT', 'id is invalid.');
+        const row = await resolveProject(args.project);
+        const rel = posix.normalize(`planning/${row.file}`);
+        const { target } = await planningTarget(rel);
+        const text = await readProjectText(args.project, target);
+        await checkExpectedSha(target, expectedSha256);
+        const tasks = parseTasks(text);
+        const id = args.id ?? nextTaskId(tasks, row.id);
+        if (taskIds(text).includes(id)) throw mcpError('E_CONFLICT', `Task ${id} already exists.`);
+        const content = appendTask(text, `- [${status}] ${id} · ${title} (${today()})`);
+        checkWrite(rel, content);
+        const backlog = await readBacklog(false);
+        const nextBacklog = backlog === null ? null : setUpdatedLine(backlog, today());
+        const writeBacklog = nextBacklog !== null && nextBacklog !== backlog;
+        if (writeBacklog) checkWrite(BACKLOG_REL, nextBacklog);
+        if (options.dryRun !== true) {
+          const backlogTarget = writeBacklog ? (await planningTarget(BACKLOG_REL)).target : null;
+          try {
+            await replaceFile(target, (temp) => writeFile(temp, content, 'utf8'));
+            if (writeBacklog) await replaceFile(backlogTarget, (temp) => writeFile(temp, nextBacklog, 'utf8'));
+            await logEntry('plan-update', rel);
+          } catch (error) {
+            await restorePlanningFile(target, text);
+            if (writeBacklog) await restorePlanningFile(backlogTarget, backlog);
+            throw error;
+          }
+        }
+        return { op: args.op, file: rel, sha256: shaText(content), id };
+      }
+      const withTask = args.task !== undefined;
+      if (withTask && (typeof args.task !== 'string' || !TASK_ID.test(args.task)))
+        throw mcpError('E_ARGUMENT', 'task is invalid.');
+      const status = planStatus('status', args.status, withTask ? TASK_STATUSES : PROJECT_STATUSES);
+      const row = await resolveProject(args.project);
+      const rel = posix.normalize(`planning/${row.file}`);
+      const { target } = await planningTarget(rel);
+      const text = await readProjectText(args.project, target);
+      await checkExpectedSha(target, expectedSha256);
+      let content;
+      if (withTask) {
+        if (!parseTasks(text).some((task) => task.id === args.task))
+          throw mcpError('E_NOT_FOUND', `Task ${args.task} is not in ${rel}.`);
+        content = setTaskStatus(text, args.task, status);
+      } else content = setProjectStatus(text, status);
+      checkWrite(rel, content);
+      const backlog = await readBacklog(false);
+      let nextBacklog = backlog;
+      if (backlog !== null) {
+        nextBacklog = setUpdatedLine(backlog, today());
+        if (!withTask) nextBacklog = setBacklogStatus(nextBacklog, row.id, status);
+      }
+      const writeBacklog = nextBacklog !== null && nextBacklog !== backlog;
+      if (writeBacklog) checkWrite(BACKLOG_REL, nextBacklog);
+      if (options.dryRun !== true) {
+        const backlogTarget = writeBacklog ? (await planningTarget(BACKLOG_REL)).target : null;
+        try {
+          await replaceFile(target, (temp) => writeFile(temp, content, 'utf8'));
+          if (writeBacklog) await replaceFile(backlogTarget, (temp) => writeFile(temp, nextBacklog, 'utf8'));
+          await logEntry('plan-update', rel);
+        } catch (error) {
+          await restorePlanningFile(target, text);
+          if (writeBacklog) await restorePlanningFile(backlogTarget, backlog);
+          throw error;
+        }
+      }
+      return { op: args.op, file: rel, sha256: shaText(content) };
+    };
+    if (options.dryRun === true) return { ...(await work()), dryRun: true };
+    return writeLocked(work);
+  };
 
   const queryWiki = async ({ query, limit, compact }) => {
     const count = limit ?? 5;
@@ -892,11 +1219,6 @@ export function createServer(options) {
       return { path: shownPath, content, truncated: content.length < raw.length, sha256 };
     }
   );
-  readTool('wiki_read_index', z.object({}), async () => {
-    const { target } = await safeFile('index.md');
-    const raw = await readFile(target, 'utf8');
-    return { content: raw.slice(0, TOOL_LIMIT), truncated: raw.length > TOOL_LIMIT };
-  });
   readTool('wiki_list_pages', z.object({ type: z.string().optional() }), async ({ type }) => {
     let pages = await core.listPages(vaultDir);
     pages = pages.filter((item) => item !== 'wiki/index.md' && item !== 'wiki/log.md');
@@ -962,12 +1284,14 @@ export function createServer(options) {
         if (options.dryRun === true) await dryRunWikiCheck();
         const { created, sha256 } = options.dryRun === true ? await work() : await writeLocked(work);
         if (options.dryRun !== true) await afterWrite();
+        const misplaced = PLANNING_PAGE_NAME.test(normalized.split('/').at(-1).replace(/\.md$/u, ''));
         return {
           path: `wiki/${normalized}`,
           written: true,
           created,
           ...(options.dryRun === true ? { dryRun: true } : {}),
           ...(sha256 === undefined ? {} : { sha256 }),
+          ...(misplaced ? { warnings: [PLANNING_WARNING] } : {}),
         };
       }
     );
@@ -978,7 +1302,7 @@ export function createServer(options) {
       z.object({ path: z.string(), content: z.string().optional(), patch: z.unknown().optional(), expectedSha256 }),
       async ({ path, content, patch, expectedSha256 }) => {
         const { normalized, target } = await safeFile(path, { allowIndex: false });
-        const sha256 = await writeLocked(async () => {
+        const work = async () => {
           await checkExpectedSha(target, expectedSha256);
           const old = await wiki.readPage(target);
           let next;
@@ -1002,12 +1326,21 @@ export function createServer(options) {
           } else throw mcpError('E_INVALID_INPUT', 'content or patch is required.');
           const output = serializePage(next);
           checkWrite(`wiki/${normalized}`, output);
-          await writePageAtomic(target, next);
-          await logEntry('update-page', `wiki/${normalized}`);
-          return expectedSha256 === undefined ? undefined : fileSha(target);
-        });
-        await afterWrite();
-        return { path: `wiki/${normalized}`, updated: true, ...(sha256 === undefined ? {} : { sha256 }) };
+          if (options.dryRun !== true) {
+            await writePageAtomic(target, next);
+            await logEntry('update-page', `wiki/${normalized}`);
+          }
+          return expectedSha256 === undefined || options.dryRun === true ? undefined : fileSha(target);
+        };
+        if (options.dryRun === true) await dryRunWikiCheck();
+        const sha256 = options.dryRun === true ? await work() : await writeLocked(work);
+        if (options.dryRun !== true) await afterWrite();
+        return {
+          path: `wiki/${normalized}`,
+          updated: true,
+          ...(sha256 === undefined ? {} : { sha256 }),
+          ...(options.dryRun === true ? { dryRun: true } : {}),
+        };
       }
     );
     const create = (name, content, kind) => async () => {
@@ -1037,7 +1370,7 @@ export function createServer(options) {
         frontmatter,
         tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : [],
       };
-      await writeLocked(async () => {
+      const work = async () => {
         try {
           await stat(target);
           throw mcpError('E_ALREADY_EXISTS', 'The destination page already exists.');
@@ -1048,22 +1381,31 @@ export function createServer(options) {
         const indexOutput =
           existing === null ? freshIndex([entry]) : mergeIndex(existing, [entry], { prune: false }).output;
         checkWrite('wiki/index.md', indexOutput);
-        await writePageAtomic(target, { frontmatter, body: parsed.body });
-        await writeIndexAtomic(indexTarget, indexOutput);
-        await logEntry(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
-      });
-      await afterWrite();
-      return { path: `wiki/${rel}`, created: true };
+        if (options.dryRun !== true) {
+          await writePageAtomic(target, { frontmatter, body: parsed.body });
+          await writeIndexAtomic(indexTarget, indexOutput);
+          await logEntry(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
+        }
+        return { misplaced: PLANNING_PAGE_NAME.test(slug) };
+      };
+      if (options.dryRun === true) await dryRunWikiCheck();
+      const { misplaced } = options.dryRun === true ? await work() : await writeLocked(work);
+      if (options.dryRun !== true) await afterWrite();
+      return {
+        path: `wiki/${rel}`,
+        created: true,
+        ...(misplaced ? { warnings: [PLANNING_WARNING] } : {}),
+        ...(options.dryRun === true ? { dryRun: true } : {}),
+      };
     };
-    tool('wiki_create_entity', z.object({ name: z.string().min(1), content: z.string() }), ({ name, content }) =>
-      create(name, content, 'entities')()
-    );
-    tool('wiki_create_concept', z.object({ name: z.string().min(1), content: z.string() }), ({ name, content }) =>
-      create(name, content, 'concepts')()
+    tool(
+      'wiki_create',
+      z.object({ type: z.enum(['entity', 'concept']), name: z.string().min(1), content: z.string() }),
+      ({ type, name, content }) => create(name, content, type === 'entity' ? 'entities' : 'concepts')()
     );
     tool('wiki_add_crosslinks', z.object({ path: z.string() }), async ({ path }) => {
       const { normalized, target } = await safeFile(path, { allowIndex: false });
-      const linked = await writeLocked(async () => {
+      const work = async () => {
         const page = await wiki.readPage(target);
         const normalizedTargets = wiki.getPageLinksDetailed(page.body).map(({ target: link }) => {
           const rel = posix.normalize(posix.join(posix.dirname(normalized), link));
@@ -1085,12 +1427,20 @@ export function createServer(options) {
         }
         const resultBody = `${page.body}\n\n## See also\n${links.join('\n')}`;
         checkWrite(`wiki/${normalized}`, serializePage({ frontmatter: page.frontmatter, body: resultBody }));
-        await wiki.addCrosslinks(wikiDir, normalized, normalizedTargets);
-        await logEntry('add-crosslinks', `wiki/${normalized}`);
+        if (options.dryRun !== true) {
+          await wiki.addCrosslinks(wikiDir, normalized, normalizedTargets);
+          await logEntry('add-crosslinks', `wiki/${normalized}`);
+        }
         return normalizedTargets.length;
-      });
-      await afterWrite();
-      return { path: `wiki/${normalized}`, linked };
+      };
+      if (options.dryRun === true) await dryRunWikiCheck();
+      const linked = options.dryRun === true ? await work() : await writeLocked(work);
+      if (options.dryRun !== true) await afterWrite();
+      return {
+        path: `wiki/${normalized}`,
+        linked,
+        ...(options.dryRun === true ? { dryRun: true } : {}),
+      };
     });
     tool('wiki_update_index', z.object({}), async () => {
       const { target } = await safeFile('index.md');
@@ -1143,6 +1493,22 @@ export function createServer(options) {
       if (options.dryRun !== true) await afterWrite();
       return { ...result, ...(options.dryRun === true ? { dryRun: true } : {}) };
     });
+    tool(
+      'plan_update',
+      z.object({
+        op: z.enum(['add_project', 'add_task', 'set_status']).optional().catch(null).describe('Operation to perform.'),
+        slug: planString('Project slug (lowercase letters, digits and hyphens).'),
+        title: planString('Single-line project or task title (1 to 200 characters).'),
+        purpose: planString('Single-line project purpose (1 to 200 characters).'),
+        status: planStatusSchema,
+        priority: planString('Single-line project priority; defaults to an em dash.'),
+        project: planString('Project id (PRJ-NNN) or slug.'),
+        id: planString('Explicit task id; defaults to the next id in the project file.'),
+        task: planString('Task id used by set_status.'),
+        expectedSha256: planString('Expected SHA-256 of the project file (the backlog for add_project).'),
+      }),
+      async (args) => planUpdate(args)
+    );
   }
   return server;
 }

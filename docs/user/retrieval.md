@@ -28,7 +28,8 @@ A page's frontmatter says how well it is established (`status`, and `verified` r
 - A **weak** page (`status: proposed` or `disputed`) ranks slightly lower. Its result carries `trust: "weak"`, and the prompt hook shows it as `Title [unverified] (path)`.
 - Every other page is neutral: its score and position are unchanged, and its result has no `trust` field.
 
-MCP writes add `generated` only to new pages and never add `status`; the author sets it. See [MCP tools](../contracts/mcp-tools.md).
+MCP writes (`wiki_write_page` and `wiki_create`) add `generated` only to new pages and never add `status`; the author
+sets it. See [MCP tools](../contracts/mcp-tools.md).
 
 ## Restricted pages
 

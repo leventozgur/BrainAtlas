@@ -4,30 +4,27 @@
 import { resolve } from 'node:path';
 import * as core from '@brainatlas/core';
 
-const TOOL_FOR = {
-  query: 'wiki_query',
-  read: 'wiki_read_page',
-  index: 'wiki_read_index',
-  list: 'wiki_list_pages',
-  status: 'wiki_status',
-  lint: 'wiki_lint',
-  write: 'wiki_write_page',
-  reindex: 'wiki_update_index',
-};
+const WIKI_OPERATIONS = core.OPERATIONS.filter((operation) => operation.cli.startsWith('wiki '));
+const SUBCOMMANDS = WIKI_OPERATIONS.map(({ cli }) => cli.split(' ')[1]);
+const TOOL_FOR = Object.fromEntries(WIKI_OPERATIONS.map(({ cli, tool }) => [cli.split(' ')[1], tool]));
+const WRITE_SUBCOMMANDS = new Set(
+  WIKI_OPERATIONS.filter(({ kind }) => kind === 'write').map(({ cli }) => cli.split(' ')[1])
+);
 
 const ALLOWED_OPTIONS = {
   query: new Set(['--limit', '--compact', '--provenance']),
   read: new Set(['--anchor', '--max-chars']),
-  index: new Set(),
   list: new Set(['--type']),
   status: new Set(),
   lint: new Set(),
   write: new Set(['--dry-run', '--expect-sha256']),
+  update: new Set(['--append', '--expect-sha256', '--frontmatter-json', '--dry-run']),
+  create: new Set(['--dry-run']),
+  link: new Set(['--dry-run']),
   reindex: new Set(['--dry-run']),
 };
 
 const MAX_CONTENT_BYTES = 1_048_576;
-const CONTENT_REQUIRED = 'wiki write requires page content on standard input.';
 
 const failure = (code, message) => Object.assign(new Error(message), { code });
 
@@ -38,11 +35,36 @@ function integerOption(name, raw) {
   return Number(raw);
 }
 
+function shaOption(raw) {
+  if (!/^[0-9a-fA-F]{64}$/u.test(raw))
+    throw failure('E_ARGUMENT', '--expect-sha256 must be a 64-character hex SHA-256.');
+  return raw;
+}
+
+function pathArgument(sub, positional) {
+  if (!positional.length) throw failure('E_ARGUMENT', `wiki ${sub} requires a Wiki path.`);
+  if (positional.length > 1) throw failure('E_ARGUMENT', `wiki ${sub} accepts one Wiki path.`);
+  if (!positional[0].endsWith('.md')) throw failure('E_ARGUMENT', `wiki ${sub} path must end in .md.`);
+  return positional[0];
+}
+
+function frontmatterOption(raw) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw failure('E_ARGUMENT', '--frontmatter-json must be a JSON object.');
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw failure('E_ARGUMENT', '--frontmatter-json must be a JSON object.');
+  return value;
+}
+
 /** Parse the words after `wiki` into `{sub, vault, args}`. Options are validated before any tool is called. */
 export function parseWikiArguments(argv) {
   const sub = argv[0];
   if (sub === undefined || sub.startsWith('-') || !Object.hasOwn(TOOL_FOR, sub)) {
-    throw failure('E_ARGUMENT', 'wiki requires one of: query, read, index, list, status, lint, write, reindex.');
+    throw failure('E_ARGUMENT', `wiki requires one of: ${SUBCOMMANDS.join(', ')}.`);
   }
   const allowed = ALLOWED_OPTIONS[sub];
   const positional = [];
@@ -68,10 +90,10 @@ export function parseWikiArguments(argv) {
       options['--provenance'] = true;
       continue;
     }
-    if (name === '--dry-run') {
+    if (name === '--append' || name === '--dry-run') {
       // A flag, never an option with a value: `--dry-run=true` is an argument error.
-      if (equals >= 0) throw failure('E_ARGUMENT', '--dry-run does not take a value.');
-      options['--dry-run'] = true;
+      if (equals >= 0) throw failure('E_ARGUMENT', `${name} does not take a value.`);
+      options[name] = true;
       continue;
     }
     let raw;
@@ -88,10 +110,12 @@ export function parseWikiArguments(argv) {
   } else if (sub === 'read') {
     if (!positional.length) throw failure('E_ARGUMENT', 'wiki read requires a Wiki path.');
     if (positional.length > 1) throw failure('E_ARGUMENT', 'wiki read accepts one Wiki path.');
-  } else if (sub === 'write') {
-    if (!positional.length) throw failure('E_ARGUMENT', 'wiki write requires a Wiki path.');
-    if (positional.length > 1) throw failure('E_ARGUMENT', 'wiki write accepts one Wiki path.');
-    if (!positional[0].endsWith('.md')) throw failure('E_ARGUMENT', 'wiki write path must end in .md.');
+  } else if (sub === 'write' || sub === 'update' || sub === 'link') {
+    pathArgument(sub, positional);
+  } else if (sub === 'create') {
+    if (positional.length < 2) throw failure('E_ARGUMENT', 'wiki create requires a type and a page name.');
+    if (!['entity', 'concept'].includes(positional[0]))
+      throw failure('E_ARGUMENT', 'wiki create type must be entity or concept.');
   } else if (positional.length) {
     throw failure('E_ARGUMENT', `wiki ${sub} accepts no positional arguments.`);
   }
@@ -108,11 +132,18 @@ export function parseWikiArguments(argv) {
     if (options['--max-chars'] !== undefined) args.maxChars = integerOption('--max-chars', options['--max-chars']);
   } else if (sub === 'write') {
     args.path = positional[0];
-    if (options['--expect-sha256'] !== undefined) {
-      if (!/^[0-9a-fA-F]{64}$/u.test(options['--expect-sha256']))
-        throw failure('E_ARGUMENT', '--expect-sha256 must be a 64-character hex SHA-256.');
-      args.expectedSha256 = options['--expect-sha256'];
-    }
+    if (options['--expect-sha256'] !== undefined) args.expectedSha256 = shaOption(options['--expect-sha256']);
+  } else if (sub === 'update') {
+    args.path = positional[0];
+    args.append = options['--append'] === true;
+    if (options['--expect-sha256'] !== undefined) args.expectedSha256 = shaOption(options['--expect-sha256']);
+    if (options['--frontmatter-json'] !== undefined)
+      args.frontmatter = frontmatterOption(options['--frontmatter-json']);
+  } else if (sub === 'create') {
+    args.type = positional[0];
+    args.name = positional.slice(1).join(' ');
+  } else if (sub === 'link') {
+    args.path = positional[0];
   } else if (sub === 'list' && options['--type'] !== undefined) {
     args.type = options['--type'];
   }
@@ -128,12 +159,13 @@ function toolFailure(text) {
 }
 
 /** Page content from standard input; missing, whitespace-only or over 1 MiB is an argument error. */
-async function readPageContent(stdin) {
+async function readPageContent(stdin, sub) {
+  const required = `wiki ${sub} requires page content on standard input.`;
   let text;
   if (typeof stdin === 'string') text = stdin;
   else {
     // On the real terminal there is no piped content to wait for.
-    if (stdin === process.stdin && process.stdin.isTTY === true) throw failure('E_ARGUMENT', CONTENT_REQUIRED);
+    if (stdin === process.stdin && process.stdin.isTTY === true) throw failure('E_ARGUMENT', required);
     const chunks = [];
     let bytes = 0;
     for await (const chunk of stdin) {
@@ -145,7 +177,7 @@ async function readPageContent(stdin) {
     text = Buffer.concat(chunks).toString('utf8');
   }
   if (Buffer.byteLength(text) > MAX_CONTENT_BYTES) throw failure('E_ARGUMENT', 'Page content is larger than 1 MiB.');
-  if (text.trim() === '') throw failure('E_ARGUMENT', CONTENT_REQUIRED);
+  if (text.trim() === '') throw failure('E_ARGUMENT', required);
   return text;
 }
 
@@ -160,13 +192,13 @@ export async function runWikiCommand(argv, { env = process.env, stdin = process.
   /** @type {{config:any, paths:any, env:any, dryRun?:boolean}} */
   const options = await serverOptions(env);
   if (vault !== undefined) options.paths.vaultDir = resolve(vault);
-  const changes = sub === 'write' || sub === 'reindex';
+  const changes = WRITE_SUBCOMMANDS.has(sub);
   // Checked before the vault is read and before stdin is consumed.
   if (changes && options.config.readOnly === true)
     throw failure('E_READ_ONLY', 'The vault is read-only (readOnly: true).');
   let okfFindings = [];
   if (sub === 'write') {
-    args.content = await readPageContent(stdin);
+    args.content = await readPageContent(stdin, sub);
     const parsed = core.parseFrontmatter(args.content);
     if (parsed.errors.length) throw failure('E_INVALID_INPUT', 'Page frontmatter is invalid.');
     const normalized = args.path.replace(/^wiki\//u, '');
@@ -180,6 +212,15 @@ export async function runWikiCommand(argv, { env = process.env, stdin = process.
       const rules = [...new Set(okfFindings.filter((finding) => finding.severity === 'error').map(({ rule }) => rule))];
       throw failure('E_OKF_INVALID', `OKF validation failed: ${rules.join(', ')}.`);
     }
+  } else if (sub === 'update') {
+    const text = await readPageContent(stdin, sub);
+    const patch = args.append === true ? { append: text } : { body: text };
+    if (args.frontmatter !== undefined) patch.frontmatter = args.frontmatter;
+    args.patch = patch;
+    delete args.append;
+    delete args.frontmatter;
+  } else if (sub === 'create') {
+    args.content = await readPageContent(stdin, sub);
   }
   if (changes && dryRun) options.dryRun = true;
   const result = await callToolInProcess(options, TOOL_FOR[sub], args);
@@ -201,6 +242,19 @@ export async function runWikiCommand(argv, { env = process.env, stdin = process.
     };
     if (args.expectedSha256 !== undefined && value.sha256 !== undefined) output.sha256 = value.sha256;
     return { sub, value: output };
+  }
+  if (sub === 'update') {
+    const output = { ok: true, path: value.path, updated: true, dryRun };
+    if (value.sha256 !== undefined) output.sha256 = value.sha256;
+    return { sub, value: output };
+  }
+  if (sub === 'create') {
+    const output = { ok: true, path: value.path, created: true, dryRun };
+    if (Array.isArray(value.warnings)) output.warnings = value.warnings;
+    return { sub, value: output };
+  }
+  if (sub === 'link') {
+    return { sub, value: { ok: true, path: value.path, linked: value.linked, dryRun } };
   }
   if (sub === 'reindex') {
     return {
@@ -233,12 +287,22 @@ export function formatWikiResult(sub, value) {
       : [];
     return [head, ...findings].join('\n');
   }
+  if (sub === 'update' || sub === 'create') {
+    const verb = sub === 'update' ? 'updated' : 'created';
+    return value?.dryRun === true
+      ? `Dry run: ${value.path} would be ${verb}.`
+      : `${verb === 'created' ? 'Created' : 'Updated'} ${value.path}.`;
+  }
+  if (sub === 'link') {
+    const head = `Linked ${value?.linked ?? 0} page(s) in ${value?.path}.`;
+    return value?.dryRun === true ? `Dry run: ${head}` : head;
+  }
   if (sub === 'query') {
     const results = Array.isArray(value?.results) ? value.results : [];
     if (!results.length) return 'No confident match.';
     return results.map(queryBlock).join('\n\n');
   }
-  if (sub === 'read' || sub === 'index') {
+  if (sub === 'read') {
     const content = typeof value?.content === 'string' ? value.content : '';
     return value?.truncated === true ? `${content}\n[truncated]` : content;
   }

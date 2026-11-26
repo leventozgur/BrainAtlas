@@ -19,8 +19,8 @@ async function raceIndex(t, root) {
     const nameA = `ba25 idx a ${r}`,
       nameB = `ba25 idx b ${r}`;
     const [ra, rb] = await Promise.all([
-      call(a.client, 'wiki_create_concept', { name: nameA, content: `Body A ${r}.` }),
-      call(b.client, 'wiki_create_concept', { name: nameB, content: `Body B ${r}.` }),
+      call(a.client, 'wiki_create', { type: 'concept', name: nameA, content: `Body A ${r}.` }),
+      call(b.client, 'wiki_create', { type: 'concept', name: nameB, content: `Body B ${r}.` }),
     ]);
     for (const [result, name] of [
       [ra, nameA],

@@ -129,7 +129,7 @@ test('BA19-ANGLE2: a hand-written angle-bracket entry counts as linked; a stale 
 test('BA19-ANGLE3: wiki_create_entity on an index that already has a spaced entry inserts its line and keeps the angle entry', async (t) => {
   const index = '# Wiki Index\n\n## entities\n\n- [My Note](<entities/my note.md>)\n';
   const f = await fixture(t, { files: { 'entities/my note.md': page('My Note') }, index });
-  await ok(f.client, 'wiki_create_entity', { name: 'Yeni Varlik', content: 'Gövde.' });
+  await ok(f.client, 'wiki_create', { type: 'entity', name: 'Yeni Varlik', content: 'Gövde.' });
   assert.equal(
     await f.readIndex(),
     '# Wiki Index\n\n## entities\n\n- [My Note](<entities/my note.md>)\n- [Yeni Varlik](entities/yeni-varlik.md)\n'

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+export * from './catalog.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');

@@ -64,7 +64,7 @@ test(
   async (t) => {
     const f = await startServer(t, {});
     const name = 'Satır\r\nBir\u0085Üç Dört Beş\u0001Altı\u009bYedi';
-    okJson(await call(f.client, 'wiki_create_entity', { name, content: page('title: x') }));
+    okJson(await call(f.client, 'wiki_create', { type: 'entity', name, content: page('title: x') }));
     const text = await readIndexText(f);
     const lines = entryLines(text);
     assert.equal(lines.length, 1, 'one entry line');
@@ -80,7 +80,7 @@ test(
   async (t) => {
     const raw = 'X\u0085Y Z W\u009bV\u007fU\tS';
     const created = await startServer(t, {});
-    okJson(await call(created.client, 'wiki_create_entity', { name: raw, content: page('title: x') }));
+    okJson(await call(created.client, 'wiki_create', { type: 'entity', name: raw, content: page('title: x') }));
     const fromCreate = entryLines(await readIndexText(created));
     const updated = await startServer(t, { files: { 'entities/parity.md': page(`title: "${raw}"`) } });
     okJson(await call(updated.client, 'wiki_update_index', {}));
@@ -99,7 +99,7 @@ test(
   async (t) => {
     const f = await startServer(t, {});
     const r = okJson(
-      await call(f.client, 'wiki_create_entity', { name: 'Çağrı Merkezi 🚀', content: page('title: x') })
+      await call(f.client, 'wiki_create', { type: 'entity', name: 'Çağrı Merkezi 🚀', content: page('title: x') })
     );
     t.diagnostic(`slug path for "Çağrı Merkezi 🚀": ${r.path}`);
     assert.equal(r.created, true);

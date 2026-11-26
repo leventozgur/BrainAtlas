@@ -38,9 +38,9 @@ for (const [label, ch] of CASES) {
         `entry line must be an angle-bracket destination (${hex(ch)} or space inside <...>)`
       );
       assert.ok(entryLines(text1).includes('- [Normal](entities/normal.md)'), 'ordinary page keeps its plain entry');
-      const read = okJson(await call(f.client, 'wiki_read_index', {}));
-      assert.equal(read.content, text1, 'wiki_read_index returns the same bytes as the file');
-      assert.ok(read.content.includes(expected), 'wiki_read_index returns the same entry line');
+      const read = okJson(await call(f.client, 'wiki_read_page', { path: 'index.md' }));
+      assert.equal(read.content, text1, 'wiki_read_page returns the same bytes as the file');
+      assert.ok(read.content.includes(expected), 'wiki_read_page returns the same entry line');
       assert.equal(
         okJson(await call(f.client, 'wiki_status', {})).indexCoveragePct,
         100,

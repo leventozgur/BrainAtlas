@@ -14,7 +14,7 @@ const SCRIPT = [
   ['wiki_list_pages', {}],
   ['wiki_query', { query: 'synthetic bilingual', limit: 3 }],
   ['wiki_read_page', { path: 'wiki/entities/sample-06.md' }],
-  ['wiki_read_index', {}],
+  ['wiki_read_page', { path: 'index.md' }],
   ['wiki_status', {}],
   ['wiki_lint', {}],
   ['wiki_write_page', { path: 'entities/eq-probe.md', content: page('Eq Probe', 'Eq probe evidence.') }],
@@ -27,11 +27,15 @@ const SCRIPT = [
     },
   ],
   ['wiki_update_page', { path: 'entities/eq-probe.md' }],
-  ['wiki_create_entity', { name: 'Eq Entity', content: 'Evidence.' }],
-  ['wiki_create_entity', { name: 'Eq Entity', content: 'Duplicate.' }],
+  ['wiki_create', { type: 'entity', name: 'Eq Entity', content: 'Evidence.' }],
+  ['wiki_create', { type: 'entity', name: 'Eq Entity', content: 'Duplicate.' }],
   [
-    'wiki_create_concept',
-    { name: 'Eq Concept', content: '---\nsummary: Concept for equivalence\ntags: [eq, check]\n---\nConcept body.' },
+    'wiki_create',
+    {
+      type: 'concept',
+      name: 'Eq Concept',
+      content: '---\nsummary: Concept for equivalence\ntags: [eq, check]\n---\nConcept body.',
+    },
   ],
   ['wiki_add_crosslinks', { path: 'entities/eq-probe.md' }],
   ['wiki_update_index', {}],
@@ -42,7 +46,7 @@ const SCRIPT = [
   ['wiki_list_pages', {}],
   ['wiki_list_pages', { type: 'entities' }],
   ['wiki_status', {}],
-  ['wiki_read_index', {}],
+  ['wiki_read_page', { path: 'index.md' }],
 ];
 
 async function runScript(t, root) {

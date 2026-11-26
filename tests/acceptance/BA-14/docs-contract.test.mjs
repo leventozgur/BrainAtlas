@@ -30,7 +30,7 @@ test('tool input keys in the contract match the advertised inputSchema of every 
   const schemaLine = doc.match(/Tool schemas are: (.+?)\.\n/s);
   assert.ok(schemaLine, 'schema summary line is present');
   const declared = [...schemaLine[1].matchAll(/`(wiki_\w+)\{([^}]*)\}`/g)];
-  assert.ok(declared.length >= 12, `expected all tools in the contract, found ${declared.length}`);
+  assert.ok(declared.length >= 10, `expected all tools in the contract, found ${declared.length}`);
   for (const [, name, body] of declared) {
     const keys = body
       .split(',')

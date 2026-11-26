@@ -174,13 +174,7 @@ test('calls without expectedSha256 keep the previous behaviour, including overwr
 test('readOnly mode still offers no write tool, and wiki_read_page still returns the hash', async (t) => {
   const { client } = await fixture(t, { readOnly: true });
   const names = (await client.listTools()).tools.map((tool) => tool.name);
-  for (const name of [
-    'wiki_write_page',
-    'wiki_update_page',
-    'wiki_create_entity',
-    'wiki_create_concept',
-    'wiki_update_index',
-  ]) {
+  for (const name of ['wiki_write_page', 'wiki_update_page', 'wiki_create', 'wiki_update_index']) {
     assert.ok(!names.includes(name), `${name} must not be offered in readOnly mode`);
   }
   const read = await ok(client, 'wiki_read_page', { path: 'concepts/shared.md' });

@@ -35,6 +35,8 @@ The payload names the installed `brainatlas` launcher and the commands:
 `brainatlas wiki query "<project name and topic terms>" --json`, `brainatlas wiki read <path> --json`, and the
 `list` / `index` / `status` variants. Claude Code's managed skill also documents capture with
 `brainatlas wiki write <path>` (page on stdin), `brainatlas wiki reindex`, and `brainatlas wiki lint`.
+Planning uses `brainatlas plan list`, `plan show`, `plan new`, `plan add` and `plan set`, which run the MCP
+`plan_read` and `plan_update` handlers in process; see [planning](planning.md).
 
 ## What is lost
 

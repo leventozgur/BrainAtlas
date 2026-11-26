@@ -74,8 +74,8 @@ test('two processes creating pages at once keep every index line and a well-form
   const ROUNDS = 50;
   for (let i = 0; i < ROUNDS; i++) {
     const [ra, rb] = await Promise.all([
-      call(a, 'wiki_create_entity', { name: `Ent ${i}`, content: `---\ntitle: Ent ${i}\n---\nx\n` }),
-      call(b, 'wiki_create_concept', { name: `Con ${i}`, content: `---\ntitle: Con ${i}\n---\ny\n` }),
+      call(a, 'wiki_create', { type: 'entity', name: `Ent ${i}`, content: `---\ntitle: Ent ${i}\n---\nx\n` }),
+      call(b, 'wiki_create', { type: 'concept', name: `Con ${i}`, content: `---\ntitle: Con ${i}\n---\ny\n` }),
     ]);
     assert.equal(ra.isError, false, ra.text);
     assert.equal(rb.isError, false, rb.text);
@@ -134,7 +134,7 @@ test('a write lock left by a dead process does not block the write', async (t) =
   const dead = spawn(process.execPath, ['-e', '0']);
   await new Promise((done) => dead.on('exit', done));
   await writeFile(resolve(wiki, LOCK), JSON.stringify({ pid: dead.pid, time: Date.now(), token: 'x' }));
-  await ok(a, 'wiki_create_entity', { name: 'After Crash', content: '---\ntitle: After Crash\n---\nz\n' });
+  await ok(a, 'wiki_create', { type: 'entity', name: 'After Crash', content: '---\ntitle: After Crash\n---\nz\n' });
 });
 
 test('a lock without a pid is taken over once it is older than 30 seconds', async (t) => {
@@ -143,7 +143,7 @@ test('a lock without a pid is taken over once it is older than 30 seconds', asyn
   await writeFile(lockPath, '{}\n');
   const old = new Date(Date.now() - 60_000);
   await utimes(lockPath, old, old);
-  await ok(a, 'wiki_create_entity', { name: 'Old Lock', content: '---\ntitle: Old Lock\n---\nz\n' });
+  await ok(a, 'wiki_create', { type: 'entity', name: 'Old Lock', content: '---\ntitle: Old Lock\n---\nz\n' });
   await assert.rejects(
     readFile(lockPath, 'utf8'),
     { code: 'ENOENT' },
@@ -154,7 +154,11 @@ test('a lock without a pid is taken over once it is older than 30 seconds', asyn
 test('a fresh lock held by a live process refuses the write with E_BUSY', async (t) => {
   const { wiki, a } = await fixture(t);
   await writeFile(resolve(wiki, LOCK), JSON.stringify({ pid: process.pid, time: Date.now(), token: 'held' }));
-  const result = await call(a, 'wiki_create_entity', { name: 'Blocked', content: '---\ntitle: Blocked\n---\nz\n' });
+  const result = await call(a, 'wiki_create', {
+    type: 'entity',
+    name: 'Blocked',
+    content: '---\ntitle: Blocked\n---\nz\n',
+  });
   assert.equal(result.isError, true);
   assert.ok(result.text.startsWith('E_BUSY:'), result.text);
   await assert.rejects(
@@ -167,7 +171,7 @@ test('a fresh lock held by a live process refuses the write with E_BUSY', async 
 
 test('the lock file is not a page: not listed, not counted, not readable through the Wiki tools', async (t) => {
   const { wiki, a } = await fixture(t);
-  await ok(a, 'wiki_create_concept', { name: 'Visible', content: '---\ntitle: Visible\n---\nvisible body\n' });
+  await ok(a, 'wiki_create', { type: 'concept', name: 'Visible', content: '---\ntitle: Visible\n---\nvisible body\n' });
   // A live lock held by this test process is present on disk while the read-only tools run.
   await writeFile(resolve(wiki, LOCK), JSON.stringify({ pid: process.pid, time: Date.now(), token: 'held' }));
   t.after(() => rm(resolve(wiki, LOCK), { force: true }));

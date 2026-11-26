@@ -49,7 +49,7 @@ test('lock file is invisible to listing, query, status, maintain and recap, and 
   );
   const status = okJson(await call(c.client, 'wiki_status', {}));
   assert.equal(status.pageCount, list.length, 'wiki_status counts the same pages as the listing');
-  assert.ok(okJson(await call(c.client, 'wiki_read_index', {})).content.length > 0);
+  assert.ok(okJson(await call(c.client, 'wiki_read_page', { path: 'index.md' })).content.length > 0);
 
   // Reads and writes through the page tools refuse the lock file name in every spelling.
   for (const path of [`wiki/${LOCK_NAME}`, LOCK_NAME, `entities/${LOCK_NAME}`]) {
@@ -127,7 +127,7 @@ test('a live fresh lock makes writes fail with E_BUSY, writes nothing, and keeps
   assert.equal(existsSync(join(f.wikiDir, EN)), false, 'refused write leaves no page');
   const index = await call(c.client, 'wiki_update_index', {});
   assert.ok(isErr(index, 'E_BUSY'), 'index update refused');
-  const create = await call(c.client, 'wiki_create_concept', { name: 'Busy Concept', content: 'x' });
+  const create = await call(c.client, 'wiki_create', { type: 'concept', name: 'Busy Concept', content: 'x' });
   assert.ok(isErr(create, 'E_BUSY'), 'create refused');
   const update = await call(c.client, 'wiki_update_page', { path: 'concepts/sample-02.md', content: page('x', 'y') });
   assert.ok(isErr(update, 'E_BUSY'), 'update refused');
@@ -180,8 +180,8 @@ test('no lock file remains after successful and failed calls, including internal
     )
   );
   assert.ok(isErr(await run('wiki_write_page', { path: '../escape.md', content: page('E', 'e') }), 'E_PATH_ESCAPE'));
-  assert.ok(isErr(await run('wiki_create_entity', { name: 'Dup Probe', content: 'one' })) === false);
-  assert.ok(isErr(await run('wiki_create_entity', { name: 'Dup Probe', content: 'two' }), 'E_ALREADY_EXISTS'));
+  assert.ok(isErr(await run('wiki_create', { type: 'entity', name: 'Dup Probe', content: 'one' })) === false);
+  assert.ok(isErr(await run('wiki_create', { type: 'entity', name: 'Dup Probe', content: 'two' }), 'E_ALREADY_EXISTS'));
   // Crosslink to a missing target fails inside the lock; the lock must still be released.
   await run('wiki_write_page', {
     path: 'entities/xl.md',
@@ -240,14 +240,7 @@ test('readOnly mode exposes no write tools and the lock is never created', async
   const f = await makeFixture(t, { readOnly: true });
   const c = await openClient(t, WT, f);
   const names = (await c.client.listTools()).tools.map((x) => x.name).sort();
-  assert.deepEqual(names, [
-    'wiki_lint',
-    'wiki_list_pages',
-    'wiki_query',
-    'wiki_read_index',
-    'wiki_read_page',
-    'wiki_status',
-  ]);
+  assert.deepEqual(names, ['plan_read', 'wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_page', 'wiki_status']);
   assert.equal(existsSync(f.lockFile), false);
 });
 
