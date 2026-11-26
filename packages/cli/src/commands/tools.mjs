@@ -134,6 +134,17 @@ export async function plan({ args, json, output, env }) {
   return;
 }
 
+export async function standard({ args, flag, json, output, env }) {
+  if (args[0] !== 'migrate') throw error('E_ARGUMENT', 'standard requires the migrate action.');
+  const apply = flag('--apply');
+  if (apply && flag('--plan')) throw error('E_ARGUMENT', 'standard migrate takes --plan or --apply, not both.');
+  const { formatStandardMigrate, runStandardMigrate } = await import('../standard.mjs');
+  const result = await runStandardMigrate({ env, apply, force: flag('--force'), prune: flag('--prune-backups') });
+  if (json) output(result);
+  else console.log(formatStandardMigrate(result));
+  if (result.error) process.exitCode = 1;
+}
+
 export async function compact({ flag, value, plan, json, output, paths, env }) {
   const page = value('--page');
   if (!page) throw error('E_ARGUMENT', 'compact requires --page <wiki/...md>.');

@@ -375,6 +375,15 @@ function defaultCapabilities(cfg, agent) {
 const valueAt = (obj, key) =>
   key.split('.').reduce((value, part) => (value && typeof value === 'object' ? value[part] : undefined), obj);
 
+export async function orphanStateDirs(paths, vaultPath) {
+  const entries = await readdir(paths.stateDir, { withFileTypes: true });
+  const own = vaultId(vaultPath);
+  return entries
+    .filter((entry) => entry.isDirectory() && /^[0-9a-f]{16}$/.test(entry.name) && entry.name !== own)
+    .map((entry) => entry.name)
+    .sort();
+}
+
 export async function doctorResult(paths, env, now = new Date()) {
   let cfg;
   let configOk;
@@ -517,12 +526,7 @@ export async function doctorResult(paths, env, now = new Date()) {
   let orphanState = [];
   if (cfg.vault?.path) {
     try {
-      const entries = await readdir(paths.stateDir, { withFileTypes: true });
-      const own = vaultId(cfg.vault.path);
-      orphanState = entries
-        .filter((entry) => entry.isDirectory() && /^[0-9a-f]{16}$/.test(entry.name) && entry.name !== own)
-        .map((entry) => entry.name)
-        .sort();
+      orphanState = await orphanStateDirs(paths, cfg.vault.path);
     } catch (cause) {
       if (cause?.code !== 'ENOENT') warnings.push(`State directory could not be read (${cause?.code ?? 'error'}).`);
     }
@@ -541,6 +545,13 @@ export async function doctorResult(paths, env, now = new Date()) {
       knownCommands: await activeCommandNames(paths, env, cfg, commandNames),
     });
     warnings.push(...references.warnings);
+    try {
+      const { pendingStandardMigration } = await import('../standard.mjs');
+      if (await pendingStandardMigration({ cfg, paths, env }))
+        warnings.push('Run brainatlas standard migrate to bring this vault to the standard.');
+    } catch (cause) {
+      warnings.push(`Standard migration state could not be checked (${cause?.code ?? 'error'}).`);
+    }
   }
   if (checks.release && cfg.modules?.length) {
     try {
