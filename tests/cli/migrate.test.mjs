@@ -105,12 +105,10 @@ test('migrate copies selected bytes, skips internal files and links, and preserv
   await assert.rejects(lstat(join(target, '.obsidian')), { code: 'ENOENT' });
   await assert.rejects(lstat(join(target, '.trash')), { code: 'ENOENT' });
   await assert.rejects(lstat(join(target, 'wiki', 'external-link.md')), { code: 'ENOENT' });
-  const agents = await readFile(join(target, 'AGENTS.md'), 'utf8');
-  const claude = await readFile(join(target, 'CLAUDE.md'), 'utf8');
-  assert.match(agents, /migrated:user-section/);
-  assert.match(agents, /Keep my custom note\./);
-  assert.match(claude, /migrated:user-section/);
-  assert.match(claude, /User-only Claude note\./);
+  assert.deepEqual(await readFile(join(target, 'AGENTS.md')), await readFile(join(source, 'AGENTS.md')));
+  assert.deepEqual(await readFile(join(target, 'CLAUDE.md')), await readFile(join(source, 'CLAUDE.md')));
+  assert.ok(report.warnings.some((warning) => warning.startsWith('AGENTS.md: no BrainAtlas managed block')));
+  assert.ok(report.warnings.some((warning) => warning.startsWith('CLAUDE.md: no BrainAtlas managed block')));
   const sourceLog = await readFile(join(source, 'wiki/log.md'));
   const targetLog = await readFile(join(target, 'wiki/log.md'));
   assert.ok(targetLog.subarray(0, sourceLog.length).equals(sourceLog));

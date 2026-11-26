@@ -4,6 +4,7 @@ export * from './config/index.mjs';
 export * from './paths/index.mjs';
 export * from './modules/index.mjs';
 export * from './vault/index.mjs';
+export * from './vault/policy.mjs';
 export * from './okf/index.mjs';
 export * from './checkpoint/index.mjs';
 export * from './safety/index.mjs';

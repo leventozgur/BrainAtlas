@@ -121,7 +121,7 @@ test('BA-12 seeded vault: CLI exits 0 with one JSON object and nothing on stderr
   assert.equal(seedRun.status, 0, seedRun.stderr);
   assert.equal(seedRun.stderr, '');
   assert.ok(seedOut && seedOut.ok === true);
-  assert.deepEqual(Object.keys(seedOut).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages']);
+  assert.deepEqual(Object.keys(seedOut).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy']);
   for (const kind of KINDS) {
     assert.equal(
       seedOut.counts[kind],

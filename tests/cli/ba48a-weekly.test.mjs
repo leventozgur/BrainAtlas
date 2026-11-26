@@ -241,7 +241,7 @@ test('reminder: only an existing last-weekly.json that is more than 8 days old a
   assert.ok(!recent.includes('Reminder:'));
   const recentJson = JSON.parse(await run(['maintain', '--json'], env, { runCommand: runner }));
   assert.equal(recentJson.weekly, undefined);
-  assert.deepEqual(Object.keys(recentJson).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages']);
+  assert.deepEqual(Object.keys(recentJson).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy']);
 
   // An old run: exactly one reminder line, plus `weekly` in the JSON.
   const oldRanAt = new Date(Date.now() - 9 * 86400000).toISOString();
@@ -261,7 +261,7 @@ test('reminder: only an existing last-weekly.json that is more than 8 days old a
   const withVault = await run(['maintain', '--vault', vault], env, { runCommand: runner });
   assert.ok(!withVault.includes('Reminder:'));
   const withVaultJson = JSON.parse(await run(['maintain', '--vault', vault, '--json'], env, { runCommand: runner }));
-  assert.deepEqual(Object.keys(withVaultJson).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages']);
+  assert.deepEqual(Object.keys(withVaultJson).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy']);
 
   // After a weekly run the reminder disappears.
   await run(['maintain', '--weekly'], env, { runCommand: runner });
@@ -330,6 +330,6 @@ test('reminder: a corrupt last-weekly.json is unreadable and adds nothing', asyn
     assert.ok(!text.includes('Reminder:'), corrupt);
     const json = JSON.parse(await run(['maintain', '--json'], env, { runCommand: fakeRunner([]) }));
     assert.equal(json.weekly, undefined, corrupt);
-    assert.deepEqual(Object.keys(json).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages'], corrupt);
+    assert.deepEqual(Object.keys(json).sort(), ['counts', 'durationMs', 'findings', 'ok', 'pages', 'policy'], corrupt);
   }
 });

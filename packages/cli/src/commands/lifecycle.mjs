@@ -17,7 +17,9 @@ import { spawnSync } from 'node:child_process';
 import {
   defaultConfig,
   effectiveChannel,
+  lintPolicyReferences,
   loadConfig,
+  refreshVaultPolicy,
   SECRET_FILTER_OFF_WARNING,
   secretFilterEnabled,
   validateConfig,
@@ -39,6 +41,7 @@ import { installedMaintainSchedule, installedSyncSchedule } from './sync.mjs';
 import { buildHealthSummary, formatHealthSummary } from '../health.mjs';
 import { readJsonl } from '../usage.mjs';
 import { adapterHealth, removeAdapter } from './adapters.mjs';
+import { commandNames } from '../index.mjs';
 import {
   error,
   validVersion,
@@ -461,6 +464,19 @@ export async function doctorResult(paths, env, now = new Date()) {
   }
   for (const name of orphanState)
     warnings.push(`State directory ${name} does not belong to the configured vault; remove it after checking.`);
+  if (cfg.vault?.path) {
+    const policy = await refreshVaultPolicy({ vaultDir: cfg.vault.path, plan: true });
+    warnings.push(...policy.warnings);
+    for (const change of policy.changes)
+      if (change.action !== 'none')
+        warnings.push(`${change.path}: the managed policy is out of date; run brainatlas agent refresh.`);
+    const references = await lintPolicyReferences({
+      vaultDir: cfg.vault.path,
+      home: env.HOME,
+      knownCommands: commandNames,
+    });
+    warnings.push(...references.warnings);
+  }
   if (checks.release && cfg.modules?.length) {
     try {
       const current = await readCurrent(paths);

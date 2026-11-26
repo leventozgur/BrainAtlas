@@ -436,6 +436,8 @@ test('BA-23 c4: clean vault has zero invalid-frontmatter and maintain output mat
   const mr = JSON.parse(m.stdout);
   delete dr.durationMs;
   delete mr.durationMs;
+  delete dr.policy;
+  delete mr.policy;
   assert.deepEqual(dr, mr);
 });
 

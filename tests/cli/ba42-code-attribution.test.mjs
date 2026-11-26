@@ -321,8 +321,9 @@ test('without repo, the findings and counts match the pre-BA-42 golden output', 
     },
   });
   const report = await runMaintenance(vaultDir, { now: NOW });
-  const { durationMs, ...stable } = report;
+  const { durationMs, policy, ...stable } = report;
   assert.equal(typeof durationMs, 'number');
+  assert.equal(policy.changes[0].action, 'create');
   assert.deepEqual(stable, {
     ok: true,
     findings: [

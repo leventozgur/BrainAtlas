@@ -53,7 +53,9 @@ async function initializeVault(vaultPath) {
       await mkdir(dirname(file), { recursive: true });
       const content = await readFile(templateUrl);
       try {
-        await writeFile(file, content, { flag: 'wx' });
+        await writeFile(file, relativePath === 'AGENTS.md' ? core.managedPolicyBlock(content) : content, {
+          flag: 'wx',
+        });
       } catch (writeError) {
         if (writeError.code !== 'EEXIST') throw writeError;
       }
