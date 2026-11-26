@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "id": "registered",
+      "ok": true,
+      "message": "Copilot MCP server is registered."
+    },
+    {
+      "id": "shim",
+      "ok": true,
+      "message": "MCP command points to the configured shim."
+    },
+    {
+      "id": "version-drift",
+      "ok": true,
+      "message": "Version drift cannot be determined from the local config."
+    },
+    {
+      "id": "hook-present",
+      "ok": true,
+      "message": "Session start hook file is present."
+    },
+    {
+      "id": "policy",
+      "ok": true,
+      "message": "MCP may not be loaded and hooks may be disabled by organization policy."
+    },
+    {
+      "id": "instructions-path",
+      "ok": true,
+      "message": "Global instructions path is unverified; confirm Copilot loads it."
+    }
+  ]
+}

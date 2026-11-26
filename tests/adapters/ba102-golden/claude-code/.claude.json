@@ -1,0 +1,28 @@
+{
+  "numProjects": 7,
+  "hasCompletedOnboarding": true,
+  "mcpServers": {
+    "personal": {
+      "command": "local-tool",
+      "args": [
+        "--keep"
+      ]
+    },
+    "brainatlas": {
+      "type": "stdio",
+      "command": "/opt/node with spaces/node",
+      "args": [
+        "/opt/brainatlas/bin/brainatlas",
+        "mcp"
+      ],
+      "env": {}
+    }
+  },
+  "other": {
+    "nested": [
+      1,
+      2,
+      3
+    ]
+  }
+}

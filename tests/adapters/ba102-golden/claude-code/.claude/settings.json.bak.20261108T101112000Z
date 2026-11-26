@@ -1,0 +1,7 @@
+{
+    "theme": "dark",
+    "hooks": {
+        "UserPromptSubmit": [{"matcher":"", "hooks":[{"type":"command","command":"user-hook"}]}],
+        "Notification": [{"hooks":[{"type":"command","command":"notify"}]}]
+    }
+}

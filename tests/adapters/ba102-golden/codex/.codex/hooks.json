@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "user-session-hook"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/usr/bin/node\" \"/opt/brainatlas/bin/brainatlas\" hook codex prompt",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "otherSetting": true
+}

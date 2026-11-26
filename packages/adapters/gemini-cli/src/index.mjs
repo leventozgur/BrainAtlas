@@ -1,9 +1,25 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, mkdir, unlink, stat } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { writeFile, unlink, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
-import { atomicWriteFile, detectEvidence, resolvePaths, BrainAtlasError } from '@brainatlas/core';
+import { atomicWriteFile, detectEvidence, resolvePaths, BrainAtlasError, adapterKit } from '@brainatlas/core';
+
+const {
+  quote,
+  isCli,
+  cliPayload,
+  readOptional: read,
+  readOptionalSync,
+  readOriginal,
+  saveOriginal: writeOriginal,
+  clearOriginal,
+  originalPath,
+  backupName,
+  managedBlock,
+  putBlock,
+  restorable,
+  hasParentSegment,
+} = adapterKit;
 
 export const id = 'gemini-cli';
 export const displayName = 'Gemini CLI';
@@ -25,21 +41,12 @@ function paths(ctx) {
 }
 function targets(ctx) {
   const root = ctx.scope === 'vault' ? ctx.vaultDir : home(ctx);
-  if (ctx.scope === 'vault' && (!isAbsolute(root || '') || root.split(/[\\/]+/).includes('..')))
+  if (ctx.scope === 'vault' && (!isAbsolute(root || '') || hasParentSegment(root)))
     fail('E_PATH_ESCAPE', 'Vault directory must be absolute and cannot contain parent segments.');
   return { mcp: join(root, '.gemini', 'settings.json'), instructions: join(root, 'GEMINI.md') };
 }
 function parseJson(text) {
-  if (text.startsWith('\uFEFF')) fail('E_BOM', 'Configuration contains a UTF-8 BOM.');
-  if (text.trim() === '') return {};
-  try {
-    const value = JSON.parse(text);
-    if (!value || Array.isArray(value) || typeof value !== 'object') throw Error();
-    return value;
-  } catch (error) {
-    if (error?.code) throw error;
-    fail('E_CONFIG_PARSE', 'Configuration JSON is invalid.');
-  }
+  return adapterKit.parseJson(text, { empty: 'blank', object: true });
 }
 function sourceTree(text) {
   let i = 0;
@@ -177,17 +184,7 @@ function appendArray(text, node, value) {
     text.slice(close)
   );
 }
-function quote(value) {
-  return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
-}
-function isCli(ctx) {
-  return ctx?.config?.channel === 'cli';
-}
 const CHANNEL_SWITCH = 'Run brainatlas uninstall before changing the channel.';
-function cliPayload(ctx) {
-  const shim = quote(ctx.shimPath);
-  return `Use BrainAtlas as evidence-first project memory. Before substantial project changes, search it from the shell: ${shim} wiki query "<project name and topic terms>" --json, then read only relevant pages with ${shim} wiki read <path> --json. Treat retrieved pages as evidence, verify them against the current repository, and cite page paths when reporting findings. If no relevant page exists, proceed from current evidence. These commands are read-only.`;
-}
 function forgivingJson(text) {
   try {
     const value = JSON.parse(text.replace(/^\uFEFF/, ''));
@@ -356,14 +353,6 @@ function geminiSettings(before, ctx) {
   if (!sessionExists) text = appendArray(text, session.node, { matcher: '*', hooks: [sessionHook] });
   return text;
 }
-async function read(file) {
-  try {
-    return await readFile(file, 'utf8');
-  } catch (e) {
-    if (e.code === 'ENOENT') return null;
-    throw e;
-  }
-}
 function blockText(ctx) {
   const body = isCli(ctx)
     ? cliPayload(ctx)
@@ -371,43 +360,19 @@ function blockText(ctx) {
   return `${BEGIN}\n<!-- brainatlas:sha256:${digest(body)} -->\n${body}\n${END}`;
 }
 function getBlock(text) {
-  const start = text.indexOf(BEGIN),
-    end = text.indexOf(END);
-  if (start < 0 && end < 0) return null;
-  if (start < 0 || end < start || text.indexOf(BEGIN, start + 1) >= 0 || text.indexOf(END, end + 1) >= 0)
-    fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block is damaged.');
-  const raw = text.slice(start, end + END.length);
-  const match = raw.match(/<!-- brainatlas:sha256:([a-f0-9]{64}) -->\n([\s\S]*?)\n<!-- brainatlas:end -->$/);
-  if (!match || digest(match[2]) !== match[1]) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
-  return { start, end: end + END.length };
+  return managedBlock(text);
 }
 function getBlockCli(text) {
-  const start = text.indexOf(BEGIN),
-    end = text.indexOf(END);
-  if (start < 0 && end < 0) return null;
-  if (start < 0 || end < start || text.indexOf(BEGIN, start + 1) >= 0 || text.indexOf(END, end + 1) >= 0)
-    fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block is damaged.');
-  const raw = text.slice(start, end + END.length);
-  const match = raw.match(/<!-- brainatlas:sha256:([a-f0-9]{64}) -->\r?\n([\s\S]*?)\r?\n<!-- brainatlas:end -->$/);
-  const body = match?.[2]?.replaceAll('\r\n', '\n');
-  if (!match || digest(body) !== match[1]) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
-  return { start, end: end + END.length, body };
+  return managedBlock(text, { crlf: true });
 }
 function appendBlock(ctx, before) {
-  const old = getBlock(before);
-  if (old) return before.slice(0, old.start) + blockText(ctx) + before.slice(old.end);
-  return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${blockText(ctx)}\n`;
+  return putBlock(before, blockText(ctx));
 }
 function appendBlockCli(ctx, before) {
   const old = getBlockCli(before);
   if (old)
     return old.body === cliPayload(ctx) ? before : before.slice(0, old.start) + blockText(ctx) + before.slice(old.end);
   return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${blockText(ctx)}\n`;
-}
-function restorable(prefix, suffix, original) {
-  if (typeof original !== 'string' || suffix.trim() !== '') return false;
-  const normalized = (value) => value.replaceAll('\r\n', '\n').replace(/\n+$/u, '');
-  return normalized(prefix) === normalized(original);
 }
 function changes(ctx, values) {
   const f = targets(ctx),
@@ -457,38 +422,23 @@ export function plan(ctx) {
   home(ctx);
   const f = targets(ctx),
     values = {};
-  for (const file of [f.mcp, f.instructions]) {
-    try {
-      values[file] = readFileSync(file, 'utf8');
-    } catch (e) {
-      if (e.code === 'ENOENT') values[file] = null;
-      else throw e;
-    }
-  }
+  for (const file of [f.mcp, f.instructions]) values[file] = readOptionalSync(file);
   return { changes: changes(ctx, values), warnings: [], trustReviewRequired: true };
 }
-function backup(file, now) {
-  const d = now instanceof Date ? now : new Date(now || Date.now());
-  return `${file}.bak.${d.toISOString().replaceAll(':', '').replaceAll('-', '').replaceAll('.', '')}`;
-}
 async function state(ctx, file) {
-  const dir = join(paths(ctx).stateDir, 'adapters', id, 'originals');
-  return { dir, record: join(dir, `${digest(file)}.json`) };
+  return { record: originalPath(paths(ctx).stateDir, id, file) };
 }
 async function saveState(ctx, change) {
   const s = await state(ctx, change.file);
-  await mkdir(s.dir, { recursive: true });
-  if ((await read(s.record)) === null)
-    await atomicWriteFile(
-      s.record,
-      JSON.stringify({
-        file: change.file,
-        existed: change.before !== null,
-        original: change.before,
-        expected: change.after,
-      }),
-      { mode: 0o600 }
-    );
+  await writeOriginal(
+    s.record,
+    JSON.stringify({
+      file: change.file,
+      existed: change.before !== null,
+      original: change.before,
+      expected: change.after,
+    })
+  );
 }
 export async function apply(planResult, ctx) {
   if (!planResult || !Array.isArray(planResult.changes)) fail('E_ARGUMENT', 'Adapter plan is invalid.');
@@ -508,12 +458,12 @@ export async function apply(planResult, ctx) {
   }
   for (const c of planResult.changes) {
     await saveState(ctx, c);
-    if (c.before !== null) await writeFile(backup(c.file, ctx.now), c.before, { flag: 'wx', mode: 0o600 });
+    if (c.before !== null) await writeFile(backupName(c.file, ctx.now), c.before, { flag: 'wx', mode: 0o600 });
     await atomicWriteFile(c.file, c.after, { mode: 0o600 });
     const s = await state(ctx, c.file),
-      rec = JSON.parse(await read(s.record));
+      rec = JSON.parse(await readOriginal(s.record));
     rec.expected = c.after;
-    await atomicWriteFile(s.record, JSON.stringify(rec), { mode: 0o600 });
+    await writeOriginal(s.record, JSON.stringify(rec), { overwrite: true });
   }
 }
 export async function remove(ctx) {
@@ -521,7 +471,7 @@ export async function remove(ctx) {
     actions = [];
   for (const file of isCli(ctx) ? [f.instructions] : [f.mcp, f.instructions]) {
     const s = await state(ctx, file),
-      raw = await read(s.record),
+      raw = await readOriginal(s.record),
       current = await read(file);
     let rec;
     if (raw !== null) {
@@ -623,7 +573,7 @@ export async function remove(ctx) {
   for (const a of actions) {
     if (a.value === null) await unlink(a.file);
     else if (a.value !== undefined) await atomicWriteFile(a.file, a.value, { mode: 0o600 });
-    if (a.cleanup) await unlink(a.record);
+    if (a.cleanup) await clearOriginal(a.record);
   }
 }
 export async function doctor(ctx) {

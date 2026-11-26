@@ -1,9 +1,30 @@
 // SPDX-License-Identifier: MIT
-import { readFileSync, realpathSync, lstatSync, readlinkSync } from 'node:fs';
-import { readFile, access, unlink } from 'node:fs/promises';
+import { realpathSync, lstatSync, readlinkSync } from 'node:fs';
+import { access, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { atomicWriteFile, BrainAtlasError, detectEvidence, resolvePaths } from '@brainatlas/core';
+import { atomicWriteFile, BrainAtlasError, detectEvidence, resolvePaths, adapterKit } from '@brainatlas/core';
+
+const {
+  isCli,
+  cliPayload,
+  stringifyJson,
+  readOptionalSync: read,
+  readOriginal,
+  saveOriginal,
+  originalPath,
+  backupName,
+  restorable,
+  hasParentSegment,
+} = adapterKit;
+
+function isWithin(root, target) {
+  const rel = path.relative(root, target);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+}
+function serializeJson(value, before) {
+  return stringifyJson(value, before, { indentPattern: /\n([ \t]+)"/ });
+}
 
 export const id = 'codex';
 export const displayName = 'Codex CLI';
@@ -38,10 +59,6 @@ function resolvedPathForSafety(target, depth = 0) {
     return path.resolve(resolvedPathForSafety(parent, depth + 1), path.basename(absolute));
   }
 }
-function isWithin(root, target) {
-  const relative = path.relative(root, target);
-  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-}
 function assertGlobalPathsSafe(paths, home, env) {
   if (env.BRAINATLAS_ALLOW_SYMLINKED_ROOT === '1') return;
   const resolvedHome = resolvedPathForSafety(home);
@@ -55,7 +72,7 @@ function paths(ctx) {
   const platform = ctx.platform || ctx.env.BRAINATLAS_PLATFORM || process.platform;
   const resolved = ctx.paths || resolvePaths({ platform, env: ctx.env });
   const base = ctx.scope === 'vault' ? ctx.vaultDir || ctx.config?.vault?.path : ctx.env.HOME;
-  if (ctx.scope === 'vault' && typeof base === 'string' && base.split(/[\\/]+/).includes('..'))
+  if (ctx.scope === 'vault' && typeof base === 'string' && hasParentSegment(base))
     err('E_PATH_ESCAPE', 'Vault path must not contain parent path segments.');
   if (ctx.scope === 'vault' && base && !path.isAbsolute(base)) err('E_PATH_ESCAPE', 'Vault path must be absolute.');
   if (ctx.scope === 'vault' && !base) err('E_VAULT_PATH', 'Vault path must be absolute.');
@@ -66,49 +83,24 @@ function paths(ctx) {
         : path.join(ctx.env.HOME, '.codex', 'config.toml'),
     hooks: ctx.scope === 'vault' ? null : path.join(ctx.env.HOME, '.codex', 'hooks.json'),
     instructions: ctx.scope === 'vault' ? path.join(base, 'AGENTS.md') : path.join(ctx.env.HOME, '.codex', 'AGENTS.md'),
-    state: path.join(resolved.stateDir, 'adapters', 'codex'),
+    state: resolved.stateDir,
     shim: ctx.shimPath,
   };
   if (ctx.scope !== 'vault') assertGlobalPathsSafe(result, ctx.env.HOME, ctx.env);
   return result;
 }
-function read(file) {
-  try {
-    return readFileSync(file, 'utf8');
-  } catch (e) {
-    if (e.code === 'ENOENT') return null;
-    throw e;
-  }
-}
 function checkText(text) {
   if (text?.startsWith('\uFEFF')) err('E_BOM', 'UTF-8 BOM is not supported.');
 }
 function parseJson(text) {
-  checkText(text);
-  if (text === '') return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    err('E_CONFIG_PARSE', 'Configuration file is invalid.');
-  }
-}
-function serializeJson(obj, before) {
-  const indent = before?.match(/\n([ \t]+)"/)?.[1] || '  ';
-  const trailing = before?.endsWith('\n') ? '\n' : '';
-  return JSON.stringify(obj, null, indent) + trailing;
+  return adapterKit.parseJson(text, {
+    empty: 'exact',
+    bomMessage: 'UTF-8 BOM is not supported.',
+    message: 'Configuration file is invalid.',
+  });
 }
 function quoteToml(s) {
   return JSON.stringify(String(s));
-}
-function isCli(ctx) {
-  return ctx?.config?.channel === 'cli';
-}
-function quote(value) {
-  return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
-}
-function cliPayload(ctx) {
-  const shim = quote(ctx.shimPath);
-  return `Use BrainAtlas as evidence-first project memory. Before substantial project changes, search it from the shell: ${shim} wiki query "<project name and topic terms>" --json, then read only relevant pages with ${shim} wiki read <path> --json. Treat retrieved pages as evidence, verify them against the current repository, and cite page paths when reporting findings. If no relevant page exists, proceed from current evidence. These commands are read-only.`;
 }
 const CHANNEL_SWITCH = 'Run brainatlas uninstall before changing the channel.';
 function tomlBlock(ctx) {
@@ -584,11 +576,6 @@ function mdCheck(text) {
   if (!claimed || createHash('sha256').update(body).digest('hex').slice(0, 12) !== claimed)
     err('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
 }
-function restorable(prefix, suffix, original) {
-  if (typeof original !== 'string' || suffix.trim() !== '') return false;
-  const normalized = (value) => value.replaceAll('\r\n', '\n').replace(/\n+$/u, '');
-  return normalized(prefix) === normalized(original);
-}
 function mdCheckCli(text) {
   const start = text.indexOf(MD_BEGIN),
     end = text.indexOf(MD_END);
@@ -741,8 +728,7 @@ export function plan(ctx) {
 /** @param {object} planResult @param {object} ctx */
 export async function apply(planResult, ctx) {
   if (!planResult || !Array.isArray(planResult.changes)) err('E_ARGUMENT', 'Plan is invalid.');
-  const p = paths(ctx),
-    originalsDir = path.join(p.state, 'originals');
+  const p = paths(ctx);
   const allowed = new Set(plan(ctx).changes.map((change) => change.file));
   for (const change of planResult.changes) {
     if (!change || typeof change.file !== 'string' || !allowed.has(change.file))
@@ -754,21 +740,15 @@ export async function apply(planResult, ctx) {
   }
   for (const change of planResult.changes) {
     const current = change.before;
-    if (current !== null) {
-      const stamp = (ctx.now instanceof Date ? ctx.now : new Date()).toISOString().replace(/[:.]/g, '-');
-      await atomicWriteFile(`${change.file}.bak.${stamp}`, current, { mode: 0o600 });
-      await atomicWriteFile(
-        path.join(originalsDir, `${createHash('sha256').update(change.file).digest('hex')}.json`),
-        JSON.stringify({ file: change.file, original: current, after: change.after }),
-        { mode: 0o600 }
-      );
-    } else {
-      await atomicWriteFile(
-        path.join(originalsDir, `${createHash('sha256').update(change.file).digest('hex')}.json`),
-        JSON.stringify({ file: change.file, original: null, after: change.after }),
-        { mode: 0o600 }
-      );
-    }
+    if (current !== null)
+      await atomicWriteFile(backupName(change.file, ctx.now, { style: 'dash', useNowValue: false }), current, {
+        mode: 0o600,
+      });
+    await saveOriginal(
+      originalPath(p.state, id, change.file),
+      JSON.stringify({ file: change.file, original: current, after: change.after }),
+      { overwrite: true }
+    );
     await atomicWriteFile(change.file, change.after, { mode: 0o600 });
   }
 }
@@ -793,10 +773,10 @@ export async function remove(ctx) {
   }
   for (const file of files) {
     const current = await read(file);
-    const recordPath = path.join(p.state, 'originals', `${createHash('sha256').update(file).digest('hex')}.json`);
+    const recordPath = originalPath(p.state, id, file);
     let record = null;
     try {
-      record = JSON.parse(await readFile(recordPath, 'utf8'));
+      record = JSON.parse(await readOriginal(recordPath));
     } catch (error) {
       if (error.code !== 'ENOENT') err('E_STATE_CORRUPT', 'Adapter state is invalid.');
     }

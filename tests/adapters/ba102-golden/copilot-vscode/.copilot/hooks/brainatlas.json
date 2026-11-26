@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "command": "\"/usr/bin/node\" \"/opt/brainatlas/bin/brainatlas\" hook copilot session-start",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}
