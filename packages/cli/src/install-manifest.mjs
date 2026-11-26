@@ -125,7 +125,10 @@ export async function recordManagedWrite(
     const rel = relative(dataDir, backupDir);
     if (rel.startsWith(`..${sep}`) || isAbsolute(rel))
       throw fail('E_MANIFEST_INVALID', 'Install backup path is invalid.');
-    await mkdir(backupDir, { recursive: true });
+    await mkdir(backupDir, { recursive: true, mode: 0o700 });
+    const backupStat = await lstat(backupDir);
+    const owned = typeof process.getuid !== 'function' || backupStat.uid === process.getuid();
+    if (backupStat.isDirectory() && !backupStat.isSymbolicLink() && owned) await chmod(backupDir, 0o700);
     backupPath = join(backupDir, `${digest(Buffer.from(file))}.before`);
     await writeFile(backupPath, before.bytes, { flag: 'wx', mode: 0o600 }).catch(async (cause) => {
       if (cause?.code !== 'EEXIST') throw cause;

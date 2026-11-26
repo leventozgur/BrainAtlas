@@ -38,9 +38,12 @@ async function fixture(t) {
   return { home, env, vault, stateDir, metrics, run };
 }
 
-const emptySummary = {
+const emptySummary = (stateDir) => ({
   days: 7,
+  stateDir,
   prompts: 0,
+  events: { prompt: 0, 'session-start': 0 },
+  byClient: {},
   outcomes: { ok: 0, empty: 0, deadline: 0, error: 0 },
   injectionRate: 0,
   meanResults: 0,
@@ -48,16 +51,18 @@ const emptySummary = {
   meanChars: 0,
   shadow: { n: 0, top1SameRate: 0, meanOverlap5: 0, injectDiffRate: 0 },
   feedback: { useful: 0, notUseful: 0 },
-};
+});
 
 test('usage with no metric files reports zero records', async (t) => {
   const f = await fixture(t);
   const result = f.run('usage', '--json');
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), emptySummary);
+  assert.deepEqual(JSON.parse(result.stdout), emptySummary(f.stateDir));
   const text = f.run('usage');
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /Prompts: 0/);
+  assert.match(text.stdout, /Events: prompt 0, session-start 0/);
+  assert.ok(text.stdout.includes(`Metrics: ${join(f.stateDir, 'metrics', 'hooks.jsonl')}`));
 });
 
 test('usage filters by days and aggregates prompt, shadow and feedback records exactly', async (t) => {
@@ -108,7 +113,10 @@ test('usage filters by days and aggregates prompt, shadow and feedback records e
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), {
     days: 7,
+    stateDir: f.stateDir,
     prompts: 5,
+    events: { prompt: 5, 'session-start': 1 },
+    byClient: {},
     outcomes: { ok: 2, empty: 1, deadline: 1, error: 1 },
     injectionRate: 0.6,
     meanResults: 1.6,
@@ -117,7 +125,7 @@ test('usage filters by days and aggregates prompt, shadow and feedback records e
     shadow: { n: 2, top1SameRate: 0.5, meanOverlap5: 2, injectDiffRate: 0.5 },
     feedback: { useful: 1, notUseful: 1 },
   });
-  assert.doesNotMatch(result.stdout, /not-json|session-start/);
+  assert.doesNotMatch(result.stdout, /not-json/);
 });
 
 test('usage rejects invalid day counts with E_ARGUMENT', async (t) => {

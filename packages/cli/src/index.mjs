@@ -25,7 +25,7 @@ const helpDescriptions = Object.freeze({
   config: 'Read or change BrainAtlas configuration.',
   safety: 'Review and manage fingerprinted safety allowances.',
   module: 'List, add, or remove installed modules.',
-  agent: 'List, add, remove an agent or switch its channel.',
+  agent: 'List, add, remove an agent, switch its channel or refresh its adapters.',
   uninstall: 'Remove BrainAtlas while preserving the vault.',
   update: 'Install or inspect a release update.',
   rollback: 'Switch to a previous release.',
@@ -54,7 +54,7 @@ const helpUsages = Object.freeze({
     'brainatlas safety allow <VAULT_RELATIVE_PATH> [--plan] [--json] | list [PATH] [--json] | revoke <PATH> [--plan] [--json]',
   module: 'brainatlas module list | add NAME --from ARCHIVE | remove NAME [--plan]',
   agent:
-    'brainatlas agent list [--json] | agent add <agent> [--channel mcp|cli] [--plan] | agent remove <agent> [--plan] | agent set <agent> --channel mcp|cli [--plan]',
+    'brainatlas agent list [--json] | agent add <agent> [--channel mcp|cli] [--plan] | agent remove <agent> [--plan] | agent set <agent> --channel mcp|cli [--plan] | agent refresh [<agent>] [--plan]',
   uninstall: 'brainatlas uninstall [--plan]',
   update: 'brainatlas update --from ARCHIVE [--plan] | --check [--pre]',
   rollback: 'brainatlas rollback [--to VERSION] [--plan]',

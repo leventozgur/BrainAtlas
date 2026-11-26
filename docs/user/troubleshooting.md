@@ -10,7 +10,9 @@ brainatlas status --summary
 
 `status --summary` (add `--json` for scripts) prints one read-only table: version, profile, modules, per-agent channels, hook mode, semantic state, last sync, OKF counts and `maintain` findings. `wiki lint`, `okf check` and `maintain` apply different rules, so a clean `wiki lint` does not mean the other two are clean; the summary lists them side by side. The OKF line uses the core rules; `okf check` also applies the strict module rules when installed.
 
-`doctor` reports whether the current release and configured adapter checks pass. It does not prove that every agent version loads its configuration or permits hooks.
+`doctor` reports whether the current release and configured adapter checks pass. It does not prove that every agent version loads its configuration or permits hooks. Both `doctor` and plain `status` report `capabilities` for every configured agent (`channel`, `read`, `write`, `inject`), `hookActivity` with the last hook time per agent, and `orphanState` for state directories that belong to no configured vault.
+
+Doctor warnings never change `ok`. A configured agent without a write path warns `<agent> has no write path (channel <channel>); run brainatlas agent refresh <agent>.` unless the configuration is read-only. An installed hook that never ran warns `<agent> hook is installed but has never run.`, and one older than seven days warns `<agent> hook last ran <N> days ago.` A state directory under the state root that does not match the configured vault is listed and warned about; nothing is deleted automatically.
 
 | Symptom | Check |
 |---|---|

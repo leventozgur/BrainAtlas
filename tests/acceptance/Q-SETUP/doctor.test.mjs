@@ -69,7 +69,18 @@ test('doctor omits the missing-index warning while semantic is disabled and stay
   const { result, networkCalls } = await runDoctor(f);
   assert.deepEqual(
     Object.keys(result).sort(),
-    ['checks', 'currentVersion', 'moduleHealth', 'modules', 'ok', 'profile', 'warnings'].sort()
+    [
+      'capabilities',
+      'checks',
+      'currentVersion',
+      'hookActivity',
+      'moduleHealth',
+      'modules',
+      'ok',
+      'orphanState',
+      'profile',
+      'warnings',
+    ].sort()
   );
   assert.equal(result.currentVersion, 'doctor-fixture');
   assert.deepEqual(result.checks, { config: true, release: true });
@@ -88,7 +99,18 @@ test('doctor keeps the missing-index warning while semantic is enabled and prese
   const { result, networkCalls } = await runDoctor(f);
   assert.deepEqual(
     Object.keys(result).sort(),
-    ['checks', 'currentVersion', 'moduleHealth', 'modules', 'ok', 'profile', 'warnings'].sort()
+    [
+      'capabilities',
+      'checks',
+      'currentVersion',
+      'hookActivity',
+      'moduleHealth',
+      'modules',
+      'ok',
+      'orphanState',
+      'profile',
+      'warnings',
+    ].sort()
   );
   assert.ok(result.warnings.includes('Semantic index is not available.'), JSON.stringify(result));
   assert.deepEqual(result.moduleHealth, [{ name: 'semantic', enabled: true, freshness: null }]);
