@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-24: hybrid wiki_query results use the same section anchor as the lexical path (diacritics, repeated headings and
-// astral headings), cut snippets only at code-point boundaries, keep the module's result order, and expose `score` as the
-// value of the active mode's ordering (rrfScore, or semanticScore in semantic-primary). Temporary vault and release
-// directories, fake embedding provider, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, cp, symlink, writeFile, rm } from 'node:fs/promises';
@@ -35,7 +31,6 @@ async function start(t, { files, budgetChars = 4000, mode = 'semantic-primary', 
   const currentDir = join(root, 'current');
   await symlink(release, currentDir);
   for (const [name, text] of Object.entries(files)) await writeFile(join(wiki, name), text);
-  // Query embeddings carry the configured `task:` prefix; document embeddings are chosen per chunk by `vectorOf`.
   const fetchImpl = async (_url, options) => ({
     ok: true,
     json: async () => ({
@@ -75,7 +70,6 @@ test('BA-24 B1: hybrid anchors equal the lexical anchors for diacritic, repeated
   await mkdir(wiki, { recursive: true });
   await writeFile(join(wiki, 'durum.md'), durum);
   const index = core.buildIndex(core.loadPages(wiki));
-  // Heading words are not scored by the core (only section body lines are), so the queries name body words.
   for (const [text, expected] of [
     ['alpha kaynak', 'guncel-durum'],
     ['zeta', 'notes-1'],
@@ -117,8 +111,6 @@ test('BA-24 B1 core: the section bestSection picks for a page equals the core se
 });
 
 test('BA-24 B1 query section: a page outside the lexical answer takes the core section for the query on its own body', async (t) => {
-  // limit 1: the lexical answer holds only other.md (four "zeta"), the semantic top is durum.md (its chunks match the query
-  // vector). The query-term section of durum.md is "Diger > Notes" (anchor notes-1), not the first chunk's section.
   const { query } = await start(t, {
     files: { 'durum.md': durum, 'other.md': '# Other\nzeta zeta zeta zeta words\n' },
     limit: 1,
@@ -134,7 +126,6 @@ test('BA-24 B1 query section: a page outside the lexical answer takes the core s
 });
 
 test('BA-24 B2: a snippet cut at the budget never ends with a lone high surrogate', async (t) => {
-  // The snippet is the chunk heading line plus its text; a budget of 16 UTF-16 units would split the emoji pair after `abcdefgh`.
   const { query } = await start(t, { files: { 'snip.md': '# Snip\nabcdefgh😀ijk\n' }, budgetChars: 16 });
   const result = await query('ijk');
   const row = result.results.find((item) => item.path === 'snip.md');
@@ -162,7 +153,6 @@ test('BA-24 B3: score follows rrfScore in rrf mode and semanticScore is an extra
 });
 
 test('BA-24 order: both modes keep the module order, and score is the active mode key', async (t) => {
-  // a.md: lexical hit with cosine 0.1; b.md: no lexical hit, cosine 1; c.md: lexical hit with negative cosine (not semantic).
   const files = {
     'a.md': '# Alpha\nalpha alpha notes\n',
     'b.md': '# Zeta\nzeta words\n',
@@ -173,7 +163,6 @@ test('BA-24 order: both modes keep the module order, and score is the active mod
     const { query, wiki, stateDir, provider } = await start(t, { files, mode, vectorOf });
     const result = await query('alpha');
     const index = await readSemanticIndex(stateDir);
-    // The module's own order is what main returned (main passed searchHybrid's output through unchanged).
     const direct = await searchHybrid({
       query: 'alpha',
       pages: core.loadPages(wiki),
@@ -217,7 +206,6 @@ test('BA-24 order: both modes keep the module order, and score is the active mod
 });
 
 test('BA-24 edge: a semantic-only hit takes the core anchor of its own chunk section, and default-mode scores stay ordered', async (t) => {
-  // "qqqq" matches no page lexically, so the section comes from the chunk text (its headingPath must match the chunk's).
   const { query } = await start(t, { files: { 'durum.md': durum } });
   const result = await query('qqqq');
   assert.equal(result.semantic.used, true);

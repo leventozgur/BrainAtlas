@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Test-only preload (node --import). Blocks outbound sockets, DNS lookups and fetch in child processes.
-// Each blocked attempt is appended to the file named by BA00_NET_LOG, if set.
 import net from 'node:net';
 import dns from 'node:dns';
 import { appendFileSync } from 'node:fs';
@@ -10,9 +8,8 @@ function blocked(kind) {
   if (file) {
     try {
       appendFileSync(file, `${kind}\n`);
-    } catch {
-      /* logging must not change behaviour */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   throw new Error(`BA-00 network blocked: ${kind}`);
 }

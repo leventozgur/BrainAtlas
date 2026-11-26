@@ -12,19 +12,6 @@ import { caseKind, isPoisonPage, loadMetaPredicate } from './lib/case-schema.mjs
 export const DEFAULT_NOW = '2026-11-10T00:00:00Z';
 const MODES = new Set(['normal', 'economic']);
 
-/**
- * Run the real hook (runHook with its retrieval worker) for every case and return per-case records.
- * Each case uses its own session id, so per-session dedup never leaks between cases.
- * A case's optional `cwd` is passed in the hook stdin; the product does not read it yet.
- * Record: {category, kind, cwd, abstain, relevant, excluded, injected, chars, durationMs, meta, poisoned, sectionHit, sectionSource}.
- * `meta` flags the first five injected pages (true for corpus meta pages). `poisoned` is true when an `eval_poison` page
- * was injected. `sectionHit` is set only for cases with `expectedHeading`: the first injected relevant block's heading line
- * is compared (sectionSource 'hook'); when that block has no heading line, the core search heading for the same query is
- * used instead (sectionSource 'search'). A case with no injected relevant block is a miss (sectionHit false).
- * BA-32: `disclosure` is `full` (default, the hook config is exactly as before) or `progressive`, which sets
- * `hooks.disclosure` in the hook config.
- * @param {{corpusDir:string,cases:object[],mode?:string,abstainThreshold?:number,disclosure?:string,now?:Date}} options
- */
 export async function runHookCases({
   corpusDir,
   cases,
@@ -119,10 +106,6 @@ export async function runHookCases({
   return records;
 }
 
-/**
- * Hook-level metrics for one corpus and one case file.
- * @param {{corpusDir:string,casesFile:string,mode?:string,abstainThreshold?:number,disclosure?:string,now?:Date}} options
- */
 export async function runHookEval({ corpusDir, casesFile, ...rest }) {
   const cases = JSON.parse(readFileSync(casesFile, 'utf8'));
   return summarizeHookRecords(await runHookCases({ corpusDir, cases, ...rest }));

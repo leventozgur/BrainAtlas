@@ -18,8 +18,6 @@ const HOLDOUT_SETS = {
   multihop: 'multihop-cases.json',
   nearNegative: 'near-negative-cases.json',
 };
-// BA-27 sets. Dev: corpus under eval/ (realDocs: the repository docs/ directory, read in place) and eval/dev/<cases>.
-// Holdout: <holdout>/<key>/corpus and <holdout>/<key>/cases.json; a missing <holdout>/<key> directory gives null.
 const NEW_SETS = {
   hookRealistic: { corpus: 'corpus-hook-realistic', cases: 'hook-realistic-cases.json' },
   longpage: { corpus: 'corpus-longpage', cases: 'longpage-cases.json' },
@@ -36,12 +34,6 @@ function gitCommit(cwd) {
 
 const readCases = (file) => JSON.parse(readFileSync(file, 'utf8'));
 
-/**
- * Run every BM25 set, the hook-level evaluation, the grep baseline and optionally the scale benchmark; return one JSON-ready object.
- * `sourceRoot` is the eval directory (defaults to this one). `holdoutDir` replaces the four historical new sets and the BA-27 sets
- * (see NEW_SETS) and their corpora only. `docsDir` is the corpus of realDocs in dev mode.
- * @param {{sourceRoot?:string,holdoutDir?:string,scale?:boolean,now?:Date,scaleOptions?:object,docsDir?:string}} options
- */
 export async function runBaSuite({
   sourceRoot = evalRoot,
   holdoutDir,
@@ -75,7 +67,6 @@ export async function runBaSuite({
     multihop: newSetSources.multihop,
     nearNegative: newSetSources.nearNegative,
   };
-  // BA-27 sources: null when a holdout directory for that set is absent.
   for (const [key, spec] of Object.entries(NEW_SETS)) {
     if (!holdoutDir)
       sources[key] = {
@@ -91,7 +82,6 @@ export async function runBaSuite({
     if (!existsSync(source.casesFile)) throw new Error('Missing case file');
   };
 
-  // The historical hook summary covers the natural set and the four historical new sets only; BA-27 sets have their own summaries.
   const hookRecords = [];
   for (const source of [naturalSource, ...Object.values(newSetSources)]) {
     requireFile(source);
@@ -124,8 +114,6 @@ export async function runBaSuite({
     });
     return { n: cases.length, bm25: bm25(source.corpusDir, source.casesFile), hook: summarizeHookRecords(records) };
   };
-  // grepBaseline[set] is the fair comparison block: grep numbers plus BM25 at the default threshold and without abstention.
-  // It sits here, not on the set objects, because the set objects keep their BA-00 shape (main parity).
   const grepSet = (key) => {
     const source = sources[key];
     if (!source) return null;

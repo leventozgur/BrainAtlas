@@ -88,7 +88,7 @@ test('empty bare remote: two hosts run, exchange updates, report JSON fields and
   assert.deepEqual(
     Object.keys(status).sort(),
     ['ahead', 'behind', 'branch', 'clean', 'initialized', 'hostId', 'lastSuccessfulSync', 'mode', 'remote'].sort()
-  ); // PM: S-HOSTID acceptance adds hostId to git status
+  );
   assert.equal(status.branch, 'main');
   assert.equal(status.remote, f.remote);
   assert.equal(status.ahead, 0);

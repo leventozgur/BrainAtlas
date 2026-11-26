@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-07: the semantic step itself (in-process, fake fetch) and its module-load trace. Hermetic: temporary directories,
-// a fake fetch that answers locally, and child processes that never reach a provider. No network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
@@ -18,7 +16,6 @@ import { buildSemanticIndex, createOllamaProvider, markdownChunks } from '../../
 const ROOT = resolve('.');
 const BIN = join(ROOT, 'packages/hooks/bin/brainatlas-hook.mjs');
 const settings = { ...SEMANTIC_DEFAULTS, dims: 2 };
-// Deterministic toy embedding: the Turkish query and the English page share the "zebra" concept.
 function vectorFor(text) {
   if (/parsiyel/u.test(text)) return [0.6, 0.8];
   return /zebra|fish|balık/iu.test(text) ? [1, 0] : [0, 1];
@@ -145,7 +142,6 @@ test('semantic step: the loader trace sees the module only when the semantic ste
     register,
     `import { register } from 'node:module';\nregister(${JSON.stringify(pathToFileURL(hooks).href)});\n`
   );
-  // A fresh vault state and an index-less global state keep the Full-on run on the no-network path.
   const env = { PATH: process.env.PATH, HOME: join(f.root, 'trace-home') };
   const paths = resolvePaths({ env });
   await mkdir(join(paths.configFile, '..'), { recursive: true });

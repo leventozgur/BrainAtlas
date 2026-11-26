@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 blind acceptance, criterion 1: wiki_create_entity / wiki_create_concept on a hand-edited index, over stdio MCP.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -17,8 +16,6 @@ import {
 
 const page = (title, extra = '') => `---\ntitle: ${title}\n${extra}---\nKısa gövde.\n`;
 
-// Hand-edited index: emoji and Turkish prose, a preface, a fenced block that imitates a heading and an entry, a
-// hand-written paragraph inside a category, a blockquote, and a second category.
 const HAND_LF = [
   '# Wiki İndeksi 📚',
   '',
@@ -105,7 +102,6 @@ test('create entity on a hand-edited CRLF index: one CRLF line is added in the c
   const { at, line } = singleInsertion(before, after);
   assert.equal(line, '- [Yeni Kavram](concepts/yeni-kavram.md)\r', 'the inserted line uses the file CRLF style');
   const lines = after.toString('utf8').split('\n');
-  // Contract: the line goes after the last entry of its category (the continuation line is not an entry).
   assert.equal(
     lines[at - 1],
     '- [Kavram](concepts/kavram.md) — açıklama #etiket\r',

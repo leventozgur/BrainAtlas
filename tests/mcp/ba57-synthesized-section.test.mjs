@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-57: the MCP wiki_query tool passes the synthesized flag of an accepted current-state block through unchanged.
-// Hermetic: temporary vault, HOME and state directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
@@ -55,8 +53,6 @@ async function ask(f, args) {
   }
 }
 
-// The hybrid path needs a release tree for the semantic module (as the other MCP hybrid tests do) and a ready index, so the
-// query never waits for the background build.
 async function semanticFixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'ba57-mcp-semantic-'));
   t.after(() => rm(root, { recursive: true, force: true }));

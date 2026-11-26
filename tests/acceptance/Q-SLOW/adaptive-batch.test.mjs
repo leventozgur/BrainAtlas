@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Acceptance (2): adaptive group size, driven by an injected clock.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { updateSemanticIndex, markdownChunks, createOllamaProvider } from '../../../modules/semantic/src/index.mjs';
@@ -73,7 +72,6 @@ test('threshold boundaries: exactly 20 s and exactly 5 s keep the size, 20.001 s
     const { p } = await run(t, { chunks: 80, indexBatchSize: 32, durations: [duration] });
     assert.equal(p.sizes[1], expectedAtFull, `after ${duration} ms`);
   }
-  // 4.999 s doubles from a reduced size, so start reduced first.
   const { p } = await run(t, { chunks: 400, indexBatchSize: 32, durations: [30000, 4999, 5000, 5001] });
   assert.deepEqual(p.sizes.slice(0, 5), [32, 16, 32, 32, 32]);
   const mid = await run(t, { chunks: 120, indexBatchSize: 32, durations: [30000, 5000, 5000] });

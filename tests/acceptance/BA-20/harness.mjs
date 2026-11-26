@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20 independent acceptance harness (blind). Starts a real stdio MCP server against a temporary vault and talks to it
-// through the MCP SDK client. BA20_TARGET=main runs the main checkout's server (executed only, never written).
-// No network, no user paths: HOME and XDG_* are injected into the temporary directory.
 import { mkdtemp, mkdir, writeFile, readdir, rm, lstat, readlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -17,10 +14,6 @@ export const SERVER_ROOT =
 
 const { defaultConfig } = await import(pathToFileURL(join(SERVER_ROOT, 'packages/core/src/config/index.mjs')).href);
 
-/**
- * Starts one stdio server for a fresh temporary vault.
- * `files` maps wiki-relative paths to string contents (written directly to disk, so any file name can be used).
- */
 export async function startServer(t, { files = {} } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'ba20-accept-'));
   const home = join(dir, 'home');
@@ -78,14 +71,12 @@ export function okJson(r) {
   assert.notEqual(r.isError, true, `unexpected refusal: ${textOf(r)}`);
   return JSON.parse(textOf(r));
 }
-/** Asserts a refusal and returns its text (the text is fixed server wording, never caller content). */
 export function refused(r, code) {
   assert.equal(r.isError, true, 'expected a refusal but the call succeeded');
   if (code) assert.match(textOf(r), new RegExp(code));
   return textOf(r);
 }
 
-/** Byte-level snapshot of every entry under a directory (symlinks recorded as links, not followed). */
 export async function snapshot(dir) {
   const out = {};
   async function walk(rel) {
@@ -106,11 +97,9 @@ export async function readIndexText(f) {
   return (await readFile(join(f.wiki, 'index.md'))).toString('utf8');
 }
 
-/** Entry lines of the index (lines that start with "- [" ). */
 export function entryLines(text) {
   return text.split('\n').filter((line) => line.startsWith('- ['));
 }
 
-/** Any C0, DEL, C1, U+2028 or U+2029 character. */
 // eslint-disable-next-line no-control-regex -- the fixture asserts control-character handling on purpose
 export const CONTROL_RE = new RegExp('[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]');

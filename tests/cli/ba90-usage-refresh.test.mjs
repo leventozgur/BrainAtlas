@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-90: usage event/client breakdown, agent refresh, private install backups and update plan.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -36,9 +35,8 @@ async function fixture(t) {
     let value = null;
     try {
       value = JSON.parse(result.stdout);
-    } catch {
-      /* not JSON */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     return { result, value };
   };
   const ok = (...args) => {

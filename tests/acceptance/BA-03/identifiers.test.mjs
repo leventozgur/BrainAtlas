@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-03 independent acceptance tests: identifier extraction, negatives, abstention, vault-variant coverage.
-// Written from the brief and docs/contracts/retrieval.md only. Hermetic: in-memory pages, temp dirs, no network.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -37,7 +35,6 @@ after(() => {
   fs.rmSync(tempHome, { recursive: true, force: true });
 });
 
-// One document that carries every identifier kind listed in the contract, plus an unrelated page.
 const IDENTIFIERS = [
   'E_WIDGET_TIMEOUT',
   'a1b2c3d',
@@ -238,8 +235,6 @@ test('vault identifier path and basename variants never abstain with identifier-
 });
 
 test('basename of a deeply nested vault path (more than 12 segments) still finds the document', () => {
-  // The contract says a document identifier yields its contiguous sub-chains, so the basename of any
-  // path that is in the vault must be findable. This is a deliberately deep path.
   const deep = `${Array.from({ length: 14 }, (_, i) => `d${i}`).join('/')}/deep_retry.mjs`;
   const idx = buildIndex(
     [
@@ -254,7 +249,6 @@ test('basename of a deeply nested vault path (more than 12 segments) still finds
 });
 
 test('dotted day-month-year dates (Turkish DD.MM.YYYY) are not identifiers: unknown date does not cause identifier-not-found', () => {
-  // The contract lists dates among non-identifiers. A dotted three-part date must not be treated as a version.
   const idx = buildIndex([page('queue.md', 'Queue retry policy and backoff details.', { title: 'Queue' })], { now });
   const r = run(idx, '11.11.2025 tarihinde ne oldu?');
   assert.notEqual(r.reason, 'identifier-not-found', 'dotted date treated as an identifier');
@@ -267,7 +261,6 @@ test('dotted ISO-like dates (YYYY.MM.DD) are not identifiers either', () => {
 });
 
 test('an identifier-free query on a plain page still ranks normally', () => {
-  // Parity check on identifier-free text: a plain word query returns the same result as the legacy rules would.
   const idx = buildIndex([page('plain.md', 'Backup archive restore steps for the vault.', { title: 'Backup' })], {
     now,
   });
@@ -277,7 +270,6 @@ test('an identifier-free query on a plain page still ranks normally', () => {
 });
 
 test('a superseded page carrying an identifier does not make that identifier findable', () => {
-  // Superseded pages are not indexed (contract), so their identifiers are not in the vault index.
   const idx = buildIndex(
     [
       page('old.md', 'Old behaviour of OLD_ONLY_CODE_ZED.', { title: 'Old', frontmatter: { status: 'superseded' } }),

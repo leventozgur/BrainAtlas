@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 independent parity check (not a node:test file): runHook prompt results on a 2000-page synthetic vault.
-// usage: node independent-hook-parity.mjs <repoRoot> <workDir>
-// Prints one JSON line per prompt: the hook stdout and exit code, so two repo roots can be diffed byte for byte.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';

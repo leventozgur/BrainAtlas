@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-58: maintain --fix never plans an index line whose title or summary matches a safety rule.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';

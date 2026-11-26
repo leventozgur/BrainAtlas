@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Docs accompanying Q-SLOW: sections exist, command names are real, no personal paths or localhost URLs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';

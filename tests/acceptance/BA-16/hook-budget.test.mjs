@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-16 blind acceptance (independent tester). Black-box: drives runHook only.
-// BA16_HOOK_MODULE selects the hook module under test (default: this worktree).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
@@ -12,7 +10,6 @@ const HOOK =
   process.env.BA16_HOOK_MODULE || fileURLToPath(new URL('../../../packages/hooks/src/index.mjs', import.meta.url));
 const { runHook } = await import(pathToFileURL(HOOK).href);
 const NOW = new Date('2026-11-10T00:00:00Z');
-// Synthetic Anthropic-style key, assembled at run time so the whole value never appears in source.
 const TAIL = 'Zx9Qw3rT7yU1iO5pA2sD8fGh';
 const SECRET = ['sk', 'ant'].join('-') + '-' + TAIL;
 const ALL_BUDGETS = [...Array.from({ length: 200 }, (_, i) => i + 1), 300, 1000, 1400, 1500, 4002];
@@ -29,7 +26,6 @@ async function fixture(t, pages) {
   for (const [name, body] of Object.entries(pages)) await writeFile(join(vault, name), body);
   return { root, home, vault, state, env: { HOME: home } };
 }
-// Pages: {title, path, body} for the audit; body text is what the page's snippet must come from.
 const page = (title, path, body) => ({ title, path, body, header: `${title} (${path})` });
 const files = (list) => Object.fromEntries(list.map((p) => [p.path, p.body]));
 
@@ -57,8 +53,6 @@ async function ask(
   return { stdout: res.stdout, exitCode: res.exitCode, context: contextOf(res.stdout, client) };
 }
 
-// Audit a context: every line with "(" must be a complete "Title (path)" header of a known page; no header
-// prefix may stand alone; each block must carry a non-empty excerpt. Returns the complete blocks found.
 function audit(context, pages) {
   const byHeader = new Map(pages.map((p) => [p.header, p]));
   const problems = [],
@@ -175,8 +169,6 @@ test('F1b regression: only fully injected pages are marked seen; a later prompt 
 });
 
 test('F2 regression: a cumulative retrieval budget must not starve later results into header-only blocks', async (t) => {
-  // Second prompt in one session: already-seen pages still consume the core's cumulative snippet budget, so
-  // fresh pages after them used to arrive with empty excerpts (header-only blocks).
   const big = Array.from({ length: 4 }, (_, i) =>
     page(`Big ${i}`, `big${i}.md`, `# Big ${i}\nzebrafish ` + 'word '.repeat(600))
   );
@@ -206,8 +198,6 @@ test('F2 regression: a cumulative retrieval budget must not starve later results
 });
 
 test('secret redaction: a key cut by the excerpt budget never leaks any 8-character fragment', async (t) => {
-  // Ten complete keys shrink under redaction, moving a final key that straddles the 4001-char core excerpt cut
-  // (raw start ~3976) into the visible range. Its kept part is shorter than a full key, so it is not matched.
   const f = await fixture(t, {
     'ops-notes.md':
       `# Ops\nzebrafish ${(SECRET + ' ').repeat(10)}${'word '.repeat(728)}${SECRET} rotate weekly. ` +
@@ -222,7 +212,6 @@ test('secret redaction: a key cut by the excerpt budget never leaks any 8-charac
         `key fragment "${TAIL.slice(i, i + 4)}" at budget ${b}: ${r.stdout}`
       );
   }
-  // Secret fully inside the excerpt: must show the placeholder, never the key.
   const g = await fixture(t, { 'ops-notes.md': `# Ops\nzebrafish key ${SECRET} rotate weekly.` });
   const full = await ask(g, 'zebrafish', { session: 'red-full' });
   assert.ok(!full.stdout.includes(TAIL), 'key tail visible');

@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20: a create name whose slug is empty (no ASCII letter or digit) is refused with E_INVALID_INPUT, without a fixed
-// message that echoes the name, and nothing is written: no hidden `.md` page and no index change. Real stdio MCP
-// server, temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -62,7 +59,6 @@ async function refused(client, name, args) {
   return text;
 }
 
-/** Names of everything directly inside a Wiki folder (empty when the folder is missing). */
 async function listDir(dir) {
   try {
     return await readdir(dir);

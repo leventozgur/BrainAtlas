@@ -304,7 +304,6 @@ test('missing Ollama, stopped server, failed model pull, index failure, and prob
 });
 
 function fFetch(f, url, request) {
-  // Reuse the fixture implementation without recursively recording a second wrapper.
   return fixtureFetch.get(f)(url, request);
 }
 

@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26 blind acceptance, hypothesis 3: restricted pages (sensitivity personal, inject never) never reach hook output,
-// are never marked as shown, and stay findable by wiki_query (stdio MCP) and by the core search.
-// Hermetic: temporary vaults live under a per-run directory in the OS temp directory and are removed afterwards.
-// No network.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -21,7 +17,6 @@ const { createSearcher } = await import(pathToFileURL(path.join(ROOT, 'packages/
 const { defaultConfig } = await import(pathToFileURL(path.join(ROOT, 'packages/core/src/config/index.mjs')).href);
 const NOW = new Date('2026-11-11T00:00:00Z');
 
-// Restricted pages. Keywords are unique to them, so a prompt that uses them makes the restricted page the best match.
 const RESTRICTED = [
   {
     path: 'wiki/personal-budget.md',
@@ -141,7 +136,6 @@ test('H3 hook: restricted pages never appear in prompt-hook output (12 prompts, 
     const m = leakedMarkers(out);
     if (m.length) leaks.push(`prompt ${i}: ${m.join(', ')}`);
   }
-  // Sanity: the same hook does inject an unrestricted page, so the absence above is not a dead hook.
   const control = await ask(v, 'açık kontrol notu ortak kavramlar', 'h3-control');
   t.diagnostic(
     `H3 prompts: ${PROMPTS.length}, leaks: ${leaks.length}, control injected: ${control.includes(CONTROL.title)}`
@@ -186,7 +180,6 @@ test('H3 wiki_query (stdio MCP) and core search still find every restricted page
   for (const p of RESTRICTED) {
     const result = await client.callTool({ name: 'wiki_query', arguments: { query: p.kw + ' ' + p.title, limit: 5 } });
     const text = result.content.find((c) => c.type === 'text')?.text ?? '';
-    // wiki_query returns wiki-relative paths (no leading wiki/) and marks restricted hits with inject:never.
     const rel = p.path.replace(/^wiki\//, '');
     if (result.isError || !text.includes(`"path":"${rel}"`)) missing.push(`wiki_query:${p.path}`);
     const core = searcher.search(p.kw + ' ' + p.title, { limit: 5, abstainThreshold: 0 }).results.map((r) => r.path);

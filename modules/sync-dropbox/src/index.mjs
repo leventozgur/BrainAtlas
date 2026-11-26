@@ -21,7 +21,6 @@ function fetchFor(ctx) {
   return ctx?.fetch ?? ctx?.dropbox?.fetch ?? globalThis.fetch;
 }
 
-/** Attach the Dropbox transport when the active config selects it. */
 export async function activate(ctx) {
   if (!ctx || typeof ctx !== 'object' || !ctx.config || !ctx.paths)
     throw new BrainAtlasError('E_MODULE_CONTEXT', 'Dropbox module context is incomplete.');
@@ -75,7 +74,6 @@ async function dispatchDropbox(args, ctx) {
 
 export const commands = Object.freeze({
   dropbox: (args, ctx) => dispatchDropbox(args, ctx),
-  // Kept as an alias for hosts that dispatch the nested sync command directly.
   sync: async (args, ctx) => {
     const values = Array.isArray(args) ? args : [];
     if (values[0] !== 'dropbox') throw new DropboxError('E_ARGUMENT');

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-57: the prompt hook adds ` [synthesized]` to the title line and the pointer line of a result whose section is an
-// accepted current-state block. Hermetic: temporary vault, state and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -74,8 +72,6 @@ test('BA-57: the synthesized title line still ends with its path', async (t) => 
   }
 });
 
-// The hybrid step is stubbed at the module seam: `loadModule` returns a fake semantic module whose `searchHybrid` yields
-// the `hits` given here. The lexical list comes from the real core searcher over the temporary vault.
 const settings = { ...SEMANTIC_DEFAULTS, dims: 2 };
 const stubModule = (hits) => ({
   validateConfiguredProvider() {},
@@ -88,7 +84,6 @@ const stubModule = (hits) => ({
   searchHybrid: async () => hits,
 });
 const BOARD = `---\nstatus: confirmed\nverified:\n${record}---\n# Board\n\n## 2026-01-05 notes\n\nrotation schedule nightly.\n\n${block('The zebrafish ledger is reconciled weekly.')}`;
-// The exact field shape produced by modules/semantic/src/hybrid.mjs: a hit carries `headingPath` and no heading or anchor.
 const hit = (extra = {}) => [
   {
     path: 'board.md',

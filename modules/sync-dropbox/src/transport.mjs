@@ -68,7 +68,9 @@ function normalizeListedPath(path, root) {
   return relative;
 }
 
-/** Build a Dropbox API v2 object transport. The injected fetch is used for every request. @param {{fetch?:Function,getAccessToken?:Function,root?:string,apiBase?:string,contentBase?:string,hostId?:string}} [options] */
+/**
+ * @param {{fetch?:Function,getAccessToken?:Function,root?:string,apiBase?:string,contentBase?:string,hostId?:string}} [options]
+ */
 export function createDropboxTransport({
   fetch: fetchImpl = globalThis.fetch,
   getAccessToken,

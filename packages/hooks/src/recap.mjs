@@ -12,7 +12,6 @@ const TITLE_CHARS = 100;
 const PATH_CHARS = 240;
 const NOFOLLOW = constants.O_NOFOLLOW || 0;
 const LOG_LINE = /^- (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (\{.*\})$/;
-// C0, DEL, C1 and the Unicode line/paragraph separators can forge card lines.
 const LINE_SEPARATORS = String.fromCharCode(0x2028, 0x2029);
 const CONTROL = new RegExp(`[\u0000-\u001f\u007f-\u009f${LINE_SEPARATORS}]`);
 const CONTROL_ALL = new RegExp(CONTROL.source, 'g');
@@ -26,7 +25,6 @@ async function ownedDirectory(dir) {
     return false;
   }
 }
-// Reads only the newest 64 KB of the log; a symlinked log is refused by O_NOFOLLOW.
 async function readLogTail(file) {
   let h;
   try {
@@ -34,14 +32,12 @@ async function readLogTail(file) {
     const st = await h.stat();
     if (!st.isFile()) return '';
     const start = Math.max(0, st.size - LOG_TAIL_BYTES);
-    // One byte before the window tells whether the window starts exactly on a line boundary.
     const from = start > 0 ? start - 1 : 0;
     const buf = Buffer.alloc(st.size - from);
     const { bytesRead } = await h.read(buf, 0, buf.length, from);
     const bytes = buf.subarray(0, bytesRead);
     if (start === 0) return bytes.toString('utf8').replace(/^\uFEFF/, '');
     if (bytes[0] === 0x0a) return bytes.subarray(1).toString('utf8');
-    // Mid-line start: the first (partial) line is dropped.
     const body = bytes.subarray(1);
     const nl = body.indexOf(0x0a);
     return nl < 0 ? '' : body.subarray(nl + 1).toString('utf8');
@@ -63,7 +59,6 @@ function wikiPagePath(rel) {
   if (rel === 'wiki/index.md' || rel === 'wiki/log.md') return false;
   return rel.split('/').every((part) => part && part !== '.' && part !== '..');
 }
-// Newest machine entry per page within the window; human lines are ignored.
 function recentPages(text, nowMs) {
   const cutoff = nowMs - WINDOW_MS;
   const latest = new Map();
@@ -87,7 +82,6 @@ function recentPages(text, nowMs) {
     .map(([path, time]) => ({ path, time }))
     .sort((a, b) => b.time - a.time || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
-// Reads the first 4 KB of a page; the real path must stay inside the vault and the leaf must not be a link.
 async function readPageHead(vaultReal, rel) {
   let h;
   try {
@@ -104,7 +98,6 @@ async function readPageHead(vaultReal, rel) {
     await h?.close().catch(() => {});
   }
 }
-// Minimal frontmatter split for the title only; no YAML parser is loaded on the hook path.
 function frontmatterSplit(head) {
   const lines = head.replace(/^\uFEFF/, '').split(/\r?\n/);
   if (lines[0] !== '---') return { fields: null, body: lines.join('\n') };
@@ -118,7 +111,6 @@ function unescapeDouble(text) {
     code.length === 5 ? String.fromCharCode(parseInt(code.slice(1), 16)) : (DOUBLE_ESCAPES[code] ?? code)
   );
 }
-// Top-level, single-line `title:` only. Returns null when absent, duplicated, empty, non-string or unsupported.
 function frontmatterTitle(lines) {
   const keys = lines.filter((line) => /^title[ \t]*:/.test(line));
   if (keys.length !== 1) return null;
@@ -147,7 +139,6 @@ function titleOf(head, rel) {
   if (!title) title = basename(rel).replace(/\.md$/i, '');
   return title.slice(0, TITLE_CHARS);
 }
-// null when the queue directory is absent or unsafe (the line is then omitted).
 async function pendingReceipts(stateDir) {
   const receipts = join(stateDir, 'receipts');
   const queue = join(receipts, 'queue');
@@ -160,8 +151,6 @@ async function pendingReceipts(stateDir) {
   }
 }
 /**
- * Deterministic session-start card built from the wiki log and the receipts queue.
- * Returns '' when there is nothing to report or when anything fails.
  * @param {{vaultPath?:string,stateDir?:string,now?:Date,maxChars?:number}} options
  * @returns {Promise<string>}
  */

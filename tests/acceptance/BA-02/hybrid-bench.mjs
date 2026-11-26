@@ -1,9 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 independent measurement (hypothesis 3): per-query cost of the MCP hybrid path.
-// usage: node hybrid-bench.mjs <repoRoot> <old|new> [pages=2000] [queries=30] [passes=3]
-//   old = loadPages(vault) + searchHybrid({pages, entries, ...})            (main's MCP path)
-//   new = searcher.refreshIfChanged() + searcher.snapshot() + searchHybrid({pages, lexicalIndex, ...})
-// Fake provider with fixed vectors; no network. Prints one JSON line.
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -48,7 +43,6 @@ try {
     const snap = searcher.snapshot();
     return searchHybrid({ query, pages: snap.pages, lexicalIndex: snap.index, entries, provider, limit: 5 });
   };
-  // Untimed warm-up pass, then timed passes.
   for (const q of queries) await runOnce(q);
   const times = [];
   const digest = createHash('sha256');

@@ -54,7 +54,6 @@ test('unansweredReturnedRate: at 0.35 an unrelated query abstains; at 0 any matc
   const open = bm25Fair({ corpusDir: f.corpus, casesFile: f.casesFile, now: NOW, abstainThreshold: 0 });
   assert.equal(strict.abstainN, 2);
   assert.equal(open.abstainN, 2);
-  // "unknownterm" matches nothing (both abstain); "zebra" matches alpha: returned at 0, and at 0.35 only if it scores above the threshold.
   assert.equal(open.unansweredReturnedRate, 0.5);
   assert.equal(strict.abstainAccuracy, 1 - strict.unansweredReturnedRate);
 });

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-81: `semantic.keepAlive` default, schema validation and dotted-key writes (including the CLI path).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';

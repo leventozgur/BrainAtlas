@@ -11,7 +11,7 @@ import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const reads = ['wiki_query', 'wiki_read_page', 'wiki_list_pages', 'wiki_status', 'wiki_lint'];
 const writes = ['wiki_write_page', 'wiki_update_page', 'wiki_create', 'wiki_add_crosslinks', 'wiki_update_index'];
-const secret = ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-'); // PM: built at runtime so the repo privacy scan stays clean
+const secret = ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-');
 const page = (title, body) => `---\ntype: entity\ntitle: ${title}\nstatus: active\n---\n${body}\n`;
 async function fixture(t, readOnly = false) {
   const dir = await mkdtemp(join(tmpdir(), 'm-mcp-acceptance-'));
@@ -124,7 +124,6 @@ test('D-17 list, reads, retrieval and invalid inputs over SDK stdio', async (t) 
   assert.equal(ok(await call(c, 'wiki_status')).readOnly, false);
   assert.ok(Array.isArray(ok(await call(c, 'wiki_lint')).findings));
   await rejected(c, 'wiki_list_pages', { type: 7 });
-  // Force real filesystem error paths for tools with empty schemas.
   await rm(join(f.vault, 'wiki/index.md'));
   fail(await call(c, 'wiki_read_page', { path: 'index.md' }));
   await rm(join(f.vault, 'wiki'), { recursive: true, force: true });

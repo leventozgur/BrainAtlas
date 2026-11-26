@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25 acceptance: atomicity. A real server process is SIGKILLed while it writes a large page. The kill is aimed at the
-// temporary-file window (the write has started, the rename has not). After every kill the target must hold either the
-// old bytes or the complete new page, never a partial file, and the next process must take over the dead holder's lock.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
@@ -52,7 +49,6 @@ test('SIGKILL during a large page write leaves old or whole new content and a re
     const pending = srv.callTool('wiki_write_page', { path: TARGET, content: newContent }).then(() => {
       done = true;
     });
-    // Poll the folder until the temporary file appears (write started), then kill at once.
     const deadline = Date.now() + 60_000;
     let sawTemp = false;
     while (!done && Date.now() < deadline) {
@@ -76,7 +72,6 @@ test('SIGKILL during a large page write leaves old or whole new content and a re
 
     const leftovers = (await readdir(join(f.wikiDir, 'concepts'))).filter((n) => n.endsWith('.tmp'));
     tally.tempLeftovers += leftovers.length;
-    // Leftover temporary files and the lock must never appear in listings.
     const after = await openClient(t, WT, f, `after-kill-${i}`);
     const listed = okJson(await call(after.client, 'wiki_list_pages', {})).pages;
     assert.equal(
@@ -84,14 +79,12 @@ test('SIGKILL during a large page write leaves old or whole new content and a re
       false,
       'temp and lock files are never listed'
     );
-    // The killed holder left its lock behind (if it was in the lock window): the next writer must take it over.
     const next = await call(after.client, 'wiki_write_page', { path: TARGET, content: page('Atomic', 'RECOVERED.') });
     assert.notEqual(next.isError, true, 'next process writes after the kill');
     if (next.isError !== true) tally.recoveredAfterKill++;
     assert.equal(existsSync(join(f.wikiDir, LOCK_NAME)), false, 'no lock after recovery');
     await after.client.close();
   }
-  // Control: an uninterrupted write yields the complete new page, which the classifier above must recognise as "new".
   await writeFile(target, oldBytes);
   const control = await openClient(t, WT, f, 'control');
   assert.notEqual((await call(control.client, 'wiki_write_page', { path: TARGET, content: newContent })).isError, true);
@@ -103,7 +96,6 @@ test('SIGKILL during a large page write leaves old or whole new content and a re
   assert.equal(tally.recoveredAfterKill, ITER, 'every kill is recovered by the next writer');
   assert.ok(tally.killedInTempWindow > 0, 'at least one kill landed inside the temporary-file window');
   assert.equal(tally.old + tally.new, ITER);
-  // Final: no page temp file is ever counted as a page by the Wiki tools.
   const pages = (await filesUnder(f.wikiDir)).filter((p) => p.endsWith('.md'));
   assert.ok(pages.every((p) => !p.endsWith('.tmp')));
 });

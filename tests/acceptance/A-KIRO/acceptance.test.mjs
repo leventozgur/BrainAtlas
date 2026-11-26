@@ -172,7 +172,7 @@ test('MCP read-only approval and stable absolute paths; hook invokes fail-open h
   assert.equal(m.command, f.ctx.nodePath);
   assert.deepEqual(m.args, [f.ctx.shimPath, 'mcp']);
   assert.deepEqual(m.autoApprove, ['wiki_query', 'wiki_read_page', 'wiki_list_pages', 'wiki_status']);
-  assert.match(h.action.command, / hook kiro prompt$/); // PM: hook goes through the stable shim (brainatlas hook kiro prompt), by design
+  assert.match(h.action.command, / hook kiro prompt$/);
 });
 test('hook package fails open on malformed input without leaking secrets', async (t) => {
   const f = await setup(t),
@@ -198,9 +198,8 @@ test(
     await symlink(outside, dirname(f.mcp));
     try {
       await kiro.apply(await kiro.plan(f.ctx), f.ctx);
-    } catch {
-      /* the write is expected to fail; the assertion below covers the outcome */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     assert.equal(await get(join(outside, 'mcp.json')), null);
   }
 );
@@ -210,8 +209,7 @@ test('relative vault traversal cannot escape HOME', async (t) => {
   f.ctx.config.vault.path = '../outside';
   try {
     await kiro.apply(await kiro.plan(f.ctx), f.ctx);
-  } catch {
-    /* the write is expected to fail; the assertion below covers the outcome */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   assert.equal(await get(join(dirname(f.home), 'outside/.kiro/settings/mcp.json')), null);
 });

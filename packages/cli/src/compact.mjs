@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// `brainatlas compact`: move older dated H2 sections of one Wiki page verbatim into wiki/archive/<name>-history.md.
-// `--plan` only reads. `--apply` writes the archive page, then the page, then one log entry, inside the Wiki write lock.
 import { lstat, mkdir, readFile, realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -14,8 +12,6 @@ const BACK_LINK_HEADING = '## Archived history';
 const BACK_LINK_TEXT = 'Older dated sections were moved verbatim to';
 const MAX_KEEP = 1000;
 const DEFAULT_KEEP = 3;
-// The reserved-name check runs before the lock module is loaded, so it uses this literal; the lock path itself takes the
-// name from the loaded module (packages/mcp/src/lock.mjs). A test pins the two together.
 export const RESERVED_LOCK_FILE_NAME = '.brainatlas-write.lock';
 const ARCHIVE_DIRECTORY = 'wiki/archive';
 
@@ -28,10 +24,6 @@ const selfCheckFailed = () => failure('E_INTERNAL', 'Compaction self-check faile
 const require = createRequire(import.meta.url);
 let lockModule = null;
 
-/**
- * The Wiki write lock module, or E_LOCK_UNAVAILABLE. It is imported only by `--apply`, after the argument and path checks,
- * so a missing or broken MCP package never breaks the other CLI commands that import this module.
- */
 async function lockApi() {
   if (lockModule) return lockModule;
   const candidates = [];
@@ -39,9 +31,8 @@ async function lockApi() {
     candidates.push(
       pathToFileURL(join(dirname(require.resolve('@brainatlas/mcp/package.json')), 'src', 'lock.mjs')).href
     );
-  } catch {
-    /* no installed MCP package: use the sibling copy below */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   candidates.push(new URL('../../mcp/src/lock.mjs', import.meta.url).href);
   let cause = null;
   for (const url of candidates) {
@@ -60,10 +51,8 @@ const stripCr = (line) => (line.endsWith('\r') ? line.slice(0, -1) : line);
 const countWords = (text) => text.trim().split(/\s+/u).filter(Boolean).length;
 const asPosix = (path) => path.split(sep).join('/');
 
-/** A back-link line: outside fences, with a trailing `\r` and trailing spaces/tabs removed, it is exactly the heading. */
 const isBackLinkLine = (line) => stripCr(line).replace(/[ \t]+$/u, '') === BACK_LINK_HEADING;
 
-/** Vault root as a real directory outside any symlink. */
 async function vaultRoot(vault) {
   const missing = () => failure('E_NOT_FOUND', 'Vault is missing or not a directory.');
   if (typeof vault !== 'string' || !vault) throw missing();
@@ -78,7 +67,6 @@ async function vaultRoot(vault) {
   return root;
 }
 
-/** True for a vault-relative POSIX path that may never be compacted. The argument must already be lower-cased. */
 function reservedPath(rel) {
   if (rel === 'wiki/index.md' || rel === 'wiki/log.md') return true;
   if (rel.startsWith(`${ARCHIVE_DIRECTORY}/`)) return true;
@@ -86,7 +74,6 @@ function reservedPath(rel) {
   return parts[parts.length - 1] === RESERVED_LOCK_FILE_NAME;
 }
 
-/** A relative `wiki/...md` path that is allowed to be compacted. Reserved names are compared case-insensitively. */
 function invalidPagePath(page) {
   if (typeof page !== 'string' || !page) return true;
   if (!page.startsWith('wiki/') || !page.endsWith('.md') || page.includes('\\') || page.includes('\0')) return true;
@@ -95,7 +82,6 @@ function invalidPagePath(page) {
   return reservedPath(page.toLowerCase());
 }
 
-/** Checks a resolved path against the vault root and the reserved names; returns the vault-relative POSIX path. */
 function checkedRelative(root, real) {
   const from = relative(root, real);
   if (!from || from === '..' || from.startsWith(`..${sep}`) || isAbsolute(from)) throw pathEscape();
@@ -104,7 +90,6 @@ function checkedRelative(root, real) {
   return posix;
 }
 
-/** The page file, after verifying every component from the vault root down to it. No symlink is followed. */
 async function checkedPageFile(root, page) {
   if (invalidPagePath(page)) throw pathEscape();
   const parts = page.split('/');
@@ -123,13 +108,10 @@ async function checkedPageFile(root, page) {
   }
   const real = await realpath(current).catch(() => null);
   if (!real) throw notFound();
-  // The real path may differ from the requested one in case only (case-insensitive file systems): re-check the rules
-  // against it so `wiki/LOG.md` and `wiki/Archive/a.md` cannot reach the log, the index or the archive.
   checkedRelative(root, real);
   return real;
 }
 
-/** Archive path and its existing state. A symlinked archive directory or archive file is rejected. */
 async function archiveTarget(root, page) {
   const name = page.slice('wiki/'.length).replace(/\.md$/u, '').replaceAll('/', '--');
   const dir = join(root, ...ARCHIVE_DIRECTORY.split('/'));
@@ -153,14 +135,12 @@ async function archiveTarget(root, page) {
   return { name, archiveRel: `${ARCHIVE_DIRECTORY}/${file}`, dir, file: target, exists: Boolean(fileInfo) };
 }
 
-/** Days in a month, with the Gregorian leap rule. */
 function daysInMonth(year, month) {
   const lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   if (month !== 2) return lengths[month - 1] ?? 0;
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
 }
 
-/** A valid calendar date `YYYY-MM-DD`, as `{text, time}`, or null. */
 function parseCalendarDate(value) {
   if (typeof value !== 'string') return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
@@ -174,7 +154,6 @@ function parseCalendarDate(value) {
   return { text: `${match[1]}-${match[2]}-${match[3]}`, time: stamp.getTime() };
 }
 
-/** The first valid calendar date inside a heading, or null. */
 function headingDate(heading) {
   for (const match of heading.matchAll(DATE_PATTERN)) {
     const parsed = parseCalendarDate(`${match[1]}-${match[2]}-${match[3]}`);
@@ -185,7 +164,6 @@ function headingDate(heading) {
 
 const isDelimiter = (line) => line === '---' || line === '---\r';
 
-/** Index of the first body line: just after the closing `---`, or 0 when there is no closed frontmatter block. */
 function bodyStart(lines) {
   if (!lines.length || !isDelimiter(lines[0])) return 0;
   for (let index = 1; index < lines.length; index++) if (isDelimiter(lines[index])) return index + 1;
@@ -201,7 +179,6 @@ const fenceCloses = (line, fence) => {
   return Boolean(match) && match[1][0] === fence.char && match[1].length >= fence.length;
 };
 
-/** H2 sections of the body, with their heading text, date, current flag and back-link flag. Fences and H1 end them. */
 function parseSections(lines, start) {
   const sections = [];
   let fence = null;
@@ -242,7 +219,6 @@ function parseSections(lines, start) {
   return sections;
 }
 
-/** True when a back-link line exists outside fences: the same definition `parseSections` uses. */
 function hasBackLink(lines) {
   let fence = null;
   for (const raw of lines) {
@@ -261,20 +237,12 @@ function hasBackLink(lines) {
   return false;
 }
 
-/** Line indexes covered by the moved sections, as one set. */
 function movedIndexes(moved) {
   const indexes = new Set();
   for (const section of moved) for (let index = section.start; index < section.end; index++) indexes.add(index);
   return indexes;
 }
 
-/**
- * Rule 8 self-check, built from the new page text rather than from the kept line array: the new page text (minus the
- * appended back-link) must have exactly the kept lines, and re-inserting the moved sections at their original indexes
- * must reproduce the original line array exactly. A page whose every line is moved keeps an empty body: the text before
- * the back-link is then "" (or the one newline Rule 7 adds), never a two-item split. Exported so the check itself can be
- * tested.
- */
 export function verifyNoLineLoss(lines, moved, pageText, appended, suffix) {
   const backLink = appended ? suffix : null;
   if (backLink !== null && !pageText.endsWith(backLink)) throw selfCheckFailed();
@@ -283,12 +251,10 @@ export function verifyNoLineLoss(lines, moved, pageText, appended, suffix) {
   const keptCount = lines.length - skipped.size;
   let kept;
   if (keptCount === 0) {
-    // Nothing is kept: the empty kept text becomes "" or the single "\n" Rule 7 appends before the back-link.
     if (body !== '' && body !== '\n') throw selfCheckFailed();
     kept = [];
   } else {
     kept = body.split('\n');
-    // Rule 7 adds one newline when the kept text does not end with one; that shows up as one extra empty trailing line.
     if (backLink !== null && kept.length === keptCount + 1 && kept[kept.length - 1] === '') kept.pop();
     if (kept.length !== keptCount) throw selfCheckFailed();
   }
@@ -309,12 +275,10 @@ export function verifyNoLineLoss(lines, moved, pageText, appended, suffix) {
   for (let index = 0; index < lines.length; index++) if (rebuilt[index] !== lines[index]) throw selfCheckFailed();
 }
 
-/** The archive text must end with exactly the moved block. */
 function verifyArchive(archiveText, movedText) {
   if (!archiveText.endsWith(movedText)) throw selfCheckFailed();
 }
 
-/** Options are validated before the page path, so bad options always report E_ARGUMENT. */
 function normalizeOptions(options = {}) {
   const keep = options.keep ?? DEFAULT_KEEP;
   if (!Number.isInteger(keep) || keep < 0 || keep > MAX_KEEP)
@@ -329,7 +293,6 @@ function normalizeOptions(options = {}) {
   return { page, keep, olderThan, threshold, now };
 }
 
-/** Read the page, select the sections to move and build the exact writes. Reads only. */
 async function evaluate(root, settings) {
   const file = await checkedPageFile(root, settings.page);
   const target = await archiveTarget(root, settings.page);
@@ -381,7 +344,6 @@ async function evaluate(root, settings) {
   let movedText = movedParts.join('\n');
   if (!movedText.endsWith('\n')) movedText += '\n';
   const header = `---\ntitle: ${JSON.stringify(`History: ${title}`)}\ntype: archive\nstatus: archived\narchived_from: ${JSON.stringify(settings.page)}\ngenerated: ${JSON.stringify(settings.now.toISOString())}\n---\n# History: ${title}\n\n`;
-  // A previous run may have written the archive but not the page: appending the same block again would duplicate it.
   let archiveText;
   if (existing === null) archiveText = `${header}${movedText}`;
   else if (existing.endsWith(movedText)) archiveText = existing;
@@ -402,7 +364,6 @@ async function evaluate(root, settings) {
   return { result, write: { pageFile: file, dir: target.dir, archiveFile: target.file, archiveText, pageText } };
 }
 
-/** Read-only plan: validates paths, reads the page, writes nothing anywhere. */
 export async function planCompaction(vault, options = {}) {
   const settings = normalizeOptions(options);
   const root = await vaultRoot(vault);
@@ -410,7 +371,6 @@ export async function planCompaction(vault, options = {}) {
   return result;
 }
 
-/** Apply: the same plan, computed from a fresh read inside the Wiki write lock, then archive, page and one log entry. */
 export async function applyCompaction(vault, options = {}) {
   const settings = normalizeOptions(options);
   const root = await vaultRoot(vault);
@@ -429,7 +389,6 @@ export async function applyCompaction(vault, options = {}) {
   });
 }
 
-/** Human summary: one header line, one count line, one line per moved section, then the undo line for an apply. */
 export function formatCompaction(result) {
   const lines = [
     `compact ${result.mode}: ${result.page} → ${result.archive}`,

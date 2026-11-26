@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-17 surrogate fix, black-box through search(): for every integer budget 1..400 no returned snippet may contain a
-// lone UTF-16 surrogate, the snippets together must fit the budget, a truncated snippet ends with exactly one ellipsis
-// and keeps a prefix of the full snippet, and a snippet that fits is returned whole. Hermetic and deterministic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadRetrieval, page, prng, LONE_SURROGATE, NOW } from './support.mjs';
@@ -22,7 +19,6 @@ const bodies = [
   '1️⃣2️⃣3️⃣'.repeat(30),
   '𝔘𝔫𝔦𝔠𝔬𝔡𝔢'.repeat(30),
 ];
-// Shift the astral and emoji runs by 0..3 ASCII units so cuts land on every position of a pair.
 const shifted = bodies.flatMap((b) => [0, 1, 2, 3].map((n) => 'a'.repeat(n) + ' alpha ' + b));
 
 test('single-result snippets: every budget 1..400 gives no lone surrogate, a fitting length and a correct ellipsis', () => {
@@ -65,7 +61,6 @@ test('multi-result budgets: snippets together never exceed the budget and none h
     const total = r.results.reduce((sum, x) => sum + x.snippet.length, 0);
     assert.ok(total <= b, `budget ${b}: total ${total}`);
     for (const x of r.results) assert.equal(LONE_SURROGATE.test(x.snippet), false, `budget ${b}: ${x.path}`);
-    // A result cut by the budget is either ellipsised or, once the budget is spent, empty; without a cut the flag is false.
     if (!r.truncated)
       assert.equal(
         r.results.some((x) => x.snippet.endsWith(ELL)),

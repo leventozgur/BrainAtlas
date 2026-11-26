@@ -55,7 +55,6 @@ function readTar(buffer) {
   return files;
 }
 
-/** Verify the checksum, OpenSSH signature and manifest inventory before returning archive entries. */
 export async function inspectReleaseArchive(archivePath, allowedSigners) {
   let archive;
   let sums;
@@ -139,7 +138,6 @@ export async function inspectReleaseArchive(archivePath, allowedSigners) {
   return { manifest, files, prefix };
 }
 
-/** Extract a previously verified release into a new directory. */
 export async function extractVerifiedRelease(archivePath, destination, allowedSigners) {
   const { manifest, files, prefix } = await inspectReleaseArchive(archivePath, allowedSigners);
   const root = resolve(destination);

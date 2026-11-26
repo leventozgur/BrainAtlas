@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-92: agent refresh, doctor and maintain keep and report the vault policy block.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

@@ -205,7 +205,6 @@ test('hybrid threshold boundaries are inclusive, including minScore zero and one
       mode: 'semantic-primary',
       minSemanticScore: 0,
     });
-  // PM correction: a cosine of exactly 0 means unrelated and is never a hit; an inclusive minScore of 0 admits any positive score.
   const atZero = await make([1e-6, 1]);
   assert.ok(
     atZero.some((item) => item.path === 'target.md'),
@@ -384,7 +383,6 @@ test('provider endpoint allowlist covers loopback forms and rejects remotes with
     );
     if (!baseUrl.includes('@')) assert.doesNotThrow(() => validateConfiguredProvider({ baseUrl, allowRemote: true }));
   }
-  // PM decision: URLs with embedded credentials are always rejected (secrets must not live in config or logs), even with allowRemote.
   assert.throws(
     () => validateConfiguredProvider({ baseUrl: 'http://127.0.0.1@evil.test', allowRemote: true }),
     (error) => error.code === 'E_SEMANTIC_PROVIDER'

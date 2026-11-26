@@ -42,7 +42,6 @@ test('config schema rejects malformed values without echoing secret values', () 
     assert.equal(validateConfig(cfg).ok, true);
     cfg.safety.secretFilter = false;
     if (profile === 'custom') {
-      // The custom profile may opt out of the secret filter explicitly.
       assert.equal(validateConfig(cfg).ok, true);
       assert.equal(setConfigValue(defaultConfig(profile), 'safety.secretFilter', false).safety.secretFilter, false);
       continue;

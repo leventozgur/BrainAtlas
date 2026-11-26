@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-29: wiki_query ranks the same scope as the hook; the navigation and policy files at the wiki root are not ranked, but
-// they stay readable through wiki_read_page and wiki_list_pages. Hermetic: temporary directories only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -72,7 +70,6 @@ test('the excluded wiki root pages stay readable through the read tools', async 
   assert.match(JSON.stringify(index), /Catalog/);
   const page = await call(mcp.client, 'wiki_read_page', { path: 'AGENTS.md' });
   assert.match(JSON.stringify(page), /Policy/);
-  // wiki_list_pages already omits wiki/index.md and wiki/log.md (unchanged); the policy file is still listed.
   const listed = await call(mcp.client, 'wiki_list_pages');
   assert.deepEqual(listed.pages.sort(), ['wiki/AGENTS.md', 'wiki/notes/habitat.md']);
 });
@@ -85,7 +82,6 @@ test('retrieval.exclude [] ranks the wiki root pages again (legacy behaviour)', 
   assert.deepEqual(results, ['AGENTS.md', 'index.md', 'log.md', 'notes/habitat.md']);
 });
 
-// BA-29: the MCP search root is wiki/ as before. Without wiki/ the server fails exactly like main (E_VAULT_MISSING).
 test('a vault without wiki/ fails in MCP exactly as in the main checkout', (t) => {
   const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   let main = null;
@@ -125,7 +121,6 @@ test('a vault without wiki/ fails in MCP exactly as in the main checkout', (t) =
   });
 });
 
-// BA-29: wiki_query with semantic enabled never returns an excluded page (fake embedding provider, as in the semantic tests).
 test('semantic wiki_query leaves out an excluded wiki root page; the same query without the rule returns it', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'ba29-mcp-sem-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -141,7 +136,6 @@ test('semantic wiki_query leaves out an excluded wiki root page; the same query 
   await symlink(release, currentDir);
   await writeFile(path.join(wiki, 'index.md'), '# Catalogue\ncatalogue of pages');
   await writeFile(path.join(wiki, 'car.md'), '# Engine\ncar motor');
-  // Queries and the catalogue page point the same way; the car page is a weaker but clear match.
   const vector = (text) => (text.startsWith('task:') || /catalogue/.test(text) ? [1, 0] : [0.8, 0.6]);
   const fetchImpl = async (_url, options) => ({
     ok: true,

@@ -126,7 +126,6 @@ async function availableHelpCommands(paths, env) {
           });
         }
       }
-      // A transport module may add subcommands to sync without owning a top-level command.
       const sync = commands.find((item) => item.name === 'sync');
       const syncHelp = moduleHelp.get('sync');
       if (sync && syncHelp?.usage?.length) {
@@ -135,9 +134,8 @@ async function availableHelpCommands(paths, env) {
         for (const line of syncHelp.usage) if (!usage.includes(line)) usage.push(line);
         sync.usage = usage;
       }
-    } catch {
-      /* Help remains usable when an installed module is damaged. */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   return commands.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -167,16 +165,9 @@ async function showHelp(topic, { paths, env, output, json }) {
   output(json ? result : lines.join('\n'));
 }
 
-// The documentation consistency check discovers built-in commands from `command === '<name>'`
-// literals in this file. These mirror the dispatch keys below and must stay in sync with them.
-// command === 'help'
-// command === 'init', command === 'install', command === 'status', command === 'doctor'
-// command === 'config', command === 'safety', command === 'module', command === 'uninstall'
-// command === 'update', command === 'rollback', command === 'recover', command === 'eval'
-// command === 'hook', command === 'mcp', command === 'migrate', command === 'adopt'
-// command === 'maintain', command === 'compact', command === 'usage', command === 'wiki'
-// command === 'plan'
-// command === 'agent', command === 'ui'
+/**
+ * @type {any} command === 'help', command === 'init', command === 'install', command === 'status', command === 'doctor', command === 'config', command === 'safety', command === 'module', command === 'uninstall', command === 'update', command === 'rollback', command === 'recover', command === 'eval', command === 'hook', command === 'mcp', command === 'migrate', command === 'adopt', command === 'maintain', command === 'compact', command === 'usage', command === 'wiki', command === 'plan', command === 'agent', command === 'ui'
+ */
 const dispatch = Object.freeze({
   init: setup.init,
   install: lifecycle.install,

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Performance suite: safety-scanner latency limits (ReDoS guards and large inputs). These tests compare a
-// measured duration with a fixed threshold, so they run only in the `perf` CI job (`npm run test:perf`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
@@ -16,7 +14,6 @@ test('one megabyte and adversarial input remain bounded', () => {
 });
 
 test('BA-26 patterns stay bounded on long adversarial runs (secret and output paths)', () => {
-  // Generous bound: the check is against super-linear backtracking, not a benchmark.
   const inputs = [
     'a_'.repeat(50000),
     'ado_'.repeat(20000),

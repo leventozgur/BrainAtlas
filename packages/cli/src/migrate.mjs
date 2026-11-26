@@ -390,9 +390,8 @@ function inspectConfigText(text) {
   let parsed = null;
   try {
     parsed = JSON.parse(text);
-  } catch {
-    /* unparsable or non-serialisable JSON is treated as absent */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   const servers = new Set();
   let promptHook = false;
   if (parsed) {
@@ -401,9 +400,8 @@ function inspectConfigText(text) {
         let serialized = '';
         try {
           serialized = JSON.stringify(value);
-        } catch {
-          /* unparsable or non-serialisable JSON is treated as absent */
-        }
+          // eslint-disable-next-line no-empty
+        } catch {}
         if (/UserPromptSubmit|BeforeSubmit|prompt[-_ ]?hook|\bhook[^\n]*\bprompt\b/i.test(serialized))
           promptHook = true;
       }
@@ -416,9 +414,8 @@ function inspectConfigText(text) {
           let serialized = '';
           try {
             serialized = JSON.stringify(config);
-          } catch {
-            /* unparsable or non-serialisable JSON is treated as absent */
-          }
+            // eslint-disable-next-line no-empty
+          } catch {}
           if (name.toLowerCase() === 'second-brain' || /wiki_query/i.test(serialized)) servers.add(name);
         }
       }

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-52: scenario matrix for the sync engine. Each row asserts the data-loss invariant (every written byte stays reachable
-// on a host or in the transport) and that conflicts are recorded.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -44,7 +42,6 @@ const remoteText = async (transport, path) => {
   const object = await transport.get(path);
   return object ? Buffer.from(object.bytes).toString('utf8') : null;
 };
-/** All text a host still holds under wiki/, including conflict copies. */
 async function holdings(host, dir = 'wiki/entities') {
   const texts = [];
   for (const name of await list(host, dir)) texts.push(await read(host, `${dir}/${name}`));
@@ -101,7 +98,6 @@ test('matrix: a host that was offline merges edits to different pages without co
   await put(a, 'wiki/entities/two.md', 'two\n');
   await a.engine.run();
   await b.engine.run();
-  // b is offline: it edits one page, a edits another and syncs twice meanwhile.
   await put(b, 'wiki/entities/two.md', 'two edited offline on b\n');
   await put(a, 'wiki/entities/one.md', 'one edited on a\n');
   await a.engine.run();

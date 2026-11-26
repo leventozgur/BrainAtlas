@@ -244,12 +244,10 @@ test('legacy run-eval keeps dev output keys and golden metrics; natural dev rema
     repeat: 1,
     abstainThreshold: 0,
   });
-  // BA-27: 72/95 -> 77/95. The natural golden changed only because 11 superseded-only labels were moved to their superseded_by pages (eval/dev/natural-cases.json, relevantLegacy kept); corpus and retrieval are unchanged.
   assert.ok(
     Math.abs(natural.recallAt5 - 77 / 95) <= 1e-9,
     `expected natural recallAt5 77/95 (0.8105) ± 1e-9 after BA-27 label hygiene, got ${natural.recallAt5}`
   );
-  // PM update (BA-03, 2026-11-11): identifier-aware retrieval improves natural MRR (0.687 → 0.694); guard against regression.
   assert.ok(natural.mrrAt10 >= 0.687 - 1e-3, `natural mrrAt10 regressed: ${natural.mrrAt10}`);
   assert.equal(natural.n, 100);
 });

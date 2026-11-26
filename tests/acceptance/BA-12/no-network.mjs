@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-12 blind test preload: any network attempt in the CLI child process throws.
 import dns from 'node:dns';
 import net from 'node:net';
 

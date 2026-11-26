@@ -109,8 +109,6 @@ function indented(raw) {
 }
 async function validateConfigPaths(locations) {
   for (const file of Object.values(locations)) {
-    // A user may intentionally redirect the complete .kiro directory. Subdirectories
-    // and files below it remain adapter-owned targets and cannot redirect writes.
     const root = dirname(dirname(dirname(file)));
     let current = join(root, '.kiro');
     for (const segment of file.slice(join(root, '.kiro').length).split(sep).filter(Boolean)) {
@@ -151,8 +149,6 @@ export function detect(env) {
   return detectEvidence({ env, dirs: ['.kiro'], commands: ['kiro'] });
 }
 async function assertNoMcp(ctx, locations) {
-  // Tolerant read: a BOM or an unreadable document means "no BrainAtlas entry" because
-  // the cli channel never writes these files.
   const forgivingJson = (raw) => {
     try {
       const value = JSON.parse(raw.replace(/^\uFEFF/, ''));
@@ -172,8 +168,6 @@ async function assertNoMcp(ctx, locations) {
   const hookRaw = await readOptional(locations.hook);
   if (hookRaw !== null) {
     const obj = forgivingJson(hookRaw);
-    // Detection matches the shim path plus `hook kiro` so both the current command
-    // (`hook kiro prompt`) and any legacy form with another trailing event are found.
     const shim = quote(ctx.shimPath || '');
     const owned = (h) =>
       typeof h?.action?.command === 'string' && ctx.shimPath && h.action.command.includes(`${shim} hook kiro`);
@@ -321,7 +315,6 @@ export async function remove(ctx) {
   const steering = await readOptional(files.steering);
   const mcp = cli ? null : await readOptional(files.mcp),
     hook = cli ? null : await readOptional(files.hook);
-  // Preflight every target before changing any of them.
   let steeringAction = null;
   if (steering !== null) {
     if (steering.startsWith(begin) && steering.endsWith(`${end}\n`)) {
@@ -363,8 +356,8 @@ export async function remove(ctx) {
           hookAction = { kind: 'write', value: original };
         }
       }
+      // eslint-disable-next-line no-empty
       if (hookAction) {
-        /* exact pre-install state is restored below */
       } else {
         let cleaned = { ...obj, hooks: next };
         if (originally && Array.isArray(originally.hooks)) {
@@ -418,9 +411,8 @@ export async function doctor(ctx) {
     try {
       await access(ctx.shimPath);
       commandExists = true;
-    } catch {
-      /* tolerant read: an unreadable or missing file never fails the check */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     checks.push({
       id: 'steering',
       ok: steeringOk,
@@ -459,14 +451,12 @@ export async function doctor(ctx) {
       try {
         await access(ctx.shimPath);
         commandExists = true;
-      } catch {
-        /* tolerant read: an unreadable or missing file never fails the check */
-      }
+        // eslint-disable-next-line no-empty
+      } catch {}
     }
     drift = container.brainatlas?.command !== (ctx.nodePath || 'node');
-  } catch {
-    /* tolerant read: an unreadable or missing file never fails the check */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   try {
     const obj = hookRaw === null ? {} : parseJson(files.hook, hookRaw);
     const managed = Array.isArray(obj.hooks)
@@ -479,9 +469,8 @@ export async function doctor(ctx) {
       : [];
     hookPresent = managed.some((h) => h.trigger === KIRO_PROMPT_TRIGGER || h.trigger === 'PromptSubmit');
     oldTrigger = managed.some((h) => h.trigger === 'PromptSubmit');
-  } catch {
-    /* tolerant read: an unreadable or missing file never fails the check */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   checks.push({
     id: 'registered',
     ok: registered,

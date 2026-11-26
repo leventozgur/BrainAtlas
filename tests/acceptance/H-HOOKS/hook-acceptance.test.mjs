@@ -116,7 +116,6 @@ test('all five client envelopes and supported session-start continuity', async (
 
   const gemini = run(f, 'gemini');
   assertSuccess(gemini, 'gemini prompt');
-  // PM (A-GEMINI2): Gemini CLI now has a documented BeforeAgent hook; prompt context uses hookSpecificOutput.additionalContext.
   assert.match(JSON.parse(gemini.stdout).hookSpecificOutput.additionalContext, /Topic/);
   assert.deepEqual(Object.keys(JSON.parse(gemini.stdout)), ['hookSpecificOutput']);
   const geminiStart = run(f, 'gemini', 'session-start');
@@ -247,18 +246,7 @@ test('metrics have a content-free schema and 0600 permissions; output redacts a 
   assert.equal(records.length, 1);
   assert.deepEqual(
     Object.keys(records[0]).sort(),
-    [
-      'chars',
-      'client',
-      'durationMs',
-      'event',
-      'mode',
-      'outcome',
-      'results',
-      'session',
-      'ts',
-    ] /* PM: ts + outcome are part of the PM brief schema (content-free) */
-      .sort()
+    ['chars', 'client', 'durationMs', 'event', 'mode', 'outcome', 'results', 'session', 'ts'].sort()
   );
   assert.match(records[0].session, /^[a-f0-9]{16}$/);
   assert.equal((await stat(metricsFile)).mode & 0o777, 0o600);
@@ -451,8 +439,6 @@ test('permission-enabled buildHookCommand can read its real config and execute a
   if (!permissionSupported) return t.skip(`Node ${process.versions.node} is below 22.13 or has no permission model`);
   const f = await fixture(t);
   await page(f);
-  // PM correction: the installer passes the config path and creates the state dir before registering the hook
-  // (permissions are fixed when the command is built, so the builder must be told where the config lives).
   await mkdir(f.stateDir, { recursive: true });
   const command = buildHookCommand({
     nodePath: process.execPath,

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-04 independent acceptance: no result is a superseded page, and any supersedes field is a valid sorted list of
-// superseded paths. The dump of the tree under test provides the results for every eval/dev set.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';

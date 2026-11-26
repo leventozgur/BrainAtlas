@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20 independent acceptance (blind): page names with C0, DEL, C1 or a space are written as angle-bracket
-// destinations, read back exactly, are covered by wiki_status, and three wiki_update_index runs are idempotent.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, startServer, readIndexText, entryLines } from './harness.mjs';

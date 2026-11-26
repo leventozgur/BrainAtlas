@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-17 deep-path fix, black-box through search(): a document whose body names a vault path of 13, 16, 20 or 40
-// components must be found by the last 1-4 path components of that path (basenames with `-`, `.` and `_` included),
-// and by the full path. A non-consecutive part of a path still abstains. Deterministic, no timing.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadRetrieval, page, NOW } from './support.mjs';
@@ -10,7 +7,6 @@ const { buildIndex, search } = await loadRetrieval();
 const run = (index, query, options = {}) =>
   search(index, query, { limit: 10, abstainThreshold: 0, asOf: NOW, ...options });
 
-// Each variant: the last components of the path (the basename may itself hold `.`, `-` and `_`).
 const leaves = [['handler-x-13.mjs'], ['build-2.1', 'report.v2.json'], ['a_b.c-d.mjs']];
 
 function makePaths(depth) {
@@ -82,7 +78,6 @@ for (const depth of [13, 16, 20, 40]) {
 }
 
 test('the three former BA-18 todo cases pass: suffix windows count path components, not dotted or hyphenated pieces', () => {
-  // Same shape as the BA-03 final-verification cases: a 13/16/20/40-component path whose basename is dotted and hyphenated.
   for (const depth of [13, 16, 20, 40]) {
     const leaf = `handler-x-${depth}.mjs`;
     const dirs = Array.from({ length: depth - 1 }, (_, i) => `dir${i}`);
@@ -95,7 +90,6 @@ test('the three former BA-18 todo cases pass: suffix windows count path componen
 });
 
 test('a 12-component path with a hyphenated basename finds its suffixes (the window is not a segment count)', () => {
-  // Diagnostic-grade fixture for the boundary: 12 components but more than 12 segments once `.` and `-` are counted.
   const dirs = Array.from({ length: 11 }, (_, i) => `d${i}`);
   const leaf = 'handler-x-13.mjs';
   const idx = buildIndex([page('b.md', `Reference: ${[...dirs, leaf].join('/')}`, { title: 'B' })], { now: NOW });

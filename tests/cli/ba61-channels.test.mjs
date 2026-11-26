@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-61: per-agent channels. Hermetic: temporary HOME, vault, config, data and state directories only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

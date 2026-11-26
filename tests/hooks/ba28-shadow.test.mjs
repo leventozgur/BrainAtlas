@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-28: shadow mode runs one extra lexical search and records only aggregate differences.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';

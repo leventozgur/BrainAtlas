@@ -221,7 +221,6 @@ test('index-stale: missing targets are reported; anchors, escaped parentheses, a
 });
 
 test('oversized: more than 3000 body words is reported, 3000 is not', async (t) => {
-  // The heading line is part of the body and "# Big" counts as two words: 2999 + 2 = 3001 (over), 2998 + 2 = 3000 (at limit).
   const big = Array.from({ length: 2999 }, () => 'word').join(' ');
   const ok = Array.from({ length: 2998 }, () => 'word').join(' ');
   const dir = await vaultWith(t, {

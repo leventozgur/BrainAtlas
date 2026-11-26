@@ -44,7 +44,6 @@ const DEFAULT_COMMANDS = Object.freeze([
 
 export const POLICY_VERSION = 2;
 
-/** Released template sha256 values grouped by the policy version that shipped them. */
 export const POLICY_HASHES = Object.freeze({
   1: Object.freeze([
     'c8243873e1a39b07ede4b850f4e3fd0183578ece97badaade076bc1ecb22dd7e',
@@ -64,14 +63,12 @@ export const POLICY_HASHES = Object.freeze({
   ]),
 });
 
-/** Reverse of POLICY_HASHES: each released sha256 mapped to its policy version. */
 export const POLICY_TEXTS = Object.freeze(
   Object.fromEntries(
     Object.entries(POLICY_HASHES).flatMap(([version, hashes]) => hashes.map((hash) => [hash, Number(version)]))
   )
 );
 
-/** The managed block for one template text, keeping the text and its sha256 byte for byte. */
 export function managedPolicyBlock(text) {
   const body = String(text);
   return `<!-- brainatlas:managed v=${POLICY_VERSION} sha256=${sha256(body)} -->\n${body}\n<!-- /brainatlas:managed -->\n`;
@@ -106,7 +103,6 @@ const backupFile = (file) => `${file}.bak.${new Date().toISOString().replace(/[:
 const writePolicy = (file, content, mode) => atomicWriteFile(file, content, { mode });
 
 /**
- * Bring AGENTS.md and CLAUDE.md up to the current managed policy block.
  * @param {{vaultDir: string, plan?: boolean, force?: boolean}} options
  */
 export async function refreshVaultPolicy({ vaultDir, plan = false, force = false }) {
@@ -229,7 +225,6 @@ async function exists(path) {
 }
 
 /**
- * Report stale paths, tools, commands and removed scripts in the user-owned text of both policy files.
  * @param {{vaultDir: string, home?: string, knownTools?: Iterable<string>, knownCommands?: Iterable<string>}} options
  */
 export async function lintPolicyReferences({ vaultDir, home, knownTools, knownCommands }) {

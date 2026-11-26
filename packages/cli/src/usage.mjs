@@ -7,8 +7,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const VERDICTS = new Set(['useful', 'not-useful']);
 const argumentError = (message) => Object.assign(new Error(message), { code: 'E_ARGUMENT' });
 const owned = (st) => typeof process.getuid !== 'function' || st.uid === process.getuid();
-// The same guarantees the hook's metric writer gives hooks.jsonl: the directory is a real directory owned by us, and the file
-// is opened without following links, is a single regular file owned by us with no group/other bits.
 async function secureDirectory(dir, recursive = false) {
   try {
     await mkdir(dir, { recursive, mode: 0o700 });
@@ -36,12 +34,10 @@ async function secureFile(file, flags) {
   }
 }
 
-/** True for the two words the feedback command accepts. */
 export function isFeedbackVerdict(value) {
   return VERDICTS.has(value);
 }
 
-/** Reads JSON objects from a JSONL file; a missing file and non-object lines are skipped. */
 export async function readJsonl(file) {
   let text;
   try {
@@ -70,7 +66,6 @@ function inWindow(record, from, to) {
 }
 const numeric = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
 const mean = (values) => (values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0);
-// Nearest-rank percentile: rank = ceil(p/100 * n), clamped to a real element.
 function percentile(values, p) {
   if (!values.length) return 0;
   const sorted = [...values].sort((left, right) => left - right);
@@ -78,7 +73,9 @@ function percentile(values, p) {
   return sorted[Math.min(sorted.length, rank) - 1];
 }
 
-/** Aggregates hook and feedback metrics for the last `days` days. Content-free by construction. @param {{stateDir?:string,days?:number,now?:Date}} [options] */
+/**
+ * @param {{stateDir?:string,days?:number,now?:Date}} [options]
+ */
 export async function usageSummary({ stateDir, days = 7, now = new Date() } = {}) {
   if (!Number.isInteger(days) || days < 1) throw argumentError('Usage days must be an integer of at least 1.');
   const dir = join(stateDir, 'metrics');
@@ -138,7 +135,6 @@ export async function usageSummary({ stateDir, days = 7, now = new Date() } = {}
   };
 }
 
-/** Human-readable form of a summary; it repeats only the aggregates. */
 export function formatUsage(summary) {
   const { days, prompts, outcomes, injectionRate, meanResults, durationMs, meanChars, shadow, feedback } = summary;
   const events = summary.events ?? { prompt: 0, 'session-start': 0 };
@@ -164,7 +160,9 @@ export function formatUsage(summary) {
   ].join('\n');
 }
 
-/** Appends one one-word feedback record with the hooks.jsonl permissions (file 0600, directory 0700). @param {{stateDir?:string,verdict?:string,now?:Date}} [options] */
+/**
+ * @param {{stateDir?:string,verdict?:string,now?:Date}} [options]
+ */
 export async function recordFeedback({ stateDir, verdict, now = new Date() } = {}) {
   if (!isFeedbackVerdict(verdict)) throw argumentError('Feedback verdict must be useful or not-useful.');
   await secureDirectory(stateDir, true);

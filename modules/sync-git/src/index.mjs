@@ -66,9 +66,8 @@ function redactRemote(value) {
       url.hash = '';
       return url.toString().replace(/%5Bredacted%5D/gi, '[redacted]');
     }
-  } catch {
-    /* Keep malformed values from being echoed verbatim below. */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   const safe = value
     .replace(/^((?:https?|ssh|git):\/\/)[^/?#]*@/i, '$1[redacted]@')
     .replace(/^([^/@:\s]+)@([^/:]+):/, '[redacted]@$2:')
@@ -114,8 +113,6 @@ function strictUtf8(bytes) {
 }
 
 /**
- * A Git backed object transport. It owns only `stateDir/sync/git`; it never
- * opens or modifies the vault's Git metadata.
  * @param {{stateDir?:string,remote?:string,branch?:string,authorName?:string,authorEmail?:string,env?:Record<string,string|undefined>,config?:object,hostId?:string,runCommand?:Function,now?:()=>Date,atomicWriter?:Function}} options
  */
 export function createGitTransport({
@@ -491,7 +488,6 @@ export function createGitTransport({
             else conflictContent = remoteBytes;
           } else conflictContent = remoteBytes;
         } else if (remoteChanged && !localBytes && remoteBytes) {
-          // A local delete racing a remote edit leaves the remote object intact.
           content = remoteBytes;
         }
         plans.push({ path, content, conflictContent });

@@ -47,9 +47,8 @@ function cleanTempSync() {
     try {
       spawnSync('chmod', ['-R', 'u+rwX', path], { stdio: 'ignore' });
       rmSync(path, { recursive: true, force: true });
-    } catch {
-      /* best effort on a signal */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   tempDirs.clear();
 }
@@ -232,11 +231,6 @@ async function walkTree(base, relative, types) {
   }
 }
 
-// The archive is listed once with `tar -tzf` (names only, one per line) and
-// extracted once into `work`. Entry types come from lstat on the extracted tree,
-// so no format-specific `tar -tv` parsing is needed. A name with a control
-// character (including a newline that splits the listing) makes the whole
-// listing unusable.
 async function inspectArchive(archive, work, version) {
   let output;
   try {
@@ -253,7 +247,6 @@ async function inspectArchive(archive, work, version) {
   for (const line of lines)
     if (line.length === 0 || hasControl(line)) throw new ListingError('unexpected entry name in archive');
   const names = lines.map((name) => ({ name, type: name.endsWith('/') ? 'd' : '-' }));
-  // Every name is validated before anything is extracted.
   for (const { name } of names) {
     if (unsafeName(name)) return { entries: names, reject: `unsafe entry name in archive: ${name}` };
     if (badPrefix(name, version)) return { entries: names, reject: `unexpected entry path in archive: ${name}` };
@@ -333,10 +326,6 @@ async function checkDistribution(dir, version, work, entries, entriesError, reje
   return { ok: true };
 }
 
-// Strict version matching for a relative path: a `brainatlas-` segment must be
-// exactly `brainatlas-<v>` when it is a directory (at most one such prefix
-// segment per entry) or exactly one of the three archive file names when it is
-// a file name. Prefix matches such as `brainatlas-<v>-rc.1-full.tgz` fail.
 function nameVersionOk(name, isDirectory, version) {
   const exact = archiveFileNames(version);
   const versionDir = `brainatlas-${version}`;
@@ -394,9 +383,8 @@ async function extractRoot(base) {
   try {
     const stat = await lstat(join(base, 'install.sh'));
     if (stat.isFile()) return base;
-  } catch {
-    /* try one nested directory */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   let entries;
   try {
     entries = await readdir(base, { withFileTypes: true });
@@ -530,8 +518,6 @@ async function main() {
   record('files', files);
   if (!files.ok) skipRest('not run');
   else {
-    // The distribution archive is listed once; both the distribution and the
-    // version check reuse that listing.
     const archive = join(dir, `brainatlas-${version}-distribution.tar.gz`);
     let entries = null;
     let entriesError = 'distribution archive could not be read';

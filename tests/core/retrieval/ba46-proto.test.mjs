@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-46: prototype-chain keys in page text, or in a retrieval cache loaded from stateDir, must not pollute any prototype
-// and must not change search results for unrelated queries. Investigation only: no product code is changed here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,7 +10,6 @@ const ASOF = new Date('2026-02-01T00:00:00Z');
 const OPTS = { limit: 5, asOf: ASOF };
 const WORDS = ['__proto__', 'constructor', 'prototype', 'hasOwnProperty', 'toString', 'valueOf'];
 const QUERIES = ['alpha', 'delta'];
-// Captured before any test body runs, so a polluted Object.prototype cannot hide behind a later snapshot.
 const PROTO_OWN_NAMES = Object.getOwnPropertyNames(Object.prototype).sort();
 const PROTO_OF_OBJECT = Object.getPrototypeOf({});
 const canon = (x) => JSON.stringify(x);
@@ -41,8 +38,6 @@ function wikiFixture(t) {
   return { home, wiki, stateDir, cache: path.join(stateDir, 'retrieval-index.json') };
 }
 
-// ---- A/B. Page text: the six prototype-chain words in title, body and frontmatter keys/values ----
-// Every word gets its own page, so a search for one word must not return the pages of the other words or the clean page.
 function textFixture(t) {
   const f = wikiFixture(t);
   const pages = {
@@ -63,7 +58,6 @@ function textFixture(t) {
   for (const [name, text] of Object.entries(pages)) fs.writeFileSync(path.join(f.wiki, name), text);
   return f;
 }
-// Plain substring scan of the fixture files, frontmatter included.
 function pagesContaining(wiki, word) {
   return fs
     .readdirSync(wiki)
@@ -83,8 +77,6 @@ test('page text with __proto__/constructor/prototype/hasOwnProperty/toString/val
     index = buildIndex(pages, { now: ASOF });
   }, 'buildIndex must not throw on prototype-chain words in page text');
   assertNoPollution('after buildIndex');
-  // tokens() lowercases and stems, so the index keys of toString/valueOf/hasOwnProperty are `tostr`, `valueof` and
-  // `hasownproperty`: ordinary own terms, never the inherited Object.prototype names. `constructor` keeps its spelling.
   assert.equal(Object.getPrototypeOf(index.postings), null, 'the built postings map must stay null-prototype');
   assert.ok(
     Object.hasOwn(index.postings, 'constructor'),
@@ -102,7 +94,6 @@ test('page text with __proto__/constructor/prototype/hasOwnProperty/toString/val
     assert.equal(result.abstained, false, `search("${word}") must answer: the fixture contains the word`);
     assertNoPollution(`after search("${word}")`);
   }
-  // The same pages go through the cache writer and decoder: their frontmatter keys and bodies are re-parsed as JSON.
   const searcher = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   assertNoPollution('after createSearcher over pages with prototype-chain words');
   const loaded = searcher.snapshot().index;
@@ -130,29 +121,16 @@ test('page text searches return only pages whose text contains the queried word'
   }
 });
 
-// ---- C. Forged caches: prototype-chain keys in postings, and __proto__ fields on a document and a page ----
-// Forged caches are valid enough for the structural decoder (the BA-02 technique), so the load path itself is exercised:
-// after createSearcher the cache file must still be byte-identical to the forged text; if the decoder instead rejects the
-// cache it is rebuilt and the case is reported as `rejected`.
-// Note on reachability (item 2 of the round feedback): tokens() keeps only letters and digits, so the underscores of
-// `__proto__` are dropped, and it lowercases and stems. `__proto__` -> `proto`, `prototype` -> `prototyp`,
-// `hasOwnProperty` -> `hasownproperty`, `toString` -> `tostr`, `valueOf` -> `valueof`. Postings keys spelled `__proto__`
-// or `prototype` therefore cannot be reached by any query at all. For those two cases the load path is covered and the read
-// path is exercised directly (`Object.hasOwn(postings, key)` plus a plain own-key read, exactly the lookup search does);
-// only the load path is covered for the query path, because the query path cannot address those keys.
 function cacheFixture(t) {
   const f = wikiFixture(t);
   fs.writeFileSync(path.join(f.wiki, 'alpha.md'), '---\ntitle: Alpha\n---\n# Alpha\nalpha bravo charlie notes\n');
   fs.writeFileSync(path.join(f.wiki, 'delta.md'), '# Delta\ndelta echo foxtrot\n');
-  createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF }); // writes a valid cache
+  createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   const index = buildIndex(loadPages(f.wiki), { now: ASOF });
   const fresh = Object.fromEntries(QUERIES.map((q) => [q, canon(search(index, q, OPTS))]));
   return { ...f, valid: fs.readFileSync(f.cache, 'utf8'), fresh };
 }
-// Postings are flat on disk: [id, c0, c1, c2, c3, ...]. Doc 0 is alpha.md, whose title has one token (lengths[0] = 1).
 const VALID_FLAT_ALPHA = '[0,1,0,0,0]';
-// Each forgery is applied to the pristine cache text, so the cases do not compose. `__proto__` is inserted as JSON text:
-// after JSON.parse it is a real own key, not a prototype assignment.
 const FORGERIES = [
   {
     name: 'postings key "__proto__"',
@@ -211,13 +189,12 @@ for (const { name, key, forge, verify } of FORGERIES) {
     const f = cacheFixture(t);
     const forged = forge(f.valid);
     assert.notEqual(forged, f.valid, `fixture error: forgery did not change the cache text for ${name}`);
-    verify(JSON.parse(forged)); // the forged key is a real own key, not a prototype assignment
+    verify(JSON.parse(forged));
     fs.writeFileSync(f.cache, forged);
     let searcher;
     assert.doesNotThrow(() => {
       searcher = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
     }, `${name}: createSearcher must not throw`);
-    // Proof that the forged cache was the input of this run: it is loaded as it is (byte-identical), not rebuilt.
     const after = fs.readFileSync(f.cache, 'utf8');
     const loaded = after === forged;
     if (loaded) assert.equal(after, forged, `${name}: the forged cache must be used as it is, not rewritten`);
@@ -237,7 +214,6 @@ for (const { name, key, forge, verify } of FORGERIES) {
       `${name}: the decoded postings map must stay null-prototype`
     );
     if (loaded && key) {
-      // The decoder really carried the forged key into the loaded index: the load path is covered, not bypassed.
       assert.ok(Object.hasOwn(index.postings, key), `${name}: the forged posting key must survive the decode`);
       assert.deepEqual(
         index.postings[key],
@@ -248,8 +224,6 @@ for (const { name, key, forge, verify } of FORGERIES) {
       const built = buildIndex(loadPages(f.wiki), { now: ASOF });
       const queryTerms = tokens(key, true);
       if (queryTerms.includes(key)) {
-        // `constructor` is a reachable query term; its forged results are the accepted cache-content risk (BA-02), so the
-        // result list is not asserted here, only that the read throws nothing and pollutes nothing.
         assert.doesNotThrow(() => search(index, key, OPTS), `${name}: search must not throw`);
         assertNoPollution(`after search("${key}") on the forged cache`);
       } else {
@@ -257,7 +231,6 @@ for (const { name, key, forge, verify } of FORGERIES) {
           !queryTerms.includes(key),
           `fixture note: "${key}" is not a query term (tokens() drops '_' and stems)`
         );
-        // The forged key is unreachable as a term, so the query must behave exactly like the fresh index.
         assert.equal(
           canon(search(index, key, OPTS)),
           canon(search(built, key, OPTS)),
@@ -269,7 +242,6 @@ for (const { name, key, forge, verify } of FORGERIES) {
       assert.doesNotThrow(() => searcher.search(word, OPTS), `${name}: search("${word}") must not throw`);
       assertNoPollution(`after search("${word}") on the cache with ${name}`);
     }
-    // The forged term's own results are not asserted: a forged posting for it is the accepted cache-content risk (BA-02).
     for (const query of QUERIES) {
       assert.equal(
         canon(searcher.search(query, OPTS)),
@@ -280,9 +252,6 @@ for (const { name, key, forge, verify } of FORGERIES) {
   });
 }
 
-// ---- D. Nested frontmatter: __proto__ and constructor.prototype as YAML mappings ----
-// YAML parses these as nested objects; canonical() and the cache writer re-serialize the keys. No key may reach
-// Object.prototype, neither at index time nor through the cache round-trip or a search.
 function nestedFixture(t) {
   const f = wikiFixture(t);
   fs.writeFileSync(

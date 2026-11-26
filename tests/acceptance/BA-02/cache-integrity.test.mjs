@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 blind acceptance: stat fingerprint, no-read freshness check, forged/corrupt on-disk cache, symlinks, races.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -45,7 +44,6 @@ function fixture(t) {
   fs.writeFileSync(path.join(outside, 'secret.md'), '# Secret\nsecret token quokka\n');
   return { home, vault, wiki, stateDir, outside, cache: path.join(stateDir, 'retrieval-index.json') };
 }
-// Reference: a clean build with no cache (what a fresh install returns).
 function reference(vault) {
   const index = buildIndex(loadPages(vault), { now: ASOF });
   return QUERIES.map((q) => canon(search(index, q, OPTS)));
@@ -105,10 +103,9 @@ test('same-size rewrite with the original mtime restored (utimes) is still detec
   const file = path.join(f.wiki, 'delta.md');
   const before = fs.lstatSync(file, { bigint: true });
   const oldText = fs.readFileSync(file, 'utf8');
-  const newText = oldText.replace('foxtrot', 'wombats'); // 'foxtrot' and 'wombats' are both 7 bytes
+  const newText = oldText.replace('foxtrot', 'wombats');
   assert.equal(newText.length, oldText.length);
   fs.writeFileSync(file, newText);
-  // Node's utimes cannot restore nanoseconds; python's os.utime(ns=) can. Fall back to Node when python3 is absent.
   let exact = false;
   try {
     execFileSync('python3', [
@@ -151,7 +148,6 @@ test('symlinked pages and directories are never indexed or read through', async 
       .sort(),
     ['alpha.md', 'delta.md', 'legacy.md']
   );
-  // Symlink created after the fingerprint: still not indexed on the next refresh.
   fs.symlinkSync(path.join(f.outside, 'secret.md'), path.join(f.wiki, 'late-link.md'));
   s.refreshIfChanged();
   assert.deepEqual(
@@ -185,7 +181,6 @@ test('the cache lives under stateDir and nothing is written into the vault', asy
   assert.ok(!f.cache.startsWith(f.vault + path.sep));
 });
 
-// Forged or corrupt caches. The key is copied from the real cache so only the payload is wrong.
 const flat = (d) => d.index.postings[Object.keys(d.index.postings)[0]];
 const forged = {
   'truncated JSON': { raw: (raw) => raw.slice(0, Math.floor(raw.length / 2)) },
@@ -291,7 +286,7 @@ const forged = {
 for (const [name, spec] of Object.entries(forged)) {
   test(`forged cache "${name}" falls back to a safe rebuild with fresh-build results`, async (t) => {
     const f = fixture(t);
-    createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF }); // writes a valid cache
+    createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
     const raw = fs.readFileSync(f.cache, 'utf8');
     const data = JSON.parse(raw);
     let next;
@@ -315,7 +310,6 @@ test('a file removed or renamed between stat and read does not crash the searche
   const s = createSearcher({ vaultDir: f.wiki, stateDir: f.stateDir, now: ASOF });
   fs.rmSync(path.join(f.wiki, 'delta.md'));
   fs.renameSync(path.join(f.wiki, 'alpha.md'), path.join(f.wiki, 'alpha2.md'));
-  // Simulate the race: a file vanishes after the walk but before it is read during the rebuild.
   const realRead = fs.readFileSync;
   let injected = false;
   fs.readFileSync = function (file, ...rest) {
@@ -338,7 +332,6 @@ test('a file removed or renamed between stat and read does not crash the searche
   }
   fs.readFileSync = realRead;
   console.log(`race: first refresh ${firstError ? 'threw ' + firstError.code : 'succeeded'}`);
-  // The process must survive and the next refresh must converge to the fresh state.
   assert.equal(s.refreshIfChanged(), true);
   assert.deepEqual(
     QUERIES.map((q) => canon(s.search(q, OPTS))),

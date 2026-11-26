@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-27 independent acceptance (determinism, set validity). Written from the brief only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -34,8 +33,6 @@ function walkFiles(root, base = root) {
   }
   return out.sort();
 }
-
-// ---------- determinism of the dev generators ----------
 
 test('BA-27 determinism: re-running eval/gen/dev-corpora.mjs and longpage.mjs in a copy reproduces every eval file byte for byte', () => {
   const work = tempDir('gen');
@@ -75,8 +72,6 @@ test('BA-27 determinism: grep baseline on each new dev set is identical across t
     'realDocs'
   );
 });
-
-// ---------- schema validity of every case in the five new dev sets (independent of the developer validator) ----------
 
 function corpusPages(dir) {
   const map = new Map();
@@ -127,8 +122,6 @@ test('BA-27 set validity: hookRealistic has 72 cases with the documented kind mi
   );
   assert.ok(cases.filter((c) => c.kind === 'operational').every((c) => c.abstain === true));
 });
-
-// ---------- label hygiene of the changed natural cases ----------
 
 test('BA-27 label hygiene: exactly the 11 documented natural cases changed; each old label is superseded and points to its replacement', () => {
   const now = JSON.parse(readFileSync(join(EVAL, 'dev', 'natural-cases.json'), 'utf8'));

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 retest (independent): fragment (#x) and query (?v=1) handling in wiki_update_index and wiki_create_*, anchor-only
-// and external entries kept byte for byte. Real stdio MCP server, temporary vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, readIndex, startServer, sectionLines } from './harness.mjs';

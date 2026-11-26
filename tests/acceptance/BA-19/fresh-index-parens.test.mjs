@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 blind acceptance, criterion 2: no index yet -> wiki_update_index and wiki_create_* first write; parentheses,
-// categories, idempotence, and whether the product's own tools read the result consistently.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, readIndex, startServer, linkDestinations, sectionLines } from './harness.mjs';
@@ -13,7 +11,6 @@ const PAREN_FILES = {
   'root-note.md': page('Kök not'),
   'entities/a(b).md': page('Parantez [1] (x)'),
 };
-// Expected escaped destination for each page (backslash before every parenthesis, CommonMark escape).
 const ESCAPED = {
   'a(b).md': 'a\\(b\\).md',
   'a)b.md': 'a\\)b.md',

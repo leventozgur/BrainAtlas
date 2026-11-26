@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-00 blind acceptance: format, label and corpus-contract audit of the new dev sets and eval/corpus-ba.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -116,7 +115,6 @@ test('identifier: 12 positive (token appears in query and relevant page) and 12 
   const abstains = cases.filter((c) => c.abstain);
   assert.equal(positives.length, 12);
   assert.equal(abstains.length, 12);
-  // Positive identifiers and their expected token, taken from the query text.
   const positiveTokens = {
     'ident-01': 'E_WIDGET_TIMEOUT',
     'ident-02': 'E_QUEUE_LOCKED',
@@ -201,7 +199,6 @@ test('multihop: 2-3 relevant pages, requireAll true, and the relevant pages are 
     assert.ok(c.relevant.length >= 2 && c.relevant.length <= 3, `${c.id}: ${c.relevant.length} pages`);
     assert.equal(c.requireAll, true, `${c.id}: requireAll`);
     assert.equal(new Set(c.relevant).size, c.relevant.length, `${c.id}: duplicate relevant`);
-    // Connectivity over the induced link graph of the relevant pages.
     const nodes = c.relevant;
     const seen = new Set([nodes[0]]);
     const queue = [nodes[0]];

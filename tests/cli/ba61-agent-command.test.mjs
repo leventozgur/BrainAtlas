@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-61 phase 2: `brainatlas agent`. Hermetic: temporary HOME, vault, config, data and state directories only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -63,9 +62,8 @@ async function fixture(t, extraPath) {
     let value = null;
     try {
       value = JSON.parse(result.stdout);
-    } catch {
-      /* not JSON */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     return { result, value };
   };
   const ok = (...args) => {
@@ -81,7 +79,6 @@ async function fixture(t, extraPath) {
   return { home, vault, configFile, json, ok, fail };
 }
 
-/** A temp bin directory holding only a `node` symlink: the whole PATH of a controlled test. */
 async function controlledBin(t) {
   const bin = await mkdtemp(join(tmpdir(), 'ba61-bin-'));
   t.after(() => rm(bin, { recursive: true, force: true }));

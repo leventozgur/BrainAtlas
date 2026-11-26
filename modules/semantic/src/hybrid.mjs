@@ -22,7 +22,6 @@ export function cosineSimilarity(left, right) {
   return leftNorm && rightNorm ? dot / Math.sqrt(leftNorm * rightNorm) : 0;
 }
 
-/** Reciprocal-rank fusion; duplicate paths within each list count only once. */
 export function reciprocalRankFusion(resultLists, { k = 60, weights = resultLists.map(() => 1) } = {}) {
   if (
     !Array.isArray(resultLists) ||
@@ -53,9 +52,6 @@ export function reciprocalRankFusion(resultLists, { k = 60, weights = resultList
 }
 
 /**
- * Combine the core BM25F results with page-level cosine-ranked chunks.
- * `lexicalIndex` is optional: when given it must be `buildIndex(pages)` for the same pages (the MCP passes its
- * searcher snapshot); when omitted the lexical index is built from `pages` as before.
  * @param {{query:string,pages:Array<any>,entries:Array<any>,provider:any,limit?:number,k?:number,asOf?:Date,indexMeta?:any,weights?:number[],mode?:string,minSemanticScore?:number,minMargin?:number,abstainThreshold?:number,lexicalIndex?:any}} options
  */
 export async function searchHybrid({
@@ -132,7 +128,6 @@ export async function searchHybrid({
       return abstain('no-semantic-results');
     if (minSemanticScore !== undefined && ranked[0].semanticScore < minSemanticScore)
       return abstain('min-semantic-score');
-    // A single candidate has the maximum possible cosine margin.
     if (
       minMargin !== undefined &&
       (ranked.length > 1 ? ranked[0].semanticScore - ranked[1].semanticScore : 2) < minMargin
@@ -151,7 +146,6 @@ export async function searchHybrid({
     }
     return fused.slice(0, limit);
   } catch {
-    // Semantic retrieval is an optional enhancement; provider failures leave BM25F usable.
     return fallback('provider-error');
   }
 }

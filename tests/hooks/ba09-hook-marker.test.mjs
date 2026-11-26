@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09: the prompt hook marks weak (proposed or disputed) pages in the injected title line and leaves the others unchanged.
-// Hermetic: temporary vault, state and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';

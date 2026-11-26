@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 independent acceptance harness. Starts a real stdio MCP server (the worktree build by default, or the main
-// checkout when BA14_TARGET=main) against a temporary vault and talks to it through the SDK client.
 import { mkdtemp, mkdir, writeFile, readdir, rm, lstat, readlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -12,13 +10,10 @@ import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 export const TARGET = process.env.BA14_TARGET === 'main' ? 'main' : 'worktree';
-// Main checkout is a sibling of the worktree directory tree; it is only ever executed, never written.
 export const SERVER_ROOT =
   TARGET === 'main' ? resolve(process.env.BA14_MAIN_ROOT || join(ROOT, '..', '..', 'BrainAtlas')) : ROOT;
-// Runtime-built, secret-shaped fixture value (same shape the repo's privacy scanner detects).
 export const SECRET = ['sk', 'proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join('-');
 
-/** Starts one server for a fresh temporary vault. `files` maps wiki-relative paths to contents (string or Buffer). */
 export async function startServer(t, { files = {}, links = {} } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'ba14-accept-'));
   const home = join(dir, 'home');
@@ -86,7 +81,6 @@ export function refused(r, code) {
   if (code) assert.match(textOf(r), new RegExp(code));
 }
 
-/** Byte-level snapshot of every file under a directory (symlinks recorded as links, not followed). */
 export async function snapshot(dir) {
   const out = {};
   async function walk(rel) {
@@ -112,7 +106,6 @@ export async function readOrNull(path) {
   }
 }
 
-/** Number of log lines that record the given action (the log is append-only). */
 export async function logCount(wiki, action) {
   const raw = await readOrNull(join(wiki, 'log.md'));
   return raw

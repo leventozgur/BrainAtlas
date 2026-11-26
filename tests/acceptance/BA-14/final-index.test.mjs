@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 final verification of wiki_update_index: parenthesis names are idempotent over repeated runs, lines inside
-// fenced code blocks are opaque (closed ``` / ~~~ fences, a 4-backtick fence, an open fence at end of file), and
-// pages at the Wiki root join the `## Pages` category. Real stdio server, temporary vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -14,14 +11,11 @@ const escapeParens = (path) => path.replace(/([()])/g, '\\$1');
 const indexOf = async (f) => readFile(join(f.wiki, 'index.md'));
 const lineIndex = (lines, exact) => lines.findIndex((line) => line === exact);
 
-/** Every line of `survivors` appears in `lines`, in the same order (exact string equality). */
 function isSubsequence(survivors, lines) {
   let at = 0;
   for (const line of lines) if (at < survivors.length && line === survivors[at]) at++;
   return at === survivors.length;
 }
-
-// ---------------------------------------------------------------- parenthesis names: idempotency over three runs
 
 const PAREN_PAGES = {
   'entities/a(b).md': page('title: Parantez B'),
@@ -53,7 +47,6 @@ test('PAREN1: four parenthesis-named pages are listed once each; runs two and th
   assert.equal(out.split('\n').filter((line) => line.startsWith('- [')).length, 4);
 });
 
-// PM update (BA-19, 2026-11-11): fixed — fresh index writes are escaped.
 test('PAREN4a (fresh index): with no index file, the first run writes the escaped destination of every parenthesis page (contract example)', async (t) => {
   const f = await startServer(t, { files: { ...PAREN_PAGES } });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 4, added: 4, removed: 0 });
@@ -67,7 +60,6 @@ test('PAREN4a (fresh index): with no index file, the first run writes the escape
   }
 });
 
-// PM update (BA-19, 2026-11-11): fixed — fresh index writes are escaped.
 test('PAREN4b (fresh index): with no index file, runs two and three add nothing and keep the bytes', async (t) => {
   const f = await startServer(t, { files: { ...PAREN_PAGES } });
   assert.deepEqual(okJson(await call(f.client, 'wiki_update_index')), { indexed: 4, added: 4, removed: 0 });
@@ -110,8 +102,6 @@ test('ANCHOR1: anchor links (#section) are never removed; a stale local entry be
     '# Wiki Index\n\n## entities\n\n- [Bölüm](#bolum) — çapa\n- [A](entities/a.md)\n'
   );
 });
-
-// ---------------------------------------------------------------- fenced code blocks are opaque
 
 for (const fence of ['```', '~~~']) {
   test(`FENCE1 (${fence}): entry and heading lines inside a closed fence are not links, headings or insertion points`, async (t) => {
@@ -187,8 +177,6 @@ test('FENCE3: a four-backtick fence is not closed by a three-backtick line insid
   const out = await readFile(join(f.wiki, 'index.md'), 'utf8');
   assert.ok(isSubsequence(index.split('\n'), out.split('\n')), 'fenced stale entry must not be removed');
 });
-
-// ---------------------------------------------------------------- root pages join the `## Pages` category
 
 test('ROOT1: a Wiki-root page in a fresh index is listed under ## Pages', async (t) => {
   const f = await startServer(t, { files: { 'notiz.md': page('title: Notiz'), 'entities/a.md': page('title: A') } });

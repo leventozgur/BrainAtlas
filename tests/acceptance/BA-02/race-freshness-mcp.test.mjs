@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-02 retest F3: a real stdio MCP server. An outside delete or rename lands during the freshness check of a
-// wiki_query. Expected: the query returns a normal (non-error) result from the last good index, and the next query
-// shows the outside change. The race is injected deterministically by race-preload.mjs (NODE_OPTIONS --import).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -33,7 +30,6 @@ function fixture(t) {
   fs.writeFileSync(configFile, JSON.stringify(config));
   return { home, vault, wiki, configFile, arm: path.join(home, 'arm'), log: path.join(home, 'race.log') };
 }
-// race: { target, op, mode, to } arms the preload injection; omitted means a plain server.
 async function start(f, race) {
   const env = {
     HOME: f.home,
@@ -71,7 +67,6 @@ async function start(f, race) {
 async function queryRaw(c, text) {
   return c.client.callTool({ name: 'wiki_query', arguments: { query: text } });
 }
-// Non-error answer required; returns the list of page paths.
 async function query(c, text) {
   const result = await queryRaw(c, text);
   assert.notEqual(result.isError, true, `wiki_query returned an error: ${result.content?.[0]?.text}`);
@@ -85,9 +80,9 @@ test('outside delete during the freshness check: the query still answers, the ne
   const c = await start(f, { target: 'beta.md', op: 'read', mode: 'delete' });
   t.after(() => c.close());
   assert.deepEqual(await query(c, 'betaterm'), ['beta.md']);
-  fs.writeFileSync(path.join(f.wiki, 'beta.md'), '# Beta\nbetaedit replaced text\n'); // changes the fingerprint
+  fs.writeFileSync(path.join(f.wiki, 'beta.md'), '# Beta\nbetaedit replaced text\n');
   fs.writeFileSync(f.arm, '');
-  const during = await query(c, 'betaedit'); // refresh reads beta.md, the preload deletes it first
+  const during = await query(c, 'betaedit');
   assert.ok(Array.isArray(during), 'query returns results, not an error');
   assert.ok(fired(f) && !armed(f), 'the race was injected during the refresh');
   assert.deepEqual(await query(c, 'alpha'), ['alpha.md'], 'other pages keep answering');

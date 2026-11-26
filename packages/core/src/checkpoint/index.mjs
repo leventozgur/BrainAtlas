@@ -17,7 +17,6 @@ const findings = (value) =>
       ? value.findings.length > 0
       : value?.ok === false;
 
-/** Stage configured paths, safety scan staged blobs, lint and commit. */
 export async function checkpoint(vaultDir, message, options = {}) {
   if (typeof message !== 'string' || !message.trim() || message.length > 120 || /[\r\n]/.test(message))
     throw new BrainAtlasError('E_CHECKPOINT_MESSAGE', 'Checkpoint message is invalid.');

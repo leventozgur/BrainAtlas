@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-17 parity with main: the golden file was generated from main (commit 87d6845) and holds the complete search
-// output (results, snippets, scores, flags, reasons) for a fixed corpus and query matrix (ASCII only, several budgets,
-// two thresholds). The worktree must reproduce every entry exactly, except the deep-path suffix queries that the BA-18
-// fix is meant to change: there main abstains with identifier-not-found, and the worktree must now return the page.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,7 +16,6 @@ const runEntry = (e) =>
     ...(e.budgetChars == null ? {} : { budgetChars: e.budgetChars }),
   });
 
-// Deep-path suffix queries (key of more than twelve segments) whose main result was a BA-18 abstention.
 const expectedChanged = new Set([
   'd10/d11/handler-x-13.mjs',
   'd11/handler-x-13.mjs',
@@ -58,7 +53,6 @@ test('every golden entry is reproduced exactly, except the BA-18 deep-path suffi
       assert.ok(row.after.results.length > 0, `${q}: must return the page`);
     }
   }
-  // The fix must not change the ordinary-word queries or the short-path queries at all.
   assert.ok(golden.entries.some((e) => e.q === 'widget pipeline retries'));
   assert.equal(changed.has('widget pipeline retries'), false);
 });

@@ -1,4 +1,3 @@
-// Test-only fault injection: corrupt one destination page immediately after its copy.
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 const original = fs.promises.writeFile;

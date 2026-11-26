@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-93: one operation catalog drives the MCP tool list, descriptions and the agent instruction texts.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';

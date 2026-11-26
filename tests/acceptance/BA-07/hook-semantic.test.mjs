@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-07 acceptance (independent): prompt hook with the semantic step, offline.
-// No test here reaches an embedding provider: each case ends before an embedding request (no index, corrupt index,
-// Lite, opt-out), or only checks module loading through a loader trace.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -159,13 +156,11 @@ test('hook sources never statically import the semantic module (single- and mult
     const source = readFileSync(join(dir, name), 'utf8');
     assert.doesNotMatch(source, staticImport, name);
   }
-  // Dynamic import is the one permitted form; make sure it exists so the check is not vacuous.
   assert.match(
     readFileSync(join(dir, 'semantic.mjs'), 'utf8'),
     /'modules',\s*'semantic'/u,
     'the dynamic entry is built from the release root'
   );
-  // The regex must catch the forms it is meant to catch (sanity check of the check itself).
   for (const bad of [
     "import x from '../../../modules/semantic/src/index.mjs';",
     "import {\n  a,\n  b\n} from '../../modules/semantic/src/hybrid.mjs';",
@@ -194,7 +189,7 @@ test('buildHookCommand grants read-only access to the semantic index directory',
       event: 'prompt',
       paths,
     });
-    if (!args.includes('--permission')) return; // Node without the permission model: nothing to grant.
+    if (!args.includes('--permission')) return;
     assert.ok(args.includes(`--allow-fs-read=${f.semanticDir}`), 'semantic index directory is readable');
     assert.ok(!args.includes(`--allow-fs-write=${f.semanticDir}`), 'semantic index directory is not writable');
     assert.ok(

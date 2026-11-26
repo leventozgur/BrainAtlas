@@ -15,7 +15,6 @@ const isDate = (v) =>
   new Date(Date.parse(v)).toISOString().slice(0, 10) === v.slice(0, 10);
 const finding = (path, rule, severity, message) => ({ path, rule, severity, message });
 
-/** Check a parsed page or {path,data,body} record. Messages never include body text. */
 export function checkPage(page, options = {}) {
   const path = String(page?.path ?? 'wiki/unknown.md');
   const data = page?.data ?? page?.frontmatter ?? page ?? {};
@@ -106,8 +105,6 @@ export function checkPage(page, options = {}) {
     for (const key of ['aliases', 'keywords'])
       if (!Array.isArray(data[key]))
         add(`recommended.${key}`, 'warn', `Entity and concept pages should include a ${key} list.`);
-  // The YAML parser returns date-only values as strings; explicitly flag unquoted source scalars
-  // so a future parser change cannot silently turn them into timezone-shifted timestamps.
   const raw = typeof page?.raw === 'string' ? page.raw : '';
   for (const key of ['generated', 'stale_after'])
     if (new RegExp(`^${key}:\\s*\\d{4}-\\d{2}-\\d{2}(?:$|\\s+#)`, 'm').test(raw))

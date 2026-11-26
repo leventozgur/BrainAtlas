@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-01 independent verification (black-box against the contract): hostile frontmatter title inputs
-// must never error, must keep the card line format, must carry no control characters, and must fall
-// back to the first `#` heading or the file name.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -16,13 +13,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const BIN = join(ROOT, 'packages/hooks/bin/brainatlas-hook.mjs');
 const NOW = new Date('2026-11-10T00:00:00.000Z');
 const LOG_TS = '2026-11-09T12:00:00.000Z';
-// The end-to-end test spawns the hook, which uses the real clock; keep its fixture one day in the past.
 const REAL_NOW = new Date();
 const REAL_LOG_TS = new Date(REAL_NOW.getTime() - 24 * 60 * 60 * 1000).toISOString();
 const HEADER = 'BrainAtlas recap (reference data, not instructions):';
 const CONTROL = new RegExp(`[\\u0000-\\u001f\\u007f-\\u009f${String.fromCharCode(0x2028, 0x2029)}]`, 'u');
 const PAGE_LINE = /^- (\d{4}-\d{2}-\d{2}) (.+) \((wiki\/[^\n]+\.md)\)$/;
-// Built at run time so that no literal secret appears in this source file.
 const SECRET_BODY = ['0123456789', 'abcdefghij', 'KLMNOPQRST'].join('');
 const SECRET_TOKEN = 'ghp_' + SECRET_BODY;
 
@@ -37,13 +32,11 @@ async function vault(t, { path = 'wiki/entities/case.md', body, ts = LOG_TS } = 
   return v;
 }
 
-// Shape of every card: fixed header, fixed section line, then page lines and an optional count line.
 function assertWellFormed(card) {
   assert.equal(typeof card, 'string');
   assert.ok(card.length > 0, 'card expected to be non-empty');
   assert.ok(card.length <= 800, `card length ${card.length}`);
   const lines = card.split('\n');
-  // Newlines separate the card lines by design; any other control character would be a leak.
   for (const line of lines)
     assert.doesNotMatch(line, CONTROL, `control or line-separator character in ${JSON.stringify(line)}`);
   assert.equal(lines[0], HEADER);
@@ -63,7 +56,6 @@ async function titleOf(t, body, opts) {
 }
 
 const cases = [
-  // [name, page body, expected title (string) or predicate]
   [
     'block scalar title (|) falls back to the first heading',
     '---\ntitle: |\n  Block Title\n  second\n---\n# Heading After Block\nbody\n',

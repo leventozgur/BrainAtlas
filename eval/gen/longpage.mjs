@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Deterministic generator for the BA-27 long-page dev set: eval/corpus-longpage (7 pages of 40 to 75 KB, many H2/H3
-// sections, dated updates) and eval/dev/longpage-cases.json (one case per selected H3 section, expectedHeading set).
-// Every H3 section carries a unique fictional codename (no digits); each case queries that codename plus the aspect word,
-// so the expected section is the one that holds the codename. Run: node eval/gen/longpage.mjs
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,7 +54,6 @@ const SENTENCES = [
   (c, a, b, n) => `Bir istisna gerekirse ${c} için ${a} onayı alınmadan ${b} değiştirilmez.`,
 ];
 
-// Codenames: three syllable groups, no digits, unique across the whole corpus.
 const CODE_A = [
   'Brev',
   'Dravo',
@@ -78,7 +73,6 @@ const CODE_A = [
 const CODE_B = ['ik', 'ana', 'ose', 'ulm', 'ter', 'qin', 'pad', 'ven', 'orm', 'ila'];
 const CODE_C = ['ar', 'el', 'im', 'ol', 'ur', 'as', 'eth'];
 
-// Page plan: H2 count and H3 per H2. Every eighth section (in document order) becomes a case.
 const PLAN = [
   { h2: 10, h3: 3 },
   { h2: 12, h3: 3 },
@@ -118,7 +112,6 @@ function paragraph(rng, codename) {
   return sentences.join(' ');
 }
 
-/** Build every page and case. Pure function of SEED, so repeated runs give identical bytes. */
 export function buildLongpage() {
   const rng = createRng(SEED);
   const nextName = codenames(rng);
@@ -165,7 +158,6 @@ export function buildLongpage() {
   return { files, cases };
 }
 
-/** Write the corpus and the case file into an eval directory (default: this package's eval root). */
 export function writeLongpage(evalRoot) {
   const { files, cases } = buildLongpage();
   const corpus = join(evalRoot, 'corpus-longpage');

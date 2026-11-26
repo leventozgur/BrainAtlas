@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Report-only measurement (no threshold): cache file size and cold/warm searcher build time for a 2000-page vault whose
-// pages sit at 20-component paths. Run sequentially, one checkout at a time, on an otherwise idle machine:
-//   BA17_ROOT=<checkout> node tests/acceptance/BA-17/bench-cache.mjs
-// Prints one JSON object with the median of REPS runs. Page contents are synthetic; no user data is read.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

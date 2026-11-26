@@ -37,7 +37,6 @@ function requireApplied(item) {
 }
 
 /**
- * Replace a scratch-home prefix with the real home in every string of a plan result.
  * @param {any} value @param {string} scratch @param {string} home @returns {any}
  */
 function mapHome(value, scratch, home) {
@@ -49,8 +48,6 @@ function mapHome(value, scratch, home) {
 }
 
 /**
- * Plan the install of the new channel on a clean, empty temporary home and map the paths back to the
- * real home. This is an approximation of the install after the removal. Nothing real is written.
  * @param {{agent: string, cfg: any, paths: any, env: any}} options
  */
 async function planInstallOnCleanHome({ agent, cfg, paths, env }) {
@@ -64,14 +61,15 @@ async function planInstallOnCleanHome({ agent, cfg, paths, env }) {
   }
 }
 
-/** A removal warning means nothing was removed: stop instead of continuing. @param {{warning?: string}} result */
+/**
+ * @param {{warning?: string}} result
+ */
 function requireRemoved(result) {
   if (result.warning)
     throw error(/unavailable/.test(result.warning) ? 'E_AGENT_UNKNOWN' : 'E_ARGUMENT', result.warning);
 }
 
 /**
- * `brainatlas agent list | add | remove | set | refresh`.
  * @param {{args: string[], paths: any, env: any, output: (data: any) => void, plan: boolean, flag?: (name: string) => boolean, value: (name: string) => string | undefined}} context
  */
 export async function agentCommand({ args, paths, env, output, plan, flag, value }) {
@@ -227,7 +225,6 @@ export async function agentCommand({ args, paths, env, output, plan, flag, value
     requireApplied(await installAdapter({ agent, cfg: next, paths, env }));
   } catch (failure) {
     const codes = [failure?.code ?? 'unknown'];
-    // Remove files the failed install may have written for the new channel, then restore the old one.
     try {
       await removeAdapter({ agent, cfg: next, paths, env });
     } catch (cleanup) {

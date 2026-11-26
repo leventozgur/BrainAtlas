@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: MIT
-// Deterministic ASCII corpus and query matrix for the parity tests. The golden file is generated from the main
-// checkout (gen-golden.mjs with BA17_ROOT=main) and compared against the worktree in parity.test.mjs.
 import { page } from './support.mjs';
 
 const filler = (n, seed = 'retention') =>
   Array.from({ length: n }, (_, i) => `${seed} note ${i} keeps the archive stable and the review honest.`).join(' ');
 
-// Paths whose segment count (split on / . -) is at most twelve, and deeper ones, as strings for bodies.
 export const shortPaths = [
   'notes/retry.mjs',
   'src/lib/retry.mjs',
@@ -81,7 +78,6 @@ export const budgets = [undefined, 1, 2, 13, 60, 200, 400];
 export const thresholds = [0, 0.35];
 
 export const queries = [
-  // Ordinary words (no identifier): results and scores must not change.
   'widget pipeline retries',
   'cache',
   'long prose retention',
@@ -94,7 +90,6 @@ export const queries = [
   'pinned lockfile',
   'warm starts snapshot path',
   'archive stable review',
-  // Identifiers present in the corpus.
   'E_WIDGET_TIMEOUT',
   'URLSessionConfiguration.timeoutIntervalForRequest',
   'timeoutIntervalForRequest',
@@ -117,7 +112,6 @@ export const queries = [
   'e.g.',
   'a.k.a',
   'E_CODE_FENCE_ONLY',
-  // Short paths (at most twelve segments): suffixes and gaps.
   'notes/retry.mjs',
   'retry.mjs',
   'build-2.1/report.v2.json',
@@ -149,7 +143,6 @@ export const queries = [
   'q1/a_b.c-d.mjs',
   'q2/a_b.c-d.mjs',
   'q1/q2/a_b.c-d.mjs',
-  // Prefixes of short paths (indexed in main, must stay so) and of deep paths (not suffixes: observed, not asserted).
   'notes/retry',
   'd1/d2/d3',
   'x/y/z',
@@ -160,7 +153,6 @@ export const queries = [
   'd1/d2/d3/d4/d5/d6/d7/d8/d9/d10/x',
   'd1/d2/d3/d4/d5/d6/d7/d8/d9/d10/d11/handler-x-13',
   'e1/e2/e3/e4/e5/e6/e7/e8/e9/e10/e11/e12/e13/e14/e15/e16/build-2.1',
-  // Deep paths (more than twelve segments): suffixes, prefixes and gaps.
   'd10/d11/handler-x-13.mjs',
   'd11/handler-x-13.mjs',
   'd9/d10/d11/handler-x-13.mjs',
@@ -182,7 +174,6 @@ export const queries = [
   'f17/f18/f19/f20/a_b.c-d.mjs',
   'f15/f20/a_b.c-d.mjs',
   'f1/f2/f3/f4/f5/f6/f7/f8/f9/f10/f11/f12/f13/f14/f15/f16/f17/f18/f19/f20/a_b.c-d.mjs',
-  // Mixed sentences with one identifier.
   'what about E_WIDGET_TIMEOUT in the widget pipeline?',
   'Ne zaman 11.11.2025 oldu?',
   'retry.mjs nasil calisiyor',

@@ -51,7 +51,6 @@ function report(rows) {
 }
 const timings = (values) => ({ p50: percentile(values, 0.5), p95: percentile(values, 0.95) });
 
-/** Evaluate identical cases with an injected provider; no network is used except by that provider. */
 export async function runSemanticEval({ corpusDir, casesFile, provider, limit = 5 }) {
   if (!provider || !Number.isInteger(limit) || limit < 1 || limit > 1000)
     throw new Error('Invalid evaluation configuration.');
@@ -111,7 +110,6 @@ export async function runSemanticEval({ corpusDir, casesFile, provider, limit = 
         limit: Math.max(limit, 10),
       });
       if (hybrid.fallbackReason) throw new Error('Hybrid semantic retrieval failed.');
-      // At least ten ranks are needed for MRR/nDCG, independent of display limit.
       const cap = Math.max(limit, 10);
       for (const [name, results] of Object.entries({ lexical, semantic, hybrid }))
         rows[name].push({ item, results: results.slice(0, cap) });

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Integration checks: each operation runs in an isolated child process with a synthetic secret-bearing sample.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -15,7 +14,6 @@ const hookUrl = new URL('../../../packages/hooks/src/index.mjs', import.meta.url
 const mcpUrl = new URL('../../../packages/mcp/src/index.mjs', import.meta.url).href;
 const checkpointUrl = new URL('../../../packages/core/src/checkpoint/index.mjs', import.meta.url).href;
 const syncUrl = new URL('../../../modules/sync-engine/src/index.mjs', import.meta.url).href;
-// The child probe runs with a temporary cwd, so the SDK entry points are resolved here and passed as file URLs.
 const requireFromHere = createRequire(import.meta.url);
 const mcpClientUrl = pathToFileURL(requireFromHere.resolve('@modelcontextprotocol/sdk/client/index.js')).href;
 const mcpTransportUrl = pathToFileURL(requireFromHere.resolve('@modelcontextprotocol/sdk/inMemory.js')).href;

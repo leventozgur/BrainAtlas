@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-32: wiki_read_page reads one section by anchor (path fragment, `anchor` and `maxChars`) and wiki_query has a compact
-// (snippet-free) form. Hermetic: temporary vault, state and HOME directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

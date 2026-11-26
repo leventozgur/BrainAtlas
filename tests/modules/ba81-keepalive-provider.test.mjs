@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-81: the Ollama provider sends `keep_alive` for a positive duration, sends no field for "0" or an omitted value,
-// rejects malformed values and keeps the fingerprint independent of the keep-alive setting.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createOllamaProvider, KEEP_ALIVE_PATTERN } from '../../modules/semantic/src/provider.mjs';

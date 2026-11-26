@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-00 blind acceptance: hook-eval metrics against hand-computed expectations on a tiny private corpus.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -7,7 +6,6 @@ import { dirname, join } from 'node:path';
 import { runHookCases, runHookEval } from '../../../eval/hook-eval.mjs';
 import { ROOT, runNode, tempDir, removeDir, listDir } from './helpers.mjs';
 
-// Private fixture: each page has one distinctive token that appears nowhere else.
 const PAGES = {
   'alpha.md': [
     'Zyqorvex gateway',
@@ -40,7 +38,6 @@ process.on('exit', () => removeDir(CASES_DIR));
 let caseSeq = 0;
 const casesPath = () => join(CASES_DIR, `cases-${caseSeq++}.json`);
 
-// Run a function with TMPDIR pointed at a private directory so hook state dirs can be checked for cleanup.
 async function withPrivateTmp(fn) {
   const priv = tempDir('hook-state');
   const prev = process.env.TMPDIR;
@@ -59,16 +56,15 @@ const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `expected ${b}, got ${
 test('scenario 1 mixed set: every metric equals the hand calculation', async () => {
   const corpusDir = makeCorpus();
   const cases = [
-    c('m1', 'identifier', 'zyqorvex gateway timeout', ['alpha.md']), // answerable, injects alpha -> hit
-    c('m2', 'multihop', 'quillfrost ledger', ['alpha.md']), // answerable, injects beta -> miss (wrong label on purpose)
-    c('m3', 'near-negative', 'unknownterm xqzzy', [], true), // abstain, nothing injected -> correct
-    c('m4', 'near-negative', 'zyqorvex', [], true), // abstain, alpha injected -> false injection
+    c('m1', 'identifier', 'zyqorvex gateway timeout', ['alpha.md']),
+    c('m2', 'multihop', 'quillfrost ledger', ['alpha.md']),
+    c('m3', 'near-negative', 'unknownterm xqzzy', [], true),
+    c('m4', 'near-negative', 'zyqorvex', [], true),
   ];
   const casesFile = casesPath();
   writeFileSync(casesFile, JSON.stringify(cases), 'utf8');
   try {
     const records = await withPrivateTmp(() => runHookCases({ corpusDir, cases, abstainThreshold: 0.35 }));
-    // Sanity on what the real hook injected (precondition for the arithmetic below).
     assert.deepEqual(
       records.map((r) => r.injected),
       [['alpha.md'], ['sub/beta.md'], [], ['alpha.md']]
@@ -76,12 +72,10 @@ test('scenario 1 mixed set: every metric equals the hand calculation', async () 
 
     const m = await withPrivateTmp(() => runHookEval({ corpusDir, casesFile, abstainThreshold: 0.35 }));
     assert.equal(m.n, 4);
-    close(m.injectionRate, 3 / 4); // m1, m2, m4 inject at least one path
-    close(m.injectionPrecision, 1 / 3); // 3 injected paths, 1 relevant (alpha in m1)
-    close(m.missRate, 1 / 2); // answerable m1 (hit), m2 (miss)
-    close(m.falseInjectionRate, 1 / 2); // abstain m3 (none), m4 (injected)
-    // BA-27: added summary keys (byKind, injectedChars, charsPerHit, neededPageInjected, metaShareTop5, sectionHitAt1, sectionCases, sectionHitSources, poisonInjected); existing keys unchanged.
-    // BA-31m: three keys added (top1ExcludedRate, top1RelevantRate, withCwd); existing keys unchanged. Pin updated by the PM decision.
+    close(m.injectionRate, 3 / 4);
+    close(m.injectionPrecision, 1 / 3);
+    close(m.missRate, 1 / 2);
+    close(m.falseInjectionRate, 1 / 2);
     assert.deepEqual(Object.keys(m).sort(), [
       'byCategory',
       'byKind',
@@ -114,11 +108,10 @@ test('scenario 1 mixed set: every metric equals the hand calculation', async () 
     close(m.byCategory['near-negative'].injectionRate, 1 / 2);
     close(m.byCategory['near-negative'].precision, 0);
 
-    // chars: computed from the same per-case context lengths the hook produced.
     const lengths = records.map((r) => r.chars).sort((x, y) => x - y);
     close(m.chars.mean, lengths.reduce((s, v) => s + v, 0) / 4);
-    close(m.chars.p50, lengths[1]); // ceil(0.5*4)-1 = 1
-    close(m.chars.p95, lengths[3]); // ceil(0.95*4)-1 = 3
+    close(m.chars.p50, lengths[1]);
+    close(m.chars.p95, lengths[3]);
     assert.ok(m.durationMs.p50 >= 0 && m.durationMs.p95 >= m.durationMs.p50);
   } finally {
     removeDir(corpusDir);

@@ -176,8 +176,6 @@ function assertNoMcp(ctx) {
   for (const file of mcpFiles) {
     const text = readText(file);
     if (text === null) continue;
-    // Tolerant read: a BOM or an unreadable document means "no BrainAtlas entry" because
-    // the cli channel never writes these files.
     let data;
     try {
       data = decodeJson(text.replace(/^\uFEFF/, ''));
@@ -308,9 +306,8 @@ function removeJsonKey(ctx, file, key) {
     const original = JSON.parse(saved);
     if (original.after === Buffer.from(before).toString('base64'))
       return original.bytes === null ? null : Buffer.from(original.bytes, 'base64').toString('utf8');
-  } catch {
-    /* fall through to ownership-only removal */
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
   const data = decodeJson(before);
   const [root, name] = key.split('.');
   if (!data[root] || !Object.hasOwn(data[root], name)) return before;
@@ -328,8 +325,6 @@ function removeMarkdown(file) {
   const after = `${before.slice(0, found.start)}${before.slice(found.end)}`;
   return after.trim() ? after.replace(/\n{3,}/g, '\n\n') : null;
 }
-// In the cli channel a managed block is only owned by this channel when its body is
-// the CLI payload; a valid-hash block with any other body is treated as edited.
 function assertCliBlockPayload(text, ctx) {
   if (!isCli(ctx) || !text || !text.includes(BEGIN)) return;
   const found = verifyBlock(text);

@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-26: a page with `sensitivity: personal` or `inject: never` is still returned by search; its result carries the optional
-// `inject: 'never'` field, and only that page has the field (legacy parity). The field is stored per document and a cache
-// that disagrees with the frontmatter is rejected and rebuilt. Hermetic: temporary vault and state directories.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -76,7 +73,6 @@ test('the restricted flag survives the on-disk cache and a cache that disagrees 
   }).results;
   assert.equal(fresh.find((r) => r.path === 'personal.md').inject, 'never');
 
-  // Forge the cache: drop the restriction from the personal document. The structural check must reject it and rebuild.
   const data = JSON.parse(fs.readFileSync(cache, 'utf8'));
   const personalDoc = data.index.docs.find((doc) => doc.page.path === 'personal.md');
   assert.equal(personalDoc.restricted, true, 'the restriction is stored per document');
@@ -88,7 +84,6 @@ test('the restricted flag survives the on-disk cache and a cache that disagrees 
   }).results;
   assert.equal(rebuilt.find((r) => r.path === 'personal.md').inject, 'never');
 
-  // Forge the other way: mark a plain page restricted. It must be rejected too.
   const again = JSON.parse(fs.readFileSync(cache, 'utf8'));
   again.index.docs.find((doc) => doc.page.path === 'plain.md').restricted = true;
   fs.writeFileSync(cache, JSON.stringify(again));

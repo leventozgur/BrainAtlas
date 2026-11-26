@@ -32,8 +32,6 @@ async function initializeVault(vaultPath) {
   try {
     return await core.initVault(vaultPath);
   } catch (cause) {
-    // Some packaged releases resolve core templates relative to node_modules; use the CLI's
-    // release-root templates only when that lookup fails, while retaining core path checks.
     if (cause?.code !== 'ENOENT') throw cause;
     const requested = resolve(vaultPath);
     await mkdir(requested, { recursive: true });
@@ -78,7 +76,6 @@ export async function adopt({ plan, output, env }) {
   return;
 }
 
-/** @param {string} text @returns {Record<string,'mcp'|'cli'>} */
 function parseChannelPairs(text) {
   /** @type {Record<string, 'mcp' | 'cli'>} */
   const pairs = {};

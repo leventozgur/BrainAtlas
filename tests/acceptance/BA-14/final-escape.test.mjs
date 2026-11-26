@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 final verification (S8): when wiki/ resolves outside the vault, every Wiki tool either refuses with
-// E_PATH_ESCAPE or answers as an empty Wiki. No response carries outside content and nothing is written outside.
-// A vault root that is itself a symlink stays legitimate. Real stdio server, temporary vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, rm, symlink, rename } from 'node:fs/promises';
@@ -11,7 +8,6 @@ import { startServer, call, okJson, refused, textOf, snapshot } from './harness.
 const page = (frontmatter, body = 'Gövde.') => `---\n${frontmatter}\n---\n${body}\n`;
 const MARKERS = ['DISWIKI-ZQ', 'DISBODY-ZQ', 'DISIDX-ZQ', 'DISLOG-ZQ', 'DISROOT-ZQ', 'DISDIR-ZQ'];
 
-/** A vault whose wiki/ is a symlink to a directory outside the vault. Every outside file carries markers. */
 async function outsideWikiFixture(t) {
   const f = await startServer(t);
   const outsideWiki = join(f.dir, 'outside-wiki');
@@ -32,7 +28,6 @@ async function outsideWikiFixture(t) {
 
 const NEW_PAGE = page('title: Yeni', 'Yeni gövde.');
 
-// One case per Wiki tool. `expect` is either 'refused' (E_PATH_ESCAPE) or a function over the parsed response.
 const CASES = [
   ['wiki_query', { query: 'DISBODY' }, (r) => assert.deepEqual(okJson(r).results, [])],
   ['wiki_list_pages', {}, (r) => assert.deepEqual(okJson(r), { pages: [] })],

@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-20: wiki_create_entity / wiki_create_concept take the frontmatter of the content as the page's own frontmatter
-// (summary, description, tags) and build the index line from it, so the create line equals the wiki_update_index line.
-// Real stdio MCP server, temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';

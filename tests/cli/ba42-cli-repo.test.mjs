@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-42: `brainatlas maintain --repo DIR` argument handling and output, through the real CLI entry point.
-// Hermetic: temporary vault, repository and HOME directories only; no network, no git.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

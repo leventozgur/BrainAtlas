@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-14 final verification: (1) wiki_update_page rejects `__proto__`, `constructor` and `prototype` patch keys and a
-// `__proto__` frontmatter key with E_INVALID_INPUT, writing nothing; (2) docs/contracts/mcp-tools.md statements are
-// checked against behavior: the vendored readIndex note, read-only tool omission, and the root category.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -13,7 +10,6 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
 import { ROOT, SERVER_ROOT, startServer, call, okJson, refused, textOf, snapshot, logCount } from './harness.mjs';
 
-// The server code under test is the worktree build, or the main checkout when BA14_TARGET=main (SERVER_ROOT).
 const { createServer } = await import(pathToFileURL(join(SERVER_ROOT, 'packages/mcp/src/index.mjs')).href);
 const { readIndex } = await import(pathToFileURL(join(SERVER_ROOT, 'vendor/llmwiki-core/dist/index.js')).href);
 
@@ -48,8 +44,6 @@ for (const [label, raw] of PROTO_CASES) {
   });
 }
 
-// ---------------------------------------------------------------- contract statements
-
 const contract = await readFile(join(ROOT, 'docs/contracts/mcp-tools.md'), 'utf8');
 
 test('contract: the vendored readIndex note holds (it does not unescape destinations and misreads balanced parentheses)', async () => {
@@ -73,7 +67,6 @@ test('contract: the vendored readIndex note holds (it does not unescape destinat
   assert.match(contract, /does not unescape link destinations and misreads unescaped balanced parentheses/);
 });
 
-// PM update (BA-19, 2026-11-11): fixed — fresh index writes are escaped.
 test('contract: a Wiki-root page uses the ## Pages category, and a parenthesis page is written escaped, as the documented example shows', async (t) => {
   assert.match(contract, /A page at the Wiki root uses the category `## Pages`/);
   assert.match(contract, /`entities\/a\\\(b\\\)\.md`/);

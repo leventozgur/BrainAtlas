@@ -34,7 +34,6 @@ const updates = new Map();
 function checkAbort(signal) {
   if (signal?.aborted) throw Object.assign(new Error('Semantic indexing aborted.'), { code: 'E_SEMANTIC_ABORTED' });
 }
-/** Update once per state directory; concurrent callers share the same work. */
 export function updateSemanticIndex(options) {
   if (options.signal?.aborted)
     return Promise.reject(Object.assign(new Error('Semantic indexing aborted.'), { code: 'E_SEMANTIC_ABORTED' }));
@@ -316,8 +315,6 @@ async function updateIndex({
       dirty = false;
       return index;
     } finally {
-      // Completed groups are kept on failure and on cancellation. The single final write runs before the lock is released and
-      // must never replace the original error (provider failure or E_SEMANTIC_ABORTED), so a failed write is dropped here.
       if (dirty) await atomicWrite(partialPath, partial).catch(() => {});
     }
   } finally {
@@ -325,7 +322,6 @@ async function updateIndex({
   }
 }
 
-/** Read a stored index without exposing file contents in errors. */
 export async function readSemanticIndex(stateDir) {
   try {
     const semanticDir = path.join(stateDir, 'semantic');
@@ -362,7 +358,6 @@ export async function readSemanticIndex(stateDir) {
   }
 }
 
-/** Report indexed, stale and missing source counts and index age in seconds. */
 export async function measureIndexFreshness({ corpusDir, index, now = new Date() }) {
   const root = await realpath(corpusDir);
   const files = await markdownFiles(root);

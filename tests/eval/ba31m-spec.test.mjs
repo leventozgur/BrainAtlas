@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-31m: top1RelevantRate, top1ExcludedRate and the withCwd summary, checked against hand-computed toy records.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -69,11 +68,11 @@ test('withCwd groups every record whose cwd is a string, the empty string includ
   assert.deepEqual(m.withCwd, {
     n: 3,
     injectionRate: 2 / 3,
-    missRate: 1 / 2, // answerable: first two records; the second misses
-    precision: 1 / 2, // two injected paths, one relevant
-    falseInjectionRate: 0, // the only abstain record injected nothing
+    missRate: 1 / 2,
+    precision: 1 / 2,
+    falseInjectionRate: 0,
     top1RelevantRate: 1 / 2,
-    top1ExcludedRate: 1 / 2, // excluded non-empty on the first two; only the second injected its excluded page first
+    top1ExcludedRate: 1 / 2,
   });
 });
 
@@ -149,7 +148,7 @@ test('existing keys keep their values and group key sets; exactly three keys are
     assert.deepEqual(Object.keys(g).sort(), ['injectionRate', 'missRate', 'n', 'precision']);
   for (const g of Object.values(m.byKind))
     assert.deepEqual(Object.keys(g).sort(), ['falseInjectionRate', 'injectionRate', 'missRate', 'n', 'precision']);
-  for (const k of oldKeys) assert.deepEqual(m[k], base[k], k); // cwd and excluded never change an existing key
+  for (const k of oldKeys) assert.deepEqual(m[k], base[k], k);
 });
 
 test('runHookCases records excluded: string items only, order kept; cwd string or null', async () => {

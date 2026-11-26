@@ -48,13 +48,6 @@ export function validateTransportPath(path) {
   return path;
 }
 
-/**
- * An offline object transport with CAS revisions. Failure rules are consumed once;
- * `{failures:[{type:'network'|'conflict'|'quota'|'interruption', operation:'put', after:1}]}`
- * fails the matching operation after `after` successful matching calls. `interruptAfter`
- * limits total transport calls and is useful for crash recovery tests.
- * @returns {ObjectTransport & {injectFailure:Function,inspect:Function}}
- */
 export function createMemoryTransport() {
   const options = arguments[0] ?? {};
   const objects = new Map();

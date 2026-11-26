@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-29: one search-root rule (<vault>/wiki when it is a directory inside the vault, else the vault root) and one
-// exclusion rule for the core searcher. Hermetic: temporary vault and state directories only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

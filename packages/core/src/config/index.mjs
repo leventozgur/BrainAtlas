@@ -5,15 +5,8 @@ import { BrainAtlasError } from '../util/errors.mjs';
 
 /** @typedef {{schemaVersion:1,profile:'lite'|'full'|'custom',channel?:'mcp'|'cli',channels?:{'claude-code'?:'mcp'|'cli',codex?:'mcp'|'cli','copilot-vscode'?:'mcp'|'cli','gemini-cli'?:'mcp'|'cli',kiro?:'mcp'|'cli'},vault:{path:string},modules:string[],agents:string[],scope:'global'|'vault',retrieval:{budgetChars:number,abstainThreshold:number,exclude?:string[],shadow?:{abstainThreshold:number},pullLowConfidence?:boolean},hooks:{mode:'normal'|'economic'|'manual',deadlineMs:number,disclosure?:'full'|'progressive'},safety:{secretFilter:boolean,extraDenyGlobs:string[],allow?:Array<{path:string,ruleId:string,sha256?:string}>},okf:{level:'warn'|'strict'},sync:{transport:string|null,options:object},semantic:{enabled:boolean,baseUrl:string,model:string,dims:number,queryPrefix:string,documentPrefix:string,minScore:number,mode:'semantic-primary'|'rrf',timeoutMs:number,indexTimeoutMs:number,indexBatchSize:number,keepAlive?:string,allowRemote:boolean},maintain?:{synthesis?:{mode?:'off'|'shadow'|'on',command?:string[],pagesPerWeek?:number,maxInputChars?:number,maxCallsPerWeek?:number,maxUsdPerWeek?:number,usdPer1kTokens?:number,timeoutMs?:number}},stateDir?:string,telemetry:false,readOnly:boolean,node:{path:string}}} Config */
 
-/** Adapter names that may carry a per-agent channel (BA-61). */
 export const CHANNEL_AGENTS = Object.freeze(['claude-code', 'codex', 'copilot-vscode', 'gemini-cli', 'kiro']);
 
-/**
- * BA-61: the channel an agent uses. A per-agent `channels` entry wins over the global `channel`.
- * @param {{channel?:unknown,channels?:unknown}|null|undefined} config
- * @param {string} agent
- * @returns {'mcp'|'cli'}
- */
 export function effectiveChannel(config, agent) {
   const map = config && typeof config === 'object' ? config.channels : undefined;
   if (map && typeof map === 'object' && !Array.isArray(map) && Object.hasOwn(map, agent)) {
@@ -48,7 +41,6 @@ export const CONFIG_SCHEMA = {
     schemaVersion: { type: 'integer', enum: [1] },
     profile: { type: 'string', enum: ['lite', 'full', 'custom'] },
     channel: { type: 'string', enum: ['mcp', 'cli'] },
-    // BA-61: optional per-agent override of `channel`.
     channels: {
       type: 'object',
       properties: Object.fromEntries(CHANNEL_AGENTS.map((name) => [name, { type: 'string', enum: ['mcp', 'cli'] }])),
@@ -70,7 +62,6 @@ export const CONFIG_SCHEMA = {
         budgetChars: { type: 'integer', minimum: 1 },
         abstainThreshold: { type: 'number', minimum: 0, maximum: 1 },
         exclude: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 200 }, uniqueItems: true },
-        // BA-53: pull-side only; the hook path is unaffected.
         pullLowConfidence: { type: 'boolean' },
         shadow: {
           type: 'object',
@@ -192,8 +183,6 @@ export const SEMANTIC_DEFAULTS = Object.freeze({
   allowRemote: false,
 });
 
-// BA-81: `keepAlive` is an in-memory default only. Writing it would make the file unreadable for older releases
-// (for example 0.1.0-rc.18 rejects unknown semantic keys), which would break rollback and cross-version reads.
 const { keepAlive: _keepAlive, ...WRITTEN_SEMANTIC_DEFAULTS } = SEMANTIC_DEFAULTS;
 
 const clone = (value) => structuredClone(value);
@@ -204,12 +193,6 @@ const isObjectSchema = (schema) =>
 const RESERVED_KEY_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 const hasReservedSegment = (keys) => keys.some((key) => RESERVED_KEY_SEGMENTS.has(key));
 
-/**
- * Walks CONFIG_SCHEMA for a dotted key. Returns one entry per segment, or null when a segment is
- * not defined at that level. An object-typed node without `properties` (for example `sync.options`)
- * accepts free-form keys; those entries carry `schema:null`.
- * @param {string[]} keys @returns {Array<{schema:object|null}>|null}
- */
 function resolveConfigKey(keys) {
   const entries = [];
   let node = CONFIG_SCHEMA;
@@ -233,7 +216,6 @@ function error(path, code, message) {
   return { path: pathName(path), code, message };
 }
 
-/** Small dependency-free validator for the schema keywords used by CONFIG_SCHEMA. */
 function validateSchema(value, schema, path, errors) {
   if (has(schema, 'const') && value !== schema.const)
     errors.push(error(path, 'E_CONST', `Invalid value for ${pathName(path)}.`));
@@ -302,7 +284,6 @@ function validateSchema(value, schema, path, errors) {
   }
 }
 
-/** @param {'lite'|'full'|'custom'} profile @returns {Config} */
 export function defaultConfig(profile) {
   if (!has(PROFILES, profile)) throw new BrainAtlasError('E_PROFILE', 'Unknown configuration profile.');
   return {
@@ -327,17 +308,10 @@ export function defaultConfig(profile) {
 export const SECRET_FILTER_OFF_WARNING =
   'safety.secretFilter is off: writes are no longer refused for secret-like content. Hook redaction, path deny globs and sync scans stay on.';
 
-/**
- * True unless the configuration explicitly disables the secret filter (custom profile only).
- * When false, writes are no longer refused for secret-like content. Hook output redaction,
- * path deny globs and the sync and synthesis egress scans stay active regardless.
- * @param {any} cfg @returns {boolean}
- */
 export function secretFilterEnabled(cfg) {
   return cfg?.safety?.secretFilter !== false;
 }
 
-/** @param {any} obj @returns {{ok:boolean, errors:Array<{path:string,code:string,message:string}>}} */
 export function validateConfig(obj) {
   const errors = [];
   validateSchema(obj, CONFIG_SCHEMA, '', errors);
@@ -369,7 +343,6 @@ export function validateConfig(obj) {
       errors.push(error('semantic.baseUrl', 'E_SEMANTIC_PROVIDER', 'Semantic provider configuration is invalid.'));
     }
   }
-  // BA-29: retrieval.exclude patterns are relative to the search root; an absolute, drive-letter, backslash or `..` pattern is refused.
   const exclude = obj?.retrieval?.exclude;
   if (Array.isArray(exclude))
     exclude.forEach((pattern, index) => {
@@ -433,7 +406,6 @@ export function validateConfig(obj) {
   return { ok: errors.length === 0, errors };
 }
 
-/** @param {{paths:object,env:Record<string,string|undefined>,readOnly?:boolean}} options @returns {Promise<Config>} */
 export async function loadConfig(options) {
   const { paths, env = {}, readOnly = false } = options || {};
   if (!paths?.configFile) throw new BrainAtlasError('E_PATHS', 'Configuration file path is required.');
@@ -461,7 +433,6 @@ export async function loadConfig(options) {
   return { ...value, semantic: { ...WRITTEN_SEMANTIC_DEFAULTS, ...value.semantic } };
 }
 
-/** @param {Config} cfg @param {{paths:object}} options @returns {Promise<void>} */
 export async function saveConfig(cfg, options) {
   const { paths } = options || {};
   const result = validateConfig(cfg);
@@ -479,14 +450,12 @@ export async function saveConfig(cfg, options) {
     try {
       const { unlink } = await import('node:fs/promises');
       await unlink(tmp);
-    } catch {
-      /* best-effort temp cleanup; the write error is reported below */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
     throw new BrainAtlasError('E_CONFIG_WRITE', 'Could not save configuration.');
   }
 }
 
-/** @param {Config} cfg @param {string} dottedKey @param {unknown} value @returns {Config} */
 export function setConfigValue(cfg, dottedKey, value) {
   if (!cfg || !has(PROFILES, cfg.profile) || typeof dottedKey !== 'string' || !dottedKey)
     throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
@@ -518,7 +487,6 @@ export function setConfigValue(cfg, dottedKey, value) {
   return out;
 }
 
-/** @param {Config} cfg @param {string} dottedKey @returns {Config} */
 export function unsetConfigValue(cfg, dottedKey) {
   if (!cfg || !has(PROFILES, cfg.profile) || typeof dottedKey !== 'string' || !dottedKey)
     throw new BrainAtlasError('E_CONFIG_KEY', 'Invalid configuration key.');
@@ -544,7 +512,6 @@ export function unsetConfigValue(cfg, dottedKey) {
   return out;
 }
 
-/** @param {unknown| string} objOrText @param {{backupDir?:string,now?:Date,sourceText?:string,dryRun?:boolean,migrations?:Array<{from:number,to:number,migrate:(obj:object)=>object}>}} options @returns {Promise<{config:Config,applied:string[],backupPath:string|null}>} */
 export async function migrateConfig(objOrText, options = {}) {
   const { backupDir, now = new Date(), sourceText, dryRun = false, migrations } = options;
   let obj = objOrText;
@@ -579,7 +546,6 @@ export async function migrateConfig(objOrText, options = {}) {
   if (!backupDir) throw new BrainAtlasError('E_BACKUP_DIR', 'A backup directory is required for migration.');
   await mkdir(backupDir, { recursive: true });
   const backupPath = join(backupDir, `config.json.bak.${now.toISOString()}`);
-  // In-memory callers have no original bytes; retain the compact JSON serialization plus its line ending.
   const backupText = sourceText ?? (typeof objOrText === 'string' ? objOrText : `${JSON.stringify(obj)}\n`);
   await writeFile(backupPath, backupText, { flag: 'wx', mode: 0o600 });
   return { config: current, applied, backupPath };

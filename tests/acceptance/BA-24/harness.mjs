@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-24 independent acceptance harness. Loads the worktree MCP and the main checkout MCP side by side with the same
-// fake embedding provider (no network, no Ollama) and the same vault. Not a test file: run by ba24-acceptance.test.mjs.
 import { mkdtemp, mkdir, cp, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -10,7 +8,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 export const WT = fileURLToPath(new URL('../../../', import.meta.url)).replace(/\/$/, '');
-// Main checkout = the common git dir's parent (the worktree shares it). BA24_MAIN_ROOT overrides it.
 export const MAIN =
   process.env.BA24_MAIN_ROOT ||
   dirname(
@@ -36,15 +33,12 @@ export const SETTINGS = Object.freeze({
   allowRemote: false,
 });
 
-// Lone surrogate (the brief's pattern; no `u` flag, so it works on UTF-16 code units).
 export const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
-// Same folding as the core normalizeText: dotless i, lowercase, NFKD, combining marks removed.
 export function fold(text) {
   return text.replace(/[ıİ]/g, 'i').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 }
 
-// Deterministic bag-of-words vector: every component is positive, so every page gets a finite, nonzero cosine.
 export function fakeVector(text) {
   const vector = new Array(DIMS).fill(0.05);
   for (const token of fold(text).split(/[^\p{L}\p{N}]+/u)) {
@@ -56,7 +50,6 @@ export function fakeVector(text) {
   return vector;
 }
 
-// state.mode: ok | error (HTTP 500) | throw (network failure) | hang (never answers; the provider timeout fires).
 export function fetchWithMode(state) {
   return async (_url, options) => {
     state.calls = (state.calls ?? 0) + 1;
@@ -193,7 +186,6 @@ stale probe pnd fresh page.
 `,
 };
 
-// Writes the shared vault once; both trees read the same files.
 export async function makeWorkspace() {
   const ws = await mkdtemp(join(tmpdir(), 'ba24-accept-'));
   const wiki = join(ws, 'vault', 'wiki');
@@ -204,7 +196,6 @@ export async function makeWorkspace() {
   return ws;
 }
 
-// Each tree gets its own release directory (copy of its modules/semantic, packages symlinked to that tree).
 export async function loadTree(name, root, ws) {
   const mcp = await import(pathToFileURL(join(root, 'packages/mcp/src/index.mjs')).href);
   const sem = await import(pathToFileURL(join(root, 'modules/semantic/src/index.mjs')).href);
@@ -248,7 +239,6 @@ export function makeConfig(ws, over = {}) {
   };
 }
 
-// Builds the semantic index with the tree's own module and the same fake provider settings the server will use.
 export async function buildIndex(tree, stateDir, ws) {
   const fetchState = { mode: 'ok' };
   const provider = tree.sem.createOllamaProvider({
@@ -295,8 +285,6 @@ export async function startServer(tree, ws, { stateDir, over = {}, fetchState = 
   };
 }
 
-// Independent oracle for the section rule the BA-24 contract requires: headings of a page in order, anchors from the
-// folded title (non-letter characters removed, spaces to hyphens), `-N` suffix for repeats. Fenced code is skipped.
 export function oracleSections(content) {
   const seen = new Set(),
     out = [],

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// `brainatlas wiki <sub>`: Wiki tools for machines that can run a shell command but cannot register MCP. The command
-// calls the registered MCP handlers in process; it has no path, secret, lock or write logic of its own.
 import { resolve } from 'node:path';
 import * as core from '@brainatlas/core';
 
@@ -60,7 +58,6 @@ function frontmatterOption(raw) {
   return value;
 }
 
-/** Parse the words after `wiki` into `{sub, vault, args}`. Options are validated before any tool is called. */
 export function parseWikiArguments(argv) {
   const sub = argv[0];
   if (sub === undefined || sub.startsWith('-') || !Object.hasOwn(TOOL_FOR, sub)) {
@@ -91,7 +88,6 @@ export function parseWikiArguments(argv) {
       continue;
     }
     if (name === '--append' || name === '--dry-run') {
-      // A flag, never an option with a value: `--dry-run=true` is an argument error.
       if (equals >= 0) throw failure('E_ARGUMENT', `${name} does not take a value.`);
       options[name] = true;
       continue;
@@ -151,20 +147,17 @@ export function parseWikiArguments(argv) {
   return { sub, vault, args, ...(dryRun ? { dryRun: true } : {}) };
 }
 
-/** A tool error: the code is the leading E_ token of the fixed tool text, the message is the rest. */
 function toolFailure(text) {
   const match = /^(E_[A-Z0-9_]+): ([\s\S]*)$/u.exec(text);
   if (!match) return failure('E_WIKI_TOOL', text);
   return failure(match[1], match[2]);
 }
 
-/** Page content from standard input; missing, whitespace-only or over 1 MiB is an argument error. */
 async function readPageContent(stdin, sub) {
   const required = `wiki ${sub} requires page content on standard input.`;
   let text;
   if (typeof stdin === 'string') text = stdin;
   else {
-    // On the real terminal there is no piped content to wait for.
     if (stdin === process.stdin && process.stdin.isTTY === true) throw failure('E_ARGUMENT', required);
     const chunks = [];
     let bytes = 0;
@@ -181,11 +174,6 @@ async function readPageContent(stdin, sub) {
   return text;
 }
 
-/**
- * Parse, call the corresponding MCP tool in process and return `{sub, value}` with the parsed tool value.
- * @param {string[]} argv words after `wiki`
- * @param {{env?:NodeJS.ProcessEnv, stdin?:string|NodeJS.ReadableStream}} [settings]
- */
 export async function runWikiCommand(argv, { env = process.env, stdin = process.stdin } = {}) {
   const { sub, vault, args, dryRun = false } = parseWikiArguments(argv);
   const { callToolInProcess, serverOptions } = await import('@brainatlas/mcp');
@@ -193,7 +181,6 @@ export async function runWikiCommand(argv, { env = process.env, stdin = process.
   const options = await serverOptions(env);
   if (vault !== undefined) options.paths.vaultDir = resolve(vault);
   const changes = WRITE_SUBCOMMANDS.has(sub);
-  // Checked before the vault is read and before stdin is consumed.
   if (changes && options.config.readOnly === true)
     throw failure('E_READ_ONLY', 'The vault is read-only (readOnly: true).');
   let okfFindings = [];
@@ -277,7 +264,6 @@ const queryBlock = (item, index) => {
   return lines.join('\n');
 };
 
-/** Human output for one tool value. `--json` callers never come through here. */
 export function formatWikiResult(sub, value) {
   if (sub === 'write') {
     const verb = value?.created === true ? 'created' : 'updated';

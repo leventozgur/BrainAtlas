@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-25: two real MCP server processes writing the same vault. Index creates must not lose lines; a stale-hash update must
-// be refused with E_CONFLICT; a stale or dead write lock must be taken over; a busy lock must refuse with E_BUSY; the lock
-// file is never listed as a page. Temporary HOME and vault, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -172,7 +169,6 @@ test('a fresh lock held by a live process refuses the write with E_BUSY', async 
 test('the lock file is not a page: not listed, not counted, not readable through the Wiki tools', async (t) => {
   const { wiki, a } = await fixture(t);
   await ok(a, 'wiki_create', { type: 'concept', name: 'Visible', content: '---\ntitle: Visible\n---\nvisible body\n' });
-  // A live lock held by this test process is present on disk while the read-only tools run.
   await writeFile(resolve(wiki, LOCK), JSON.stringify({ pid: process.pid, time: Date.now(), token: 'held' }));
   t.after(() => rm(resolve(wiki, LOCK), { force: true }));
   const listed = await ok(a, 'wiki_list_pages');

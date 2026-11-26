@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-29 independent acceptance, item 6: with the semantic module on (fake embedding provider, in-process fetch), the MCP hybrid
-// result never names an excluded root page (wiki/index.md, wiki/log.md). The hook's semantic step runs in a worker that uses
-// the global fetch, so it cannot be given a fake provider in-process; its filter is checked by reading the code, not here.
-// Hermetic: temporary directories, an injected fetch that answers in memory, no sockets, no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, cp, symlink, writeFile, rm } from 'node:fs/promises';
@@ -16,7 +12,6 @@ import { createServer } from '../../../packages/mcp/src/index.mjs';
 import { createOllamaProvider, updateSemanticIndex, markdownChunks } from '../../../modules/semantic/src/index.mjs';
 
 const CAND = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-// Every text gets the same vector, so semantic similarity alone puts every page in the answer for any query.
 const fakeFetch = async (_url, options) => ({
   ok: true,
   json: async () => ({ embeddings: JSON.parse(options.body).input.map(() => [1, 0]) }),

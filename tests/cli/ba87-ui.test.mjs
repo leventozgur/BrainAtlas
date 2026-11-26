@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-87: typed controls, one-step confirmation, reset, agent install, channel labels, profile-aware semantic switch.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
@@ -24,7 +23,6 @@ const OK_REPORT = {
   next: 'brainatlas semanticSetup --yes',
 };
 
-/** A stub semantic module that records every call and returns the report from BA87_SEMANTIC_REPORT. */
 function moduleSource() {
   return `// SPDX-License-Identifier: MIT
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -125,9 +123,8 @@ function call(panel, { method = 'GET', path = '/', headers = {}, body, token = p
           let json = null;
           try {
             json = JSON.parse(text);
-          } catch {
-            /* HTML */
-          }
+            // eslint-disable-next-line no-empty
+          } catch {}
           resolveCall({ status: res.statusCode, text, json, headers: res.headers });
         });
       }

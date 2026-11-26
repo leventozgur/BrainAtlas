@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-08 link graph: extraction forms, resolution, graph expansion, optional result fields, and cache validation.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -134,7 +133,6 @@ test('expansion adds a direct neighbour with via link and a related field; the a
   assert.equal(linked.via, 'link');
   assert.deepEqual(result.results.find((r) => r.path === 'seed.md').related, ['timing.md']);
   assert.equal(result.results.find((r) => r.path === 'seed.md').via, undefined);
-  // A query that matches only the neighbour's text must not be answered through the graph.
   const unanswered = search(index, 'forty countersign zebra', { abstainThreshold: 0.99 });
   assert.equal(unanswered.abstained, true);
   const noLexical = search(index, 'zebra quasar', { abstainThreshold: 0 });
@@ -151,7 +149,6 @@ test('a single-page query keeps its first result and score exactly as without li
     bodies.map(([f, b]) => page(f, b)),
     { now }
   );
-  // Same tokens and lengths, but no link syntax: scores can then be compared exactly.
   const plain = buildIndex(
     bodies.map(([f, b]) => page(f, b.replace(/\[\[beta\]\]/u, 'beta'))),
     { now }

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-53: opt-in low-confidence rows for pull queries (the wiki_query MCP tool and the wiki CLI). Hermetic: temporary
-// vault, HOME and state directories only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -18,8 +16,6 @@ const BIN = resolve('packages/cli/bin/brainatlas.mjs');
 const BASE_DESCRIPTION = 'Search verified Wiki evidence and return ranked snippets; compact omits the snippets.';
 const EXTRA_SENTENCE =
   'Results marked lowConfidence scored below the abstain threshold; treat them as weak evidence and verify before relying on them.';
-// Each query is measured against the fixture before use: WEAK is below_threshold, STRONG ranks well, NO_MATCH abstains
-// with no_match and IDENTIFIER abstains with identifier-not-found.
 const WEAK = 'deployment kubernetes ingress tls certificate renewal';
 const STRONG = 'deployment pipeline release checks';
 const NO_MATCH = 'kubernetes ingress controller tls';
@@ -52,7 +48,6 @@ function configFor(f, lowConfidence) {
   return config;
 }
 
-/** The core's own answer, used to prove the fixture query measures as the test expects. */
 function measured(f, query) {
   const searcher = createSearcher({ vaultDir: join(f.vault, 'wiki'), stateDir: f.stateDir });
   return {

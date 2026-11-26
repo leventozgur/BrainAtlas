@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-19 final verification (independent, blind): a page whose path holds CR, U+0085, U+2028 or U+2029 is never written
-// to the index and is not counted by wiki_status coverage; the other pages are still indexed; three runs are idempotent.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { call, okJson, startServer, readIndex, singleInsertion } from './harness.mjs';

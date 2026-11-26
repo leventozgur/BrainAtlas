@@ -83,8 +83,6 @@ function legacyHookCommand(ctx, event) {
 function isManagedHook(hook, ctx, event) {
   return hook?.type === 'command' && [hookCommand(ctx, event), legacyHookCommand(ctx, event)].includes(hook.command);
 }
-// Channel-switch detection must not depend on the current nodePath: match the shim
-// path plus the `hook <client>` token so both current and legacy command forms are found.
 function managedHookByShim(hook, ctx) {
   if (hook?.type !== 'command' || typeof hook.command !== 'string' || !ctx.shimPath) return false;
   const shim = quote(ctx.shimPath);
@@ -137,8 +135,6 @@ function isManagedSkill(ctx, text) {
 function assertNoMcp(ctx, current) {
   const files = filesOf(ctx);
   const conflict = () => fail('E_CHANNEL_SWITCH', 'Run brainatlas uninstall before changing the channel.');
-  // Files the cli channel never writes are parsed tolerantly: a BOM or malformed
-  // document is treated as having no BrainAtlas entry so install is not blocked.
   const tryParseJson = (bytes) => {
     try {
       const value = JSON.parse(bytes.replace(/^\uFEFF/, ''));
@@ -208,8 +204,6 @@ function putBlock(before, block) {
   if (prior) return before.slice(0, prior.start) + block + before.slice(prior.end);
   return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${block}\n`;
 }
-// The cli channel accepts a managed block whose line endings are CRLF: the body is
-// compared with CRLF normalised to LF, and an unchanged block is never rewritten.
 function managedBlockCli(text) {
   const start = text.indexOf(BEGIN);
   const end = text.indexOf(END);
@@ -377,8 +371,6 @@ export function plan(ctx) {
   homeOf(ctx);
   const files = filesOf(ctx);
   const current = {};
-  // Planning is read-only and parses every touched file before returning a writable plan.
-  // The skill file belongs to the cli channel only; the default channel must not touch it.
   const targets = isCli(ctx)
     ? [files.mcp, files.settings, files.instructions, files.skill]
     : [files.mcp, files.settings, files.instructions];
@@ -434,8 +426,6 @@ function backupName(file, now) {
 }
 export async function apply(planResult, ctx) {
   if (!planResult || !Array.isArray(planResult.changes)) fail('E_ARGUMENT', 'Adapter plan is invalid.');
-  // A caller may retain or alter a plan, so derive the writable set again from
-  // the current adapter scope before trusting any supplied change.
   const allowed = new Set(plan(ctx).changes.map((change) => change.file));
   for (const change of planResult.changes) {
     if (!change || typeof change.file !== 'string' || !allowed.has(change.file))
@@ -507,7 +497,6 @@ async function recordOf(ctx, file) {
 async function removeCli(ctx, files) {
   /** @type {any[]} */
   const actions = [];
-  // Preflight every target before making any file or state change.
   for (const file of [files.instructions, files.skill]) {
     const { record, text, value } = await recordOf(ctx, file);
     const current = await readOptional(file);
@@ -559,7 +548,6 @@ export async function remove(ctx) {
   const targets = [files.mcp, files.settings, files.instructions];
   if (isCli(ctx)) return removeCli(ctx, files);
   const actions = [];
-  // Preflight every target before making any file or state change.
   for (const file of targets) {
     const { record } = await stateFile(ctx, file);
     const recText = await readOptional(record);
@@ -616,8 +604,6 @@ export async function remove(ctx) {
     const value = parseJson(current);
     let changed = false;
     if (file === files.mcp && original) {
-      // Restore a pre-existing BrainAtlas entry from the saved snapshot. If
-      // none existed, remove only the entry this adapter added.
       const beforeValue = original.existed ? parseJson(original.original) : {};
       const priorEntry = beforeValue.mcpServers?.brainatlas;
       if (priorEntry !== undefined) {
@@ -630,11 +616,9 @@ export async function remove(ctx) {
         changed = true;
       }
     } else if (file === files.mcp) {
-      // Without an ownership record, this entry may have predated apply.
       actions.push({ file, record, removeRecord: false });
       continue;
     } else if (!original) {
-      // Do not claim matching hooks that were present before the first apply.
       actions.push({ file, record, removeRecord: false });
       continue;
     } else {
@@ -759,7 +743,6 @@ export async function doctor(ctx) {
   };
 }
 export async function trustReview(_ctx) {
-  // contract arity (docs/contracts/adapter.md)
   return {
     required: true,
     client: displayName,

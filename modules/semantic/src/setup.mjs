@@ -44,9 +44,8 @@ async function executable(name, ctx) {
     try {
       await (ctx.access ?? access)(candidate, constants.X_OK);
       return candidate;
-    } catch {
-      /* try next */
-    }
+      // eslint-disable-next-line no-empty
+    } catch {}
   }
   return null;
 }
@@ -112,7 +111,6 @@ export async function semanticSetup(args, ctx) {
   const options = parse(args);
   const retry = `brainatlas semanticSetup --yes${options.mode ? ` --mode ${options.mode}` : ''}`;
   const settings = { ...SEMANTIC_DEFAULTS, ...ctx.config.semantic };
-  // Setup never transfers vault text to a remote service.
   validateConfiguredProvider({ ...settings, allowRemote: false });
   const isTTY = ctx.isTTY ?? Boolean(process.stdin.isTTY && process.stderr.isTTY);
   const dry = options.dry || (!options.yes && !isTTY);
@@ -251,7 +249,6 @@ export async function semanticSetup(args, ctx) {
     report.next = retry;
     return finish();
   }
-  // For an already installed model, interactive consent still covers index and config changes.
   if (installed && !options.yes && !(await (ctx.prompt ?? ask)()))
     return stop('index', 'Setup was not approved.', retry);
   const provider = createOllamaProvider({
@@ -265,7 +262,6 @@ export async function semanticSetup(args, ctx) {
     lastPercent = -10,
     warned = false,
     warnedHour = false;
-  // A `\r` progress line stays open until something else is written; close it with a newline first.
   let lineOpen = false;
   const endLine = () => {
     if (lineOpen) {
@@ -322,7 +318,6 @@ export async function semanticSetup(args, ctx) {
       freshness.missing === 0 &&
       freshness.indexed === Object.keys(previous.fileHashes).length
     ) {
-      // Deletions require comparing the current file count as well.
       index = await updateSemanticIndex({
         corpusDir,
         stateDir: ctx.paths.stateDir,

@@ -228,8 +228,6 @@ test('reported body equality matches every final wiki page including the migrati
   const r = run(f, 'migrate', '--from', f.source, '--to', f.target, '--json');
   ok(r);
   const body = (text) => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
-  // PM correction (documented contract): log.md is append-only and receives one migration entry, so bodyHashMatch covers every
-  // page except log.md; the log is reported separately as logPrefixPreserved / logAppendedEntries.
   const out = JSON.parse(r.stdout);
   const sourceIndex = body(await readFile(join(f.source, 'wiki', 'index.md'), 'utf8'));
   const targetIndex = body(await readFile(join(f.target, 'wiki', 'index.md'), 'utf8'));

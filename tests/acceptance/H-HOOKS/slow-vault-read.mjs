@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// Test-only NODE_OPTIONS preload: make worker retrieval exceed the hook deadline.
 import fs from 'node:fs';
 
 const originalReadFileSync = fs.readFileSync.bind(fs);

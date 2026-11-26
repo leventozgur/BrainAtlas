@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-81: the post-output, in-process warm-up, its rate limit and the prompt hook's keep_alive, against a fake Ollama
-// server on 127.0.0.1. Every hook process is spawned asynchronously; no test uses spawnSync.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -312,8 +310,6 @@ function spawnBuiltCommand(command, f, stdin, extraEnv = {}) {
   });
 }
 
-// The real hook runs under `--permission`; the command built for clients must be able to write the rate-limit stamp,
-// reach the loopback provider and exit normally without any child-process allowance.
 test('the built hook command warms up under the Node permission sandbox', { skip: !permissionSupported }, async (t) => {
   const server = await startServer(t, { delayMs: 100 });
   const f = await fixture(t, { baseUrl: server.baseUrl });

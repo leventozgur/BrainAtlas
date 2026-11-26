@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// safety.secretFilter opt-out: only the custom profile may disable it, and only write refusals are lifted.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -36,11 +35,8 @@ test('only the custom profile can disable the secret filter', () => {
   assert.equal(secretFilterEnabled(custom), false);
   assert.equal(secretFilterEnabled(defaultConfig('custom')), true);
   assert.equal(secretFilterEnabled({}), true);
-  // Switching an opted-out config to a locked profile is refused instead of silently re-enabling.
   assert.throws(() => setConfigValue(custom, 'profile', 'full'));
-  // Re-enabling is always allowed.
   assert.equal(setConfigValue(custom, 'safety.secretFilter', true).safety.secretFilter, true);
-  // Redaction of output is independent of the setting.
   assert.equal(redact(`key ${SECRET}`).includes(SECRET), false);
 });
 

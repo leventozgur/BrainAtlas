@@ -76,7 +76,9 @@ function credentialsJson(value) {
   }
 }
 
-/** Print the PKCE authorization URL, read a code from stdin, exchange it, and persist tokens. @param {{appKey?:string,fetch?:Function,credentialStore?:any,stdin?:any,stdout?:any,now?:()=>number,random?:Function}} [options] */
+/**
+ * @param {{appKey?:string,fetch?:Function,credentialStore?:any,stdin?:any,stdout?:any,now?:()=>number,random?:Function}} [options]
+ */
 export async function enrollDropbox({
   appKey,
   fetch: fetchImpl = globalThis.fetch,
@@ -124,7 +126,9 @@ export async function enrollDropbox({
   return { status: 'ENROLLED' };
 }
 
-/** Return a refresh-aware access token callback for Dropbox API requests. @param {{credentialStore?:any,fetch?:Function,now?:()=>number}} [options] */
+/**
+ * @param {{credentialStore?:any,fetch?:Function,now?:()=>number}} [options]
+ */
 export function createDropboxTokenProvider({
   credentialStore,
   fetch: fetchImpl = globalThis.fetch,

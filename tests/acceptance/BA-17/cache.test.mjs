@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-17 cache schema: a cache written under the old fingerprint tag (retrieval-stat-v5) is rebuilt exactly once,
-// and the rebuilt cache (tag v6) is reused on the next start without a rewrite. The fingerprint is reproduced here from
-// the contract (lstat size, mtimeMs, ctimeMs, ino and the vault-relative path of every walked Markdown file, in walk
-// order, under the schema tag). The reproduction is checked against the key the module writes before it is trusted.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -74,11 +70,9 @@ test('a cache written under the v5 tag is rebuilt once, then reused without a re
       cacheFile = path.join(stateDir, 'retrieval-index.json');
     createSearcher({ vaultDir: vault, stateDir, now: NOW });
     const current = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-    // Same content, old schema tag in the key: the only thing that should trigger a rebuild.
     fs.writeFileSync(cacheFile, JSON.stringify({ ...current, key: fingerprintKey(vault, 'retrieval-stat-v5') }));
     const oldBytes = fs.readFileSync(cacheFile, 'utf8');
 
-    // First start on the new code: the key mismatches, so the cache is rewritten under the v6 key.
     const first = createSearcher({ vaultDir: vault, stateDir, now: NOW });
     const rebuilt = fs.readFileSync(cacheFile, 'utf8');
     assert.notEqual(rebuilt, oldBytes, 'old-tag cache must be rebuilt');
@@ -88,13 +82,11 @@ test('a cache written under the v5 tag is rebuilt once, then reused without a re
       'rebuilt cache carries the v6 key'
     );
 
-    // Second start: same vault, cache hit, no rewrite.
     const second = createSearcher({ vaultDir: vault, stateDir, now: NOW });
     assert.equal(fs.readFileSync(cacheFile, 'utf8'), rebuilt, 'a valid v6 cache is reused without a rewrite');
     assert.equal(second.refreshIfChanged(), false, 'no change, no rebuild');
     assert.equal(first.refreshIfChanged(), false);
 
-    // Results from the rebuilt and the reused cache equal a fresh build of the same vault.
     const { loadPages } = await loadRetrieval();
     const fresh = buildIndex(loadPages(vault), { now: NOW });
     for (const q of ['E_WIDGET_TIMEOUT', 'l12/l13/l14/l15/l16/handler-x-13.mjs', 'OLD_ONLY_TOKEN', 'widget pipeline']) {
@@ -102,7 +94,6 @@ test('a cache written under the v5 tag is rebuilt once, then reused without a re
       const b = JSON.stringify(search(fresh, q, { limit: 5, abstainThreshold: 0, asOf: NOW }));
       assert.equal(a.replace(/"stale":(true|false)/g, ''), b.replace(/"stale":(true|false)/g, ''), `query ${q}`);
     }
-    // The superseded page stays out of the index (it is recorded as skipped, not searched).
     assert.equal(second.search('OLD_ONLY_TOKEN', { limit: 5, abstainThreshold: 0, asOf: NOW }).results.length, 0);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });

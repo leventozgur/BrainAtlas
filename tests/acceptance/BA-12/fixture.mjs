@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-12 blind acceptance fixture: a seeded defective vault built at test time (no repo files are read or copied).
-// Seeds are defects with a known kind and page. Companions and allowed findings are not scored as false positives.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -16,8 +14,6 @@ export const KINDS = [
   'update-sprawl',
 ];
 
-// key: a short target string expected in the finding's detail (for broken-link and index-stale).
-// path: vault-relative path of the page or index that holds the defect.
 export const SEEDS = [
   { id: 'stale-date', kind: 'stale', path: 'wiki/concepts/st-date.md' },
   { id: 'stale-pnd', kind: 'stale', path: 'wiki/concepts/st-pnd.md' },
@@ -50,18 +46,14 @@ export const SEEDS = [
   { id: 'sprawl-6-summary', kind: 'update-sprawl', path: 'wiki/summaries/us-6b.md' },
 ];
 
-// Companion findings that the contract implies for an orphan page (an orphan is also not in the index).
 export const COMPANIONS = [
   { kind: 'index-missing', path: 'wiki/concepts/orph-1.md' },
   { kind: 'index-missing', path: 'wiki/entities/orph-2.md' },
   { kind: 'index-missing', path: 'wiki/summaries/orph-3.md' },
 ];
 
-// Hard case: linked from a hub but not in the index. The contract says index-missing applies; it must NOT be an orphan.
-// Scored neither way (the brief lists it as a non-defect, the contract as index-missing). Reported separately.
 export const AMBIGUOUS = [{ kind: 'index-missing', path: 'wiki/summaries/hn-linked-unindexed.md' }];
 
-// Pages that must produce no finding at all (hard negatives).
 export const CLEAN_PATHS = [
   'wiki/concepts/c-ok-1.md',
   'wiki/concepts/c-ok-2.md',
@@ -78,7 +70,6 @@ export const CLEAN_PATHS = [
   'wiki/sources/us-5.md',
 ];
 
-/** Content pages in the seeded vault (index and log excluded). */
 export const contentPageCount = () => PAGES.length;
 
 const WORDS = [
@@ -150,7 +141,6 @@ const HUB_BODY = [
 ].join('\n');
 
 const PAGES = [
-  // Hub and clean pages
   { path: 'concepts/c-ok-1.md', title: 'Hub', fm: { type: 'concept' }, body: HUB_BODY },
   {
     path: 'concepts/c-ok-2.md',
@@ -201,7 +191,6 @@ const PAGES = [
     body: 'Linked from the hub but not in the index.',
   },
 
-  // Stale seeds
   {
     path: 'concepts/st-date.md',
     title: 'Stale date',
@@ -233,7 +222,6 @@ const PAGES = [
     body: 'Expired unquoted date.',
   },
 
-  // Superseded seeds
   {
     path: 'concepts/sup-no-field.md',
     title: 'No field',
@@ -265,7 +253,6 @@ const PAGES = [
     body: 'Loop member.',
   },
 
-  // Broken link seeds
   {
     path: 'concepts/bl-wiki.md',
     title: 'BL wiki',
@@ -291,22 +278,18 @@ const PAGES = [
     body: 'Ambiguous wikilink: [[dupname]].',
   },
 
-  // Orphans (not linked, not indexed)
   { path: 'concepts/orph-1.md', title: 'Orphan 1', fm: { type: 'concept' }, body: 'Nothing links here.' },
   { path: 'entities/orph-2.md', title: 'Orphan 2', fm: { type: 'entity' }, body: 'Nothing links here.' },
   { path: 'summaries/orph-3.md', title: 'Orphan 3', fm: { type: 'summary' }, body: 'Nothing links here.' },
 
-  // Index-missing seeds (linked from the hub, not indexed)
   { path: 'concepts/im-1.md', title: 'IM 1', fm: { type: 'concept' }, body: 'Linked but not indexed.' },
   { path: 'entities/im-2.md', title: 'IM 2', fm: { type: 'entity' }, body: 'Linked but not indexed.' },
   { path: 'sources/im-3.md', title: 'IM 3', fm: { type: 'source' }, body: 'Linked but not indexed.' },
 
-  // Oversized seeds
   { path: 'concepts/big-1.md', title: 'Big 1', fm: { type: 'concept' }, body: `${MARKER} ${words(3400)}` },
   { path: 'entities/big-2.md', title: 'Big 2', fm: { type: 'entity' }, body: words(3400) },
   { path: 'sources/big-3.md', title: 'Big 3', fm: { type: 'source' }, body: words(3400) },
 
-  // Update sprawl seeds
   { path: 'concepts/us-6.md', title: 'US 6', fm: { type: 'concept' }, body: `${MARKER}\n\n${dated(6, 'Update')}` },
   {
     path: 'entities/us-8.md',
@@ -371,7 +354,6 @@ function renderPage(p) {
   return `${frontmatter(p.fm)}# ${p.title}\n\n${p.body}\n`;
 }
 
-/** Write the seeded defective vault under `root` (creates root/wiki). */
 export function buildSeededVault(root) {
   const wiki = join(root, 'wiki');
   for (const p of PAGES) {
@@ -384,7 +366,6 @@ export function buildSeededVault(root) {
   return root;
 }
 
-/** Scoring. Returns { seeds, detected, perKind, falsePositives, companionsSeen, ambiguousSeen, totalFindings, strictFp }. */
 export function score(findings) {
   const used = new Set();
   const matchOf = (seed, pass) =>
@@ -443,7 +424,6 @@ export function score(findings) {
   };
 }
 
-/** Synthetic large vault: n pages, all indexed and chained, with one broken wikilink every 100 pages. */
 export function buildLargeVault(root, n) {
   const wiki = join(root, 'wiki');
   mkdirSync(wiki, { recursive: true });

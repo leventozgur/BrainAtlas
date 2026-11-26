@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-04 independent acceptance: date-aware and current-aware section choice for result snippets.
-// Hermetic: in-memory pages, fixed as-of date 2026-11-11.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, run, NOW } from './helpers.mjs';
@@ -19,7 +17,6 @@ test('ISO dates, with and without time, pick the newest section regardless of fi
 });
 
 test('DD.MM.YYYY headings are read day first', () => {
-  // 05.03.2026 is 5 March, so 2026-04-01 is newer. A month-first reading would make it 3 May and win.
   assert.equal(
     headingOf(
       [page('l.md', '## Limit 05.03.2026\nwidget limit is 40\n## Limit 2026-04-01\nwidget limit is 60\n')],
@@ -92,10 +89,8 @@ test('equal dates: the higher term score wins, then the earlier section', () => 
 });
 
 test('a dated section below 0.6 of the best score is not a candidate; at 0.6 or above it is', () => {
-  // Terms in the best section: widget, limit, timeout (3 distinct). A dated section with one of them scores 1/3.
   const low = '## Overview\nwidget limit timeout\n## Limit 2026-10-01\nwidget only here\n';
   assert.equal(headingOf([page('s.md', low)], 'widget limit timeout'), 'Overview');
-  // Two of three terms scores 2/3, which is at least 0.6 of the best and so eligible; the newer dated section wins.
   const enough = '## Overview\nwidget limit timeout\n## Limit 2026-10-01\nwidget limit here\n';
   assert.equal(headingOf([page('s.md', enough)], 'widget limit timeout'), 'Limit 2026-10-01');
 });
@@ -129,7 +124,6 @@ test('a long multi-section page with nested headings picks the newest eligible s
   for (const d of dates) parts.push(`### Window ${d}`, 'deploy window opens nightly');
   parts.push('## Current notes', 'no marker here');
   const r = top([page('long.md', parts.join('\n') + '\n')], 'deploy window');
-  // 2026-12-01 is after asOf and is excluded; 2026-09-30 is the newest eligible date.
   assert.equal(r.heading, 'Window 2026-09-30');
   assert.equal(r.headingPath, 'Changelog > Deploys > Window 2026-09-30');
   assert.equal(r.anchor, 'window-2026-09-30');

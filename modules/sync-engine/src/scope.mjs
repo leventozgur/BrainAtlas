@@ -118,7 +118,6 @@ async function walk(root, ignoredDir, output, allowedPaths, excluded, current = 
   }
 }
 
-/** Collect scoped files and secret refusals without returning or persisting matching values. */
 /** @param {{vaultPath:string,stateDir?:string,config?:any}} options */
 export async function inventoryVault({ vaultPath, stateDir, config = {} }) {
   const scope = resolveSyncScope(config);

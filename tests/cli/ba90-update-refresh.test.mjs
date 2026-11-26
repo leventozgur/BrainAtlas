@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-90: a successful update refreshes adapters with the new release CLI; --plan does not.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';

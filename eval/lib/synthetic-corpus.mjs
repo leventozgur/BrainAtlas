@@ -25,11 +25,6 @@ const SYLLABLES = [
   'pax',
 ];
 
-/**
- * Seeded PRNG (mulberry32). The same seed always yields the same sequence.
- * @param {number} seed
- * @returns {() => number} values in [0, 1)
- */
 export function createRng(seed) {
   let state = seed >>> 0;
   return () => {
@@ -48,13 +43,6 @@ function makeWord(rng) {
   return word;
 }
 
-/**
- * Generate a deterministic synthetic vault of Markdown pages with no real content.
- * Every page has frontmatter, a title, three headed sections and a fixed-size body.
- * @param {string} dir existing empty directory
- * @param {{pages:number,seed?:number,wordsPerPage?:number,queryCount?:number}} options
- * @returns {{paths:string[],queries:string[]}} page paths and queries drawn from page vocabulary
- */
 export function writeSyntheticCorpus(dir, { pages, seed = 1, wordsPerPage = 120, queryCount = 30 }) {
   if (!Number.isInteger(pages) || pages < 1 || pages > 50000) throw new Error('Invalid page count');
   const rng = createRng(seed);
@@ -85,13 +73,6 @@ export function writeSyntheticCorpus(dir, { pages, seed = 1, wordsPerPage = 120,
   return { paths, queries };
 }
 
-/**
- * Deterministic fixed-length vectors for the fake embedding provider.
- * @param {number} seed
- * @param {number} count
- * @param {number} dims
- * @returns {number[][]}
- */
 export function fixedVectors(seed, count, dims) {
   const rng = createRng(seed);
   return Array.from({ length: count }, () => Array.from({ length: dims }, () => rng() * 2 - 1));

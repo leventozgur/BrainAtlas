@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: MIT
-// BA-09 holdout decision measurements (not a node:test file, so `npm test` does not run it). Prints JSON only; writes nothing.
-// Usage: node tests/acceptance/BA-09/holdout-decision.mjs <pm-dir> <main-repo-dir>
-// Items: 1 primary (rival trust cases, first result relevant, threshold 0.35), 2 neutral controls (first result same as main),
-// 4 multihop-hard requireAll rate. Items 3 (ba-suite + gate) and 5 (scale-bench) are run from the command line, see the report.
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadCandidate, loadMain, repoRoot, NOW } from './helpers.mjs';
@@ -51,7 +47,6 @@ const controlsSame = Object.keys(out.primary.main.controlTop).every((id) => {
 });
 out.controlsIdenticalFirstResult = controlsSame;
 
-// Item 4 uses the repository's eval runner; main is imported from the main repository and the candidate from this worktree.
 for (const [name, root] of [
   ['main', MAIN_ROOT],
   ['candidate', repoRoot],
