@@ -1,0 +1,16 @@
+{
+    "other": {"keep": true},
+    "mcpServers": {"other": {"command": "x"},
+    "brainatlas": {"command":"/opt/node","args":["/opt/brainatlas/bin/brainatlas","mcp"]}
+    }
+,
+    "hooks": {
+      "BeforeAgent": [
+        {"matcher":"*","hooks":[{"name":"brainatlas-context","type":"command","command":"\"/opt/node\" \"/opt/brainatlas/bin/brainatlas\" hook gemini prompt","timeout":5000,"description":"Add relevant BrainAtlas context before the agent responds."}]}
+      ]
+    ,
+      "SessionStart": [
+        {"matcher":"*","hooks":[{"name":"brainatlas-session","type":"command","command":"\"/opt/node\" \"/opt/brainatlas/bin/brainatlas\" hook gemini session-start","timeout":5000,"description":"Restore BrainAtlas session continuity at session start."}]}
+      ]
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "telemetry": false,
+    "mcpServers": {
+        "other": {
+            "command": "tool",
+            "args": []
+        },
+        "brainatlas": {
+            "type": "stdio",
+            "command": "/usr/bin/node",
+            "args": [
+                "/opt/brainatlas/bin/brainatlas",
+                "mcp"
+            ]
+        }
+    },
+    "custom": [
+        1,
+        2
+    ]
+}

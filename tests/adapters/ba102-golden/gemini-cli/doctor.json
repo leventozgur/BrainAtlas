@@ -1,0 +1,35 @@
+{
+  "ok": false,
+  "checks": [
+    {
+      "id": "registered",
+      "ok": true,
+      "message": "BrainAtlas MCP server is registered."
+    },
+    {
+      "id": "shim",
+      "ok": false,
+      "message": "Shim file is missing."
+    },
+    {
+      "id": "version-drift",
+      "ok": true,
+      "message": "Version drift cannot be determined from adapter configuration."
+    },
+    {
+      "id": "hook-present",
+      "ok": true,
+      "message": "Gemini BeforeAgent hook is registered; enable it in the hooks panel if needed."
+    },
+    {
+      "id": "session-hook-present",
+      "ok": true,
+      "message": "Gemini SessionStart hook is registered."
+    },
+    {
+      "id": "instructions",
+      "ok": true,
+      "message": "BrainAtlas instructions are present."
+    }
+  ]
+}

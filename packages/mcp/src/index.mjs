@@ -39,6 +39,34 @@ import * as wiki from '@llmwiki/core';
 const TOOL_LIMIT = 20_000;
 const PLANNING_PAGE_NAME = /(^|-)(backlog|todo|tasks|roadmap)(-|$)/i;
 const PLANNING_WARNING = 'Planning content belongs in planning/; use plan_update.';
+const TYPE_FOLDERS = Object.freeze({
+  entity: 'entities',
+  concept: 'concepts',
+  source: 'sources',
+  summary: 'summaries',
+  query: 'queries',
+});
+const WIKI_FOLDERS = new Set([...Object.values(TYPE_FOLDERS), 'archive']);
+const KEBAB_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+function namingWarnings(rel, frontmatter) {
+  const segments = rel.split('/');
+  const file = segments.pop() ?? '';
+  const stem = file.endsWith('.md') ? file.slice(0, -3) : file;
+  const parts = [...segments, stem];
+  const rules = [];
+  if (parts.some((part) => !KEBAB_NAME.test(part))) rules.push('name is not lowercase kebab-case');
+  if (stem.length > 80) rules.push('name is longer than 80 characters');
+  const folder = segments[0] ?? '';
+  if (!segments.length) rules.push('page is not in a Wiki type folder');
+  else if (!WIKI_FOLDERS.has(folder)) rules.push(`folder ${folder} is not a Wiki type folder`);
+  const type = frontmatter?.type;
+  const expected = typeof type === 'string' && Object.hasOwn(TYPE_FOLDERS, type) ? TYPE_FOLDERS[type] : undefined;
+  if (expected !== undefined && folder !== expected) rules.push(`type ${type} belongs in ${expected}/`);
+  return rules.map((rule) => `wiki/${rel}: ${rule}`);
+}
+function refuseNaming(config, warnings) {
+  if (config.okf?.level === 'strict' && warnings.length) throw mcpError('E_OKF_INVALID', warnings.join('; '));
+}
 function mcpError(code, message) {
   const error = /** @type {Error & {code:string}} */ (new Error(message));
   error.code = code;
@@ -54,6 +82,7 @@ function asText(error) {
   if (error?.code === 'E_PATH_ESCAPE' && error.message === 'Path is outside planning/.')
     return 'E_PATH_ESCAPE: Path is outside planning/.';
   if (error?.code === 'E_PATH_ESCAPE') return 'E_PATH_ESCAPE: path is outside the Wiki.';
+  if (error?.code === 'E_OKF_INVALID') return `E_OKF_INVALID: ${error.message}`;
   if (error?.code === 'E_INVALID_INPUT') return `E_INVALID_INPUT: ${error.message}`;
   if (
     (error?.code === 'E_ARGUMENT' &&
@@ -589,6 +618,28 @@ export function createServer(options) {
     return (await core.listPages(vaultDir))
       .map((rel) => ({ path: rel.slice('wiki/'.length), file: join(canonicalWiki, rel.slice('wiki/'.length)) }))
       .filter(({ path }) => !['index.md', 'log.md'].includes(path.split('/').at(-1)));
+  };
+  const namingFindings = async () => {
+    const findings = [];
+    for (const { path, file } of await listManagedPages()) {
+      let data;
+      try {
+        const parsed = core.parseFrontmatter(await readFile(file, 'utf8'));
+        if (parsed.errors.length) throw new Error('unparseable');
+        data = parsed.data;
+      } catch {
+        findings.push({
+          severity: 'warning',
+          category: 'naming',
+          message: `wiki/${path}: page could not be read`,
+          file: path,
+        });
+        continue;
+      }
+      for (const message of namingWarnings(path, data))
+        findings.push({ severity: 'warning', category: 'naming', message, file: path });
+    }
+    return findings;
   };
   const assertWikiInsideVault = async () => {
     const canonicalVault = await realpath(vaultDir);
@@ -1141,7 +1192,17 @@ export function createServer(options) {
       indexCoveragePct,
     };
   });
-  readTool('wiki_lint', z.object({}), () => wiki.lintWiki(wikiDir));
+  readTool('wiki_lint', z.object({}), async () => {
+    const result = await wiki.lintWiki(wikiDir);
+    const naming = await namingFindings();
+    if (!naming.length) return result;
+    return {
+      ...result,
+      findings: [...result.findings, ...naming],
+      warningCount: result.warningCount + naming.length,
+      categorySummary: { ...result.categorySummary, naming: (result.categorySummary.naming ?? 0) + naming.length },
+    };
+  });
 
   if (config.readOnly !== true) {
     const expectedSha256 = z
@@ -1156,6 +1217,10 @@ export function createServer(options) {
         checkWrite(`wiki/${normalized}`, content);
         const parsed = core.parseFrontmatter(content);
         if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
+        const misplaced = PLANNING_PAGE_NAME.test(normalized.split('/').at(-1).replace(/\.md$/u, ''));
+        const naming = namingWarnings(normalized, parsed.data);
+        const warnings = [...naming, ...(misplaced ? [PLANNING_WARNING] : [])];
+        if ((await existingFrontmatter(target)) === undefined) refuseNaming(config, naming);
         const work = async () => {
           await checkExpectedSha(target, expectedSha256);
           const existing = await existingFrontmatter(target);
@@ -1172,14 +1237,13 @@ export function createServer(options) {
         if (options.dryRun === true) await dryRunWikiCheck();
         const { created, sha256 } = options.dryRun === true ? await work() : await writeLocked(work);
         if (options.dryRun !== true) await afterWrite();
-        const misplaced = PLANNING_PAGE_NAME.test(normalized.split('/').at(-1).replace(/\.md$/u, ''));
         return {
           path: `wiki/${normalized}`,
           written: true,
           created,
           ...(options.dryRun === true ? { dryRun: true } : {}),
           ...(sha256 === undefined ? {} : { sha256 }),
-          ...(misplaced ? { warnings: [PLANNING_WARNING] } : {}),
+          ...(warnings.length ? { warnings } : {}),
         };
       }
     );
@@ -1227,20 +1291,37 @@ export function createServer(options) {
         };
       }
     );
-    const create = (name, content, kind) => async () => {
+    const create = (name, content, type) => async () => {
+      const folder = TYPE_FOLDERS[type];
       const slug = pageSlug(name);
       if (!slug) throw mcpError('E_INVALID_INPUT', 'The page name needs at least one ASCII letter or digit.');
-      const rel = `${kind}/${slug}.md`;
+      const rel = `${folder}/${slug}.md`;
       const parsed = core.parseFrontmatter(content);
       if (parsed.errors.length) throw mcpError('E_INVALID_INPUT', 'Page frontmatter is invalid.');
+      const template = core.parseFrontmatter(
+        await readFile(new URL(`../../../templates/pages/${type}.md`, import.meta.url), 'utf8')
+      );
+      const usesTemplateBody = parsed.body.trim() === '';
+      const templateData = usesTemplateBody || !['entity', 'concept'].includes(type) ? { ...template.data } : {};
+      delete templateData.title;
+      delete templateData.generated;
       const frontmatter = {
-        type: kind === 'entities' ? 'entity' : 'concept',
+        ...templateData,
+        type,
         tags: [],
         created: new Date().toISOString(),
         ...withWriteProvenance(parsed.data),
-        title: name,
+        title:
+          ['entity', 'concept'].includes(type) || typeof parsed.data.title !== 'string' || !parsed.data.title.trim()
+            ? name
+            : parsed.data.title,
       };
-      checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body: parsed.body }));
+      const body = usesTemplateBody ? template.body : parsed.body;
+      const naming = namingWarnings(rel, frontmatter);
+      refuseNaming(config, naming);
+      const misplaced = PLANNING_PAGE_NAME.test(slug);
+      const warnings = [...naming, ...(misplaced ? [PLANNING_WARNING] : [])];
+      checkWrite(`wiki/${rel}`, serializePage({ frontmatter, body }));
       const { target } = await safeFile(rel, { allowIndex: false });
       const indexTarget = (await safeFile('index.md')).target;
       const entry = {
@@ -1261,26 +1342,30 @@ export function createServer(options) {
           existing === null ? freshIndex([entry]) : mergeIndex(existing, [entry], { prune: false }).output;
         checkWrite('wiki/index.md', indexOutput);
         if (options.dryRun !== true) {
-          await writePageAtomic(target, { frontmatter, body: parsed.body });
+          await writePageAtomic(target, { frontmatter, body });
           await writeIndexAtomic(indexTarget, indexOutput);
-          await logEntry(kind === 'entities' ? 'create-entity' : 'create-concept', `wiki/${rel}`);
+          await logEntry(`create-${type}`, `wiki/${rel}`);
         }
-        return { misplaced: PLANNING_PAGE_NAME.test(slug) };
       };
       if (options.dryRun === true) await dryRunWikiCheck();
-      const { misplaced } = options.dryRun === true ? await work() : await writeLocked(work);
+      if (options.dryRun === true) await work();
+      else await writeLocked(work);
       if (options.dryRun !== true) await afterWrite();
       return {
         path: `wiki/${rel}`,
         created: true,
-        ...(misplaced ? { warnings: [PLANNING_WARNING] } : {}),
+        ...(warnings.length ? { warnings } : {}),
         ...(options.dryRun === true ? { dryRun: true } : {}),
       };
     };
     tool(
       'wiki_create',
-      z.object({ type: z.enum(['entity', 'concept']), name: z.string().min(1), content: z.string() }),
-      ({ type, name, content }) => create(name, content, type === 'entity' ? 'entities' : 'concepts')()
+      z.object({
+        type: z.enum(['entity', 'concept', 'source', 'summary', 'query']),
+        name: z.string().min(1),
+        content: z.string().optional(),
+      }),
+      ({ type, name, content = '' }) => create(name, content, type)()
     );
     tool('wiki_add_crosslinks', z.object({ path: z.string() }), async ({ path }) => {
       const { normalized, target } = await safeFile(path, { allowIndex: false });

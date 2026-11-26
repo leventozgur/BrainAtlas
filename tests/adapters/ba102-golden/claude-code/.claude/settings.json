@@ -1,0 +1,46 @@
+{
+    "theme": "dark",
+    "hooks": {
+        "UserPromptSubmit": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "user-hook"
+                    }
+                ]
+            },
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "\"/opt/node with spaces/node\" \"/opt/brainatlas/bin/brainatlas\" hook claude prompt",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "Notification": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "notify"
+                    }
+                ]
+            }
+        ],
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "\"/opt/node with spaces/node\" \"/opt/brainatlas/bin/brainatlas\" hook claude session-start",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ]
+    }
+}

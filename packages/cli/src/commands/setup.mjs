@@ -184,6 +184,9 @@ export async function init({ flag, value, plan, output, paths, env }) {
   const vaultSummary = { path: vaultPath, created: await missingVaultInitPaths(vaultPath) };
   if (!plan) {
     await initializeVault(vaultPath);
+    const currentStandard = await core.readStandard(vaultPath);
+    if (!currentStandard.standard && currentStandard.errors.length === 0)
+      await core.writeStandard(vaultPath, core.standardFromConfig(cfg));
     await saveTrackedConfig(cfg, paths, env);
   }
   const detectedAgents = [];

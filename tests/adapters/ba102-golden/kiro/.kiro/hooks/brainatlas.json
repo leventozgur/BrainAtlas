@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "brainatlas-context",
+      "description": "Retrieve relevant BrainAtlas context for the current prompt.",
+      "trigger": "UserPromptSubmit",
+      "action": {
+        "type": "command",
+        "command": "\"/path with spaces/node\" \"/opt/brainatlas/bin/brainatlas\" hook kiro prompt"
+      },
+      "timeout": 10,
+      "enabled": true
+    }
+  ]
+}

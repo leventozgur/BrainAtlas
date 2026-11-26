@@ -5,14 +5,20 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   discoverModules,
   fingerprintSafetyFinding,
+  isVaultStandardKey,
   loadConfig,
   readModuleManifest,
+  readStandard,
   resolveModuleOrder,
   scanPath,
   scanText,
   SECRET_FILTER_OFF_WARNING,
   setConfigValue,
+  STANDARD_VERSION,
+  standardFromConfig,
   unsetConfigValue,
+  validateStandard,
+  writeStandard,
   activate as activateModule,
 } from '@brainatlas/core';
 import { inspectReleaseArchive } from '../archive.mjs';
@@ -343,9 +349,52 @@ export async function safety({ args, plan, output, paths, env }) {
   throw error('E_ARGUMENT', 'Safety action must be allow, list, or revoke.');
 }
 
-export async function configCommand({ args, plan, output, paths, env, markRedacted }) {
+const pathValue = (obj, key) =>
+  key.split('.').reduce((value, part) => (value && typeof value === 'object' ? value[part] : undefined), obj);
+
+function withPathValue(value, key, next) {
+  const copy = structuredClone(value);
+  const parts = key.split('.');
+  let target = copy;
+  for (const part of parts.slice(0, -1)) target = target[part];
+  target[parts.at(-1)] = structuredClone(next);
+  return copy;
+}
+
+function withoutPathValue(value, key) {
+  const copy = structuredClone(value);
+  const parts = key.split('.');
+  let target = copy;
+  for (const part of parts.slice(0, -1)) target = target[part];
+  delete target[parts.at(-1)];
+  return copy;
+}
+
+async function deviceSetting(paths, key) {
+  let text;
+  try {
+    text = await readFile(paths.configFile, 'utf8');
+  } catch (cause) {
+    if (cause?.code === 'ENOENT') return { present: false, value: undefined };
+    throw error('E_CONFIG_READ', 'Could not read configuration.');
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw error('E_CONFIG_READ', 'Could not read configuration.');
+  }
+  const found = pathValue(value, key);
+  return { present: found !== undefined, value: found };
+}
+
+const VAULT_MESSAGE = (key) => `${key} is a vault standard setting; it applies to every device that uses this vault.`;
+const DEVICE_WARNING = (key) => `Device config sets ${key}; the vault standard value is used.`;
+
+export async function configCommand({ args, plan, output, paths, env, markRedacted, json, flag }) {
   const action = args.shift();
   const key = args.shift();
+  const vaultKey = typeof key === 'string' && isVaultStandardKey(key);
   const cfg = await loadConfig({ paths, env });
   if (action === 'get') {
     if (key && !key.startsWith('--') && !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key))
@@ -353,7 +402,41 @@ export async function configCommand({ args, plan, output, paths, env, markRedact
     const result = key && !key.startsWith('--') ? key.split('.').reduce((v, k) => v?.[k], cfg) : cfg;
     if (result === undefined) throw error('E_CONFIG_KEY', 'Unknown configuration key.');
     markRedacted();
+    if (json && vaultKey) {
+      const current = await readStandard(cfg.vault.path);
+      const fromStandard = cfg.standardApplied === true && pathValue(current.standard, key) !== undefined;
+      const source = fromStandard ? 'standard' : (await deviceSetting(paths, key)).present ? 'device' : 'default';
+      output({ value: result, source });
+      return;
+    }
     output(result);
+    return;
+  }
+  if ((action === 'set' || action === 'unset') && vaultKey && !flag?.('--device')) {
+    const raw = action === 'set' ? args.shift() : undefined;
+    if (action === 'set' && (raw === undefined || raw.startsWith('--')))
+      throw error('E_ARGUMENT', 'Missing configuration value.');
+    let parsed;
+    if (action === 'set') {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = raw;
+      }
+    }
+    const current = await readStandard(cfg.vault.path);
+    if (current.errors.length)
+      throw error('E_STANDARD_INVALID', 'The vault standard is invalid.', { errors: current.errors });
+    if (current.standard && current.standard.standardVersion !== STANDARD_VERSION)
+      throw error('E_STANDARD_VERSION', 'The vault standard was written by a newer BrainAtlas; update this device.');
+    const base = current.standard || standardFromConfig(cfg);
+    const standard = action === 'set' ? withPathValue(base, key, parsed) : withoutPathValue(base, key);
+    const validation = validateStandard(standard);
+    if (!validation.ok)
+      throw error('E_STANDARD_INVALID', 'The vault standard is invalid.', { errors: validation.errors });
+    if (!plan) await writeStandard(cfg.vault.path, standard);
+    console.error(VAULT_MESSAGE(key));
+    output({ action: action === 'set' ? 'config set' : 'config unset', key });
     return;
   }
   if ((action === 'set' || action === 'unset') && (key === 'channels' || key?.startsWith('channels.')))
@@ -370,7 +453,13 @@ export async function configCommand({ args, plan, output, paths, env, markRedact
       parsed = raw;
     }
     const updated = setConfigValue(cfg, key, parsed);
-    if (!plan) await saveTrackedConfig(updated, paths, env);
+    if (!plan) await saveTrackedConfig(updated, paths, env, { deviceKeys: [key] });
+    if (flag?.('--device')) {
+      const current = await readStandard(cfg.vault.path);
+      const standardValue = pathValue(current.standard, key);
+      if (standardValue !== undefined && JSON.stringify(standardValue) !== JSON.stringify(parsed))
+        console.error(DEVICE_WARNING(key));
+    }
     let credentialUrl = false;
     if (key === 'sync.options.remote' && typeof parsed === 'string' && /^https:\/\//i.test(parsed)) {
       try {
@@ -391,7 +480,12 @@ export async function configCommand({ args, plan, output, paths, env, markRedact
     if (!key || !/^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*$/.test(key))
       throw error('E_CONFIG_KEY', 'Invalid configuration key.');
     const updated = unsetConfigValue(cfg, key);
-    if (!plan && JSON.stringify(updated) !== JSON.stringify(cfg)) await saveTrackedConfig(updated, paths, env);
+    if (!plan && JSON.stringify(updated) !== JSON.stringify(cfg))
+      await saveTrackedConfig(updated, paths, env, { deviceKeys: [key] });
+    if (flag?.('--device')) {
+      const current = await readStandard(cfg.vault.path);
+      if (pathValue(current.standard, key) !== undefined) console.error(DEVICE_WARNING(key));
+    }
     output({ action: 'config unset', key });
     return;
   }

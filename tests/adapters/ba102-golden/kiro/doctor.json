@@ -1,0 +1,32 @@
+{
+  "ok": false,
+  "checks": [
+    {
+      "id": "registered",
+      "ok": true,
+      "message": "BrainAtlas MCP server is registered."
+    },
+    {
+      "id": "command",
+      "ok": false,
+      "message": "MCP command does not point to the configured shim."
+    },
+    {
+      "id": "version-drift",
+      "ok": true,
+      "message": "No command drift detected."
+    },
+    {
+      "id": "hook",
+      "ok": true,
+      "message": "BrainAtlas prompt hook is present."
+    }
+  ],
+  "warnings": [],
+  "capabilities": {
+    "channel": "mcp",
+    "read": true,
+    "write": true,
+    "inject": "prompt"
+  }
+}

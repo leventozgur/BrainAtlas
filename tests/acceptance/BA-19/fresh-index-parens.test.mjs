@@ -104,5 +104,9 @@ test('product tools read the fresh index consistently: wiki_read_page returns th
     100,
     'every page is listed in the index, so coverage must be 100 (wiki_status must read the escaped destinations)'
   );
-  assert.deepEqual(okJson(await call(f.client, 'wiki_lint', {})).findings, [], 'lint reports no index finding');
+  assert.deepEqual(
+    okJson(await call(f.client, 'wiki_lint', {})).findings.filter((finding) => finding.category !== 'naming'),
+    [],
+    'lint reports no index finding'
+  );
 });

@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "other": {"command":"tool", "args":[], "custom":true}
+  },
+  "userSetting": "keep me"
+}

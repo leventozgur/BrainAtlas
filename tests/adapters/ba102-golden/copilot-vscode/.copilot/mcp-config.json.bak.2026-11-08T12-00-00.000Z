@@ -1,0 +1,7 @@
+{
+    "telemetry": false,
+    "mcpServers": {
+        "other": {"command": "tool", "args": []}
+    },
+    "custom": [1, 2]
+}

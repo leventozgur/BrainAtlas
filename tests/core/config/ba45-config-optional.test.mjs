@@ -136,6 +136,7 @@ test('CLI config set/unset handle optional keys, --plan and help usage', async (
     0
   );
   const file = join(home, 'config/brainatlas/config.json');
+  const standardFile = join(home, 'vault/.brainatlas/standard.json');
   const before = await readFile(file, 'utf8');
   assert.equal(run('config', 'unset', 'retrieval.shadow', '--json').status, 0);
   assert.equal(await readFile(file, 'utf8'), before);
@@ -149,7 +150,7 @@ test('CLI config set/unset handle optional keys, --plan and help usage', async (
   assert.equal(JSON.parse(run('config', 'get', 'hooks.disclosure', '--json').stdout), 'progressive');
   result = run('config', 'set', 'retrieval.exclude', '["drafts/**"]', '--json');
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(await readFile(file, 'utf8')).retrieval.exclude, ['drafts/**']);
+  assert.deepEqual(JSON.parse(await readFile(standardFile, 'utf8')).retrieval.exclude, ['drafts/**']);
   const withKeys = await readFile(file, 'utf8');
   for (const invalid of [
     ['hooks.disclosure', 'maybe'],
@@ -170,7 +171,7 @@ test('CLI config set/unset handle optional keys, --plan and help usage', async (
   const configText = await readFile(file, 'utf8');
   assert.equal(Object.hasOwn(JSON.parse(configText).hooks, 'disclosure'), false);
   assert.equal(run('config', 'unset', 'retrieval.exclude').status, 0);
-  assert.equal(Object.hasOwn(JSON.parse(await readFile(file, 'utf8')).retrieval, 'exclude'), false);
+  assert.equal(Object.hasOwn(JSON.parse(await readFile(standardFile, 'utf8')).retrieval, 'exclude'), false);
   const stable = await readFile(file, 'utf8');
   assert.equal(run('config', 'unset', 'retrieval.exclude').status, 0);
   assert.equal(await readFile(file, 'utf8'), stable);

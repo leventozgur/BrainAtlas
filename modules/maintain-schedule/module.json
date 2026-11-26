@@ -1,6 +1,6 @@
 {
   "name": "maintain-schedule",
-  "version": "0.1.0-rc.19",
+  "version": "0.1.0-rc.20",
   "description": "Weekly OS scheduler (launchd or systemd user timer) for brainatlas maintain --weekly.",
   "requires": [],
   "provides": ["maintain-schedule"],

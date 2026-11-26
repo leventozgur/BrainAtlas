@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "other": {
+      "command": "tool",
+      "args": [],
+      "custom": true
+    },
+    "brainatlas": {
+      "command": "/path with spaces/node",
+      "args": [
+        "/opt/brainatlas/bin/brainatlas",
+        "mcp"
+      ],
+      "env": {},
+      "disabled": false,
+      "autoApprove": [
+        "wiki_query",
+        "wiki_read_page",
+        "wiki_list_pages",
+        "wiki_status"
+      ]
+    }
+  },
+  "userSetting": "keep me"
+}

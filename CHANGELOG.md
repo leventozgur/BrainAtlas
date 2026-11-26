@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.0-rc.20 — 2026-11-27
+
+Second step of the common standard: the settings that decide knowledge quality live in the vault, every page type has a template and one naming rule, and `brainatlas standard migrate` repairs drifted devices. The default install (Lite, MCP + hooks) is otherwise unchanged.
+
+**On every device after updating:** run `brainatlas agent refresh`, then `brainatlas standard migrate` to review the plan and `brainatlas standard migrate --apply` to carry it out (backups go to `<vault>/.brainatlas/migrations/<stamp>/`). See `docs/user/standard.md`.
+
+- BA-95: vault standard file `.brainatlas/standard.json` holds `okf.level`, `retrieval.budgetChars`, `retrieval.abstainThreshold`, `retrieval.exclude` and `safety.extraDenyGlobs`; on every device that opens the vault these values override the device config. `init` writes it and `agent refresh` creates it from the current device values when missing (no behaviour change on upgrade); it is never overwritten by refresh. `config set` of these keys writes the standard (`--device` keeps a device value, which the standard still overrides); `config get --json` shows the source. A standard written by a newer release is never rewritten. `doctor` gains a `conformance` block (standard and policy versions, adapters up to date, semantic on/off, vault minimum capabilities met) with warnings that never change `ok`. The policy reference lint knows commands provided by active modules (for example the okf-strict module's `okf` command).
+- BA-96: `wiki_create` and `brainatlas wiki create` accept all five page types (entity, concept, source, summary, query) and fill an empty body from `templates/pages/<type>.md`; the result always has the provenance fields. New Wiki paths follow one naming rule (lowercase kebab-case, at most 80 characters, a type folder that matches the page type): a warning, and a refusal with `okf.level: strict`. Existing pages are never renamed and can still be edited; `wiki lint` reports existing violations.
+- BA-97: `brainatlas standard migrate [--plan|--apply] [--force] [--prune-backups]` plans and applies, in order: missing skeleton, the standard file, the vault policy refresh, Wiki pages that hold planning content (moved verbatim to `planning/projects/` with a backlog row), orphan state directories (archived, not deleted), a stale per-vault retrieval index copy, and a report of adapter backups (pruned to the newest 3 only with `--prune-backups`). Every changed vault file is backed up first, each step is rolled back on failure, symlinks are never followed, and a second run plans nothing. `doctor` suggests it when a change is pending.
+- BA-102: the five agent adapters share one adapter kit for JSON, quoting, cli payloads, hook commands, managed blocks and original-file records; written files are byte-identical to rc.19 (golden tests). Removing an adapter whose saved original record is already gone no longer fails.
+
 ## 0.1.0-rc.19 — 2026-11-26
 
 First step of a common standard for every device: backlog items always go to `planning/`, the vault policy stays current, and the MCP tools and the shell commands offer the same operations. The default install (Lite, MCP + hooks) is otherwise unchanged.

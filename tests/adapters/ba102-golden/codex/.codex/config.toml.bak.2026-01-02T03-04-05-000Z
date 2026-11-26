@@ -1,0 +1,6 @@
+model = "example-model"
+approval_policy = "on-request"
+
+[profiles.default]
+model_reasoning_effort = "medium"
+

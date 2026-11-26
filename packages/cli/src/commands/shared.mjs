@@ -75,12 +75,12 @@ export function releaseSigner(paths, env) {
   return env.BRAINATLAS_ALLOWED_SIGNERS || join(paths.currentDir, 'release', 'allowed_signers');
 }
 
-export async function saveTrackedConfig(cfg, paths, env = process.env) {
+export async function saveTrackedConfig(cfg, paths, env = process.env, options = {}) {
   const home = env.HOME;
   const roots = managedRoots(paths, env);
   const created = home ? await missingDirectories(dirname(paths.configFile), home, roots) : [];
   const before = await snapshotPath(paths.configFile);
-  await saveConfig(cfg, { paths });
+  await saveConfig(cfg, { paths, deviceKeys: options.deviceKeys });
   const after = await snapshotPath(paths.configFile);
   await recordManagedWrite(paths, paths.configFile, { before, after });
   if (created.length && home) await recordCreatedDirectories(paths, created, home, roots);
@@ -186,4 +186,20 @@ export async function activateEnabledModules(ordered, entries, ctx) {
     if (typeof entry?.activate !== 'function') throw error('E_MODULE_ENTRY', 'Module entry does not export activate.');
     await entry.activate(ctx);
   }
+}
+
+export async function activeCommandNames(paths, env, cfg, builtIn) {
+  const names = new Set(builtIn);
+  if (!cfg?.modules) return names;
+  const current = await readCurrent(paths).catch(() => null);
+  const releaseDir = currentReleaseDir(paths, current);
+  if (!releaseDir) return names;
+  try {
+    const { ordered, entries } = await enabledModuleEntries(releaseDir, cfg);
+    for (const manifest of ordered)
+      for (const name of Object.keys(entries.get(manifest.name)?.commands || {})) names.add(name);
+  } catch {
+    return names;
+  }
+  return names;
 }

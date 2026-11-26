@@ -1,9 +1,32 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, mkdir, unlink, stat, rmdir } from 'node:fs/promises';
-import { readFileSync as readSync, existsSync } from 'node:fs';
+import { writeFile, unlink, stat, rmdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, isAbsolute, dirname, basename } from 'node:path';
-import { OPERATIONS, atomicWriteFile, detectEvidence, resolvePaths, BrainAtlasError } from '@brainatlas/core';
+import {
+  OPERATIONS,
+  atomicWriteFile,
+  detectEvidence,
+  resolvePaths,
+  BrainAtlasError,
+  adapterKit,
+} from '@brainatlas/core';
+
+const {
+  quote,
+  isCli,
+  readOptional,
+  readOptionalSync,
+  restorable,
+  managedBlock,
+  putBlock,
+  backupName,
+  originalPath,
+  saveOriginal: writeOriginal,
+  readOriginal,
+  clearOriginal,
+  hasParentSegment,
+} = adapterKit;
 
 export const id = 'claude-code';
 export const displayName = 'Claude Code';
@@ -31,7 +54,7 @@ function filesOf(ctx) {
   const vault = ctx.scope === 'vault';
   if (vault && (typeof ctx.vaultDir !== 'string' || !isAbsolute(ctx.vaultDir)))
     fail('E_VAULT_PATH', 'Vault scope requires an absolute vault directory.');
-  if (vault && ctx.vaultDir.split(/[\\/]+/).includes('..'))
+  if (vault && hasParentSegment(ctx.vaultDir))
     fail('E_PATH_ESCAPE', 'Vault directory must not contain parent path segments.');
   const root = vault ? ctx.vaultDir : home;
   return {
@@ -45,12 +68,6 @@ function filesOf(ctx) {
 function mcpEntry(ctx) {
   if (!ctx.nodePath || !ctx.shimPath) fail('E_ARGUMENT', 'nodePath and shimPath are required.');
   return { type: 'stdio', command: ctx.nodePath, args: [ctx.shimPath, 'mcp'], env: {} };
-}
-function quote(value) {
-  return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
-}
-function isCli(ctx) {
-  return ctx?.config?.channel === 'cli';
 }
 function legacyPayloads(ctx) {
   if (!ctx.shimPath) fail('E_ARGUMENT', 'shimPath is required.');
@@ -161,70 +178,18 @@ function assertNoMcp(ctx, current) {
   }
 }
 function parseJson(bytes) {
-  if (bytes.startsWith('\uFEFF')) fail('E_BOM', 'Configuration contains a UTF-8 BOM.');
-  try {
-    const value = JSON.parse(bytes);
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
-    return value;
-  } catch (error) {
-    if (error?.code) throw error;
-    fail('E_CONFIG_PARSE', 'Configuration JSON is invalid.');
-  }
-}
-function indentOf(bytes) {
-  const match = bytes.match(/\n([\t ]+)"[^\n]+"\s*:/);
-  return match?.[1] || '  ';
+  return adapterKit.parseJson(bytes, { object: true });
 }
 function jsonStringify(value, before) {
-  const indent = before ? indentOf(before) : '  ';
-  const newline = before?.includes('\r\n') ? '\r\n' : '\n';
-  return JSON.stringify(value, null, indent).replaceAll('\n', newline) + (before?.endsWith('\n') ? newline : '');
-}
-async function readOptional(file) {
-  try {
-    return await readFile(file, 'utf8');
-  } catch (error) {
-    if (error.code === 'ENOENT') return null;
-    throw error;
-  }
-}
-function managedBlock(text) {
-  const start = text.indexOf(BEGIN);
-  const end = text.indexOf(END);
-  if (start < 0 && end < 0) return null;
-  if (start < 0 || end < start || text.indexOf(BEGIN, start + 1) >= 0 || text.indexOf(END, end + 1) >= 0)
-    fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block is damaged.');
-  const block = text.slice(start, end + END.length);
-  const match = block.match(/<!-- brainatlas:sha256:([a-f0-9]{64}) -->\n([\s\S]*?)\n<!-- brainatlas:end -->$/);
-  if (!match || hash(match[2]) !== match[1]) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
-  return { start, end: end + END.length, block };
-}
-function putBlock(before, block) {
-  const prior = managedBlock(before);
-  if (prior) return before.slice(0, prior.start) + block + before.slice(prior.end);
-  return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${block}\n`;
+  return adapterKit.stringifyJson(value, before, { preserveLineEndings: true });
 }
 function managedBlockCli(text) {
-  const start = text.indexOf(BEGIN);
-  const end = text.indexOf(END);
-  if (start < 0 && end < 0) return null;
-  if (start < 0 || end < start || text.indexOf(BEGIN, start + 1) >= 0 || text.indexOf(END, end + 1) >= 0)
-    fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block is damaged.');
-  const block = text.slice(start, end + END.length);
-  const match = block.match(/<!-- brainatlas:sha256:([a-f0-9]{64}) -->\r?\n([\s\S]*?)\r?\n<!-- brainatlas:end -->$/);
-  const body = match?.[2]?.replaceAll('\r\n', '\n');
-  if (!match || hash(body) !== match[1]) fail('E_MANAGED_BLOCK_EDITED', 'Managed instructions block was edited.');
-  return { start, end: end + END.length, block, body };
+  return adapterKit.managedBlock(text, { crlf: true });
 }
 function putCliBlock(before, block, payload) {
   const prior = managedBlockCli(before);
   if (prior) return prior.body === payload ? before : before.slice(0, prior.start) + block + before.slice(prior.end);
   return `${before}${before && !before.endsWith('\n') ? '\n' : ''}${before ? '\n' : ''}${block}\n`;
-}
-function restorable(prefix, suffix, original) {
-  if (typeof original !== 'string' || suffix.trim() !== '') return false;
-  const normalized = (value) => value.replaceAll('\r\n', '\n').replace(/\n+$/u, '');
-  return normalized(prefix) === normalized(original);
 }
 function displayPath(ctx, file) {
   const home = homeOf(ctx);
@@ -374,14 +339,7 @@ export function plan(ctx) {
   const targets = isCli(ctx)
     ? [files.mcp, files.settings, files.instructions, files.skill]
     : [files.mcp, files.settings, files.instructions];
-  for (const file of targets) {
-    try {
-      current[file] = readSync(file, 'utf8');
-    } catch (error) {
-      if (error.code === 'ENOENT') current[file] = null;
-      else throw error;
-    }
-  }
+  for (const file of targets) current[file] = readOptionalSync(file);
   const warnings = [];
   let needsConfirmation = false;
   if (isCli(ctx)) {
@@ -402,27 +360,17 @@ export function plan(ctx) {
   };
 }
 async function stateFile(ctx, file) {
-  const p = pathsOf(ctx);
-  const dir = join(p.stateDir, 'adapters', id, 'originals');
-  return { dir, record: join(dir, `${hash(file)}.json`) };
+  return { record: originalPath(pathsOf(ctx).stateDir, id, file) };
 }
 async function saveOriginal(ctx, change) {
-  const { dir, record } = await stateFile(ctx, change.file);
-  await mkdir(dir, { recursive: true });
-  const existing = await readOptional(record);
-  if (existing !== null) return;
+  const { record } = await stateFile(ctx, change.file);
   const data = JSON.stringify({
     file: change.file,
     existed: change.before !== null,
     original: change.before,
     expected: change.after,
   });
-  await atomicWriteFile(record, data, { mode: 0o600 });
-}
-function backupName(file, now) {
-  const date = now instanceof Date ? now : new Date(now || Date.now());
-  const stamp = date.toISOString().replaceAll(':', '').replaceAll('-', '').replaceAll('.', '');
-  return `${file}.bak.${stamp}`;
+  await writeOriginal(record, data);
 }
 export async function apply(planResult, ctx) {
   if (!planResult || !Array.isArray(planResult.changes)) fail('E_ARGUMENT', 'Adapter plan is invalid.');
@@ -441,7 +389,7 @@ export async function apply(planResult, ctx) {
       await writeFile(backupName(change.file, ctx.now), change.before, { flag: 'wx', mode: 0o600 });
     await atomicWriteFile(change.file, change.after, { mode: 0o600 });
     const { record } = await stateFile(ctx, change.file);
-    const saved = JSON.parse(await readFile(record, 'utf8'));
+    const saved = JSON.parse(await readOriginal(record));
     saved.expected = change.after;
     await atomicWriteFile(record, JSON.stringify(saved), { mode: 0o600 });
   }
@@ -476,7 +424,7 @@ async function removeIfEmpty(directory) {
 }
 async function recordOf(ctx, file) {
   const { record } = await stateFile(ctx, file);
-  const text = await readOptional(record);
+  const text = await readOriginal(record);
   if (text === null) return { record, text: null, value: null };
   let value;
   try {
@@ -539,7 +487,7 @@ async function removeCli(ctx, files) {
   for (const action of actions) {
     if (action.write === null) await unlink(action.file);
     else if (action.write !== undefined) await atomicWriteFile(action.file, action.write, { mode: 0o600 });
-    if (action.removeRecord) await unlink(action.record);
+    if (action.removeRecord) await clearOriginal(action.record);
     if (action.prune) await removeIfEmpty(action.prune);
   }
 }
@@ -550,7 +498,7 @@ export async function remove(ctx) {
   const actions = [];
   for (const file of targets) {
     const { record } = await stateFile(ctx, file);
-    const recText = await readOptional(record);
+    const recText = await readOriginal(record);
     const current = await readOptional(file);
     let original;
     if (recText) {
@@ -636,7 +584,7 @@ export async function remove(ctx) {
   for (const action of actions) {
     if (action.write === null) await unlink(action.file);
     else if (action.write !== undefined) await atomicWriteFile(action.file, action.write, { mode: 0o600 });
-    if (action.removeRecord) await unlink(action.record);
+    if (action.removeRecord) await clearOriginal(action.record);
   }
 }
 export async function doctor(ctx) {

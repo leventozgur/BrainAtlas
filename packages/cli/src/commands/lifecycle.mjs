@@ -19,10 +19,13 @@ import {
   effectiveChannel,
   lintPolicyReferences,
   loadConfig,
+  readStandard,
   refreshVaultPolicy,
   SECRET_FILTER_OFF_WARNING,
   secretFilterEnabled,
+  STANDARD_VERSION,
   validateConfig,
+  VAULT_STANDARD_KEYS,
   vaultId,
 } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from '../archive.mjs';
@@ -40,9 +43,10 @@ import {
 import { installedMaintainSchedule, installedSyncSchedule } from './sync.mjs';
 import { buildHealthSummary, formatHealthSummary } from '../health.mjs';
 import { readJsonl } from '../usage.mjs';
-import { adapterHealth, removeAdapter } from './adapters.mjs';
+import { adapterHealth, installAdapter, removeAdapter } from './adapters.mjs';
 import { commandNames } from '../index.mjs';
 import {
+  activeCommandNames,
   error,
   validVersion,
   managedRoots,
@@ -368,6 +372,18 @@ function defaultCapabilities(cfg, agent) {
   };
 }
 
+const valueAt = (obj, key) =>
+  key.split('.').reduce((value, part) => (value && typeof value === 'object' ? value[part] : undefined), obj);
+
+export async function orphanStateDirs(paths, vaultPath) {
+  const entries = await readdir(paths.stateDir, { withFileTypes: true });
+  const own = vaultId(vaultPath);
+  return entries
+    .filter((entry) => entry.isDirectory() && /^[0-9a-f]{16}$/.test(entry.name) && entry.name !== own)
+    .map((entry) => entry.name)
+    .sort();
+}
+
 export async function doctorResult(paths, env, now = new Date()) {
   let cfg;
   let configOk;
@@ -386,8 +402,40 @@ export async function doctorResult(paths, env, now = new Date()) {
     checks.release = false;
   }
   const warnings = [];
+  const standardState = cfg.vault?.path ? await readStandard(cfg.vault.path) : { standard: null, errors: [] };
+  const standard = standardState.standard;
+  const standardApplied = Boolean(standard && standard.standardVersion === STANDARD_VERSION);
+  let deviceConfig = null;
+  try {
+    deviceConfig = JSON.parse(await readFile(paths.configFile, 'utf8'));
+  } catch (cause) {
+    if (cause?.code !== 'ENOENT') warnings.push(`Device config could not be read (${cause?.code ?? 'error'}).`);
+  }
+  if (!standard) {
+    if (standardState.errors.length)
+      warnings.push(`The vault standard is invalid (${standardState.errors[0].code}); device settings are used.`);
+    else warnings.push('The vault has no standard file; run brainatlas agent refresh.');
+  } else if (standard.standardVersion > STANDARD_VERSION) {
+    warnings.push(
+      `standardVersion ${standard.standardVersion} is newer than this BrainAtlas supports; update this device.`
+    );
+  } else if (standardApplied && deviceConfig) {
+    for (const key of VAULT_STANDARD_KEYS) {
+      const standardValue = valueAt(standard, key);
+      const deviceValue = valueAt(deviceConfig, key);
+      if (
+        standardValue !== undefined &&
+        deviceValue !== undefined &&
+        JSON.stringify(standardValue) !== JSON.stringify(deviceValue)
+      )
+        warnings.push(`Device config sets ${key}; the vault standard value is used.`);
+    }
+  }
   if (!secretFilterEnabled(cfg)) warnings.push(SECRET_FILTER_OFF_WARNING);
   const capabilities = {};
+  const adaptersCurrent = {};
+  const minimumMet = {};
+  const minimum = standard?.capabilities?.minimum ?? { read: true, write: false };
   const moduleHealth = [];
   if (cfg.agents?.length) {
     for (const agent of cfg.agents) {
@@ -401,8 +449,43 @@ export async function doctorResult(paths, env, now = new Date()) {
         capabilities[agent] = health.capabilities ?? defaultCapabilities(cfg, agent);
         for (const warning of health.warnings || []) warnings.push(`${agent}: ${warning}`);
       }
+      let planFailed = false;
+      try {
+        const planned = await installAdapter({ agent, cfg, paths, env, plan: true });
+        adaptersCurrent[agent] =
+          !planned.warning && Array.isArray(planned.changes?.changes) && planned.changes.changes.length === 0;
+      } catch (cause) {
+        adaptersCurrent[agent] = false;
+        planFailed = true;
+        warnings.push(`${agent} adapter plan failed (${cause?.code ?? 'error'}).`);
+      }
+      const capability = capabilities[agent];
+      const missing = [];
+      if (minimum.read === true && capability?.read !== true) missing.push('read');
+      if (minimum.write === true && cfg.readOnly !== true && capability?.write !== true) missing.push('write');
+      minimumMet[agent] = missing.length === 0;
+      if (missing.length) warnings.push(`${agent} does not meet the vault minimum (${missing.join(', ')}).`);
+      if (!adaptersCurrent[agent] && !planFailed)
+        warnings.push(`${agent} adapter files are out of date; run brainatlas agent refresh ${agent}.`);
     }
   }
+  let policyVersion = null;
+  if (cfg.vault?.path) {
+    try {
+      const policyText = await readFile(join(cfg.vault.path, 'AGENTS.md'), 'utf8');
+      const match = /<!--\s*brainatlas:managed\s+v=(\d+)/.exec(policyText);
+      if (match) policyVersion = Number(match[1]);
+    } catch {
+      policyVersion = null;
+    }
+  }
+  const conformance = {
+    standardVersion: standard?.standardVersion ?? null,
+    policyVersion,
+    adaptersCurrent,
+    semantic: cfg.semantic?.enabled === true ? 'on' : 'off',
+    minimumMet,
+  };
   for (const [agent, capability] of Object.entries(capabilities)) {
     if (capability && capability.write === false && cfg.readOnly !== true)
       warnings.push(
@@ -443,12 +526,7 @@ export async function doctorResult(paths, env, now = new Date()) {
   let orphanState = [];
   if (cfg.vault?.path) {
     try {
-      const entries = await readdir(paths.stateDir, { withFileTypes: true });
-      const own = vaultId(cfg.vault.path);
-      orphanState = entries
-        .filter((entry) => entry.isDirectory() && /^[0-9a-f]{16}$/.test(entry.name) && entry.name !== own)
-        .map((entry) => entry.name)
-        .sort();
+      orphanState = await orphanStateDirs(paths, cfg.vault.path);
     } catch (cause) {
       if (cause?.code !== 'ENOENT') warnings.push(`State directory could not be read (${cause?.code ?? 'error'}).`);
     }
@@ -464,9 +542,16 @@ export async function doctorResult(paths, env, now = new Date()) {
     const references = await lintPolicyReferences({
       vaultDir: cfg.vault.path,
       home: env.HOME,
-      knownCommands: commandNames,
+      knownCommands: await activeCommandNames(paths, env, cfg, commandNames),
     });
     warnings.push(...references.warnings);
+    try {
+      const { pendingStandardMigration } = await import('../standard.mjs');
+      if (await pendingStandardMigration({ cfg, paths, env }))
+        warnings.push('Run brainatlas standard migrate to bring this vault to the standard.');
+    } catch (cause) {
+      warnings.push(`Standard migration state could not be checked (${cause?.code ?? 'error'}).`);
+    }
   }
   if (checks.release && cfg.modules?.length) {
     try {
@@ -526,6 +611,7 @@ export async function doctorResult(paths, env, now = new Date()) {
     profile: cfg.profile,
     modules: cfg.modules,
     capabilities,
+    conformance,
     hookActivity,
     orphanState,
     moduleHealth,

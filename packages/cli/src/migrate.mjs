@@ -8,6 +8,7 @@ const error = (code, message) => Object.assign(new Error(message), { code });
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const categories = ['wiki', 'planning', 'raw', 'inbox', 'archive'];
 const initDirectories = new Set([
+  '.brainatlas',
   'wiki',
   'wiki/entities',
   'wiki/concepts',
@@ -65,6 +66,8 @@ async function initScaffoldTemplates() {
   );
   const policy = await readFile(new URL('../../../templates/policy/AGENTS.md', import.meta.url), 'utf8');
   files.set('AGENTS.md', Buffer.from(core.managedPolicyBlock(policy)));
+  const standard = core.standardFromConfig(core.defaultConfig('lite'));
+  files.set('.brainatlas/standard.json', Buffer.from(`${JSON.stringify(standard, null, 2)}\n`));
   return files;
 }
 

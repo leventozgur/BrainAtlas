@@ -465,8 +465,8 @@ async function checkCodeReferences(page, repoRoot, cache, add, git) {
   }
 }
 
-/** @param {string} vault @param {{now?:Date,repo?:string}} [options] */
-export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
+/** @param {string} vault @param {{now?:Date,repo?:string,knownCommands?:Iterable<string>}} [options] */
+export async function runMaintenance(vault, { now = new Date(), repo, knownCommands = commandNames } = {}) {
   const started = Date.now();
   const root = await vaultRoot(vault);
   const repoRoot = repo === undefined ? null : await repoDirectory(repo);
@@ -621,7 +621,7 @@ export async function runMaintenance(vault, { now = new Date(), repo } = {}) {
     if (change.action !== 'none')
       policyWarnings.push(`${change.path}: the managed policy is out of date; run brainatlas agent refresh.`);
   policyWarnings.push(
-    ...(await lintPolicyReferences({ vaultDir: root, home: process.env.HOME, knownCommands: commandNames })).warnings
+    ...(await lintPolicyReferences({ vaultDir: root, home: process.env.HOME, knownCommands })).warnings
   );
   return {
     ok: true,
