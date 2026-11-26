@@ -92,6 +92,8 @@ test('stdio MCP exposes and exercises every tool with scoped writes', async (t) 
   assert.deepEqual(
     listed.tools.map((item) => item.name).sort(),
     [
+      'plan_read',
+      'plan_update',
       'wiki_add_crosslinks',
       'wiki_create_concept',
       'wiki_create_entity',
@@ -176,7 +178,15 @@ test('readOnly stdio server omits every write tool', async (t) => {
   const names = (await client.listTools()).tools.map((item) => item.name);
   assert.deepEqual(
     names.sort(),
-    ['wiki_lint', 'wiki_list_pages', 'wiki_query', 'wiki_read_index', 'wiki_read_page', 'wiki_status'].sort()
+    [
+      'plan_read',
+      'wiki_lint',
+      'wiki_list_pages',
+      'wiki_query',
+      'wiki_read_index',
+      'wiki_read_page',
+      'wiki_status',
+    ].sort()
   );
   assert.equal(
     names.some((name) => writeTools.includes(name)),

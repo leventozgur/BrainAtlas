@@ -41,6 +41,7 @@ const helpDescriptions = Object.freeze({
   compact: 'Move older dated sections of one page verbatim into wiki/archive/<name>-history.md (--plan or --apply).',
   usage: 'Summarize hook metrics for the last days or record feedback.',
   wiki: 'Wiki tools from the shell, running the same code as the MCP tools: query, read, index, list, status, lint; write and reindex change the Wiki.',
+  plan: 'Read and update the planning backlog and project files: list, show, new, add, set.',
   ui: '(experimental) Open a local browser panel for status, agent channels and settings (127.0.0.1 only).',
   help: 'Show built-in and active module commands.',
 });
@@ -70,6 +71,7 @@ const helpUsages = Object.freeze({
     'brainatlas compact --page wiki/<path>.md (--plan | --apply) [--keep N] [--older-than YYYY-MM-DD] [--vault PATH] [--json]',
   usage: 'brainatlas usage [--days N] [--json] | brainatlas usage feedback useful|not-useful',
   wiki: 'brainatlas wiki query <text> [--limit N] [--compact] [--provenance] | read <path> [--anchor A] [--max-chars N] | index | list [--type T] | status | lint | write <path> [--dry-run] [--expect-sha256 H] (content on stdin) | reindex [--dry-run]  [--vault PATH] [--json]',
+  plan: 'brainatlas plan list | show <project> [--max-chars N] | new <slug> --title T --purpose P [--status S] | add <project> <title...> [--status S] [--id X] | set <project> [<task>] <status>  [--expect-sha256 H] [--dry-run] [--vault PATH] [--json]',
   ui: 'brainatlas ui [--no-open] [--json]',
   help: 'brainatlas --help | brainatlas help [COMMAND]',
 });
@@ -173,6 +175,7 @@ async function showHelp(topic, { paths, env, output, json }) {
 // command === 'update', command === 'rollback', command === 'recover', command === 'eval'
 // command === 'hook', command === 'mcp', command === 'migrate', command === 'adopt'
 // command === 'maintain', command === 'compact', command === 'usage', command === 'wiki'
+// command === 'plan'
 // command === 'agent', command === 'ui'
 const dispatch = Object.freeze({
   init: setup.init,
@@ -197,6 +200,7 @@ const dispatch = Object.freeze({
   compact: tools.compact,
   usage: tools.usage,
   wiki: tools.wiki,
+  plan: tools.plan,
 });
 const builtInCommands = new Set([...Object.keys(dispatch), 'help']);
 

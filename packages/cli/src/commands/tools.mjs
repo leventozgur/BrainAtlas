@@ -121,6 +121,18 @@ export async function wiki({ args, json, output, env }) {
   return;
 }
 
+export async function plan({ args, json, output, env }) {
+  const { formatPlanResult, runPlanCommand } = await import('../plan.mjs');
+  const result = await runPlanCommand(args, { env });
+  if (json) {
+    output(result.value);
+    return;
+  }
+  const text = formatPlanResult(result.sub, result.value);
+  if (text) console.log(text);
+  return;
+}
+
 export async function compact({ flag, value, plan, json, output, paths, env }) {
   const page = value('--page');
   if (!page) throw error('E_ARGUMENT', 'compact requires --page <wiki/...md>.');

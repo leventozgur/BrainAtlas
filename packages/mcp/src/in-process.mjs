@@ -15,6 +15,8 @@ const CALLABLE_TOOLS = new Set([
   'wiki_lint',
   'wiki_write_page',
   'wiki_update_index',
+  'plan_read',
+  'plan_update',
 ]);
 
 function argumentError(name) {
@@ -23,8 +25,9 @@ function argumentError(name) {
 }
 
 /**
- * Run one Wiki tool in process: the six read tools plus wiki_write_page and wiki_update_index. Any other name is
- * refused before a server is created. Client and server are closed on every path, including an error.
+ * Run one Wiki or planning tool in process: the six read tools plus wiki_write_page, wiki_update_index, plan_read and
+ * plan_update. Any other name is refused before a server is created. Client and server are closed on every path,
+ * including an error.
  * @param {{config:object,paths:object,env:object,dryRun?:boolean}} options
  * @param {string} name
  * @param {object} [args]

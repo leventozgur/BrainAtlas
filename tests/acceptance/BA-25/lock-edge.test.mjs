@@ -241,6 +241,7 @@ test('readOnly mode exposes no write tools and the lock is never created', async
   const c = await openClient(t, WT, f);
   const names = (await c.client.listTools()).tools.map((x) => x.name).sort();
   assert.deepEqual(names, [
+    'plan_read',
     'wiki_lint',
     'wiki_list_pages',
     'wiki_query',

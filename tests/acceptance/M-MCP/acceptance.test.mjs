@@ -104,7 +104,10 @@ async function files(dir) {
 test('D-17 list, reads, retrieval and invalid inputs over SDK stdio', async (t) => {
   const f = await fixture(t),
     c = f.client;
-  assert.deepEqual((await c.listTools()).tools.map((x) => x.name).sort(), [...reads, ...writes].sort());
+  assert.deepEqual(
+    (await c.listTools()).tools.map((x) => x.name).sort(),
+    [...reads, ...writes, 'plan_read', 'plan_update'].sort()
+  );
   const q = ok(await call(c, 'wiki_query', { query: 'nebulacharcoalprobe', limit: 2 }));
   assert.ok(q.results.length);
   assert.ok(q.results.every((x) => typeof x.stale === 'boolean' && x.status !== 'superseded'));
@@ -184,7 +187,7 @@ test('all write tools: success, invalid operations, log and refreshed retrieval'
 test('readOnly hides and rejects every write operation', async (t) => {
   const f = await fixture(t, true),
     c = f.client;
-  assert.deepEqual((await c.listTools()).tools.map((x) => x.name).sort(), reads.sort());
+  assert.deepEqual((await c.listTools()).tools.map((x) => x.name).sort(), [...reads, 'plan_read'].sort());
   assert.equal(ok(await call(c, 'wiki_status')).readOnly, true);
   const args = [
     { path: 'entities/forbidden.md', content: page('Forbidden', 'text') },
