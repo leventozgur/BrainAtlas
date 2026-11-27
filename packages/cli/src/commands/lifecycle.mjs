@@ -27,6 +27,8 @@ import {
   validateConfig,
   VAULT_STANDARD_KEYS,
   vaultId,
+  vaultStateDir,
+  absoluteVaultPath,
 } from '@brainatlas/core';
 import { inspectReleaseArchive, extractVerifiedRelease } from '../archive.mjs';
 import {
@@ -499,7 +501,9 @@ export async function doctorResult(paths, env, now = new Date()) {
   if (hookAgents.length && cfg.vault?.path) {
     let records = null;
     try {
-      records = await readJsonl(join(paths.stateDir, vaultId(cfg.vault.path), 'metrics', 'hooks.jsonl'));
+      records = await readJsonl(
+        join(vaultStateDir(paths, absoluteVaultPath(cfg.vault.path, env.HOME)), 'metrics', 'hooks.jsonl')
+      );
     } catch (cause) {
       warnings.push(`Hook metrics could not be read (${cause?.code ?? 'error'}).`);
     }
@@ -589,7 +593,9 @@ export async function doctorResult(paths, env, now = new Date()) {
           if (cfg.semantic?.enabled === true)
             try {
               const semantic = entries.get('semantic');
-              const index = await semantic?.readSemanticIndex?.(paths.stateDir);
+              const index = await semantic?.readSemanticIndex?.(
+                vaultStateDir(paths, absoluteVaultPath(cfg.vault.path, env.HOME))
+              );
               freshness = index
                 ? await semantic.measureIndexFreshness({ corpusDir: join(cfg.vault.path, 'wiki'), index })
                 : null;

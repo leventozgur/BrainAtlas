@@ -7,7 +7,7 @@ import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultConfig, resolvePaths, saveConfig } from '@brainatlas/core';
+import { defaultConfig, resolvePaths, saveConfig, vaultStateDir } from '@brainatlas/core';
 import { cleanEnv } from './clean-env.mjs';
 
 const root = resolve(join(fileURLToPath(new URL('.', import.meta.url)), '../..'));
@@ -58,7 +58,7 @@ async function fixture(t) {
 }
 
 async function writeIndex(f, fileHashes) {
-  const dir = join(f.paths.stateDir, 'semantic');
+  const dir = join(vaultStateDir(f.paths, f.vault), 'semantic');
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, 'index.json'),

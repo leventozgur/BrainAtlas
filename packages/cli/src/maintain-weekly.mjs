@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { vaultId } from '@brainatlas/core';
+import { join } from 'node:path';
+import { absoluteVaultPath, vaultStateDir } from '@brainatlas/core';
 import { planCompaction } from './compact.mjs';
 import { planFix } from './maintain-fix.mjs';
 import { receiptCandidates, runMaintenance } from './maintain.mjs';
@@ -42,7 +42,7 @@ const isOverdue = (ranAt, now) => {
 };
 
 export function weeklyDirectory(paths, vaultPath) {
-  return join(paths.stateDir, vaultId(resolve(vaultPath)), 'maintenance');
+  return join(vaultStateDir(paths, absoluteVaultPath(vaultPath)), 'maintenance');
 }
 
 export async function weeklyReminder(options = /** @type {any} */ ({})) {
@@ -133,7 +133,7 @@ export async function runWeeklyMaintenance(vault, options = /** @type {any} */ (
         synthesis = await proposeCurrentState({
           vault,
           config,
-          stateDir: join(paths.stateDir, vaultId(resolve(vault))),
+          stateDir: vaultStateDir(paths, absoluteVaultPath(vault)),
           now,
           runCommand,
           env: options.env,

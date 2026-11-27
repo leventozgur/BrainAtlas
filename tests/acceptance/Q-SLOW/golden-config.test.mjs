@@ -168,7 +168,7 @@ test('semanticIndex and semanticStatus command outputs keep their keys (status g
     ok: true,
     json: async () => ({ embeddings: JSON.parse(request.body).input.map(() => [1, 0]) }),
   });
-  const ctx = { config, env: { HOME: w.root }, paths: { stateDir: w.stateDir }, fetchImpl };
+  const ctx = { config, env: { HOME: w.root }, paths: { stateDir: w.stateRoot }, fetchImpl };
   const indexed = await commands.semanticIndex([], ctx);
   assert.deepEqual(indexed, { indexed: 4 });
   assert.deepEqual(Object.keys(indexed), ['indexed']);
@@ -315,7 +315,7 @@ test('provider fingerprint and existing index validity are independent of the tw
   const ctx = (semantic) => ({
     config: { ...config, semantic: { ...config.semantic, ...semantic } },
     env: { HOME: w.root },
-    paths: { stateDir: w.stateDir },
+    paths: { stateDir: w.stateRoot },
     fetchImpl,
   });
   await commands.semanticIndex([], ctx({}));
@@ -354,7 +354,7 @@ test('invalid semantic index settings are refused by the commands without callin
   for (const semantic of [{ indexBatchSize: 0 }, { indexBatchSize: 65 }, { indexTimeoutMs: 0 }]) {
     config.semantic = { ...SEMANTIC_DEFAULTS, dims: 2, model: 'm', ...semantic };
     await assert.rejects(
-      commands.semanticIndex([], { config, env: { HOME: w.root }, paths: { stateDir: w.stateDir }, fetchImpl }),
+      commands.semanticIndex([], { config, env: { HOME: w.root }, paths: { stateDir: w.stateRoot }, fetchImpl }),
       undefined,
       JSON.stringify(semantic)
     );
@@ -373,7 +373,7 @@ test('the hook sources do not depend on the semantic module or the new settings'
 
 async function mcpFixture(t, files, config) {
   const w = await workspace(t, files);
-  const paths = { stateDir: w.stateDir, releasesDir: join(w.root, 'releases'), currentDir: join(w.root, 'current') };
+  const paths = { stateDir: w.stateRoot, releasesDir: join(w.root, 'releases'), currentDir: join(w.root, 'current') };
   const release = join(paths.releasesDir, 'v1');
   await mkdir(join(release, 'modules'), { recursive: true });
   const repo = new URL('../../../', import.meta.url).pathname;

@@ -22,7 +22,7 @@ Steps run in this order and only when needed.
 | `policy` | runs the same refresh as `agent refresh`; `--force` only when given |
 | `planning-page` | moves a Wiki page whose file name contains `backlog`, `todo`, `tasks` or `roadmap` verbatim to `planning/projects/<slug>.md` (an existing target becomes `-2`, `-3`, ...), adds a backlog row (next `PRJ-NNN`, status `idea`), removes the Wiki page, updates the index and logs one `standard-migrate` entry |
 | `orphan-state` | moves state directories of a former vault path to `<stateDir>/archive/<name>-<stamp>/` (never deleted) |
-| `duplicate-index` | removes the stale per-vault copy `<stateDir>/<vault id>/retrieval-index.json`; the live root `<stateDir>/retrieval-index.json` is never removed |
+| `duplicate-index` | removes the root caches `<stateDir>/retrieval-index.json` and `<stateDir>/semantic/` once the per-vault copies under `<stateDir>/<vault id>/` exist; the per-vault ones are never removed |
 | `adapter-backups` | with `--prune-backups`, keeps the newest 3 `*.bak.*` backups per adapter file and deletes the rest |
 
 Report only, listed under `warnings`: policy text that names tools, commands or paths that no longer exist (user text is

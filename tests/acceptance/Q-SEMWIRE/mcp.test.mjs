@@ -3,7 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, cp, readFile, readdir, rm, symlink, writeFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { vaultId } from '../../../packages/core/src/paths/index.mjs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createServer } from '../../../packages/mcp/src/index.mjs';
@@ -21,7 +22,8 @@ async function fixture(t, { installSemantic = true, files = {}, fetchImpl } = {}
   t.after(() => rm(root, { recursive: true, force: true }));
   const vault = join(root, 'vault');
   const wiki = join(vault, 'wiki');
-  const stateDir = join(root, 'state');
+  const rootState = join(root, 'state');
+  const stateDir = join(rootState, vaultId(vault));
   const releasesDir = join(root, 'releases');
   const release = join(releasesDir, 'v1');
   const currentDir = join(root, 'current');
@@ -43,10 +45,10 @@ async function fixture(t, { installSemantic = true, files = {}, fetchImpl } = {}
   config.vault.path = vault;
   config.modules = installSemantic ? ['semantic'] : [];
   config.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2, timeoutMs: 30 };
-  const paths = { stateDir, releasesDir, currentDir };
+  const paths = { stateDir: rootState, releasesDir, currentDir };
   const env = { HOME: root };
   const connect = async (cfg = config, state = stateDir, fetch = fetchImpl) => {
-    const server = createServer({ config: cfg, paths: { ...paths, stateDir: state }, env, fetchImpl: fetch });
+    const server = createServer({ config: cfg, paths: { ...paths, stateDir: dirname(state) }, env, fetchImpl: fetch });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'q-semwire-acceptance', version: '1' });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

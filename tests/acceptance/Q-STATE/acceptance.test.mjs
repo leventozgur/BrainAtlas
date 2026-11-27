@@ -9,7 +9,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createServer } from '../../../packages/mcp/src/index.mjs';
 import { defaultConfig } from '../../../packages/core/src/config/index.mjs';
-import { resolvePaths } from '../../../packages/core/src/paths/index.mjs';
+import { resolvePaths, vaultStateDir } from '../../../packages/core/src/paths/index.mjs';
 import { inventoryVault, resolveSyncScope } from '../../../modules/sync-engine/src/scope.mjs';
 
 async function fixture(t) {
@@ -66,7 +66,9 @@ test('implicit state: read operations preserve the entire vault tree; writes onl
     true
   );
   assert.deepEqual(await tree(vault), [...before, 'wiki/entities/acceptance.md'].sort());
-  assert.ok((await stat(join(resolvePaths({ env, platform: 'linux' }).stateDir, 'retrieval-index.json'))).isFile());
+  assert.ok(
+    (await stat(join(vaultStateDir(resolvePaths({ env, platform: 'linux' }), vault), 'retrieval-index.json'))).isFile()
+  );
 });
 
 test('platform override and explicit state directory locate caches outside vault', async (t) => {
@@ -76,13 +78,15 @@ test('platform override and explicit state directory locate caches outside vault
     const before = await tree(vault);
     const client = await connect(t, { config, paths: {}, env });
     assert.notEqual((await call(client, 'wiki_query', { query: 'evidence', limit: 0 })).isError, true);
-    assert.ok((await stat(join(resolvePaths({ env, platform }).stateDir, 'retrieval-index.json'))).isFile());
+    assert.ok(
+      (await stat(join(vaultStateDir(resolvePaths({ env, platform }), vault), 'retrieval-index.json'))).isFile()
+    );
     assert.deepEqual(await tree(vault), before);
   }
   const custom = join(base, 'custom-state');
   const client = await connect(t, { config, paths: { stateDir: custom }, env: linuxEnv(base) });
   assert.notEqual((await call(client, 'wiki_query', { query: 'evidence', limit: 20 })).isError, true);
-  assert.ok((await stat(join(custom, 'retrieval-index.json'))).isFile());
+  assert.ok((await stat(join(vaultStateDir({ stateDir: custom }, vault), 'retrieval-index.json'))).isFile());
   assert.throws(
     () => createServer({ config, paths: {}, env: { ...linuxEnv(base), BRAINATLAS_PLATFORM: 'unsupported' } }),
     { code: 'E_PLATFORM' }

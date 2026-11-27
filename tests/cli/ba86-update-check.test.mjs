@@ -152,9 +152,9 @@ test('selection ignores drafts and bad tags, respects prereleases and picks the 
   assert.equal(pre.prerelease, true);
 
   const installedPre = await fixture(t, { version: '0.1.0-rc.16' });
-  const candidates = [release('0.1.0-rc.10', { prerelease: true }), release('0.1.0-rc.20', { prerelease: true })];
+  const candidates = [release('0.1.0-rc.10', { prerelease: true }), release('0.1.0-rc.21', { prerelease: true })];
   const seen = await runJson(['update', '--check', '--json'], installedPre.env, async () => response(candidates));
-  assert.equal(seen.offeredVersion, '0.1.0-rc.20');
+  assert.equal(seen.offeredVersion, '0.1.0-rc.21');
 
   const highest = await runJson(['update', '--check', '--json', '--pre'], env, async () =>
     response([release('0.1.0-rc.9'), release('0.1.0-rc.16'), release('0.1.0')])

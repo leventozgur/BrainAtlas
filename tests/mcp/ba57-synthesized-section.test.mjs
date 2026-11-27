@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { defaultConfig, SEMANTIC_DEFAULTS } from '../../packages/core/src/config/index.mjs';
+import { vaultId } from '../../packages/core/src/paths/index.mjs';
 import { createServer } from '../../packages/mcp/src/index.mjs';
 import { createOllamaProvider, markdownChunks, updateSemanticIndex } from '../../modules/semantic/src/index.mjs';
 
@@ -57,7 +58,8 @@ async function semanticFixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'ba57-mcp-semantic-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const wiki = join(root, 'vault', 'wiki'),
-    stateDir = join(root, 'state'),
+    stateRoot = join(root, 'state'),
+    stateDir = join(stateRoot, vaultId(join(root, 'vault'))),
     releasesDir = join(root, 'releases'),
     release = join(releasesDir, 'v1'),
     currentDir = join(root, 'current');
@@ -82,7 +84,12 @@ async function semanticFixture(t) {
     provider: createOllamaProvider({ ...config.semantic, fetchImpl }),
     chunkMarkdown: markdownChunks,
   });
-  const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
+  const server = createServer({
+    config,
+    paths: { stateDir: stateRoot, releasesDir, currentDir },
+    env: { HOME: root },
+    fetchImpl,
+  });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'ba57-semantic', version: '1' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

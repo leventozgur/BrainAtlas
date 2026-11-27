@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runHook, buildHookCommand } from '../../packages/hooks/src/index.mjs';
 import { semanticRequested, SEMANTIC_BUDGET_MS } from '../../packages/hooks/src/semantic.mjs';
-import { resolvePaths } from '../../packages/core/src/paths/index.mjs';
 import { SEMANTIC_DEFAULTS } from '../../packages/core/src/config/index.mjs';
 
 const NOW = new Date('2026-11-10T00:00:00Z');
@@ -25,7 +24,7 @@ async function fixture(t, pages = PAGES) {
   await Promise.all([mkdir(wiki, { recursive: true }), mkdir(state), mkdir(home)]);
   for (const [name, body] of Object.entries(pages)) await writeFile(join(wiki, name), body);
   const env = { HOME: home };
-  return { root, vault, wiki, state, env, globalState: resolvePaths({ env }).stateDir };
+  return { root, vault, wiki, state, env };
 }
 
 function config(f, overrides = {}) {
@@ -110,7 +109,7 @@ test('semantic on with an index built for another model: fingerprint mismatch fa
   const other = { ...SEMANTIC_DEFAULTS, model: 'some-other-model', dims: 2 };
   await buildSemanticIndex({
     corpusDir: f.wiki,
-    stateDir: f.globalState,
+    stateDir: f.state,
     provider: createOllamaProvider({ ...other, fetchImpl: fake }),
     chunkMarkdown: markdownChunks,
   });
@@ -159,6 +158,6 @@ test('permission command grants read access to the global semantic index only', 
     t.diagnostic('Node permission model unavailable here');
     return;
   }
-  assert.ok(command.includes(`--allow-fs-read=${join(f.globalState, 'semantic')}`));
-  assert.ok(!command.some((flag) => flag === `--allow-fs-write=${join(f.globalState, 'semantic')}`));
+  assert.ok(command.includes(`--allow-fs-read=${f.state}`));
+  assert.ok(!command.some((flag) => flag === `--allow-fs-write=${join(f.state, 'semantic')}`));
 });

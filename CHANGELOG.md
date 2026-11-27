@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.0-rc.21 — 2026-11-27
+
+One fix found while migrating the maintainer's own Mac with rc.20: each device kept two retrieval indexes for the same vault.
+
+- BA-105: every cache derived from a vault (retrieval index, semantic index) lives in one per-vault state directory, `<state>/<vault id>/`, for the MCP server, the shell commands, the hook and `maintain`. Before, the hook used the per-vault directory and the MCP server the state root, so the same vault had two diverging indexes; rc.20's `standard migrate` then removed the hook's copy. A root retrieval index built for the same vault is moved into place once instead of being rebuilt; the semantic index is rebuilt once per vault after updating (its cost grows with the vault). `standard migrate` now removes the root caches when the per-vault ones exist, and warns when other vaults on the device will rebuild theirs. `doctor` stays read-only. Vault paths are resolved against the home directory the same way everywhere.
+
 ## 0.1.0-rc.20 — 2026-11-27
 
 Second step of the common standard: the settings that decide knowledge quality live in the vault, every page type has a template and one naming rule, and `brainatlas standard migrate` repairs drifted devices. The default install (Lite, MCP + hooks) is otherwise unchanged.

@@ -8,7 +8,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createServer } from '../../packages/mcp/src/index.mjs';
 import { defaultConfig, SEMANTIC_DEFAULTS } from '../../packages/core/src/config/index.mjs';
-import { createSearcher } from '../../packages/core/src/index.mjs';
+import { createSearcher, vaultId } from '../../packages/core/src/index.mjs';
 import { createOllamaProvider, updateSemanticIndex, markdownChunks } from '../../modules/semantic/src/index.mjs';
 
 async function backgroundFixture(t, fetchImpl, semantic = {}) {
@@ -18,7 +18,8 @@ async function backgroundFixture(t, fetchImpl, semantic = {}) {
     for (const cleanup of cleanups.reverse()) await cleanup();
   });
   const wiki = join(root, 'vault/wiki'),
-    stateDir = join(root, 'state'),
+    stateRoot = join(root, 'state'),
+    stateDir = join(stateRoot, vaultId(join(root, 'vault'))),
     releasesDir = join(root, 'releases'),
     release = join(releasesDir, 'v1'),
     currentDir = join(root, 'current');
@@ -32,7 +33,12 @@ async function backgroundFixture(t, fetchImpl, semantic = {}) {
   config.modules = ['semantic'];
   config.vault.path = join(root, 'vault');
   config.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2, ...semantic };
-  const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
+  const server = createServer({
+    config,
+    paths: { stateDir: stateRoot, releasesDir, currentDir },
+    env: { HOME: root },
+    fetchImpl,
+  });
   const [ct, st] = InMemoryTransport.createLinkedPair(),
     client = new Client({ name: 'test', version: '1' });
   await Promise.all([server.connect(st), client.connect(ct)]);
@@ -129,7 +135,8 @@ test('MCP opt-in semantic search keeps lexical fallback and thresholds', async (
     for (const cleanup of cleanups.reverse()) await cleanup();
   });
   const wiki = join(root, 'vault/wiki'),
-    stateDir = join(root, 'state'),
+    stateRoot = join(root, 'state'),
+    stateDir = join(stateRoot, vaultId(join(root, 'vault'))),
     releasesDir = join(root, 'releases'),
     release = join(releasesDir, 'v1');
   await mkdir(wiki, { recursive: true });
@@ -157,7 +164,12 @@ test('MCP opt-in semantic search keeps lexical fallback and thresholds', async (
   config.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2 };
   const provider = createOllamaProvider({ ...config.semantic, fetchImpl });
   await updateSemanticIndex({ corpusDir: wiki, stateDir, provider, chunkMarkdown: markdownChunks });
-  const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
+  const server = createServer({
+    config,
+    paths: { stateDir: stateRoot, releasesDir, currentDir },
+    env: { HOME: root },
+    fetchImpl,
+  });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test', version: '1' });
   await Promise.all([server.connect(st), client.connect(ct)]);
@@ -183,7 +195,8 @@ test('missing semantic module and manifest differ from an import failure', async
   const root = await mkdtemp(join(tmpdir(), 'mcp-semantic-module-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const wiki = join(root, 'vault/wiki'),
-    stateDir = join(root, 'state'),
+    stateRoot = join(root, 'state'),
+    stateDir = join(stateRoot, vaultId(join(root, 'vault'))),
     releasesDir = join(root, 'releases'),
     release = join(releasesDir, 'v1');
   const moduleDir = join(release, 'modules/semantic'),
@@ -205,7 +218,7 @@ test('missing semantic module and manifest differ from an import failure', async
   const query = async () => {
     const server = createServer({
       config,
-      paths: { stateDir, releasesDir, currentDir },
+      paths: { stateDir: stateRoot, releasesDir, currentDir },
       env: { HOME: root },
       fetchImpl: async () => {
         calls++;
@@ -250,7 +263,8 @@ test('empty index rebuilds once when pages exist and remains valid for an empty 
     for (const cleanup of cleanups.reverse()) await cleanup();
   });
   const wiki = join(root, 'vault/wiki'),
-    stateDir = join(root, 'state'),
+    stateRoot = join(root, 'state'),
+    stateDir = join(stateRoot, vaultId(join(root, 'vault'))),
     releasesDir = join(root, 'releases'),
     release = join(releasesDir, 'v1'),
     currentDir = join(root, 'current');
@@ -275,7 +289,12 @@ test('empty index rebuilds once when pages exist and remains valid for an empty 
   };
   const provider = createOllamaProvider({ ...config.semantic, fetchImpl });
   await updateSemanticIndex({ corpusDir: wiki, stateDir, provider, chunkMarkdown: markdownChunks });
-  const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
+  const server = createServer({
+    config,
+    paths: { stateDir: stateRoot, releasesDir, currentDir },
+    env: { HOME: root },
+    fetchImpl,
+  });
   const [ct, st] = InMemoryTransport.createLinkedPair(),
     client = new Client({ name: 'test', version: '1' });
   await Promise.all([server.connect(st), client.connect(ct)]);
@@ -309,7 +328,7 @@ test('empty index rebuilds once when pages exist and remains valid for an empty 
   };
   const server2 = createServer({
     config,
-    paths: { stateDir, releasesDir, currentDir },
+    paths: { stateDir: stateRoot, releasesDir, currentDir },
     env: { HOME: root },
     fetchImpl: blockedFetch,
   });
@@ -357,7 +376,8 @@ test('MCP fallback, opt-out and remote policy preserve lexical answers without l
     for (const cleanup of cleanups.reverse()) await cleanup();
   });
   const wiki = join(root, 'vault/wiki'),
-    stateDir = join(root, 'state'),
+    stateRoot = join(root, 'state'),
+    stateDir = join(stateRoot, vaultId(join(root, 'vault'))),
     releasesDir = join(root, 'releases'),
     release = join(releasesDir, 'v1');
   await mkdir(wiki, { recursive: true });
@@ -381,7 +401,7 @@ test('MCP fallback, opt-out and remote policy preserve lexical answers without l
     if (behavior === 'dimension') return { ok: true, json: async () => ({ embeddings: [[1]] }) };
     return { ok: true, json: async () => ({ embeddings: JSON.parse(opts.body).input.map(() => [1, 0]) }) };
   };
-  const connect = async (cfg, queryStateDir = stateDir) => {
+  const connect = async (cfg, queryStateDir = stateRoot) => {
     const server = createServer({
       config: cfg,
       paths: { stateDir: queryStateDir, releasesDir, currentDir },
@@ -439,7 +459,7 @@ test('MCP fallback, opt-out and remote policy preserve lexical answers without l
   const mismatch = structuredClone(config);
   mismatch.semantic.model = 'different';
   const mismatchState = join(root, 'mismatch-state');
-  await cp(stateDir, mismatchState, { recursive: true });
+  await cp(stateDir, join(mismatchState, vaultId(join(root, 'vault'))), { recursive: true });
   const mismatchQuery = await connect(mismatch, mismatchState);
   const mismatchResult = await mismatchQuery('car');
   assert.deepEqual(mismatchResult.results, golden.results);

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { defaultConfig } from '../../packages/core/src/config/index.mjs';
+import { vaultId } from '../../packages/core/src/paths/index.mjs';
 import { createServer } from '../../packages/mcp/src/index.mjs';
 import { SEMANTIC_DEFAULTS } from '../../packages/core/src/config/index.mjs';
 import { createOllamaProvider, updateSemanticIndex, markdownChunks } from '../../modules/semantic/src/index.mjs';
@@ -125,7 +126,8 @@ test('semantic wiki_query leaves out an excluded wiki root page; the same query 
   const root = await mkdtemp(path.join(os.tmpdir(), 'ba29-mcp-sem-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const wiki = path.join(root, 'vault/wiki'),
-    stateDir = path.join(root, 'state'),
+    stateRoot = path.join(root, 'state'),
+    stateDir = path.join(stateRoot, vaultId(path.join(root, 'vault'))),
     releasesDir = path.join(root, 'releases'),
     release = path.join(releasesDir, 'v1'),
     currentDir = path.join(root, 'current');
@@ -157,7 +159,7 @@ test('semantic wiki_query leaves out an excluded wiki root page; the same query 
     if (exclude !== undefined) config.retrieval = { ...config.retrieval, exclude };
     const server = createServer({
       config,
-      paths: { stateDir, releasesDir, currentDir },
+      paths: { stateDir: stateRoot, releasesDir, currentDir },
       env: { HOME: root },
       fetchImpl,
     });

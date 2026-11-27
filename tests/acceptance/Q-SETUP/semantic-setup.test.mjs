@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { vaultStateDir } from '../../../packages/core/src/paths/index.mjs';
 import { defaultConfig, resolvePaths, saveConfig } from '@brainatlas/core';
 import { commands } from '../../../modules/semantic/src/index.mjs';
 
@@ -184,7 +185,7 @@ test('successful setup enables semantic last, preserves retrieval/config, and is
     assert.deepEqual(saved[key], original[key], `unexpected config change at ${key}`);
   }
   const savedConfigText = await readFile(f.paths.configFile, 'utf8');
-  const savedIndexText = await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8');
+  const savedIndexText = await readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.json'), 'utf8');
 
   f.ctx.config = saved;
   const second = await run(f, ['--yes', '--json', '--mode', 'rrf']);
@@ -193,7 +194,7 @@ test('successful setup enables semantic last, preserves retrieval/config, and is
   assert.equal(second.report.steps.index.status, 'skipped');
   assert.equal(second.report.steps.config.status, 'skipped');
   assert.equal(await readFile(f.paths.configFile, 'utf8'), savedConfigText);
-  assert.equal(await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8'), savedIndexText);
+  assert.equal(await readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.json'), 'utf8'), savedIndexText);
 });
 
 test('dry-run and non-TTY runs make only loopback GETs and leave config and state untouched', async (t) => {
@@ -203,7 +204,7 @@ test('dry-run and non-TTY runs make only loopback GETs and leave config and stat
     assert.equal(result.report.dryRun, true);
     assertOnlyLoopbackGet(f.calls);
     assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
-    await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.json')));
+    await assert.rejects(readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.json')));
     assert.deepEqual(
       f.execs.map((item) => item.args),
       [['--version']]
@@ -217,7 +218,7 @@ test('dry-run and non-TTY runs make only loopback GETs and leave config and stat
   assert.equal(plannedDownload.report.steps.model.status, 'action-needed');
   assertOnlyLoopbackGet(missing.calls);
   assert.equal(await readFile(missing.paths.configFile, 'utf8'), missing.before);
-  await assert.rejects(readFile(join(missing.paths.stateDir, 'semantic', 'index.json')));
+  await assert.rejects(readFile(join(vaultStateDir(missing.paths, missing.vault), 'semantic', 'index.json')));
 });
 
 test('interactive decline and missing wiki are safe and actionable', async (t) => {
@@ -230,7 +231,7 @@ test('interactive decline and missing wiki are safe and actionable', async (t) =
   assert.equal(declined.promptCalls, 1);
   assertOnlyLoopbackGet(declined.calls);
   assert.equal(await readFile(declined.paths.configFile, 'utf8'), declined.before);
-  await assert.rejects(readFile(join(declined.paths.stateDir, 'semantic', 'index.json')));
+  await assert.rejects(readFile(join(vaultStateDir(declined.paths, declined.vault), 'semantic', 'index.json')));
 
   const missing = await fixture(t);
   missing.ctx.config.vault.path = join(missing.root, 'absent-vault');
@@ -398,8 +399,8 @@ test('setup output does not expose page text or provider errors; corpus symlinks
   const g = await fixture(t);
   await mkdir(outsideDir);
   await writeFile(join(outsideDir, 'marker'), 'unchanged');
-  await mkdir(g.paths.stateDir, { recursive: true });
-  await symlink(outsideDir, join(g.paths.stateDir, 'semantic'));
+  await mkdir(vaultStateDir(g.paths, g.vault), { recursive: true });
+  await symlink(outsideDir, join(vaultStateDir(g.paths, g.vault), 'semantic'));
   const symlinkResult = await run(g);
   assert.equal(symlinkResult.exitCode, 2);
   assert.equal(symlinkResult.report.steps.index.status, 'action-needed');
@@ -415,7 +416,9 @@ test('vault path traversal cannot redirect semantic state writes outside the inj
   assert.equal(result.exitCode, 0);
   assert.deepEqual(await readdir(f.vault), ['wiki']);
   assert.deepEqual(await readdir(f.wiki), ['evidence.md']);
-  assert.ok((await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8')).includes('fixture page'));
+  assert.ok(
+    (await readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.json'), 'utf8')).includes('fixture page')
+  );
   assert.equal(JSON.parse(await readFile(f.paths.configFile, 'utf8')).semantic.enabled, true);
 });
 

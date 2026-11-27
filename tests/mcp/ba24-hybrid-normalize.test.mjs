@@ -21,7 +21,8 @@ async function start(t, { files, budgetChars = 4000, mode = 'semantic-primary', 
   const root = await mkdtemp(join(tmpdir(), 'ba24-hybrid-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const wiki = join(root, 'vault/wiki'),
-    stateDir = join(root, 'state'),
+    stateRoot = join(root, 'state'),
+    stateDir = join(stateRoot, core.vaultId(join(root, 'vault'))),
     releasesDir = join(root, 'releases'),
     release = join(releasesDir, 'v1');
   await mkdir(wiki, { recursive: true });
@@ -44,7 +45,12 @@ async function start(t, { files, budgetChars = 4000, mode = 'semantic-primary', 
   config.semantic = { ...SEMANTIC_DEFAULTS, enabled: true, dims: 2, mode };
   const provider = createOllamaProvider({ ...config.semantic, fetchImpl });
   await updateSemanticIndex({ corpusDir: wiki, stateDir, provider, chunkMarkdown: markdownChunks });
-  const server = createServer({ config, paths: { stateDir, releasesDir, currentDir }, env: { HOME: root }, fetchImpl });
+  const server = createServer({
+    config,
+    paths: { stateDir: stateRoot, releasesDir, currentDir },
+    env: { HOME: root },
+    fetchImpl,
+  });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'ba24-test', version: '1' });
   await Promise.all([server.connect(st), client.connect(ct)]);
