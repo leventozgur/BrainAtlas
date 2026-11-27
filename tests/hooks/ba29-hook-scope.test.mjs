@@ -109,7 +109,11 @@ test('hook and MCP share one cache when they use the same state directory', asyn
   const config = defaultConfig('lite');
   config.vault.path = vault;
   config.retrieval = { ...config.retrieval, abstainThreshold: 0 };
-  const server = createServer({ config, paths: { vaultDir: vault, stateDir: state }, env: { HOME: dir } });
+  const server = createServer({
+    config,
+    paths: { vaultDir: vault, stateDir: path.dirname(state) },
+    env: { HOME: dir },
+  });
   const [c, s] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'ba29', version: '1' });
   await Promise.all([server.connect(s), client.connect(c)]);

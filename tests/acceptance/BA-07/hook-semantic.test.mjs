@@ -6,7 +6,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { resolvePaths } from '../../../packages/core/src/paths/index.mjs';
 import { SEMANTIC_DEFAULTS } from '../../../packages/core/src/config/index.mjs';
 import { runHook, buildHookCommand } from '../../../packages/hooks/src/index.mjs';
 
@@ -24,7 +23,7 @@ function fixture() {
   writeFileSync(join(vault, 'wiki', 'alpha.md'), '# Alpha\n\nGardens and soil care for gardens every spring.\n');
   writeFileSync(join(vault, 'wiki', 'beta.md'), '# Beta\n\nRivers and bridges need inspection.\n');
   const stateDir = join(root, 'hook-state');
-  const semanticDir = join(resolvePaths({ env: { HOME: home } }).stateDir, 'semantic');
+  const semanticDir = join(stateDir, 'semantic');
   return { root, vault, home, stateDir, semanticDir, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
@@ -178,7 +177,7 @@ test('buildHookCommand grants read-only access to the semantic index directory',
     process.env.HOME = f.home;
     const paths = {
       vault: f.vault,
-      state: resolvePaths({ env: { HOME: f.home } }).stateDir,
+      state: f.stateDir,
       release: ROOT,
       configFile: join(f.home, 'config.json'),
     };
@@ -190,7 +189,7 @@ test('buildHookCommand grants read-only access to the semantic index directory',
       paths,
     });
     if (!args.includes('--permission')) return;
-    assert.ok(args.includes(`--allow-fs-read=${f.semanticDir}`), 'semantic index directory is readable');
+    assert.ok(args.includes(`--allow-fs-read=${f.stateDir}`), 'semantic index directory is readable');
     assert.ok(!args.includes(`--allow-fs-write=${f.semanticDir}`), 'semantic index directory is not writable');
     assert.ok(
       !args.some((a) => a.startsWith('--allow-fs-write=') && a.includes('/semantic')),

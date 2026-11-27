@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
+import { vaultStateDir } from '../../../packages/core/src/paths/index.mjs';
 import { defaultConfig, resolvePaths, saveConfig } from '@brainatlas/core';
 import { commands } from '../../../modules/semantic/src/index.mjs';
 import { exists, fakeClock, makeSecret, readJson, sectionPage, snapshot, tempRoot } from './helpers.mjs';
@@ -89,8 +90,8 @@ async function fixture(
     clock,
     state,
     configBytes: () => readFile(paths.configFile, 'utf8'),
-    partialFile: join(paths.stateDir, 'semantic', 'index.partial.json'),
-    indexFile: join(paths.stateDir, 'semantic', 'index.json'),
+    partialFile: join(vaultStateDir(paths, vault), 'semantic', 'index.partial.json'),
+    indexFile: join(vaultStateDir(paths, vault), 'semantic', 'index.json'),
   };
 }
 fixture.noProgress = false;
@@ -206,7 +207,7 @@ test('ETA above 300 s, interactive, no --yes: one confirmation; decline stops wi
   assert.equal(await f.configBytes(), before, 'config unchanged');
   assert.equal(await exists(f.indexFile), false);
   assert.equal(await partialCount(f), 32, 'the finished first group is saved');
-  assert.equal(await exists(join(f.paths.stateDir, 'semantic', 'index.lock')), false);
+  assert.equal(await exists(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.lock')), false);
   assert.equal(f.state.embedRequests.length, 1, 'nothing embedded after the decline');
   const notice = f.state.progress.find((line) => /minutes?/u.test(line));
   assert.ok(notice, 'ETA notice is shown');
@@ -357,7 +358,7 @@ test('provider failures during setup indexing do not leak error text, secrets or
   assert.equal(everything.includes(f.home), false);
   const report = JSON.parse(result.output);
   assert.equal(report.steps.index.status, 'action-needed');
-  assert.equal(await exists(join(f.paths.stateDir, 'semantic', 'index.lock')), false);
+  assert.equal(await exists(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.lock')), false);
 });
 
 test('page text and secrets never reach progress output or the partial file', async (t) => {
@@ -386,7 +387,7 @@ test('status exposes partialChunks additively and 0 when the partial file is abs
     'stale',
   ]);
   assert.equal(before.partialChunks, 0);
-  await mkdir(join(f.paths.stateDir, 'semantic'), { recursive: true });
+  await mkdir(join(vaultStateDir(f.paths, f.vault), 'semantic'), { recursive: true });
   await writeFile(
     f.partialFile,
     JSON.stringify({ version: 1, providerFingerprint: 'someone-else', dims: 2, preprocessVersion: '1', vectors: {} })
@@ -396,8 +397,8 @@ test('status exposes partialChunks additively and 0 when the partial file is abs
 
 test('setup while another live indexer holds the lock stops with action-needed, embeds nothing and leaves the foreign lock alone', async (t) => {
   const f = await fixture(t, { sections: 20 });
-  await mkdir(join(f.paths.stateDir, 'semantic'), { recursive: true });
-  const lockFile = join(f.paths.stateDir, 'semantic', 'index.lock');
+  await mkdir(join(vaultStateDir(f.paths, f.vault), 'semantic'), { recursive: true });
+  const lockFile = join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.lock');
   const held = { pid: process.pid, startedAt: f.clock.now() };
   await writeFile(lockFile, JSON.stringify(held));
   const before = await f.configBytes();

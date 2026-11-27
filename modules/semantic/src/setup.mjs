@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline/promises';
 import { totalmem } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { SEMANTIC_DEFAULTS, saveConfig, setConfigValue } from '../../../packages/core/src/config/index.mjs';
+import { vaultStateDir } from '../../../packages/core/src/paths/index.mjs';
 import { createOllamaProvider, validateConfiguredProvider } from './provider.mjs';
 import { markdownChunks } from './chunking.mjs';
 import { updateSemanticIndex, readSemanticIndex, measureIndexFreshness, countPendingChunks } from './index-store.mjs';
@@ -142,6 +143,7 @@ export async function semanticSetup(args, ctx) {
   };
   const vault = resolve(ctx.env.HOME ?? '.', ctx.config.vault.path);
   const corpusDir = join(vault, 'wiki');
+  const stateDir = vaultStateDir(ctx.paths, vault);
   try {
     if (!['darwin', 'linux'].includes(ctx.platform ?? process.platform))
       return stop(
@@ -239,7 +241,7 @@ export async function semanticSetup(args, ctx) {
     const provider = createOllamaProvider({ ...settings, fetchImpl });
     const count = await countPendingChunks({
       corpusDir,
-      stateDir: ctx.paths.stateDir,
+      stateDir,
       provider,
       chunkMarkdown: markdownChunks,
     });
@@ -309,7 +311,7 @@ export async function semanticSetup(args, ctx) {
   };
   let index;
   try {
-    const previous = await readSemanticIndex(ctx.paths.stateDir);
+    const previous = await readSemanticIndex(stateDir);
     const freshness = previous && (await measureIndexFreshness({ corpusDir, index: previous }));
     if (
       previous &&
@@ -320,7 +322,7 @@ export async function semanticSetup(args, ctx) {
     ) {
       index = await updateSemanticIndex({
         corpusDir,
-        stateDir: ctx.paths.stateDir,
+        stateDir,
         provider,
         chunkMarkdown: markdownChunks,
         skipUnchangedWrite: true,
@@ -332,7 +334,7 @@ export async function semanticSetup(args, ctx) {
     } else {
       index = await updateSemanticIndex({
         corpusDir,
-        stateDir: ctx.paths.stateDir,
+        stateDir,
         provider,
         chunkMarkdown: markdownChunks,
         skipUnchangedWrite: true,

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 import { mkdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { commandNames } from '../index.mjs';
-import { loadConfig, secretFilterEnabled, vaultId } from '@brainatlas/core';
+import { loadConfig, secretFilterEnabled, vaultStateDir, absoluteVaultPath } from '@brainatlas/core';
 import { recordCreatedDirectories, missingDirectories } from '../install-manifest.mjs';
 import { formatMaintenance, receiptCandidates, runMaintenance } from '../maintain.mjs';
 import { applyCompaction, formatCompaction, planCompaction } from '../compact.mjs';
@@ -43,7 +43,7 @@ export async function hookCommandFor({ client, event, paths, config }) {
   }
   if (typeof component.buildHookCommand !== 'function')
     throw error('E_COMPONENT_MISSING', 'Hook command builder is unavailable.');
-  const state = join(paths.stateDir, vaultId(config.vault.path));
+  const state = vaultStateDir(paths, absoluteVaultPath(config.vault.path));
   await mkdir(state, { recursive: true });
   return component.buildHookCommand({
     nodePath: process.execPath,
@@ -95,7 +95,7 @@ async function queueMaintenanceReceipt({ config, paths, env, candidates }) {
     .find((entry) => typeof entry?.onSessionEnd === 'function');
   if (!handler) return { queued: false, reason: 'receipts-module-missing' };
   const cfg = structuredClone(config);
-  cfg.stateDir = join(paths.stateDir, vaultId(config.vault.path));
+  cfg.stateDir = vaultStateDir(paths, absoluteVaultPath(config.vault.path));
   const roots = managedRoots(paths, env);
   const created = await missingDirectories(cfg.stateDir, env.HOME, roots);
   await mkdir(cfg.stateDir, { recursive: true });
@@ -220,7 +220,7 @@ export async function maintain({ args, flag, value, json, plan, output, paths, e
     } else {
       vaultPath = requested === undefined ? (await loadConfig({ paths, env, readOnly: true })).vault.path : requested;
     }
-    const stateDir = join(paths.stateDir, vaultId(resolve(vaultPath)));
+    const stateDir = vaultStateDir(paths, absoluteVaultPath(vaultPath));
     const now = new Date();
     let result;
     if (action === 'list') result = await listProposals({ stateDir, now });
@@ -335,7 +335,7 @@ export async function usage({ args, value, json, output, paths, env }) {
   if (feedbackAction && rawDays !== undefined) throw error('E_ARGUMENT', 'Usage --days is only valid for the summary.');
   if (!feedbackAction && positional.length) throw error('E_ARGUMENT', 'Usage arguments are invalid.');
   const cfg = await loadConfig({ paths, env });
-  const stateDir = join(paths.stateDir, vaultId(cfg.vault.path));
+  const stateDir = vaultStateDir(paths, absoluteVaultPath(cfg.vault.path));
   if (feedbackAction) {
     const result = await recordFeedback({ stateDir, verdict: positional[1] });
     output(json ? result : `Recorded feedback: ${positional[1]}.`);
@@ -407,7 +407,7 @@ export async function hookOrMcp({ command, args, env, paths, output }) {
         if (stdin.length > 1024 * 1024) throw error('E_HOOK_INPUT', 'Hook input is too large.');
       }
       const cfg = await loadConfig({ paths, env });
-      cfg.stateDir = join(paths.stateDir, vaultId(cfg.vault.path));
+      cfg.stateDir = vaultStateDir(paths, absoluteVaultPath(cfg.vault.path));
       const roots = managedRoots(paths, env);
       const created = await missingDirectories(cfg.stateDir, env.HOME, roots);
       await mkdir(cfg.stateDir, { recursive: true });

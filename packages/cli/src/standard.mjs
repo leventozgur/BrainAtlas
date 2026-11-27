@@ -11,7 +11,8 @@ import {
   scanText,
   secretFilterEnabled,
   standardFromConfig,
-  vaultId,
+  vaultStateDir,
+  absoluteVaultPath,
   writeStandard,
 } from '@brainatlas/core';
 import { commandNames } from './index.mjs';
@@ -327,14 +328,28 @@ export async function planStandardMigration({ cfg, paths, env, force = false, pr
       await rename(join(stateRoot, name), join(archive, `${name}-${stamp}`));
     });
 
-  const staleIndex = join(stateRoot, vaultId(cfg.vault.path), 'retrieval-index.json');
-  if ((await kindOf(staleIndex)) === 'file')
+  const vaultState = vaultStateDir(paths, absoluteVaultPath(cfg.vault.path, env.HOME));
+  const rootIndex = join(stateRoot, 'retrieval-index.json');
+  const rootSemantic = join(stateRoot, 'semantic');
+  const hasIndex = (await kindOf(join(vaultState, 'retrieval-index.json'))) === 'file';
+  const hasSemantic = (await kindOf(join(vaultState, 'semantic'))) === 'dir';
+  const staleIndex = hasIndex && (await kindOf(rootIndex)) === 'file';
+  const staleSemantic = hasSemantic && (await kindOf(rootSemantic)) === 'dir';
+  if (staleIndex || staleSemantic) {
     add(
       'duplicate-index',
-      `state/${vaultId(cfg.vault.path)}/retrieval-index.json`,
-      'remove the stale per-vault copy',
-      () => rm(staleIndex)
+      [staleIndex && 'state/retrieval-index.json', staleSemantic && 'state/semantic'].filter(Boolean).join(', '),
+      'remove the root caches (cache; rebuilt on demand)',
+      async () => {
+        if (staleIndex) await rm(rootIndex);
+        if (staleSemantic) await rm(rootSemantic, { recursive: true });
+      }
     );
+    const vaultDirs = (await readdir(stateRoot, { withFileTypes: true }).catch(() => [])).filter(
+      (entry) => entry.isDirectory() && /^[0-9a-f]{16}$/.test(entry.name)
+    );
+    if (vaultDirs.length > 1) warnings.push('Other vaults on this device rebuild their caches after this step.');
+  }
 
   if (!cheap)
     for (const group of await adapterBackups(paths, env, cfg, warnings)) {

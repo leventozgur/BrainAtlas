@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { defaultConfig, SEMANTIC_DEFAULTS } from '../../../packages/core/src/config/index.mjs';
+import { vaultId } from '../../../packages/core/src/paths/index.mjs';
 import { createServer } from '../../../packages/mcp/src/index.mjs';
 import { createOllamaProvider, updateSemanticIndex, markdownChunks } from '../../../modules/semantic/src/index.mjs';
 
@@ -21,7 +22,8 @@ async function fixture(t, pages) {
   const root = await mkdtemp(join(tmpdir(), 'ba29-semantic-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const wiki = join(root, 'vault/wiki'),
-    stateDir = join(root, 'state'),
+    stateRoot = join(root, 'state'),
+    stateDir = join(stateRoot, vaultId(join(root, 'vault'))),
     releasesDir = join(root, 'releases'),
     release = join(releasesDir, 'v1'),
     currentDir = join(root, 'current');
@@ -43,7 +45,7 @@ async function fixture(t, pages) {
   await updateSemanticIndex({ corpusDir: wiki, stateDir, provider, chunkMarkdown: markdownChunks });
   const server = createServer({
     config,
-    paths: { stateDir, releasesDir, currentDir },
+    paths: { stateDir: stateRoot, releasesDir, currentDir },
     env: { HOME: root },
     fetchImpl: fakeFetch,
   });

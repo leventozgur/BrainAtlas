@@ -203,7 +203,7 @@ test('a prompt whose semantic step hits fallback:deadline sends one warm-up afte
   const f = await fixture(t, { baseUrl: server.baseUrl });
   await buildSemanticIndex({
     corpusDir: f.wiki,
-    stateDir: f.paths.stateDir,
+    stateDir: f.stateDir,
     provider: createOllamaProvider({ ...f.config.semantic, fetchImpl: fakeFetch }),
     chunkMarkdown: markdownChunks,
   });
@@ -221,7 +221,7 @@ test('the prompt hook sends keep_alive on every embedding request', async (t) =>
   const f = await fixture(t, { baseUrl: server.baseUrl });
   await buildSemanticIndex({
     corpusDir: f.wiki,
-    stateDir: f.paths.stateDir,
+    stateDir: f.stateDir,
     provider: createOllamaProvider({ ...f.config.semantic, fetchImpl: fakeFetch }),
     chunkMarkdown: markdownChunks,
   });

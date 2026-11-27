@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { vaultId } from '../../../packages/core/src/paths/index.mjs';
 
 export const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 export const makeSecret = () => ['sk', 'test' + 'x'.repeat(24)].join('-');
@@ -17,13 +18,14 @@ export async function tempRoot(t) {
 export async function workspace(t, files = {}) {
   const root = await tempRoot(t);
   const wiki = join(root, 'vault', 'wiki');
-  const stateDir = join(root, 'state');
+  const stateRoot = join(root, 'state');
+  const stateDir = join(stateRoot, vaultId(join(root, 'vault')));
   await mkdir(wiki, { recursive: true });
   for (const [name, body] of Object.entries(files)) {
     await mkdir(join(wiki, name, '..'), { recursive: true });
     await writeFile(join(wiki, name), body);
   }
-  return { root, vault: join(root, 'vault'), wiki, stateDir, semanticDir: join(stateDir, 'semantic') };
+  return { root, vault: join(root, 'vault'), wiki, stateRoot, stateDir, semanticDir: join(stateDir, 'semantic') };
 }
 
 export function sectionPage(title, count, tag = 'x') {

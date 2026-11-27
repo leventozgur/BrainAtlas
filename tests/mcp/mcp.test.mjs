@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { defaultConfig } from '../../packages/core/src/config/index.mjs';
-import { resolvePaths } from '../../packages/core/src/paths/index.mjs';
+import { resolvePaths, vaultStateDir } from '../../packages/core/src/paths/index.mjs';
 import { createServer } from '../../packages/mcp/src/index.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -194,7 +194,10 @@ test('createServer without a stateDir keeps the vault tree unchanged and uses re
   const before = await treePaths(fixture.vault);
   createServer({ config, paths: {}, env });
   assert.deepEqual(await treePaths(fixture.vault), before);
-  const expectedStateDir = resolvePaths({ env, platform: env.BRAINATLAS_PLATFORM || process.platform }).stateDir;
+  const expectedStateDir = vaultStateDir(
+    resolvePaths({ env, platform: env.BRAINATLAS_PLATFORM || process.platform }),
+    fixture.vault
+  );
   assert.ok((await readdir(expectedStateDir)).includes('retrieval-index.json'));
 });
 

@@ -94,6 +94,8 @@ test('plan lists every drift step and changes nothing', async (t) => {
   assert.deepEqual([report.path, report.detail], ['~/.claude.json', 6]);
   assert.equal(kinds(plan).at(-1), 'adapter-backups');
   assert.ok(plan.warnings.some((warning) => warning.includes('frobnicate')));
+  assert.ok(plan.warnings.includes('Other vaults on this device rebuild their caches after this step.'));
+  assert.match(plan.steps.find((step) => step.kind === 'duplicate-index').detail, /cache; rebuilt on demand/);
   assert.deepEqual(await files(f.vault), before);
   assert.deepEqual(f.ok('standard', 'migrate', '--plan'), plan);
   const doctor = f.json('doctor').value;
@@ -138,8 +140,8 @@ test('apply backs up, moves verbatim, archives, reports and a second run plans n
   const archived = await readdir(join(f.paths.stateDir, 'archive'));
   assert.equal(archived.length, 1);
   assert.match(archived[0], /^0123456789abcdef-/);
-  await stat(join(f.paths.stateDir, 'retrieval-index.json'));
-  await assert.rejects(stat(join(f.paths.stateDir, vaultId(f.vault), 'retrieval-index.json')));
+  await stat(join(f.paths.stateDir, vaultId(f.vault), 'retrieval-index.json'));
+  await assert.rejects(stat(join(f.paths.stateDir, 'retrieval-index.json')));
   for (const name of f.backups) await stat(name);
 
   const after = await files(f.vault);

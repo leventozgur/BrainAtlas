@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { join } from 'node:path';
-import { checkVault, vaultId } from '@brainatlas/core';
+import { checkVault, vaultStateDir, absoluteVaultPath } from '@brainatlas/core';
 import { runMaintenance } from './maintain.mjs';
 import { readJsonl } from './usage.mjs';
 
@@ -49,7 +49,7 @@ async function hookSemantic(stateDir, now, days = 7) {
 
 export async function buildHealthSummary({ doctor, currentVersion, config, agentChannels, paths, now = new Date() }) {
   const vaultPath = config?.vault?.path;
-  const stateDir = vaultPath ? join(paths.stateDir, vaultId(vaultPath)) : null;
+  const stateDir = vaultPath ? vaultStateDir(paths, absoluteVaultPath(vaultPath)) : null;
   const sync = doctor.moduleHealth?.find((item) => item.name === 'sync') ?? null;
   const semantic = doctor.moduleHealth?.find((item) => item.name === 'semantic') ?? null;
   const [okf, maintain, hook] = await Promise.all([
