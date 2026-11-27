@@ -368,15 +368,14 @@ export function createServer(options) {
   const requestedVault = paths.vaultDir ?? env.BRAINATLAS_VAULT ?? config.vault?.path;
   if (typeof requestedVault !== 'string' || !requestedVault)
     throw mcpError('E_VAULT_PATH', 'A Wiki vault path is required.');
-  const vaultDir = resolve(
-    isAbsolute(requestedVault) ? requestedVault : resolve(home ?? process.cwd(), requestedVault)
-  );
+  const vaultDir = core.absoluteVaultPath(requestedVault, home ?? process.cwd());
   const wikiDir = join(vaultDir, 'wiki');
-  let stateDir = paths.stateDir;
-  if (typeof stateDir !== 'string' || !stateDir) {
+  let rootStateDir = paths.stateDir;
+  let stateDir;
+  if (typeof rootStateDir !== 'string' || !rootStateDir) {
     if (home) {
       const platform = env.BRAINATLAS_PLATFORM || process.platform;
-      stateDir = core.resolvePaths({ env, platform }).stateDir;
+      rootStateDir = core.resolvePaths({ env, platform }).stateDir;
     } else {
       const vaultKey = createHash('sha256').update(vaultDir).digest('hex').slice(0, 16);
       stateDir = join(tmpdir(), 'brainatlas-state', vaultKey);
@@ -384,10 +383,12 @@ export function createServer(options) {
       chmodSync(stateDir, 0o700);
     }
   }
+  if (stateDir === undefined) stateDir = core.vaultStateDir({ stateDir: rootStateDir }, vaultDir);
   const excludeRules = config.retrieval?.exclude ?? core.DEFAULT_EXCLUDE_WIKI;
   const isExcluded = (rel) => core.isExcludedPath(rel, excludeRules);
   let searcher = null;
-  const getSearcher = () => (searcher ??= core.createSearcher({ vaultDir: wikiDir, stateDir, exclude: excludeRules }));
+  const getSearcher = () =>
+    (searcher ??= core.createSearcher({ vaultDir: wikiDir, stateDir, adoptFrom: rootStateDir, exclude: excludeRules }));
   if (options.dryRun !== true) getSearcher();
   const semanticEnabled =
     config.semantic?.enabled === true &&

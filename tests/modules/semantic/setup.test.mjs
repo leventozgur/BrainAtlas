@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { vaultStateDir } from '../../../packages/core/src/paths/index.mjs';
 import { defaultConfig, saveConfig } from '../../../packages/core/src/config/index.mjs';
 import { commands } from '../../../modules/semantic/src/index.mjs';
 
@@ -55,7 +56,7 @@ async function fixture(t, overrides = {}) {
     },
     ...overrides,
   };
-  return { root, config, paths, ctx, calls, execs, before: await readFile(paths.configFile, 'utf8') };
+  return { root, vault, config, paths, ctx, calls, execs, before: await readFile(paths.configFile, 'utf8') };
 }
 const run = async (ctx, args = ['--yes']) => {
   const result = await commands.semanticSetup([...args, '--json'], ctx);
@@ -68,12 +69,12 @@ test('setup enables last, preserves config and is idempotent', async (t) => {
   const cfg = JSON.parse(await readFile(f.paths.configFile));
   assert.equal(cfg.semantic.enabled, true);
   assert.equal(cfg.retrieval.budgetChars, 4321);
-  const indexBefore = await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8');
+  const indexBefore = await readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.json'), 'utf8');
   f.ctx.config = cfg;
   const second = await run(f.ctx);
   assert.equal(second.report.steps.index.status, 'skipped');
   assert.equal(second.report.steps.config.status, 'skipped');
-  assert.equal(await readFile(join(f.paths.stateDir, 'semantic', 'index.json'), 'utf8'), indexBefore);
+  assert.equal(await readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.json'), 'utf8'), indexBefore);
   assert.ok(f.execs.every(([, args]) => JSON.stringify(args) === '["--version"]'));
 });
 test('dry and noninteractive runs use only GET and do not write', async (t) => {
@@ -86,7 +87,7 @@ test('dry and noninteractive runs use only GET and do not write', async (t) => {
       ['/api/tags', 'GET'],
     ]);
     assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
-    await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.json')));
+    await assert.rejects(readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.json')));
   }
 });
 test('failure paths preserve config and provide next action', async (t) => {
@@ -179,14 +180,16 @@ test('slow indexing asks once after ETA and retains progress when declined', asy
   assert.equal(prompts, 2);
   assert.match(messages.join(' '), /more than an hour/);
   assert.equal(await readFile(f.paths.configFile, 'utf8'), f.before);
-  const partial = JSON.parse(await readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json'), 'utf8'));
+  const partial = JSON.parse(
+    await readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.partial.json'), 'utf8')
+  );
   assert.equal(Object.keys(partial.vectors).length, 1);
 });
 test('dry run reports pending chunks without writes', async (t) => {
   const f = await fixture(t);
   const result = await run(f.ctx, ['--dry-run']);
   assert.match(result.report.steps.index.reason, /1 chunks; duration depends on hardware/);
-  await assert.rejects(readFile(join(f.paths.stateDir, 'semantic', 'index.partial.json')));
+  await assert.rejects(readFile(join(vaultStateDir(f.paths, f.vault), 'semantic', 'index.partial.json')));
 });
 
 async function withStderr(events, work) {
@@ -290,7 +293,7 @@ test('TTY progress line is terminated after a successful index and output stays 
 test('another running indexing operation is reported as action-needed without leaking details', async (t) => {
   for (const args of [['--yes'], ['--yes', '--mode', 'rrf']]) {
     const f = await fixture(t);
-    const dir = join(f.paths.stateDir, 'semantic');
+    const dir = join(vaultStateDir(f.paths, f.vault), 'semantic');
     await mkdir(dir, { recursive: true });
     const lock = join(dir, 'index.lock');
     const content = JSON.stringify({ pid: process.pid, startedAt: Date.now() });

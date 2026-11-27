@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { createHash } from 'node:crypto';
-import { join, posix, sep } from 'node:path';
+import { isAbsolute, join, posix, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrainAtlasError } from '../util/errors.mjs';
 
@@ -42,6 +42,16 @@ export function vaultId(absPath) {
   if (typeof absPath !== 'string' || !absPath || !absPath.startsWith('/'))
     throw new BrainAtlasError('E_VAULT_PATH', 'Vault path must be absolute.');
   return createHash('sha256').update(absPath).digest('hex').slice(0, 16);
+}
+
+export function absoluteVaultPath(vaultPath, home = process.env.HOME) {
+  return resolve(isAbsolute(vaultPath) ? vaultPath : resolve(home ?? process.cwd(), vaultPath));
+}
+
+export function vaultStateDir(paths, vaultPath) {
+  if (typeof vaultPath !== 'string' || !isAbsolute(vaultPath))
+    throw new BrainAtlasError('E_PATHS', 'Vault path must be absolute.');
+  return join(paths.stateDir, vaultId(resolve(vaultPath)));
 }
 
 export function packageRootFromUrl(fileUrl) {

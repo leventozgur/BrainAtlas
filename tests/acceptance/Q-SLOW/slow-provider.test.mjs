@@ -24,7 +24,7 @@ function slowFetch(ms, log = []) {
   };
 }
 function commandContext(w, config, fetchImpl) {
-  return { config, env: { HOME: w.root }, paths: { stateDir: w.stateDir }, fetchImpl };
+  return { config, env: { HOME: w.root }, paths: { stateDir: w.stateRoot }, fetchImpl };
 }
 function configFor(w, overrides = {}) {
   const config = defaultConfig('custom');
@@ -127,7 +127,7 @@ test('wiki_query against a provider that never answers still times out at timeou
     budgetChars: 4000,
     abstainThreshold: 0.35,
   });
-  const paths = { stateDir: w.stateDir, releasesDir: join(w.root, 'releases'), currentDir: join(w.root, 'current') };
+  const paths = { stateDir: w.stateRoot, releasesDir: join(w.root, 'releases'), currentDir: join(w.root, 'current') };
   await mkdir(paths.releasesDir, { recursive: true });
   const { cp, symlink } = await import('node:fs/promises');
   const release = join(paths.releasesDir, 'v1');

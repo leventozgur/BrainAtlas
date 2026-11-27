@@ -11,6 +11,7 @@ import {
 import { cosineSimilarity, reciprocalRankFusion, searchHybrid } from './hybrid.mjs';
 import { semanticGate } from './eval.mjs';
 import { SEMANTIC_DEFAULTS } from '../../../packages/core/src/config/index.mjs';
+import { vaultStateDir } from '../../../packages/core/src/paths/index.mjs';
 import { join, resolve } from 'node:path';
 import { semanticSetup } from './setup.mjs';
 
@@ -38,10 +39,12 @@ function commandOptions(ctx) {
   const settings = { ...SEMANTIC_DEFAULTS, ...ctx.config.semantic };
   validateConfiguredProvider(settings);
   const vault = resolve(ctx.env.HOME ?? '.', ctx.config.vault.path);
+  const corpusDir = join(vault, 'wiki');
+  const stateDir = vaultStateDir(ctx.paths, vault);
   return {
     settings,
-    corpusDir: join(vault, 'wiki'),
-    stateDir: ctx.paths.stateDir,
+    corpusDir,
+    stateDir,
     provider: createOllamaProvider({
       ...settings,
       timeoutMs: settings.indexTimeoutMs,

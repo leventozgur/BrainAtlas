@@ -1207,7 +1207,7 @@ function update(base, walk, excluded, nowIso) {
   return { index, files, skipped: skipped.concat(unreadable), pages: reused === 0 ? reads : null };
 }
 export function createSearcher(options) {
-  const { vaultDir, stateDir, now, atomicWriter = atomicWriteFileSync, exclude } = options || {};
+  const { vaultDir, stateDir, adoptFrom, now, atomicWriter = atomicWriteFileSync, exclude } = options || {};
   if (typeof vaultDir !== 'string' || typeof stateDir !== 'string')
     fail('E_INVALID_INPUT', 'Expected vault and state directories');
   if (exclude !== undefined && (!Array.isArray(exclude) || exclude.some((p) => typeof p !== 'string' || !p)))
@@ -1218,12 +1218,54 @@ export function createSearcher(options) {
   const fingerprintOf = () => statFingerprint(vaultDir, rules);
   const cache = path.join(stateDir, 'retrieval-index.json');
   let state = null;
+  let adoptionTried = false;
+  function moveRootCache(source) {
+    try {
+      fs.linkSync(source, cache);
+    } catch (error) {
+      if (error?.code === 'EEXIST' || error?.code === 'ENOENT') return true;
+      if (error?.code !== 'EPERM' && error?.code !== 'EXDEV') return false;
+      try {
+        fs.renameSync(source, cache);
+        return true;
+      } catch (renameError) {
+        return renameError?.code === 'ENOENT';
+      }
+    }
+    try {
+      fs.unlinkSync(source);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') return false;
+    }
+    return true;
+  }
+  function adoptRootCache(walk) {
+    if (adoptionTried || typeof adoptFrom !== 'string' || path.resolve(adoptFrom) === path.resolve(stateDir))
+      return null;
+    adoptionTried = true;
+    const source = path.join(adoptFrom, 'retrieval-index.json');
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(source, 'utf8'));
+    } catch {
+      return null;
+    }
+    if (!isPlainObject(data) || data.key !== walk.key) return null;
+    try {
+      fs.mkdirSync(stateDir, { recursive: true });
+    } catch {
+      return null;
+    }
+    return moveRootCache(source) ? data : null;
+  }
   function readCache(walk) {
     let data;
     try {
       data = JSON.parse(fs.readFileSync(cache, 'utf8'));
-    } catch {
-      return null;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') return null;
+      data = adoptRootCache(walk);
+      if (!data) return null;
     }
     if (!isPlainObject(data) || typeof data.key !== 'string') return null;
     const paths = data.key === walk.key ? new Set(walk.entries.map((entry) => entry.rel)) : null;

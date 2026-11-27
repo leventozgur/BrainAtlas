@@ -6,7 +6,7 @@ import { dirname, join, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { redact } from '../../core/src/safety/index.mjs';
-import { resolvePaths, vaultId } from '../../core/src/paths/index.mjs';
+import { absoluteVaultPath, resolvePaths, vaultStateDir } from '../../core/src/paths/index.mjs';
 import { SEMANTIC_DEFAULTS } from '../../core/src/config/index.mjs';
 import { SEMANTIC_BUDGET_MS, semanticEntryUrl, semanticRequested } from './semantic.mjs';
 
@@ -198,18 +198,14 @@ async function metric(stateDir, record) {
     // eslint-disable-next-line no-empty
   } catch {}
 }
-function semanticStep(config, env) {
-  if (!semanticRequested(config)) return null;
-  try {
-    return {
-      settings: { ...SEMANTIC_DEFAULTS, ...config.semantic },
-      stateDir: resolvePaths({ env }).stateDir,
-      budgetMs: SEMANTIC_BUDGET_MS,
-      entryUrl: semanticEntryUrl(),
-    };
-  } catch {
-    return null;
-  }
+function semanticStep(config, stateDir) {
+  if (!stateDir || !semanticRequested(config)) return null;
+  return {
+    settings: { ...SEMANTIC_DEFAULTS, ...config.semantic },
+    stateDir,
+    budgetMs: SEMANTIC_BUDGET_MS,
+    entryUrl: semanticEntryUrl(),
+  };
 }
 async function warmupDue(stateDir, now) {
   if (!stateDir) return false;
@@ -326,7 +322,7 @@ export async function runHook(input = {}) {
   let stateDir = config.stateDir || config.paths?.stateDir;
   if (!stateDir && config.vault?.path) {
     try {
-      stateDir = join(resolvePaths({ env }).stateDir, vaultId(config.vault.path));
+      stateDir = vaultStateDir(resolvePaths({ env }), absoluteVaultPath(config.vault.path, env.HOME));
       // eslint-disable-next-line no-empty
     } catch {}
   }
@@ -371,7 +367,7 @@ export async function runHook(input = {}) {
             context = '';
           }
         }
-        const step = semanticStep(config, env);
+        const step = semanticStep(config, stateDir);
         if (step) warmup = warmupTask(step.settings, stateDir, env, now);
       }
     } else if (typeof prompt === 'string' && prompt.trim() && stateDir && config.vault?.path) {
@@ -392,7 +388,7 @@ export async function runHook(input = {}) {
           query,
           { limit: 20, abstainThreshold: config.retrieval?.abstainThreshold ?? 0 },
           deadline - (Date.now() - start),
-          semanticStep(config, env),
+          semanticStep(config, stateDir),
           shadowThreshold(config.retrieval)
         );
         const found = hit.results
@@ -401,7 +397,7 @@ export async function runHook(input = {}) {
         semanticState = hit.semantic;
         shadowState = hit.shadow;
         if (semanticState === 'fallback:deadline') {
-          const step = semanticStep(config, env);
+          const step = semanticStep(config, stateDir);
           if (step) warmup = warmupTask(step.settings, stateDir, env, now);
         }
         if (Date.now() - start >= deadline) throw new Error('deadline');
@@ -486,11 +482,6 @@ export function buildHookCommand({ nodePath, shimPath, client, event, paths }) {
       yamlDir = dirname(createRequire(import.meta.url).resolve('yaml/package.json'));
       // eslint-disable-next-line no-empty
     } catch {}
-    let semanticIndexDir;
-    try {
-      semanticIndexDir = join(resolvePaths({ env: process.env }).stateDir, 'semantic');
-      // eslint-disable-next-line no-empty
-    } catch {}
     const reads = [
       paths.vault,
       paths.state,
@@ -501,7 +492,6 @@ export function buildHookCommand({ nodePath, shimPath, client, event, paths }) {
       yamlDir,
       dirname(nodePath),
       shimPath,
-      semanticIndexDir,
     ].filter(Boolean);
     args.push(
       '--permission',

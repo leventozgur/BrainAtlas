@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { vaultId } from '../../../packages/core/src/paths/index.mjs';
 
 export const WT = fileURLToPath(new URL('../../../', import.meta.url)).replace(/\/$/, '');
 export const MAIN =
@@ -239,6 +240,8 @@ export function makeConfig(ws, over = {}) {
   };
 }
 
+const indexDirOf = (tree, stateDir, ws) => (tree.name === 'wt' ? join(stateDir, vaultId(join(ws, 'vault'))) : stateDir);
+
 export async function buildIndex(tree, stateDir, ws) {
   const fetchState = { mode: 'ok' };
   const provider = tree.sem.createOllamaProvider({
@@ -249,7 +252,7 @@ export async function buildIndex(tree, stateDir, ws) {
   });
   await tree.sem.updateSemanticIndex({
     corpusDir: join(ws, 'vault', 'wiki'),
-    stateDir,
+    stateDir: indexDirOf(tree, stateDir, ws),
     provider,
     indexBatchSize: SETTINGS.indexBatchSize,
     chunkMarkdown: tree.sem.markdownChunks,
